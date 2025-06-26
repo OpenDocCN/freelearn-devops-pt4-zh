@@ -3,37 +3,44 @@
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: Ceph的规划
 - en: 'The first chapter of this book covers all the areas you need to consider when
     deploying a Ceph cluster, from the initial planning stages through to hardware
     choices. The topics we will cover include the following:'
   id: totrans-1
   prefs: []
   type: TYPE_NORMAL
+  zh: 本书的第一章涵盖了在部署Ceph集群时需要考虑的所有领域，从初步规划阶段到硬件选择。我们将讨论的主题包括以下内容：
 - en: What Ceph is and how it works
   id: totrans-2
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 什么是Ceph，以及它是如何工作的
 - en: Good use cases for Ceph and important considerations
   id: totrans-3
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: Ceph的良好使用案例及重要的考虑因素
 - en: Advice and best practices on infrastructure design
   id: totrans-4
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 基础设施设计建议和最佳实践
 - en: Ideas about planning a Ceph project
   id: totrans-5
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: Ceph项目规划的思路
 - en: What is Ceph?
   id: totrans-6
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 什么是Ceph？
 - en: Ceph is an open source, distributed, scaled-out, software-defined storage system
     that can provide block, object, and file storage. Through the use of the **Controlled
     Replication Under Scalable Hashing** (**CRUSH**) algorithm, Ceph eliminates the
@@ -46,29 +53,34 @@
   id: totrans-7
   prefs: []
   type: TYPE_NORMAL
+  zh: Ceph是一个开源的、分布式的、可扩展的、软件定义的存储系统，可以提供块存储、对象存储和文件存储。通过使用**可控复制下的可扩展哈希**（**CRUSH**）算法，Ceph消除了对集中式元数据的需求，并能够将负载分散到集群中的所有节点。由于CRUSH是一个算法，数据的位置是通过计算得出的，而不是基于表查找，并且可以扩展到数百PB而不会有瓶颈的风险及相关的单点故障。客户端还直接与所需的OSD建立连接，这也消除了任何单点故障成为瓶颈的可能性。
 - en: 'Ceph provides three main types of storage: block storage via the **RADOS Block
     Device** (**RBD**), file storage via CephFS, and object storage via RADOS Gateway,
     which provides S3 and Swift-compatible storage.'
   id: totrans-8
   prefs: []
   type: TYPE_NORMAL
+  zh: Ceph提供三种主要类型的存储：通过**RADOS块设备**（**RBD**）提供的块存储，通过CephFS提供的文件存储，以及通过RADOS网关提供的对象存储，支持S3和Swift兼容的存储。
 - en: Ceph is a pure SDS solution, and this means that you are free to run it on any
     hardware that matches Ceph's requirements. This is a major development in the
     storage industry, which has typically suffered from strict vendor lock-in.
   id: totrans-9
   prefs: []
   type: TYPE_NORMAL
+  zh: Ceph是一个纯粹的SDS解决方案，这意味着你可以在任何符合Ceph要求的硬件上运行它。这是存储行业的一项重大进展，因为该行业通常面临严格的厂商锁定问题。
 - en: It should be noted that Ceph prefers consistency as per the CAP theorem, and
     will try at all costs to make protecting your data a higher priority than availability
     in the event of a partition.
   id: totrans-10
   prefs: []
   type: TYPE_NORMAL
+  zh: 值得注意的是，根据CAP定理，Ceph偏向于一致性，并会在分区发生时不惜一切代价将保护数据作为高于可用性的优先级。
 - en: How Ceph works
   id: totrans-11
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: Ceph是如何工作的
 - en: The core storage layer in Ceph is the **Reliable Autonomous Distributed Object
     Store **(**RADOS**), which, as the name suggests, provides an object store on
     which the higher-level storage protocols are built. The RADOS layer in Ceph consists
@@ -79,6 +91,7 @@
   id: totrans-12
   prefs: []
   type: TYPE_NORMAL
+  zh: Ceph的核心存储层是**可靠自治分布式对象存储**（**RADOS**），正如其名称所示，它提供了一个对象存储，基于此构建了更高层的存储协议。Ceph中的RADOS层由多个**对象存储守护进程**（**OSD**）组成。每个OSD是完全独立的，并通过对等关系形成集群。每个OSD通常映射到一个单独的磁盘，这与传统方法不同，后者通过RAID控制器将多个磁盘组合成一个设备供操作系统使用。
 - en: The other key component in a Ceph cluster is the monitors. These are responsible
     for forming a cluster quorum via the use of Paxos. The monitors are not directly
     involved in the data path and do not have the same performance requirements of
@@ -201,6 +214,10 @@
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**可靠性**：Ceph 设计为通过其组件的扩展性质提供一个高度容错的存储系统。虽然单个组件的高可用性较差，但当它们聚集在一起时，任何组件的故障都不应导致无法服务客户端请求。事实上，随着
+    Ceph 集群的增长，个别组件的故障应当被视为正常现象，并成为正常操作条件的一部分。然而，Ceph 提供一个强大集群的能力并不意味着可以在硬件或设计选择上妥协，若如此做，很可能会导致失败。Ceph
+    假设硬件能够满足几个要求，稍后在本章中将讨论这些要求。与 RAID 不同，RAID 中，使用更大容量的硬盘时，磁盘重建的时间可能需要几周，而 Ceph 通常能在数小时内恢复单个磁盘故障。随着大容量硬盘的日益普及，Ceph
+    在可靠性和降级性能方面相比传统存储阵列具有许多优势。'
 - en: '**Use of commodity hardware**: Ceph is designed to be run on commodity hardware,
     which gives us the ability to design and build a cluster without the premium cost
     demanded by traditional tier 1 storage and server vendors. This can be both a
@@ -219,21 +236,27 @@
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**使用普通硬件**：Ceph 设计为运行在普通硬件上，这使我们能够设计和构建一个集群，而无需支付传统一线存储和服务器供应商要求的高昂费用。这既是一个优势，也是一个挑战。能够选择自己的硬件使你能够精确匹配
+    Ceph 组件的需求。然而，品牌硬件所提供的一个优势是兼容性测试。我们并不陌生于发现奇怪的固件问题，这些问题可能导致非常混乱的症状。应考虑你的 IT 团队是否有足够的时间和技能来应对未经测试的硬件解决方案可能带来的任何隐晦问题。使用普通硬件还可以防止传统的叉车升级模式，在这种模式下，升级单个组件往往需要完全替换整个存储阵列。使用
+    Ceph，你可以以非常细粒度的方式更换单个组件，并且通过自动数据平衡，避免了长时间的数据迁移过程。'
 - en: Specific use cases
   id: totrans-23
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 具体使用案例
 - en: We will now cover some of the more common use cases for Ceph and discuss some
     of the concepts behind them.
   id: totrans-24
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在我们将讨论一些 Ceph 的常见使用案例，并探讨其中的一些概念。
 - en: OpenStack or KVM based virtualization
   id: totrans-25
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 基于 OpenStack 或 KVM 的虚拟化
 - en: 'Ceph is the perfect match for providing storage to an OpenStack environment;
     in fact, Ceph is currently the most popular choice. The OpenStack survey in 2018
     revealed that 61% of surveyed OpenStack users are utilizing Ceph to provide storage
@@ -244,37 +267,47 @@
   id: totrans-26
   prefs: []
   type: TYPE_NORMAL
+  zh: Ceph 是为 OpenStack 环境提供存储的完美选择；事实上，Ceph 目前是最受欢迎的选择。2018 年的 OpenStack 调查显示，61%
+    的受访 OpenStack 用户正在使用 Ceph 为 OpenStack 提供存储。OpenStack Cinder 块驱动程序使用 Ceph RBD 来为虚拟机（VM）提供块存储，而
+    OpenStack Manila，这款**文件即服务**（**FaaS**）软件，与 CephFS 集成得很好。以下是 Ceph 成为 OpenStack
+    优秀解决方案的一些原因：
 - en: Both are open source projects with commercial offerings
   id: totrans-27
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 两者都是开源项目，并且都有商业版本
 - en: Both have a proven track record in large-scale deployments
   id: totrans-28
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 两者在大规模部署中都有成熟的应用记录
 - en: Ceph can provide block, CephFS, and object storage, all of which OpenStack can
     use
   id: totrans-29
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: Ceph 可以提供块存储、CephFS 和对象存储，OpenStack 都可以使用这些服务。
 - en: With careful planning, it is possible to deploy a hyper-converged cluster
   id: totrans-30
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 通过精心规划，完全有可能部署一个超融合集群
 - en: If you are not using OpenStack, or have no plans to, Ceph also integrates very
     well with KVM virtualization.
   id: totrans-31
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你不使用 OpenStack，或没有计划使用，Ceph 也与 KVM 虚拟化系统非常兼容。
 - en: Large bulk block storage
   id: totrans-32
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 大容量块存储
 - en: Because of the ability to design and build cost-effective OSD nodes, Ceph enables
     you to build large, high-performance storage clusters that are very cost-effective
     compared to alternative options. The Luminous release brought support for Erasure
@@ -283,11 +316,14 @@
   id: totrans-33
   prefs: []
   type: TYPE_NORMAL
+  zh: 由于能够设计和构建具有成本效益的 OSD 节点，Ceph 使你能够构建大型、高性能的存储集群，相比其他选择，这种方案成本效益更高。Luminous 版本带来了对块和文件工作负载的
+    Erasure 编码支持，这使得 Ceph 在这一任务中的吸引力进一步增加。
 - en: Object storage
   id: totrans-34
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 对象存储
 - en: The very fact that the core RADOS layer is an object store means that Ceph excels
     at providing object storage either via the S3 or Swift protocols. Ceph currently
     has one of the best compatibility records for matching the S3 API. If cost, latency,
@@ -296,11 +332,14 @@
   id: totrans-35
   prefs: []
   type: TYPE_NORMAL
+  zh: 由于核心的 RADOS 层本身就是一个对象存储，Ceph 在通过 S3 或 Swift 协议提供对象存储方面表现出色。Ceph 目前在兼容 S3 API
+    方面拥有最好的记录之一。如果成本、延迟或数据安全是使用公共云对象存储解决方案的顾虑，自己运行 Ceph 集群来提供对象存储可能是一个理想的用例。
 - en: Object storage with custom applications
   id: totrans-36
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 用于自定义应用的对象存储
 - en: Using librados, you can get your in-house application to talk directly to the
     underlying Ceph RADOS layer. This can greatly simplify the development of your
     application, and gives you direct access to high-performant reliable storage.
@@ -310,11 +349,14 @@
   id: totrans-37
   prefs: []
   type: TYPE_NORMAL
+  zh: 使用 librados，你可以让自家应用直接与底层的 Ceph RADOS 层进行交互。这可以极大简化应用的开发，并为你提供对高性能可靠存储的直接访问。librados
+    的一些更高级功能，例如将多个操作打包为一个原子操作，在现有存储解决方案中也很难实现。
 - en: Distributed filesystem – web farm
   id: totrans-38
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 分布式文件系统 – web 群集
 - en: A farm of web servers all need to access the same files so that they can all
     serve the same content no matter which one the client connects to. Traditionally,
     an HA NFS solution would be used to provide distributed file access, but can start
@@ -324,11 +366,14 @@
   id: totrans-39
   prefs: []
   type: TYPE_NORMAL
+  zh: 一组 web 服务器需要访问相同的文件，以便无论客户端连接到哪一台，它们都能提供相同的内容。传统上，HA NFS 解决方案会用来提供分布式文件访问，但在规模化时可能会遇到多个限制。CephFS
+    可以提供一个分布式文件系统来存储 web 内容，并允许它在 web 服务器群集中的所有服务器上挂载。
 - en: Distributed filesystem – NAS or fileserver replacement
   id: totrans-40
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 分布式文件系统 – NAS 或文件服务器替代
 - en: By using Samba in conjunction with CephFS, a highly available filesystem can
     be exported to Windows based clients. Because of the active and inactive nature
     of both Samba and CephFS, performance will grow with the expansion of the Ceph
@@ -336,11 +381,14 @@
   id: totrans-41
   prefs: []
   type: TYPE_NORMAL
+  zh: 通过将 Samba 与 CephFS 配合使用，可以将一个高可用的文件系统导出到基于 Windows 的客户端。由于 Samba 和 CephFS 都具有活跃和非活跃的特性，随着
+    Ceph 集群的扩展，性能也会随之提升。
 - en: Big data
   id: totrans-42
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 大数据
 - en: Big data is the concept of analyzing large amounts of data that would not fit
     into traditional data analysis systems or for which the use of analysis methods
     would be too complex. Big data tends to require storage systems that are both
@@ -350,21 +398,26 @@
   id: totrans-43
   prefs: []
   type: TYPE_NORMAL
+  zh: 大数据是指分析大量无法容纳在传统数据分析系统中的数据，或者这些数据的分析方法过于复杂的概念。大数据通常需要既能存储大量数据又能提供扩展性能的存储系统。Ceph
+    能够满足这两个要求，因此是为大数据系统提供扩展存储的理想候选者。
 - en: Infrastructure design
   id: totrans-44
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 基础设施设计
 - en: While considering infrastructure design, we need to take care of certain components.
     We will now briefly look at these components.
   id: totrans-45
   prefs: []
   type: TYPE_NORMAL
+  zh: 在考虑基础设施设计时，我们需要关注某些组件。接下来我们将简要介绍这些组件。
 - en: SSDs
   id: totrans-46
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: SSD
 - en: SSDs are great. Their price has been lowered enormously over the last 10 years,
     and all evidence suggests that it will continue to do so. They have the ability
     to offer access times several orders of magnitude lower than rotating disks and
@@ -372,6 +425,7 @@
   id: totrans-47
   prefs: []
   type: TYPE_NORMAL
+  zh: SSD 非常出色。在过去的 10 年里，它们的价格已经大幅下降，所有证据表明，这一趋势将继续。它们能够提供比旋转磁盘低几个数量级的访问时间，并且消耗更少的电力。
 - en: One important concept to understand about SSDs is that, although their read
     and write latencies are typically measured in tens of microseconds, to overwrite
     existing data in a flash block, requires the entire flash block to be erased before
@@ -389,12 +443,17 @@
   id: totrans-48
   prefs: []
   type: TYPE_NORMAL
+  zh: 关于 SSD，有一个重要概念需要理解：虽然它们的读写延迟通常以微秒为单位进行衡量，但要覆盖现有数据，需要先擦除整个闪存块才能进行写入。SSD 中的典型闪存块大小可能为
+    128k，即使是一个 4 KB 的写入操作，也需要读取整个块，擦除它，然后将现有数据和新写入的数据一起写入。擦除操作可能需要几毫秒，如果没有 SSD 固件中的聪明例程，这会使写入操作变得非常缓慢。为了绕过这个限制，SSD
+    配备了一个 RAM 缓存，以便它们可以立即确认写入，同时固件会在内部移动数据，优化覆盖写入过程和磨损均衡。然而，RAM 缓存是易失性内存，通常在突然断电的情况下会导致数据丢失和损坏。为了防止这种情况，SSD
+    可以配备电源丧失保护，通过在板载设置一个大电容器，储存足够的电力以便将所有未完成的写入刷新到闪存中。
 - en: 'One of the biggest trends in recent years is the different tiers of SSDs that
     have become available. Broadly speaking, these can be broken down into the following
     categories:'
   id: totrans-49
   prefs: []
   type: TYPE_NORMAL
+  zh: 近年来最大的趋势之一是不同层次的 SSD 已经变得可以获取。大致来说，这些可以分为以下几类：
 - en: '**Consumer**:These are the cheapest you can buy, and are pitched at the average
     PC user. They provide a lot of capacity very cheaply and offer fairly decent performance.
     They will likely offer no power-loss protection, and will either demonstrate extremely
@@ -405,6 +464,7 @@
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**消费级**：这是你可以购买的最便宜的 SSD，面向普通 PC 用户。它们提供了非常大的存储容量，并且价格非常便宜，性能也相当不错。它们可能没有电源丧失保护，并且在进行同步写入时表现可能会非常差，或者在存储数据完整性上做出虚假承诺。它们的写入耐久性可能非常差，但对于标准使用来说，仍然足够。'
 - en: '**Prosumer**: These are a step up from the consumer models, and will typically
     provide better performance and have higher write endurance, although still far
     from what enterprise SSDs provide.'
@@ -412,47 +472,55 @@
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**专业级**：这些比消费级型号稍强，通常提供更好的性能，并具有更高的写入耐久性，尽管仍远不及企业级 SSD。'
 - en: 'Before moving on to the enterprise models, it is worth just covering why you
     should not under any condition use the preceding models of SSDs for Ceph. These
     reasons are shown in the following list:'
   id: totrans-52
   prefs: []
   type: TYPE_NORMAL
+  zh: 在讨论企业级模型之前，值得一提的是，为什么在任何情况下都不应将前面提到的 SSD 模型用于 Ceph。以下是这些原因：
 - en: Lack of proper power-loss protection will either result in extremely poor performance
     or not ensure proper data consistency
   id: totrans-53
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 缺乏适当的电源丧失保护将导致极其差的性能，或者不能确保数据的一致性。
 - en: Firmware is not as heavily tested, as enterprise SSDs often reveal data-corrupting
     bugs
   id: totrans-54
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 固件的测试不如企业级 SSD 那样严格，因为企业级 SSD 经常会暴露出数据损坏的错误。
 - en: Low write endurance will mean that they will quickly wear out, often ending
     in sudden failure
   id: totrans-55
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 低写入耐久性意味着它们会很快磨损，通常会导致突发故障。
 - en: Because of high wear and failure rates, their initial cost benefits rapidly
     disappear
   id: totrans-56
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 由于高磨损和故障率，它们的初期成本优势很快就会消失。
 - en: The use of consumer SSDs with Ceph will result in poor performance and increase
     the chance of catastrophic data loss
   id: totrans-57
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 使用消费级 SSD 运行 Ceph 会导致性能低下，并增加灾难性数据丢失的风险。
 - en: Enterprise SSDs
   id: totrans-58
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 企业级 SSD
 - en: The biggest difference between consumer and enterprise SSDs is that an enterprise
     SSD should provide the guarantee that, when it responds to the host system confirming
     that data has been safely stored, it actually has been permanently written to
@@ -547,23 +615,29 @@
   id: totrans-68
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了理解在运行 filestore 时选择合适 SSD 的重要性，我们必须明白，由于普通 POSIX 文件系统的限制，为了提供在写入过程中发生的原子事务，需要一个日志，以便在事务未能完全完成时能够回滚。如果没有为日志使用独立的
+    SSD，则会为其创建一个单独的分区。OSD 处理的每次写入将首先写入日志，然后再刷新到磁盘的主存储区。这就是为什么建议为旋转磁盘使用 SSD 作为日志的主要原因。双重写入严重影响旋转磁盘的性能，主要是由于磁盘头在日志和数据区之间随机移动的特性。
 - en: Likewise, an SSD OSD using filestore still requires a journal, and so it will
     experience approximately double the number of writes and thus provide half the
     expected client performance.
   id: totrans-69
   prefs: []
   type: TYPE_NORMAL
+  zh: 同样，使用 filestore 的 SSD OSD 仍然需要一个日志，因此它将经历大约双倍的写入次数，从而提供一半的预期客户端性能。
 - en: As can now be seen, not all models of SSD are equal, and Ceph's requirements
     can make choosing the correct one a tough process. Fortunately, a quick test can
     be carried out to establish an SSD's potential for use as a Ceph journal.
   id: totrans-70
   prefs: []
   type: TYPE_NORMAL
+  zh: 如今可以看到，并非所有型号的 SSD 都是相同的，Ceph 的需求可能使选择正确的 SSD 成为一项艰巨的任务。幸运的是，可以通过一个快速测试来确定 SSD
+    是否适合用作 Ceph 日志。
 - en: Memory
   id: totrans-71
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 内存
 - en: Recommendations for BlueStore OSDs are 3 GB of memory for every HDD OSD and
     5 GB for an SSD OSD. In truth, there are a number of variables that lead to this
     recommendation, but suffice to say that you never want to find yourself in the
@@ -572,6 +646,8 @@
   id: totrans-72
   prefs: []
   type: TYPE_NORMAL
+  zh: 对于 BlueStore OSD，每个 HDD OSD 推荐使用 3 GB 内存，每个 SSD OSD 推荐使用 5 GB 内存。实际上，存在许多变量导致这一推荐，但可以说，绝不能让
+    OSD 内存不足的情况发生，任何多余的内存都将被用来提升性能。
 - en: Aside from the base-line memory usage of the OSD, the main variable affecting
     memory usage is the number of PGs running on the OSD. While total data size does
     have an impact on memory usage, it is dwarfed by the effect of the number of PGs.
@@ -580,6 +656,8 @@
   id: totrans-73
   prefs: []
   type: TYPE_NORMAL
+  zh: 除了 OSD 的基本内存使用量外，影响内存使用量的主要变量是 OSD 上运行的 PG 数量。虽然总数据量对内存使用量有影响，但其影响远不及 PG 数量的影响。一个在每个
+    OSD 上运行 200 个 PG 的健康集群，可能每个 OSD 使用的内存不足 4 GB。
 - en: However, in a cluster where the number of PGs has been set higher than best
     practice, memory usage will be higher. It is also worth noting that when an OSD
     is removed from a cluster, extra PGs will be placed on remaining OSDs to re-balance
@@ -591,6 +669,8 @@
   id: totrans-74
   prefs: []
   type: TYPE_NORMAL
+  zh: 然而，在一个 PG 数量高于最佳实践的集群中，内存使用量会更高。同样需要注意的是，当 OSD 从集群中移除时，额外的 PG 会被放置到剩余的 OSD 上，以重新平衡集群。这也会增加内存使用量以及恢复操作本身。如果没有足够的内存，内存使用量的激增有时会导致级联故障。为了减少
+    Linux 内存不足时随机杀死 OSD 进程的风险，应该始终为 SSD 配置一个较大的交换分区。
 - en: As a minimum, the aim is to provision around 4 GB per OSD for HDDs and 5 GB
     per OSD for SSDs; this should be treated as the bare minimum, and 5 GB/6 GB (HDD/SSD
     respectively) per OSD would be the ideal amount. With both BlueStore and filestore,
@@ -602,6 +682,7 @@
   id: totrans-75
   prefs: []
   type: TYPE_NORMAL
+  zh: 至少，目标是为HDD分配每个OSD大约4 GB，为SSD分配每个OSD大约5 GB；这应视为最低要求，理想的每个OSD内存应为5 GB/6 GB（分别对应HDD/SSD）。无论是使用BlueStore还是filestore，服务器上安装的任何额外内存都可以用于缓存数据，从而减少客户端操作的读取延迟。Filestore使用Linux页缓存，因此会自动利用RAM。对于BlueStore，我们需要手动调整内存限制，分配额外的内存作为缓存；这将在[第3章](5c188246-4bac-42ef-8135-ba55336f3847.xhtml)中进一步详细讲解，*BlueStore*。
 - en: If your cluster is still running filestore, depending on your workload and the
     size of the spinning disks that are used for the Ceph OSD's, extra memory may
     be required to ensure that the operating system can sufficiently cache the directory
@@ -611,15 +692,18 @@
   id: totrans-76
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果您的集群仍在使用filestore，根据工作负载和用于Ceph OSD的旋转磁盘大小，可能需要额外的内存，以确保操作系统能够充分缓存文件系统中的目录条目和文件节点，这些文件系统用于存储Ceph对象。这可能会影响您希望为节点配置的RAM量，相关内容将在本书的调优部分进行更详细的讨论。
 - en: Regardless of the configured memory size, ECC memory should be used at all times.
   id: totrans-77
   prefs: []
   type: TYPE_NORMAL
+  zh: 无论配置的内存大小如何，都应始终使用ECC内存。
 - en: CPU
   id: totrans-78
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: CPU
 - en: 'Ceph''s official recommendation is for 1 GHz of CPU power per OSD. Unfortunately,
     in real life, it''s not quite as simple as this. What the official recommendations
     don''t point out is that a certain amount of CPU power is required per I/O; it''s
@@ -633,6 +717,7 @@
   id: totrans-79
   prefs: []
   type: TYPE_NORMAL
+  zh: Ceph的官方推荐是每个OSD提供1 GHz的CPU性能。不幸的是，现实中情况并非如此简单。官方推荐没有提到的是，每个I/O需要一定的CPU性能；这并非一个静态数值。从这个角度考虑，这其实是有道理的：只有当有任务时，CPU才会被使用。如果没有I/O操作，CPU就不需要。而这个关系是按比例增加的：I/O越多，所需的CPU就越多。官方的推荐值适用于基于旋转磁盘的OSD。配备快速SSD的OSD节点往往会消耗远超该推荐值的CPU。更复杂的是，CPU的需求还会根据I/O大小的不同而变化，较大的I/O需要更多的CPU。
 - en: If the OSD node starts to struggle for CPU resources, it can cause OSDs to start
     timing out and getting marked out from the cluster, often to rejoin several seconds
     later. This continuous loss and recovery tends to place more strain on the already
@@ -640,6 +725,7 @@
   id: totrans-80
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果OSD节点开始出现CPU资源紧张的情况，可能会导致OSD超时并从集群中被标记为下线，通常会在几秒钟后重新加入。持续的丢失与恢复会加剧对已有限的CPU资源的压力，进而导致连锁故障。
 - en: A good figure to aim for would be around 1-10 MHz per I/O, corresponding to
     4 kb-4 MB I/Os respectively. As always, testing should be carried out before going
     live to confirm that CPU requirements are met both in normal and stressed I/O
@@ -652,6 +738,7 @@
   id: totrans-81
   prefs: []
   type: TYPE_NORMAL
+  zh: 一个理想的目标是每个I/O约1-10 MHz，分别对应4 kb至4 MB的I/O。如同往常一样，在上线之前需要进行测试，以确认在正常和高负载I/O条件下，CPU的需求是否得到了满足。此外，在BlueStore中使用压缩和校验和将会增加每个I/O所需的CPU，升级自使用filestore的Ceph集群时，这一点需要在任何计算中加以考虑。擦除编码池的CPU消耗也会高于复制池。CPU的使用量会随着擦除编码类型和配置文件的不同而变化，因此必须进行测试，以更好地了解需求。
 - en: Another aspect of CPU selection that is key to determining performance in Ceph
     is the clock speed of the cores. A large proportion of the I/O path in Ceph is
     single threaded, and so a faster-clocked core will run through this code path
@@ -663,6 +750,7 @@
   id: totrans-82
   prefs: []
   type: TYPE_NORMAL
+  zh: 另一个影响Ceph性能的关键CPU选择因素是核心的时钟速度。Ceph中大部分I/O路径是单线程的，因此时钟速度更快的核心会更快地运行该代码路径，从而减少延迟。由于大多数CPU的热设计有限，通常随着核心数的增加，时钟速度会有所折衷。高核心数和高时钟速度的CPU往往价格较高，因此在选择最佳CPU时，了解你的I/O和延迟要求非常有帮助。
 - en: 'A small experiment was done to find the effect of CPU clock speed on write
     latency. A Linux workstation running Ceph had its CPU clock manually adjusted
     using the user space governor. The following results clearly show the benefit
@@ -670,34 +758,42 @@
   id: totrans-83
   prefs: []
   type: TYPE_NORMAL
+  zh: 进行了一项小实验，旨在找出CPU时钟速度对写入延迟的影响。一个运行Ceph的Linux工作站通过用户空间调控器手动调整了其CPU时钟。以下结果清晰地显示了高时钟速度CPU的优势：
 - en: '| **CPU MHz** | **4 KB write I/O** |  **Avg latency (us)** |'
   id: totrans-84
   prefs: []
   type: TYPE_TB
+  zh: '| **CPU MHz** | **4 KB写入I/O** |  **平均延迟（微秒）** |'
 - en: '| 1600  | 797  | 1250 |'
   id: totrans-85
   prefs: []
   type: TYPE_TB
+  zh: '| 1600  | 797  | 1250 |'
 - en: '| 2000  | 815  | 1222 |'
   id: totrans-86
   prefs: []
   type: TYPE_TB
+  zh: '| 2000  | 815  | 1222 |'
 - en: '| 2400  | 1161  | 857 |'
   id: totrans-87
   prefs: []
   type: TYPE_TB
+  zh: '| 2400  | 1161  | 857 |'
 - en: '| 2800  | 1227  | 812 |'
   id: totrans-88
   prefs: []
   type: TYPE_TB
+  zh: '| 2800  | 1227  | 812 |'
 - en: '| 3300  | 1320  | 755 |'
   id: totrans-89
   prefs: []
   type: TYPE_TB
+  zh: '| 3300  | 1320  | 755 |'
 - en: '| 4300  | 1548  | 644 |'
   id: totrans-90
   prefs: []
   type: TYPE_TB
+  zh: '| 4300  | 1548  | 644 |'
 - en: If low latency, and especially low write latency, is important, then go for
     the highest-clocked CPUs you can get, ideally at least above 3 GHz. This may require
     a compromise in SSD-only nodes on how many cores are available, and thus how many
@@ -707,11 +803,13 @@
   id: totrans-91
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果低延迟，特别是低写入延迟很重要，那么请选择时钟速度最高的CPU，理想情况下至少要超过3 GHz。这可能需要在只使用SSD的节点上做出一些妥协，涉及可用核心数，以及每个节点能够支持多少SSD。对于具有12个旋转磁盘和SSD日志的节点，单插槽四核处理器是一个极好的选择，因为它们通常具有非常高的时钟速度，并且价格非常具有竞争力。
 - en: Where extreme low latency is not as important—for example, in object workloads—look
     at entry-level processors with well-balanced core counts and clock speeds.
   id: totrans-92
   prefs: []
   type: TYPE_NORMAL
+  zh: 在低延迟不是特别重要的情况下——例如，在对象工作负载中——可以考虑选择具有良好核心数量和平衡时钟速度的入门级处理器。
 - en: Another consideration concerning CPU and motherboard choice should be the number
     of sockets. In dual-socket designs, the memory, disk controllers, and NICs are
     shared between the sockets. When data required by one CPU is required from a resource
@@ -723,11 +821,13 @@
   id: totrans-93
   prefs: []
   type: TYPE_NORMAL
+  zh: 另一个关于CPU和主板选择的考虑因素是插槽数量。在双插槽设计中，内存、磁盘控制器和网络接口卡（NIC）是在插槽之间共享的。当一个CPU需要从另一个CPU所在的资源中获取数据时，就需要一个插槽，这个插槽必须穿越两个CPU之间的互联总线。现代CPU具有高速互联，但这确实会引入性能损失，因此应该考虑是否可以实现单插槽设计。关于如何规避这些可能的性能损失，调优部分提供了一些选项。
 - en: Disks
   id: totrans-94
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 磁盘
 - en: 'When choosing the disks to build a Ceph cluster with, there is always the temptation
     to go with the biggest disks you can, as the total cost of ownership figures looks
     great on paper. Unfortunately, in reality this is often not a great choice. While
@@ -739,21 +839,25 @@
   id: totrans-95
   prefs: []
   type: TYPE_NORMAL
+  zh: 在选择用于构建Ceph集群的磁盘时，总是会有倾向选择最大容量磁盘的诱惑，因为从总体拥有成本的角度来看，数字看起来很好。然而，实际上这通常不是一个理想选择。尽管磁盘在过去20年里容量大幅增加，但它们的性能并没有显著提升。首先，你应该忽略任何顺序的MB/s数据，因为在企业级工作负载中，你永远看不到这样的数据；总会有某些因素使I/O模式变得足够非顺序，以至于它实际上可以被视为完全随机。其次，记住以下数据：
 - en: 7.2k disks = 70–80 4k IOPS
   id: totrans-96
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 7.2k磁盘 = 70–80 4k IOPS
 - en: 10k disks = 120–150 4k IOPS
   id: totrans-97
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 10k 磁盘 = 120–150 4k IOPS
 - en: 15k disks = You should be using SSDs
   id: totrans-98
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 15k 磁盘 = 应使用 SSD
 - en: As a general rule, if you are designing a cluster that will offer active workloads
     rather than bulk inactive/archive storage, then you should design for the required
     IOPS and not capacity. If your cluster will largely contain spinning disks with
@@ -768,6 +872,9 @@
   id: totrans-99
   prefs: []
   type: TYPE_NORMAL
+  zh: 一般而言，如果你正在设计一个将提供活跃工作负载而不是大量非活跃/归档存储的集群，那么应该根据所需的 IOPS 进行设计，而不是容量。如果你的集群主要包含旋转磁盘，并且目的是为活跃工作负载提供存储，那么应优先考虑增加小容量磁盘的数量，而不是使用大容量磁盘。随着
+    SSD 容量成本的下降，应该认真考虑在集群中使用 SSD，作为缓存层或甚至是完全的 SSD 集群。SSD 已经在除少数特殊工作负载外取代了 15k 磁盘；到本世纪末，10k
+    磁盘可能也会走上相同的道路。存储领域可能会变成“两马竞争”的局面，缓慢的大容量磁盘将承担大宗存储角色，而基于闪存的设备将承担活跃 I/O 角色。
 - en: Thought should also be given to the use of SSDs as either journals with Ceph's
     filestore or for storing the DB and WAL when using BlueStore. Filestore performance
     is dramatically improved when using SSD journals and it is not recommended that
@@ -775,6 +882,8 @@
   id: totrans-100
   prefs: []
   type: TYPE_NORMAL
+  zh: 还应考虑将 SSD 用作 Ceph 文件存储的日志，或在使用 BlueStore 时用于存储数据库和 WAL。当使用 SSD 日志时，文件存储性能显著提升，除非集群设计用于处理非常冷的数据，否则不建议使用
+    SSD 日志。
 - en: When choosing SSDs for holding the BlueStore DB, it's important to correctly
     size the SSDs so that the majority, or ideally all, of the metadata will be stored
     on the SSD. Official recommendations are for the RocksDB database to be about
@@ -792,12 +901,18 @@
   id: totrans-101
   prefs: []
   type: TYPE_NORMAL
+  zh: 选择用于存储 BlueStore 数据库的 SSD 时，重要的是正确选择 SSD 的尺寸，以便大部分或理想情况下所有元数据都能存储在 SSD 上。官方建议，RocksDB
+    数据库的大小应约为 HDD 大小的 4%。在实践中，实际使用中很少见到这种水平的消耗，4% 只是一个保守估计。随着 10 TB 及更大容量的磁盘逐渐普及，为这样一个磁盘专门配备
+    400 GB 的 SSD 并不具备成本效益。如果 RocksDB 的大小超过了分配给 SSD 的空间，那么元数据将溢出到 HDD 上。因此，虽然 OSD 仍然可以运行，但需要从
+    HDD 中读取元数据的请求将比所有元数据都存储在 SSD 上时更慢。在用于 RBD 工作负载的集群的实际测试中，数据库的使用通常在 0.5% 区域。有关 RocksDB
+    中存储的数据及所需空间的更多细节，请参见本书的[第 3 章](5c188246-4bac-42ef-8135-ba55336f3847.xhtml)，*BlueStore*。
 - en: As the SSDs used for storing the BlueStore DB are not used for storing data,
     their write endurance is not as critical as it has been in the past, when SSDs
     were used with filestore.
   id: totrans-102
   prefs: []
   type: TYPE_NORMAL
+  zh: 由于用于存储 BlueStore 数据库的 SSD 并不用于存储数据，因此它们的写入耐久性不像过去那样关键，当时 SSD 是与文件存储一起使用的。
 - en: You should also bear in mind that the default replication level of 3 will mean
     that each client write I/O will generate at least three times the I/O on the backend
     disks. When using filestore, because of the internal mechanisms in Ceph, in most
@@ -805,6 +920,7 @@
   id: totrans-103
   prefs: []
   type: TYPE_NORMAL
+  zh: 还需要注意的是，默认的复制级别 3 意味着每个客户端写入 I/O 会在后端磁盘上生成至少三倍的 I/O。使用文件存储时，由于 Ceph 内部机制的原因，在大多数情况下，这个数字可能会超过六倍的写入放大效应。
 - en: Understand that even though, compared to a legacy RAID array, Ceph enables rapid
     recovery from a failed disk, this is because of the fact that Ceph involves a
     much larger number of disks in the recovery process. However, larger disks still
@@ -822,22 +938,26 @@
   id: totrans-104
   prefs: []
   type: TYPE_NORMAL
+  zh: 虽然与传统的RAID阵列相比，Ceph能够快速从故障磁盘中恢复，但这是因为Ceph在恢复过程中涉及到大量更多的磁盘。然而，更大的磁盘仍然存在挑战，特别是当您需要从受影响的多个磁盘中恢复节点故障时。在由十个1TB磁盘组成的集群中，每个磁盘50%占用时，如果发生磁盘故障，剩余的磁盘将需要在它们之间恢复500GB的数据，大约每个磁盘需要恢复约55GB。以平均20MB/s的恢复速度，预计恢复时间约为45分钟。一个有一百个1TB磁盘的集群仍然需要恢复500GB的数据，但这次任务由99个磁盘共享，每个磁盘需要恢复约5GB；理论上，较大的集群从单个磁盘故障中恢复需要约4分钟。实际上，这些恢复时间会更长，因为有额外的机制增加了恢复时间。在较小的集群中，选择磁盘容量时，恢复时间应该是一个关键因素。
 - en: Networking
   id: totrans-105
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 网络
 - en: The network is a key and often overlooked component in a Ceph cluster. A poorly
     designed network can often lead to a number of problems that manifest themselves
     in peculiar ways and make for a confusing troubleshooting session.
   id: totrans-106
   prefs: []
   type: TYPE_NORMAL
+  zh: 网络是Ceph集群中一个关键但常被忽视的组件。设计不良的网络往往会导致多种问题，这些问题以奇特的方式显现，并导致令人困惑的故障排除过程。
 - en: 10 G requirement
   id: totrans-107
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 10 G 需求
 - en: A 10 G network is strongly recommended for building a Ceph cluster; while 1
     G networking will work, the amount of latency will almost be unacceptable, and
     will limit you as to the size of the nodes you can deploy. Thought should also
@@ -849,6 +969,7 @@
   id: totrans-108
   prefs: []
   type: TYPE_NORMAL
+  zh: 建议使用10G网络来构建Ceph集群；虽然1G网络可以工作，但延迟量几乎无法接受，并且将限制您可以部署的节点大小。在选择恢复时，还应考虑大量数据需要在集群中移动的情况。1G网络不仅无法为此提供足够的性能，而且会影响正常的I/O流量。在最糟糕的情况下，这可能导致OSD超时，从而引起集群不稳定。
 - en: As mentioned, one of the main benefits of 10 G networking is the lower latency.
     Quite often, a cluster will never push enough traffic to make full use of the
     10 G bandwidth; however, the latency improvement will be realized no matter the
@@ -860,6 +981,7 @@
   id: totrans-109
   prefs: []
   type: TYPE_NORMAL
+  zh: 如前所述，10G网络的主要好处之一是较低的延迟。通常，集群不会产生足够的流量来充分利用10G带宽；然而，无论集群负载如何，都将实现延迟改善。在本书调优部分中将了解到，延迟直接影响存储系统的性能，特别是在执行直接或同步I/O时。
 - en: Lately, the next generation of networking hardware has become available, supporting
     speeds starting at 25 G and climbing to 100 G. If you are implementing a new network
     when deploying your Ceph cluster, it is highly recommended that you look into
@@ -867,6 +989,7 @@
   id: totrans-110
   prefs: []
   type: TYPE_NORMAL
+  zh: 近年来，下一代网络硬件已经推出，支持从25G到100G不等的速度。如果在部署Ceph集群时实施新的网络，强烈建议考虑部署这种下一代硬件。
 - en: If your OSD node will come equipped with dual NICs, you should carefully work
     on for a network design that allows you to use them active for both transmit and
     receive. It is wasteful to leave a 10 G link in a passive state, and will help
@@ -874,11 +997,13 @@
   id: totrans-111
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你的OSD节点配备了双网卡，你应该仔细设计一个网络，使其能够同时活跃地进行传输和接收。将10G链路置于被动状态是浪费，而且在负载下有助于降低延迟。
 - en: Network design
   id: totrans-112
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 网络设计
 - en: A good network design is an important step to bringing a Ceph cluster online.
     If your networking is handled by another team, then make sure they are included
     in all stages of the design, as often an existing network will not be designed
@@ -887,6 +1012,7 @@
   id: totrans-113
   prefs: []
   type: TYPE_NORMAL
+  zh: 良好的网络设计是将Ceph集群投入使用的重要步骤。如果你的网络由其他团队管理，请确保他们参与到设计的所有阶段，因为现有网络往往并未设计用于满足Ceph的需求，这可能导致Ceph性能差，并影响现有系统。
 - en: It's recommended that each Ceph node be connected via redundant links to two
     separate switches so that, in the event of a switch failure, the Ceph node is
     still accessible. Stacking switches should be avoided if possible, as they can
@@ -895,11 +1021,13 @@
   id: totrans-114
   prefs: []
   type: TYPE_NORMAL
+  zh: 推荐将每个Ceph节点通过冗余链路连接到两个独立的交换机，这样在交换机故障的情况下，Ceph节点仍然可访问。如果可能，应该避免堆叠交换机，因为它们可能引入单点故障，并且在某些情况下，为了进行固件升级，两个交换机都需要下线。
 - en: If your Ceph cluster will be contained in only one set of switches, then feel
     free to skip this next section.
   id: totrans-115
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你的Ceph集群仅包含在一组交换机中，那么可以跳过接下来的部分。
 - en: Traditional networks were mainly designed around a north–south access path,
     where clients at the north access data through the network to servers at the south.
     If a server is connected to an access switch that is needed to talk to another
@@ -913,6 +1041,7 @@
   id: totrans-116
   prefs: []
   type: TYPE_NORMAL
+  zh: 传统网络主要围绕北–南访问路径设计，在这种路径中，北部的客户端通过网络访问南部的服务器。如果一台服务器连接到一个接入交换机，而这个交换机需要与连接到另一个接入交换机的另一台服务器进行通信，那么流量将通过核心交换机进行路由。由于这种访问模式，接入层和汇聚层在设计时并没有考虑到处理大量服务器间流量的问题，这对于它们原本设计的环境是足够的。服务器间流量被称为东–西流量，随着应用程序变得更加紧密互联并需要多个其他服务器的数据，这种流量在现代数据中心中变得越来越普遍。
 - en: 'Ceph generates a lot of east–west traffic, both from internal cluster replication
     traffic, but also from other servers consuming Ceph storage. In large environments,
     the traditional core, aggregation, and access layer design may struggle to cope,
@@ -924,14 +1053,17 @@
   id: totrans-117
   prefs: []
   type: TYPE_NORMAL
+  zh: Ceph产生大量东–西流量，这不仅来自集群内部的复制流量，还来自其他服务器访问Ceph存储。在大型环境中，传统的核心、汇聚和接入层设计可能无法应对，因为大量流量会通过核心交换机进行路由。可以购买更快速的交换机并添加更快或额外的上联链路；然而，根本问题是你试图在一个扩展网络设计上运行一个扩展存储系统。各层的布局如下图所示：
 - en: '![](img/4b01539d-5019-47ca-9dee-321e7abcdcbf.png)'
   id: totrans-118
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/4b01539d-5019-47ca-9dee-321e7abcdcbf.png)'
 - en: A traditional network topology
   id: totrans-119
   prefs: []
   type: TYPE_NORMAL
+  zh: 传统网络拓扑
 - en: 'A design that is becoming very popular in data centers is the leaf spine design.
     This approach completely gets rid of the traditional model and replaces it with
     two layers of switches, the spine layer and the leaf layer. The core concept is
@@ -941,20 +1073,24 @@
   id: totrans-120
   prefs: []
   type: TYPE_NORMAL
+  zh: 在数据中心中，一种越来越受欢迎的设计是叶脊设计。这种方法完全摒弃了传统模型，用两层交换机——脊层和叶层——取而代之。核心概念是每个叶交换机连接到每个脊交换机，因此任何叶交换机与其他叶交换机之间最多只需一次跳跃。这提供了稳定的跳跃延迟和带宽。如下图所示：
 - en: '![](img/992c1436-b1e9-47b8-a86e-93a49de8f1db.png)'
   id: totrans-121
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/992c1436-b1e9-47b8-a86e-93a49de8f1db.png)'
 - en: A leaf spine topology
   id: totrans-122
   prefs: []
   type: TYPE_NORMAL
+  zh: 一种叶脊拓扑结构
 - en: The leaf layer is where the servers connect to, and is typically made up of
     a large number of 10 G ports and a handful of 40 G or faster up-link ports to
     connect into the spine layer.
   id: totrans-123
   prefs: []
   type: TYPE_NORMAL
+  zh: 叶层是服务器连接的地方，通常由大量10 G端口和少数40 G或更高速的上联端口组成，用于连接脊层。
 - en: The spine layer won't normally connect directly into servers unless there are
     certain special requirements, and will just serve as an aggregation point for
     all the leaf switches. The spine layer will often have higher port speeds to reduce
@@ -962,6 +1098,7 @@
   id: totrans-124
   prefs: []
   type: TYPE_NORMAL
+  zh: 脊层通常不会直接连接到服务器，除非有某些特殊要求，它将仅作为所有叶交换机的汇聚点。脊层通常具有更高的端口速度，以减少从叶交换机出来的流量可能发生的任何竞争。
 - en: Leaf spine networks are typically moving away from pure layer 2 topologies,
     where the layer 2 domain is terminated on the leaf switches and layer 3 routing
     is done between the leaf and spine layer. It is advised that you do this using
@@ -977,6 +1114,9 @@
   id: totrans-125
   prefs: []
   type: TYPE_NORMAL
+  zh: 叶脊网络通常不再采用纯粹的第2层拓扑结构，其中第2层域终止在叶交换机上，且第3层路由在叶交换机和脊交换机之间进行。建议你使用动态路由协议，如BGP或OSPF，来建立跨越整个网络的路由。与大型第2层网络相比，这带来了许多优势。生成树通常用于第2层网络以阻止交换环路，方法是阻塞上联链路。在使用40
+    G上联时，这样丢失的带宽非常可观。通过在第3层设计中使用动态路由协议，ECMP（等成本多路径）可以用于公平地分配数据到所有上联链路，以最大化可用带宽。在一个叶交换机通过40
+    G上联连接到两个脊交换机的例子中，整个拓扑中任何其他叶交换机的带宽都会达到80 G，无论它位于哪里。
 - en: Some network designs take this even further and push the layer-3 boundary down
     to the servers by actually running these routing protocols on servers as well,
     so that ECMP can be used to simplify the use of both NICs on the server in an
@@ -984,11 +1124,13 @@
   id: totrans-126
   prefs: []
   type: TYPE_NORMAL
+  zh: 一些网络设计更进一步，将第3层边界推到服务器，通过在服务器上运行这些路由协议，使得ECMP可以用于简化服务器两个网卡的活动/活动使用方式。这被称为主机上的路由。
 - en: OSD node sizes
   id: totrans-127
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: OSD节点大小
 - en: A common approach when designing nodes for use with Ceph is to pick a large-capacity
     server that contains large numbers of disk slots. In certain scenarios, this may
     be a good choice, but generally with Ceph, smaller nodes are preferable. To decide
@@ -998,16 +1140,19 @@
   id: totrans-128
   prefs: []
   type: TYPE_NORMAL
+  zh: 在为Ceph设计节点时，一个常见的方法是选择一个大容量服务器，该服务器包含大量磁盘插槽。在某些场景下，这可能是一个不错的选择，但通常来说，Ceph更倾向于使用较小的节点。为了决定每个节点应包含多少磁盘，你需要考虑多个因素，正如我们将在后续章节中描述的那样。
 - en: Failure domains
   id: totrans-129
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 故障域
 - en: If your cluster will have fewer than 10 nodes, then focusing on failure domains
     should be your main concern here.
   id: totrans-130
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你的集群节点少于10个，那么将故障域作为主要关注点应该是你此时的重点。
 - en: With legacy scale-up storage, the hardware is expected to be 100% reliable;
     all components are redundant and the failure of a complete component, such as
     a system board or disk JBOD, would likely cause an outage. Therefore, there is
@@ -1019,6 +1164,7 @@
   id: totrans-131
   prefs: []
   type: TYPE_NORMAL
+  zh: 在传统的扩展存储中，硬件预期要达到100%的可靠性；所有组件都是冗余的，像系统板或磁盘JBOD这样的完整组件故障很可能会导致停机。因此，无法真正了解这样的故障如何影响系统的运行，只能寄希望于它不会发生！而在Ceph中，有一个基本假设，即你的基础设施某一部分（无论是磁盘、节点，甚至机架）完全故障应该被视为正常现象，并且不应该使你的集群不可用。
 - en: Let's take two Ceph clusters, both comprised of 240 disks. Cluster A is comprised
     of 20 x 12 disk nodes and cluster B is comprised of 4 x 60 disk nodes. Now let's
     take a scenario where, for whatever reason, a Ceph OSD node goes offline. This
@@ -1028,6 +1174,8 @@
   id: totrans-132
   prefs: []
   type: TYPE_NORMAL
+  zh: 假设有两个 Ceph 集群，都是由 240 个磁盘组成。集群 A 由 20 个 12 磁盘节点组成，集群 B 由 4 个 60 磁盘节点组成。现在假设某种原因导致一个
+    Ceph OSD 节点下线。这可能是计划维护或意外故障，但该节点现在已下线，所有数据不可用。Ceph 设计上能够处理这种情况，并且如果需要，甚至可以在保持完整数据访问的同时恢复。
 - en: In the case of cluster A, we have now lost 5% of our disks and in the event
     of a permanent loss would have to reconstruct 72 TB of data. Cluster B has lost
     25% of its disks and would have to reconstruct 360 TB. The latter would severely
@@ -1036,6 +1184,8 @@
   id: totrans-133
   prefs: []
   type: TYPE_NORMAL
+  zh: 在集群 A 的情况下，我们现在已经失去了 5% 的磁盘，如果发生永久丢失，必须重建 72 TB 的数据。集群 B 失去了 25% 的磁盘，必须重建 360
+    TB 的数据。后者将严重影响集群性能，并且在数据重建期间，性能降级的时间可能持续好几天。
 - en: Even if a decision is made to override the automated healing and leave Ceph
     in a degraded state while you fix or perform maintenance on a node, in the 4 x
     60 disk example, taking a node offline will also reduce the I/O performance of
@@ -1043,6 +1193,8 @@
   id: totrans-134
   prefs: []
   type: TYPE_NORMAL
+  zh: 即使决定覆盖自动修复并将 Ceph 保持在降级状态，直到修复或对节点进行维护，在 4 x 60 磁盘的例子中，将一个节点下线也会导致集群的 I/O 性能下降
+    25%，这可能意味着客户端应用程序会受到影响。
 - en: It's clear that on smaller-sized clusters, these very large, dense nodes are
     not a good idea. A 10 node Ceph cluster is probably the minimum size if you want
     to reduce the impact of node failure, and so in the case of 60-drive JBODs, you
@@ -1050,11 +1202,14 @@
   id: totrans-135
   prefs: []
   type: TYPE_NORMAL
+  zh: 很明显，在较小规模的集群中，这种非常大的高密度节点并不是一个好主意。如果你希望减少节点故障的影响，10 节点的 Ceph 集群可能是最小的规模，因此在
+    60 驱动器的 JBOD 情况下，至少需要一个以 PB 级别为单位的集群。
 - en: Price
   id: totrans-136
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 价格
 - en: One often-cited reason for wanting to go with large, dense nodes is trying drive
     down the cost of the hardware purchase. This is often a false economy as dense
     nodes tend to require premium parts that often end up costing more per GB than
@@ -1062,6 +1217,8 @@
   id: totrans-137
   prefs: []
   type: TYPE_NORMAL
+  zh: 想要选择大型、高密度节点的一个常被引用的原因是尝试降低硬件购买的成本。但这通常是一个错误的经济决策，因为高密度节点往往需要高端部件，而这些部件每 GB
+    的成本往往比低密度节点更高。
 - en: For example, a 12-disk HDD node may only require a single quad processor to
     provide enough CPU resources for the OSDs. A 60-bay enclosure may require dual
     10-core processors or greater, which are a lot more expensive per GHz provided.
@@ -1070,6 +1227,8 @@
   id: totrans-138
   prefs: []
   type: TYPE_NORMAL
+  zh: 例如，一个 12 磁盘的 HDD 节点可能只需要一个四核处理器就能为 OSD 提供足够的 CPU 资源。而 60 托架的机箱可能需要双 10 核处理器或更强的处理器，这些处理器每
+    GHz 的成本要贵得多。你可能还需要更大的 DIMM，这些 DIMM 的成本也较高，甚至可能需要更多 10G 或更快的网络接口卡。
 - en: The bulk of the cost of the hardware will be made up of the CPUs, memory, networking,
     and disks. As we have seen, all of these hardware resource requirements scale
     linearly with the number and size of the disks. The only way in which larger nodes
@@ -1078,6 +1237,7 @@
   id: totrans-139
   prefs: []
   type: TYPE_NORMAL
+  zh: 硬件的大部分成本将由 CPU、内存、网络和磁盘组成。正如我们所看到的，这些硬件资源的需求会随着磁盘数量和大小的增加而线性扩展。较大的节点可能具有优势的唯一因素是，它们需要更少的主板和电源，但这在整体成本中占的比重不大。
 - en: When looking at SSD only clusters, the higher performance of SSDs dictates the
     use of more powerful CPUs and greatly increased bandwidth requirements. It would
     certainly not be a good idea to deploy a single node with 60 SSDs, as the required
@@ -1088,11 +1248,14 @@
   id: totrans-140
   prefs: []
   type: TYPE_NORMAL
+  zh: 当查看仅使用 SSD 的集群时，SSD 的更高性能要求使用更强大的 CPU，并大大增加带宽需求。显然，不建议部署一个单节点 60 SSD 的集群，因为所需的
+    CPU 资源可能无法提供，或者成本过于昂贵。使用 1U 和 2U 服务器，配备 10 个或 24 个磁盘托架，可能会在成本、性能或容量之间找到一个平衡点，这取决于集群的使用场景。
 - en: Power supplies
   id: totrans-141
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 电源
 - en: Servers can be configured with either single or dual redundant power supplies.
     Traditional workloads normally demand dual power supplies to protect against downtime
     in the case of a power supply or feed failure. If your Ceph cluster is large enough,
@@ -1103,6 +1266,8 @@
   id: totrans-142
   prefs: []
   type: TYPE_NORMAL
+  zh: 服务器可以配置为单个或双重冗余电源供应。传统的工作负载通常需要双重电源供应，以防止电源或电源馈电失败时发生停机。如果您的 Ceph 集群足够大，那么您可能可以考虑在
+    OSD 节点中使用单一 PSU，并让 Ceph 在发生电源故障时提供可用性。应考虑运行单一电源供应与在数据中心整个电源馈电故障时的最坏情况之间的利弊。
 - en: If your Ceph nodes are using RAID controllers with a write back cache, then
     they should be protected either via a battery or flash backup device. In the case
     of a complete power failure, the cache's contents will be kept safe until power
@@ -1111,70 +1276,85 @@
   id: totrans-143
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果您的 Ceph 节点使用带写回缓存的 RAID 控制器，则应通过电池或闪存备份设备保护它们。在完全电源故障的情况下，缓存的内容将在电力恢复之前保持安全。如果
+    RAID 控制器的缓存以写穿模式运行，则不需要缓存备份。
 - en: How to plan a successful Ceph implementation
   id: totrans-144
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 如何规划成功的 Ceph 实施
 - en: 'The following are some general rules for deploying a successful Ceph cluster:'
   id: totrans-145
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下是部署成功 Ceph 集群的一些通用规则：
 - en: Do use 10 G networking as a minimum
   id: totrans-146
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 至少使用 10 G 网络
 - en: Do research and test the correctly sized hardware you wish to use
   id: totrans-147
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 进行研究并测试您希望使用的正确大小的硬件
 - en: Don't use the no barrier mount option with filestore
   id: totrans-148
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 不要在 filestore 上使用 no barrier 挂载选项
 - en: Don't configure pools with a size of two or a `min_size` of one
   id: totrans-149
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 不要将池配置为大小为二或 `min_size` 为一
 - en: Don't use consumer SSDs
   id: totrans-150
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 不要使用消费级 SSD
 - en: Don't use raid controllers in write back mode without battery protection
   id: totrans-151
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 在没有电池保护的情况下，切勿使用写回模式的 RAID 控制器
 - en: Don't use configuration options you don't understand
   id: totrans-152
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 不要使用不理解的配置选项
 - en: Do implement some form of change management
   id: totrans-153
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 必须实施某种形式的变更管理
 - en: Do carry out power-loss testing
   id: totrans-154
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 必须进行电力丧失测试
 - en: Do have an agreed backup and recovery plan
   id: totrans-155
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 必须有一个约定的备份和恢复计划
 - en: Understanding your requirements and how they relate to Ceph
   id: totrans-156
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 理解您的需求以及它们与 Ceph 的关系
 - en: As we have discussed, Ceph is not always the right choice for every storage
     requirement. Hopefully, this chapter has given you the knowledge to help you identify
     your requirements and match them to Ceph's capabilities, and hopefully, Ceph is
@@ -1182,17 +1362,20 @@
   id: totrans-157
   prefs: []
   type: TYPE_NORMAL
+  zh: 正如我们所讨论的，Ceph 并不总是适用于每个存储需求。希望本章为您提供了帮助，帮助您识别需求并将其与 Ceph 的能力相匹配。希望 Ceph 适合您的用例，您可以继续进行项目。
 - en: 'Care should be taken to understand the requirements of the project, including
     the following:'
   id: totrans-158
   prefs: []
   type: TYPE_NORMAL
+  zh: 需要谨慎理解项目的要求，包括以下内容：
 - en: Knowing who the key stakeholders of the project are. They will likely be the
     same people that will be able to detail how Ceph will be used.
   id: totrans-159
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 知道项目的关键利益相关者是谁。他们很可能是能够详细说明如何使用 Ceph 的人。
 - en: Collect the details of what systems Ceph will need to interact with. If it becomes
     apparent, for example, that unsupported operating systems are expected to be used
     with Ceph, then this needs to be flagged at an early stage.
@@ -1200,46 +1383,55 @@
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 收集 Ceph 需要与之交互的系统的详细信息。如果发现，例如，预期使用不受支持的操作系统与 Ceph 一起使用，那么需要在早期阶段标出这一点。
 - en: Defining goals so that you can gauge whether the project is a success
   id: totrans-161
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 定义目标，以便您可以衡量项目是否成功
 - en: 'Every project should have a series of goals that can help identify whether
     the project has been a success. Some of these goals may be the following:'
   id: totrans-162
   prefs: []
   type: TYPE_NORMAL
+  zh: 每个项目都应有一系列目标，帮助判断项目是否成功。一些目标可能包括：
 - en: It should cost no more than *X* amount
   id: totrans-163
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 它的成本不应超过 *X* 数量
 - en: It should provide *X* IOPS or MB/s of performance
   id: totrans-164
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 它应该提供 *X* IOPS 或 MB/s 的性能
 - en: It should survive certain failure scenarios
   id: totrans-165
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 它应能承受某些故障场景
 - en: It should reduce ownership costs of storage by *X*
   id: totrans-166
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 它应该将存储的拥有成本降低 *X*
 - en: These goals will need to be revisited throughout the life of the project to
     make sure that it is on track.
   id: totrans-167
   prefs: []
   type: TYPE_NORMAL
+  zh: 这些目标需要在项目生命周期中不断回顾，以确保项目保持在正确的轨道上。
 - en: Joining the Ceph community
   id: totrans-168
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 加入 Ceph 社区
 - en: Whether it's by joining the Ceph mailing lists, the IRC channel, or attending
     community events, becoming part of the Ceph community is highly recommended. Not
     only will you be able to run proposed hardware and cluster configurations across
@@ -1248,6 +1440,7 @@
   id: totrans-169
   prefs: []
   type: TYPE_NORMAL
+  zh: 无论是通过加入 Ceph 邮件列表、IRC 频道，还是参加社区活动，成为 Ceph 社区的一部分都是强烈推荐的。你不仅可以在许多可能有相似使用场景的人之间运行提议的硬件和集群配置，而且如果你在遇到困难时，社区提供的支持和指导也非常出色。
 - en: By being part of the community, you will also gain insight into the development
     process of the Ceph project and see features being shaped prior to their introduction.
     For the more adventurous, thought should be given to actively contributing to
@@ -1256,11 +1449,14 @@
   id: totrans-170
   prefs: []
   type: TYPE_NORMAL
+  zh: 成为社区的一员，你还将深入了解 Ceph 项目的开发过程，并在功能正式发布之前看到它们的形成。对于那些更具冒险精神的人，可以考虑积极参与项目。这可能包括在邮件列表中帮助他人、报告
+    Bug、更新文档，甚至提交代码改进。
 - en: Choosing your hardware
   id: totrans-171
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 选择硬件
 - en: The infrastructure section of this chapter will have given you a good idea of
     the hardware requirements of Ceph and the theory behind selecting the correct
     hardware for the project. The second biggest cause of outages in a Ceph cluster
@@ -1269,6 +1465,7 @@
   id: totrans-172
   prefs: []
   type: TYPE_NORMAL
+  zh: 本章的基础设施部分已经为你提供了 Ceph 硬件需求的良好理解，以及选择正确硬件的理论背景。Ceph 集群停机的第二大原因来自于不当的硬件选择，因此在设计阶段早期做出正确的选择至关重要。
 - en: If possible, check with your hardware vendor to see whether they have any reference
     designs; these are often certified by Red Hat and will take a lot of the hard
     work off your shoulders in trying to determine whether your hardware choices are
@@ -1278,6 +1475,8 @@
   id: totrans-173
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果可能，向你的硬件供应商询问是否有任何参考设计；这些设计通常经过 Red Hat 认证，可以减轻你确定硬件选择有效性的工作量。你还可以请 Red Hat
+    或你选择的 Ceph 支持供应商验证你的硬件，他们会有之前的经验，并能够解答你可能有的任何问题。
 - en: Lastly, if you are planning on deploying and running your Ceph cluster entirely
     in house without any third-party involvement or support, consider reaching out
     to the Ceph community. The Ceph user's mailing list is contributed to by individuals
@@ -1287,11 +1486,13 @@
   id: totrans-174
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后，如果你计划完全在内部部署并运行 Ceph 集群，而不依赖任何第三方的参与或支持，建议考虑联系 Ceph 社区。Ceph 用户的邮件列表由来自全球各地的不同背景的个人贡献。很有可能有人正在做类似的事情，他们能够为你提供有关硬件选择的建议。
 - en: Training yourself and your team to use Ceph
   id: totrans-175
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 培训你自己和你的团队使用 Ceph
 - en: As with all technologies, it's essential that Ceph administrators receive some
     sort of training. Once the Ceph cluster goes live and becomes a business dependency,
     inexperienced administrators are a risk to stability. Depending on your reliance
@@ -1300,11 +1501,13 @@
   id: totrans-176
   prefs: []
   type: TYPE_NORMAL
+  zh: 与所有技术一样，Ceph 管理员接受一定的培训至关重要。一旦 Ceph 集群上线并成为业务依赖，缺乏经验的管理员将成为稳定性的风险。根据你对第三方支持的依赖程度，可能需要不同层次的培训，并且这也可能决定你是应该寻找培训课程，还是自学。
 - en: Running a PoC to determine whether Ceph has met the requirements
   id: totrans-177
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 运行 PoC 来确定 Ceph 是否满足需求
 - en: A **proof of concept **(**PoC**) cluster should be deployed to test the design
     and identify any issues early on before proceeding with full-scale hardware procurement.
     This should be treated as a decision point in the project; don't be afraid to
@@ -1316,6 +1519,8 @@
   id: totrans-178
   prefs: []
   type: TYPE_NORMAL
+  zh: 应该部署一个**概念验证**（**PoC**）集群，以测试设计并在进行大规模硬件采购之前尽早发现问题。这应该作为项目中的一个决策点；如果发现任何严重问题，不要害怕重新审视目标或重新开始设计。如果你有类似规格的现有硬件，使用它进行
+    PoC 测试是可以的，但目标应该是尽量使用与计划构建生产集群的硬件尽可能相似的设备，以便充分测试设计。
 - en: As well as testing for stability, the PoC cluster should also be used to forecast
     whether it looks likely that the goals you have set for the project will be met.
     Although it may be hard to directly replicate the workload requirements during
@@ -1324,6 +1529,7 @@
   id: totrans-179
   prefs: []
   type: TYPE_NORMAL
+  zh: 除了测试稳定性外，PoC 集群还应当用于预测你为项目设定的目标是否可能实现。尽管在 PoC 阶段可能很难直接复制工作负载的需求，但应该尽量使测试与预期的生产工作负载匹配。
 - en: The PoC stage is also a good time to firm up your knowledge on Ceph, practice
     day-to-day operations, and test out features. This will be of benefit further
     down the line. You should also take this opportunity to be as abusive as possible
@@ -1335,11 +1541,14 @@
   id: totrans-180
   prefs: []
   type: TYPE_NORMAL
+  zh: PoC 阶段也是加深你对 Ceph 知识理解、练习日常操作并测试功能的好时机。这对后续工作会有帮助。你还应该借此机会尽可能地对 PoC 集群进行“折磨”。随机拔出磁盘、关闭节点电源以及断开网络连接。如果设计得当，Ceph
+    应该能够承受这些事件。现在进行这些测试将使你更有信心在更大规模下操作 Ceph，并且如果需要，也能更轻松地了解如何进行故障排除。
 - en: Following best practices to deploy your cluster
   id: totrans-181
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 遵循最佳实践来部署你的集群
 - en: When deploying your cluster, you should focus on understanding the process rather
     than following guided examples. This will give you better knowledge of the various
     components that make up Ceph, and should you encounter any errors during deployment
@@ -1349,12 +1558,15 @@
   id: totrans-182
   prefs: []
   type: TYPE_NORMAL
+  zh: 在部署集群时，你应该专注于理解过程，而不是单纯跟随示例。这将帮助你更好地了解组成 Ceph 的各种组件，如果在部署或操作过程中遇到错误，你也将能更好地解决问题。本书的下一章将详细介绍
+    Ceph 的部署，包括使用编排工具。
 - en: Initially, it is recommended that the default options for both the operating
     system and Ceph are used. It is better to start from a known state should any
     issues arise during deployment and initial testing.
   id: totrans-183
   prefs: []
   type: TYPE_NORMAL
+  zh: 最初，建议使用操作系统和 Ceph 的默认选项。如果在部署和初步测试过程中出现任何问题，最好从已知状态开始。
 - en: RADOS pools using replication should have their replication level left at the
     default of three and the minimum replication level of two. This corresponds to
     the pool variables of `size` and `min_size` respectively. Unless there is both
@@ -1369,6 +1581,9 @@
   id: totrans-184
   prefs: []
   type: TYPE_NORMAL
+  zh: 使用副本的 RADOS 池应将其副本级别保持在默认的三副本，并将最小副本级别设为二副本。这分别对应池变量中的 `size` 和 `min_size`。除非有充分的理解和理由来降低这些值的影响，否则不建议更改它们。副本大小决定了集群中将存储多少份数据副本，降低副本大小的效果在数据丢失保护方面应该是显而易见的。而
+    `min_size` 在数据丢失中的影响较少被理解，但却是常见的原因。擦除编码池应类似地进行配置，以确保有至少两个擦除编码块用于恢复。例如，`k=4 m=2`；这将提供与
+    `size=3` 副本池相同的耐用性，但可用容量是其两倍。
 - en: The `min_size` variable controls how many copies the cluster must write to acknowledge
     the write back to a client. A `min_size` of `2` means that the cluster must at
     least write two copies of data before acknowledging the write; this can mean that,
@@ -1386,6 +1601,9 @@
   id: totrans-185
   prefs: []
   type: TYPE_NORMAL
+  zh: '`min_size` 变量控制集群必须写入多少副本才能确认写入操作已回传给客户端。`min_size` 为 `2` 意味着集群至少必须写入两份数据副本才能确认写入；这意味着，在严重退化的集群情况下，如果
+    PG 只剩下一个副本，写入操作将会被阻塞，直到 PG 恢复到有两个副本为止。正因如此，你可能会想将 `min_size` 降到 `1`，这样，在这种情况下，集群操作仍然可以继续，如果可用性比一致性更重要，那么这可以是一个有效的决策。然而，当
+    `min_size` 为 `1` 时，数据可能只会写入一个 OSD，并且无法保证所需副本的数量很快就能满足。在此期间，任何额外的组件故障可能会导致数据丢失，尤其是在退化状态下写入的数据。总之，停机时间是坏事，而数据丢失通常更糟，而这两个设置可能会对数据丢失的概率产生最大的影响。'
 - en: The only scenario where a `min_size` setting of `1` should be used permanently is
     in extremely small clusters where there aren't really enough OSDs to have it set
     any higher, although at this scale, it is debatable whether Ceph is the correct
@@ -1393,11 +1611,14 @@
   id: totrans-186
   prefs: []
   type: TYPE_NORMAL
+  zh: 在极小的集群中，`min_size` 设置为 `1` 的唯一场景是永久使用这种设置，因为这些集群中没有足够的 OSD 可供设置更高的值，尽管在这种规模下，是否选择
+    Ceph 作为正确的存储平台仍有争议。
 - en: Defining a change management process
   id: totrans-187
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 定义变更管理过程
 - en: The biggest cause of data loss and outages with a Ceph cluster are normally
     human error, whether it be by accidentally running the wrong command or changing
     configuration options, which may have unintended consequences. These incidents
@@ -1408,11 +1629,13 @@
   id: totrans-188
   prefs: []
   type: TYPE_NORMAL
+  zh: Ceph 集群数据丢失和停机的最大原因通常是人为错误，无论是误执行了错误的命令，还是更改了配置选项，这些操作可能会产生意外后果。随着管理 Ceph 的团队人数增加，这些事件可能会变得更加频繁。减少人为错误导致服务中断或数据丢失的风险的一个好方法是实施某种形式的变更控制。下一章将更详细地讨论这一点。
 - en: Creating a backup and recovery plan
   id: totrans-189
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 创建备份和恢复计划
 - en: Ceph is highly redundant and, when properly designed, should have no single
     point of failure and be resilient to many types of hardware failures. However,
     one-in-a-million situations do occur, and as we have also discussed, human error
@@ -1423,6 +1646,8 @@
   id: totrans-190
   prefs: []
   type: TYPE_NORMAL
+  zh: Ceph 具有高度冗余性，并且在设计得当的情况下，应该没有单点故障，能够抵抗多种硬件故障。然而，一百万分之一的情况确实会发生，正如我们所讨论的，人的错误也是不可预测的。在这两种情况下，Ceph
+    集群可能会进入不可用状态，或者发生数据丢失。在许多情况下，可能可以恢复部分或全部数据，并使集群恢复正常运行。
 - en: However, in all cases, a full backup and recovery plan should be discussed before
     putting any live data onto a Ceph cluster. Many a company has gone out of business
     or lost the faith of its customers when it's revealed that not only has there
@@ -1433,11 +1658,13 @@
   id: totrans-191
   prefs: []
   type: TYPE_NORMAL
+  zh: 然而，在所有情况下，在将任何实时数据放入 Ceph 集群之前，应该讨论完整的备份和恢复计划。许多公司因长时间停机并丧失关键数据而倒闭，或者失去客户的信任。当外界得知不仅发生了长时间的停机，还丢失了关键数据时，往往会对公司产生致命打击。可能在讨论后，大家同意不需要备份和恢复计划，这也是可以的。只要风险和可能的结果都已经讨论并达成一致，这就是最重要的。
 - en: Summary
   id: totrans-192
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 总结
 - en: In this chapter, you learned all of the necessary steps to allow you to successfully
     plan and implement a Ceph project. You also learned about the available hardware
     choices, how they relate to Ceph's requirements, and how they affect both Ceph's
@@ -1447,54 +1674,66 @@
   id: totrans-193
   prefs: []
   type: TYPE_NORMAL
+  zh: 本章中，你学习了成功规划和实施 Ceph 项目所需的所有步骤。你还了解了可用的硬件选择，它们如何与 Ceph 的需求相关，以及它们如何影响 Ceph 的性能和可靠性。最后，你还了解到确保
+    Ceph 集群健康运行所需的流程和程序的重要性。
 - en: The following chapters in this book will build on the knowledge you have learned
     in this chapter and help you put it to use to enable you to actually deploy, manage,
     and utilize Ceph storage.
   id: totrans-194
   prefs: []
   type: TYPE_NORMAL
+  zh: 本书接下来的章节将在本章所学知识的基础上，帮助你将其应用于实际，最终实现 Ceph 存储的部署、管理和使用。
 - en: Questions
   id: totrans-195
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 问题
 - en: What does RADOS stand for?
   id: totrans-196
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: RADOS 代表什么？
 - en: What does CRUSH stand for?
   id: totrans-197
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: CRUSH 代表什么？
 - en: What is the difference between consumer and enterprise SSDs?
   id: totrans-198
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 消费级 SSD 和企业级 SSD 有什么区别？
 - en: Does Ceph prefer the consistency or availability of your data?
   id: totrans-199
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: Ceph 更倾向于保证数据的一致性还是可用性？
 - en: Since the Luminous release, what is the default storage technology?
   id: totrans-200
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 自 Luminous 版本发布以来，默认的存储技术是什么？
 - en: Who created Ceph?
   id: totrans-201
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 谁创建了 Ceph？
 - en: What are block devices created on Ceph called?
   id: totrans-202
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在 Ceph 上创建的块设备叫什么？
 - en: What is the name of the component that actually stores data in Ceph?
   id: totrans-203
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 实际存储数据的 Ceph 组件叫什么？

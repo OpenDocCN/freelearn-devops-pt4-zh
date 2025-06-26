@@ -1,7 +1,9 @@
 - en: '*Chapter 5*: Implementing Storage for the Container''s Data'
+  id: totrans-0
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: '*第五章*：为容器的数据实现存储'
 - en: In the previous chapters, we explored how to run and manage our containers using
     Podman, but we will soon come to realize in this chapter that these operations
     aren't useful in certain scenarios where the applications included in our containers
@@ -9,66 +11,95 @@
     and this is one of their main features, as we described in the first chapter of
     this book, and for this reason, we need a way to attach persistent storage to
     a running container to preserve the container's important data.
+  id: totrans-1
   prefs: []
   type: TYPE_NORMAL
+  zh: 在之前的章节中，我们探讨了如何使用Podman运行和管理容器，但我们很快会意识到，在本章中，这些操作在某些场景下并不有用，特别是当容器中的应用程序需要以持久方式存储数据时。容器默认是短暂的，这是它们的主要特性之一，正如我们在本书的第一章中描述的那样，因此我们需要一种方法，将持久存储附加到运行中的容器，以保存容器的重要数据。
 - en: 'In this chapter, we''re going to cover the following main topics:'
+  id: totrans-2
   prefs: []
   type: TYPE_NORMAL
+  zh: 本章我们将讨论以下主要内容：
 - en: Why does storage matter for containers?
+  id: totrans-3
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 为什么存储对容器很重要？
 - en: Containers' storage features
+  id: totrans-4
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 容器的存储特性
 - en: Copying files into and out of a container
+  id: totrans-5
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 将文件复制进出容器
 - en: Attaching host storage to a container
+  id: totrans-6
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 将主机存储附加到容器
 - en: Technical requirements
+  id: totrans-7
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 技术要求
 - en: Before proceeding with the chapter's lecture and examples, a machine with a
     working Podman installation is required. As stated in [*Chapter 3*](B17908_03_epub.xhtml#_idTextAnchor068),
     *Running the First Container*, all the examples in the book are executed on a
     Fedora 34 system or later but can be reproduced on the reader's OS of choice.
+  id: totrans-8
   prefs: []
   type: TYPE_NORMAL
+  zh: 在继续本章的讲解和示例之前，需要一台安装了Podman的工作机器。如[*第三章*](B17908_03_epub.xhtml#_idTextAnchor068)中所述，*运行第一个容器*，本书中的所有示例都在Fedora
+    34系统或更高版本上执行，但也可以在读者选择的操作系统上重现。
 - en: Finally, a good understanding of the topics covered in [*Chapter 4*](B17908_04_epub.xhtml#_idTextAnchor083),
     *Managing Running Containers*, is useful in terms of being able to easily grasp
     concepts regarding OCI images and container execution.
+  id: totrans-9
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后，充分理解[*第四章*](B17908_04_epub.xhtml#_idTextAnchor083)中讨论的主题，*管理正在运行的容器*，对于能够轻松掌握OCI镜像和容器执行的概念非常有用。
 - en: Why does storage matter for containers?
+  id: totrans-10
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 为什么存储对容器很重要？
 - en: 'Before moving forward in the chapter and answering this interesting question,
     we need to distinguish between two kinds of storage for containers:'
+  id: totrans-11
   prefs: []
   type: TYPE_NORMAL
+  zh: 在继续本章并回答这个有趣的问题之前，我们需要区分容器的两种存储类型：
 - en: External storage attached to running containers to store data, making it persistent
     on a container's restart
+  id: totrans-12
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 附加到正在运行的容器的外部存储，用于存储数据，使数据在容器重启时保持持久性
 - en: Underlying storage for root filesystems of our containers and container images
+  id: totrans-13
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 用于容器根文件系统和容器镜像的底层存储
 - en: Talking about external storage, as we described in [*Chapter 1*](B17908_01_epub.xhtml#_idTextAnchor015),
     *Introduction to Container Technology*, containers are stateless, ephemeral, and
     often with a read-only filesystem. This is because the theory behind the technology
     states that containers should be used for spawning scalable and distributed applications
     that have to scale horizontally instead of vertically.
+  id: totrans-14
   prefs: []
   type: TYPE_NORMAL
+  zh: 讨论外部存储，如我们在[*第一章*](B17908_01_epub.xhtml#_idTextAnchor015)中描述的那样，*容器技术概述*，容器是无状态的、短暂的，并且通常具有只读文件系统。这是因为该技术背后的理论认为，容器应该用于创建可扩展的、分布式的应用程序，这些应用程序必须进行横向扩展，而不是纵向扩展。
 - en: Scaling an application horizontally means that in case we require additional
     resources for our running services, we will not increase CPU or RAM for a single
     running container, but we will instead launch a brand new container that will
@@ -76,14 +107,18 @@
     well-known paradigm adopted in the public cloud. The container in principle should
     be ephemeral because any additional copy of the existing container image should
     be run at any time for empowering the existing running service.
+  id: totrans-15
   prefs: []
   type: TYPE_NORMAL
+  zh: 横向扩展应用程序意味着，当我们需要为正在运行的服务增加额外资源时，我们不会增加单个运行容器的CPU或RAM，而是启动一个全新的容器，新的容器将与现有容器一起处理传入的请求。这与公有云中采用的著名范式相同。原则上，容器应该是短暂的，因为任何现有容器镜像的额外副本应该随时运行，以增强现有的运行服务。
 - en: Of course, exceptions exist, and it could happen that a running container cannot
     be scaled horizontally or that it simply needs to share configurations, cache,
     or any other data relevant to other copies of the same container images at startup
     time or during runtime.
+  id: totrans-16
   prefs: []
   type: TYPE_NORMAL
+  zh: 当然，存在一些例外情况，可能发生正在运行的容器无法水平扩展，或者容器在启动时或运行时需要共享配置、缓存或与其他相同容器镜像副本相关的任何数据。
 - en: Let's understand this with the help of a real-life example. Using a car-sharing
     service to get a new car for every destination inside a city can be a useful and
     smart way to move around without worrying about parking fees, fuel, and other
@@ -94,8 +129,10 @@
     to them some storage for letting our container write data down but then, once
     our container stops, we should detach that storage so that a brand-new container
     can use it when needed.
+  id: totrans-17
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们通过一个现实生活中的例子来理解这一点。使用共享汽车服务，每次前往城市中的目的地时都可以获得一辆新车，这是一种非常有用且智能的出行方式，既能避免停车费、油费和其他问题的困扰。然而，另一方面，这项服务并不允许你将物品存放在停放的车内。因此，使用共享汽车服务时，我们可以在进入车内时拿出物品，但在离开车之前，我们必须把物品收拾好。同样的道理也适用于容器，我们必须为容器附加存储，以允许容器写入数据，但当容器停止时，我们应该卸载存储，以便新的容器在需要时使用。
 - en: 'Here''s another more technical example: let''s consider a standard three-tier
     application with a web, a backend, and a database service. Every layer of this
     application may need storage, which it will use in a variety of ways. The web
@@ -103,65 +140,88 @@
     images at runtime, and so on. The backend service will need a place to store configuration
     and synchronization data between the other running backend services, if any, and
     so on. The database service will surely need a place to store the DB data.'
+  id: totrans-18
   prefs: []
   type: TYPE_NORMAL
+  zh: 这里有一个更技术性的例子：假设我们有一个标准的三层应用程序，包含 Web 服务、后端服务和数据库服务。这个应用程序的每一层可能都需要存储，并以各种方式使用这些存储。Web
+    服务可能需要一个地方来保存缓存、存储渲染后的网页、运行时的一些自定义图像等等。后端服务需要一个地方来存储配置数据，以及与其他运行中的后端服务之间的同步数据（如果有的话）等等。数据库服务肯定需要一个地方来存储数据库数据。
 - en: Storage is often associated with low-level infrastructure, but in a container,
     the storage becomes important even for developers, who should plan where to attach
     the storage, and the features needed for their application.
+  id: totrans-19
   prefs: []
   type: TYPE_NORMAL
+  zh: 存储通常与低级基础设施相关联，但在容器中，存储变得对开发人员同样重要，开发人员需要规划存储附加的位置，以及其应用程序所需的功能。
 - en: If we extend the topic to container orchestration, then the storage inherits
     a strategic role because it should be as elastic and feasible as the Kubernetes
     orchestrator that we might use it with. The container storage in this case should
     become more like software-defined storage – able to provide storage resources
     in a self-service way to developers, and to containers in general.
+  id: totrans-20
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果我们将话题扩展到容器编排，那么存储就承担了战略性角色，因为它应该像我们可能使用的 Kubernetes 编排器一样具备弹性和可行性。在这种情况下，容器存储应更像是软件定义的存储——能够以自助服务的方式为开发人员和容器提供存储资源。
 - en: Although this book will talk about local storage, it's important to note that
     this is not enough for the Kubernetes orchestrator because containers should be
     portable from one host to another depending on the availability and scaling rules
     defined. This is where software-defined storage could be the solution!
+  id: totrans-21
   prefs: []
   type: TYPE_NORMAL
+  zh: 尽管本书将讨论本地存储，但值得注意的是，对于 Kubernetes 编排器来说，这还不够，因为容器应该能够根据定义的可用性和扩展规则，从一个主机迁移到另一个主机。这就是软件定义存储可能成为解决方案的地方！
 - en: As we can deduct from the previous examples, external storage matters in containers.
     The usage may vary depending on the running application inside our container,
     but it is required. At the same time, another key role is driven by the underlying
     container storage that is responsible for handling the correct storage of containers
     and the container images' root filesystem. Choosing the right, stable, and performing
     underlying local storage will ensure better and correct management of our containers.
+  id: totrans-22
   prefs: []
   type: TYPE_NORMAL
+  zh: 从前面的例子中我们可以推断出，外部存储在容器中至关重要。其使用可能会根据我们容器中运行的应用程序不同而有所不同，但它是必需的。同时，另一个关键角色是由底层容器存储驱动的，它负责处理容器的正确存储以及容器镜像根文件系统的存储。选择正确、稳定且性能良好的底层本地存储，将确保更好的容器管理。
 - en: So, let's first explore a bit of the theory of container storage and then discuss
     how to work with it.
+  id: totrans-23
   prefs: []
   type: TYPE_NORMAL
+  zh: 所以，让我们首先探索一下容器存储的理论，然后讨论如何使用它。
 - en: Containers' storage features
+  id: totrans-24
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 容器存储功能
 - en: Before going into a real example and use cases, we should first dig into the
     main differences between container storage and a **container storage interface**
     (**CSI**).
+  id: totrans-25
   prefs: []
   type: TYPE_NORMAL
+  zh: 在进入实际的示例和用例之前，我们应该首先深入了解容器存储与 **容器存储接口**（**CSI**）之间的主要区别。
 - en: Container storage, previously referred to as *underlying container storage*,
     is responsible for handling container images on **Copy-on-Write** (**COW**) filesystems.
     Container images need to be transferred and move around until a container engine
     is instructed to run them, so we need a way to store that image until it is run.
     That's the role of container storage.
+  id: totrans-26
   prefs: []
   type: TYPE_NORMAL
+  zh: 容器存储，之前被称为 *底层容器存储*，负责处理 **写时复制**（**COW**）文件系统上的容器镜像。容器镜像需要传输并移动，直到容器引擎被指示运行它们，因此我们需要一种方法来存储镜像，直到它被运行。这就是容器存储的作用。
 - en: Once we start using an orchestrator such as Kubernetes, CSI instead is responsible
     for providing container block or file storage that containers need to write data
     to.
+  id: totrans-27
   prefs: []
   type: TYPE_NORMAL
+  zh: 一旦我们开始使用 Kubernetes 等调度器，CSI 负责提供容器所需的块存储或文件存储，用于容器写入数据。
 - en: In the next section of this chapter, we will concentrate on container storage
     and its configuration. Later, we will talk about external storage for containers
     and the options we have in Podman to expose the host local storage to the running
     containers.
+  id: totrans-28
   prefs: []
   type: TYPE_NORMAL
+  zh: 本章的下一部分，我们将重点讨论容器存储及其配置。稍后，我们将讨论容器的外部存储以及 Podman 提供的将主机本地存储暴露给运行中的容器的选项。
 - en: A great innovation introduced with Podman is the *containers/storage* project
     ([https://github.com/containers/storage](https://github.com/containers/storage)),
     a great way to share an underlying common method for accessing container storage
@@ -169,552 +229,821 @@
     daemon to interact with container storage. With no other way to directly interact
     with the underlying storage, the Docker daemon just hid it from the user as well
     as the system administrator.
+  id: totrans-29
   prefs: []
   type: TYPE_NORMAL
+  zh: Podman 引入的一项重要创新是 *containers/storage* 项目（[https://github.com/containers/storage](https://github.com/containers/storage)），它为共享一种访问主机容器存储的底层通用方法提供了一个很好的方式。随着
+    Docker 的出现，我们不得不通过 Docker 守护进程来与容器存储进行交互。由于没有其他直接与底层存储交互的方式，Docker 守护进程只会将其隐藏在用户和系统管理员面前。
 - en: With the *containers/storage* project, we now have an easy way to use multiple
     tools for analyzing, managing, or working with container storage at the same time.
+  id: totrans-30
   prefs: []
   type: TYPE_NORMAL
+  zh: 通过 *containers/storage* 项目，我们现在可以轻松地同时使用多个工具来分析、管理或处理容器存储。
 - en: The configuration of this low-level piece of software is so important for Podman
     as well as for other companion tools of Podman and can be inspected or edited
     through its configuration file available at `/etc/containers/storage.conf`.
+  id: totrans-31
   prefs: []
   type: TYPE_NORMAL
+  zh: 这个低级软件的配置对于 Podman 以及其他 Podman 配套工具至关重要，可以通过其配置文件 `/etc/containers/storage.conf`
+    进行检查或编辑。
 - en: Looking at the configuration file, we can easily discover that we can change
     a lot of options in terms of how our containers interact with the underlying storage.
     Let's inspect the most important option – the storage driver.
+  id: totrans-32
   prefs: []
   type: TYPE_NORMAL
+  zh: 看一下配置文件，我们可以轻松发现，我们可以改变许多选项，来决定容器如何与底层存储交互。让我们检查一下最重要的选项——存储驱动程序。
 - en: Storage driver
+  id: totrans-33
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 存储驱动程序
 - en: 'The configuration file, as one of its first options, gives the opportunity
     to choose the default **Copy On Write** (**COW**) container storage driver. The
     configuration file in the current version, at the time of writing this book, supports
     the following COW drivers:'
+  id: totrans-34
   prefs: []
   type: TYPE_NORMAL
+  zh: 配置文件作为其第一个选项之一，提供了选择默认 **写时复制**（**COW**）容器存储驱动程序的机会。在本书写作时，当前版本的配置文件支持以下 COW
+    驱动程序：
 - en: overlay
+  id: totrans-35
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: overlay
 - en: vfs
+  id: totrans-36
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: vfs
 - en: devmapper
+  id: totrans-37
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: devmapper
 - en: aufs
+  id: totrans-38
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: aufs
 - en: btrfs
+  id: totrans-39
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: btrfs
 - en: zfs
+  id: totrans-40
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: zfs
 - en: These are also often referred to as **graph drivers** because most of them organize
     the layers they handle in a graph structure.
+  id: totrans-41
   prefs: []
   type: TYPE_NORMAL
+  zh: 这些驱动程序通常也被称为 **图形驱动程序**，因为它们大多数通过图形结构组织它们处理的层。
 - en: Using Podman on Fedora 34 or later, the container's storage configuration file
     is shipped with overlay as the default driver.
+  id: totrans-42
   prefs: []
   type: TYPE_NORMAL
+  zh: 在 Fedora 34 或更高版本上使用 Podman 时，容器的存储配置文件默认使用 overlay 作为驱动程序。
 - en: Another important thing to mention is that, at the time of writing this book,
     there are two versions of the overlay filesystem – version 1 and version 2\.
+  id: totrans-43
   prefs: []
   type: TYPE_NORMAL
+  zh: 另一个需要提到的重要点是，在本书写作时，overlay 文件系统有两个版本——版本 1 和版本 2。
 - en: The original overlay filesystem version 1 was initially used by the Docker container
     engine, but was later abandoned in favor of version 2\. That's why Podman and
     the container's storage configuration file refers generically to the name overlay,
     but it instead uses the new version 2.
+  id: totrans-44
   prefs: []
   type: TYPE_NORMAL
+  zh: 原始的 Overlay 文件系统版本 1 最初由 Docker 容器引擎使用，但后来被版本 2 替代。这就是为什么 Podman 和容器的存储配置文件通常使用
+    `overlay` 这个名字，但实际使用的是新的版本 2。
 - en: Before going into detail regarding the other options and, finally, the practical
     examples contained in this chapter, let's further explore how one of these COW
     filesystem drivers works.
+  id: totrans-45
   prefs: []
   type: TYPE_NORMAL
+  zh: 在详细了解本章中的其他选项和实际示例之前，让我们进一步探讨这些 COW 文件系统驱动程序中的一个是如何工作的。
 - en: The overlay union filesystem has been present in a Linux kernel since version
     3.18\. It is usually enabled by default and activated dynamically once a mount
     is initiated with this filesystem.
+  id: totrans-46
   prefs: []
   type: TYPE_NORMAL
+  zh: Overlay 联合文件系统从 Linux 内核版本 3.18 开始就已存在。它通常默认启用，并且在初始化挂载时动态激活。
 - en: The mechanism behind this filesystem is really simple but powerful – it allows
     a directory tree to be overlaid on another, storing only the differences, but
     showing the latest updated, *squashed* tree of directories.
+  id: totrans-47
   prefs: []
   type: TYPE_NORMAL
+  zh: 这个文件系统背后的机制非常简单，但却非常强大——它允许将一个目录树叠加到另一个目录上，仅存储差异，但展示最新更新的、*合并*后的目录树。
 - en: Usually, in the world of containers, we start using a read-only filesystem,
     adding one or more layers, read-only again, until a running container will use
     this bunch of *squashed* layers as its root filesystem. This is where the last
     read-write layer will be created as an overlay of the others.
+  id: totrans-48
   prefs: []
   type: TYPE_NORMAL
+  zh: 通常，在容器世界里，我们会开始使用一个只读文件系统，添加一个或多个只读层，再次变为只读，直到运行中的容器将这些 *合并* 层作为其根文件系统。这时，将创建最后一个读写层，作为其他层的叠加。
 - en: 'Let''s see what happens under the hood once we pull down a brand-new container
     image with Podman:'
+  id: totrans-49
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们看看当我们用 Podman 拉取一个全新的容器镜像时，幕后发生了什么：
 - en: Important Note
+  id: totrans-50
   prefs: []
   type: TYPE_NORMAL
+  zh: 重要说明
 - en: If you wish to proceed with testing the following example on your test machine,
     ensure that you remove any running container and container images to easily match
     the image with the layers that Podman will download for us.
+  id: totrans-51
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你希望在测试机器上继续测试下面的示例，请确保删除任何正在运行的容器和容器镜像，这样可以更轻松地将镜像与 Podman 下载的层匹配。
 - en: '[PRE0]'
+  id: totrans-52
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE0]'
 - en: We can see from the previous command output that multiple layers have been downloaded.
     That's because the container image we pulled down is composed of many layers.
+  id: totrans-53
   prefs: []
   type: TYPE_NORMAL
+  zh: 从之前命令的输出中，我们可以看到已经下载了多个层。这是因为我们拉取的容器镜像由多个层组成。
 - en: 'Now we can start inspecting just the downloaded layers. First of all, we have
     to locate the right directory, which we can search for inside the configuration
     file. Alternatively, we can use an easier technique. Podman has a command dedicated
     to displaying its running configuration and other useful information – `podman
     info`. Let''s see how it works:'
+  id: totrans-54
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在我们可以开始检查下载的层。首先，我们需要找到正确的目录，可以通过在配置文件中搜索来定位。或者，我们可以使用一种更简单的方法。Podman 有一个命令专门用于显示其运行配置和其他有用信息——`podman
+    info`。让我们看看它是如何工作的：
 - en: '[PRE1]'
+  id: totrans-55
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE1]'
 - en: To reduce the output of the `podman info` command, we used the `grep` command
     to only match the `store` section that contains the current configuration in place
     for container storage.
+  id: totrans-56
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了减少 `podman info` 命令的输出，我们使用了 `grep` 命令，仅匹配包含当前容器存储配置的 `store` 部分。
 - en: 'As we can see, the driver used is `overlay`, and the root directory to search
     our layers is reported as the `graphRoot` directory: `/var/lib/containers/storage`;
     for rootless containers, the equivalent is `$HOME/.local/share/containers/storage`.
     We also have other paths reported, but we will talk about these later in this
     section. The keyword `graph` is a term derived from the category of drivers we
     just introduced earlier.'
+  id: totrans-57
   prefs: []
   type: TYPE_NORMAL
+  zh: 正如我们所看到的，使用的驱动程序是 `overlay`，要搜索层的根目录被报告为 `graphRoot` 目录：`/var/lib/containers/storage`；对于无根容器，相应的目录是
+    `$HOME/.local/share/containers/storage`。我们还可以看到其他路径，但这些路径将在本节后面讨论。`graph` 这个关键词来自我们之前介绍过的驱动类别。
 - en: 'Let''s take a look into that directory to see what the actual content is:'
+  id: totrans-58
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们看看这个目录，看看里面到底有什么内容：
 - en: '[PRE2]'
+  id: totrans-59
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE2]'
 - en: 'We have several directories available for which the names are pretty self-explanatory.
     The ones we are looking for are as follows:'
+  id: totrans-60
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们可以看到几个可用的目录，它们的名称很直观。我们要寻找的是以下这些：
 - en: '`overlay-images`: This contains the metadata of the container images downloaded.'
+  id: totrans-61
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`overlay-images`：此目录包含下载的容器镜像的元数据。'
 - en: '`overlay-layers`: This contains the archives for all the layers of every container
     image.'
+  id: totrans-62
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`overlay-layers`：这里包含了每个容器镜像所有层的归档文件。'
 - en: '`overlay`: This is the directory containing the unpacked layers of every container
     image.'
+  id: totrans-63
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`overlay`：这是包含每个容器镜像解压层的目录。'
 - en: 'Let''s check the content of the first directory, `overlay-images`:'
+  id: totrans-64
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们检查第一个目录`overlay-images`的内容：
 - en: '[PRE3]'
+  id: totrans-65
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE3]'
 - en: As we can imagine, in this directory, we can find the metadata of the only container
     image we pulled down and, in the directory with a very long ID, we will find the
     manifest file describing the layers that make up our container image.
+  id: totrans-66
   prefs: []
   type: TYPE_NORMAL
+  zh: 正如我们所想，在这个目录中，我们可以找到我们拉取下来的唯一容器镜像的元数据，并且在那个ID非常长的目录中，我们将找到描述构成容器镜像层的清单文件。
 - en: 'Let''s now check the content of the second directory, `overlay-layers`:'
+  id: totrans-67
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在让我们检查第二个目录`overlay-layers`的内容：
 - en: '[PRE4]'
+  id: totrans-68
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE4]'
 - en: 'As we can see, we just found all the layers'' archives downloaded for our container
     image, but where they have been unpacked? The answer is easy – in the third folder,
     `overlay`:'
+  id: totrans-69
   prefs: []
   type: TYPE_NORMAL
+  zh: 正如我们所看到的，我们刚刚找到了为容器镜像下载的所有层的归档文件，但它们被解压到哪里了呢？答案很简单——在第三个文件夹`overlay`中：
 - en: '[PRE5]'
+  id: totrans-70
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE5]'
 - en: The first question that could arise when looking at the latest directory content
     is, what's the purpose of the `l` (L in lowercase) directory?
+  id: totrans-71
   prefs: []
   type: TYPE_NORMAL
+  zh: 当查看最新目录内容时，可能会产生的第一个问题是，`l`（小写L）目录的用途是什么？
 - en: 'To answer this question, we have to inspect the content of a layer directory.
     We can start with the first one on the list:'
+  id: totrans-72
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了回答这个问题，我们必须检查一个层目录的内容。我们可以从列表中的第一个开始：
 - en: '[PRE6]'
+  id: totrans-73
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE6]'
 - en: 'Let''s understand the purpose of these files and directories:'
+  id: totrans-74
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们理解这些文件和目录的用途：
 - en: '`diff`: This directory represents the upper layer of the overlay, and is used
     to store any changes to the layer.'
+  id: totrans-75
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`diff`：这个目录表示叠加层的上层，用于存储对该层的任何更改。'
 - en: '`lower`: This file reports all the lower layer mounts, ordered from uppermost
     to lowermost.'
+  id: totrans-76
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`lower`：这个文件报告所有下层的挂载情况，按从上到下的顺序排列。'
 - en: '`merged`: This directory is the one that the overlay is mounted on.'
+  id: totrans-77
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`merged`：该目录是叠加层挂载到的目录。'
 - en: '`work`: This directory is used for internal operations.'
+  id: totrans-78
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`work`：该目录用于内部操作。'
 - en: '`link`: This file contains a unique string for the layer.'
+  id: totrans-79
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`link`：这个文件包含层的唯一字符串。'
 - en: Now, coming back to our question, what's the purpose of the `l` (L in lowercase)
     directory?
+  id: totrans-80
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，回到我们的问题，`l`（小写L）目录的用途是什么？
 - en: 'Under the `l` directory, there are symbolic links with unique strings pointing
     to the `diff` directory for every layer. The symbolic links reference lower layers
     in the `lower` file. Let''s check it:'
+  id: totrans-81
   prefs: []
   type: TYPE_NORMAL
+  zh: 在`l`目录下，有指向每个层的`diff`目录的符号链接。符号链接在`lower`文件中引用了下层。让我们检查一下：
 - en: '[PRE7]'
+  id: totrans-82
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE7]'
 - en: To double-check what we just learned, let's find the first layer of our container
     image and check whether there is a lower file for it.
+  id: totrans-83
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了再次确认我们刚刚学到的内容，让我们找到容器镜像的第一层，并检查是否有`lower`文件。
 - en: 'Let''s inspect the manifest file for our container image:'
+  id: totrans-84
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们检查我们容器镜像的清单文件：
 - en: '[PRE8]'
+  id: totrans-85
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE8]'
 - en: 'Then, we must compare the checksum of the compressed archive with the list
     of all the layers we downloaded:'
+  id: totrans-86
   prefs: []
   type: TYPE_NORMAL
+  zh: 然后，我们必须将压缩归档文件的校验和与我们下载的所有层的列表进行比较：
 - en: Good to Know
+  id: totrans-87
   prefs: []
   type: TYPE_NORMAL
+  zh: 知识点
 - en: SHA-256 is an algorithm used to produce a unique cryptographic hash that can
     be used to verify the integrity of a file (checksum).
+  id: totrans-88
   prefs: []
   type: TYPE_NORMAL
+  zh: SHA-256是一种算法，用于生成唯一的加密哈希值，可以用来验证文件的完整性（校验和）。
 - en: '[PRE9]'
+  id: totrans-89
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE9]'
 - en: The file we just analyzed, `overlay-layers/layers.json`, was not indented. For
     this reason, we used the `jq` utility to format it and make it human-readable.
+  id: totrans-90
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们刚刚分析的文件`overlay-layers/layers.json`没有进行缩进。因此，我们使用`jq`工具来格式化它，使其更易于人类阅读。
 - en: Good to Know
+  id: totrans-91
   prefs: []
   type: TYPE_NORMAL
+  zh: 知识点
 - en: If you cannot find the `jq` utility on your system, you can install it through
     the operating system default package manager. On Fedora, for example, you can
     run `dnf install jq`.
+  id: totrans-92
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你在系统上找不到`jq`工具，可以通过操作系统的默认包管理器安装它。例如，在Fedora上，你可以运行`dnf install jq`来安装。
 - en: 'As you can see, we just found the ID of our root layer. Now, let''s look at
     its content:'
+  id: totrans-93
   prefs: []
   type: TYPE_NORMAL
+  zh: 正如你所看到的，我们刚刚找到了根层的ID。现在，让我们看看它的内容：
 - en: '[PRE10]'
+  id: totrans-94
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE10]'
 - en: As we can verify, there is not a `lower` file inside the layer's directory because
     this is the first layer of our container image!
+  id: totrans-95
   prefs: []
   type: TYPE_NORMAL
+  zh: 正如我们可以验证的那样，在层的目录中没有`lower`文件，因为这是我们容器镜像的第一层！
 - en: The difference we might notice is the presence of a directory named `empty`.
     This is because if a layer has no parent, then the overlay system will create
     a dummy lower directory named `empty` and it will skip writing a `lower` file.
+  id: totrans-96
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们可能注意到的不同之处是有一个名为`empty`的目录。这是因为如果某一层没有父层，那么叠加系统将创建一个名为`empty`的虚拟下层目录，并跳过写入`lower`文件。
 - en: Finally, as the last stage of our practical example, let's run our container
     and verify that a new `diff` layer will be created. We expect that this layer
     will contain only the difference between the lower ones.
+  id: totrans-97
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后，作为我们实践示例的最后阶段，让我们运行容器并验证会创建一个新的`diff`层。我们预计这个层将只包含与下层的差异。
 - en: 'First, we run our container image we just analyzed:'
+  id: totrans-98
   prefs: []
   type: TYPE_NORMAL
+  zh: 首先，我们运行我们刚刚分析的容器镜像：
 - en: '[PRE11]'
+  id: totrans-99
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE11]'
 - en: 'As you can see, we started it in the background through the `-d` option to
     continue working on the system host. After this, we will execute a new shell on
     the pod to actually check the container''s root folder and create a new file on
     it:'
+  id: totrans-100
   prefs: []
   type: TYPE_NORMAL
+  zh: 如您所见，我们通过`-d`选项在后台启动了容器，这样我们可以继续在系统主机上工作。之后，我们将在该Pod上执行一个新的shell来实际检查容器的根文件夹并在其中创建一个新文件：
 - en: '[PRE12]'
+  id: totrans-101
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE12]'
 - en: 'This new file we just created will be temporary and will only last for the
     lifetime of the container. It is now time to find the `diff` layer that was just
     created by the overlay driver on our host system. The easiest way is to analyze
     the mount points used in the running container:'
+  id: totrans-102
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们刚刚创建的这个新文件是临时性的，且只在容器的生命周期内存在。现在是时候找到我们主机系统上由覆盖驱动程序刚刚创建的`diff`层了。最简单的方法是分析正在运行的容器中使用的挂载点：
 - en: '[PRE13]'
+  id: totrans-103
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE13]'
 - en: 'As you can see, the first mount point of the list shows a very long line full
     of layer paths divided by colons. In this long line, we can find the `upperdir`
     directory we are searching for:'
+  id: totrans-104
   prefs: []
   type: TYPE_NORMAL
+  zh: 如您所见，列表中的第一个挂载点显示了一长串用冒号分隔的层路径。在这条长长的路径中，我们可以找到正在寻找的`upperdir`目录：
 - en: '[PRE14]'
+  id: totrans-105
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE14]'
 - en: 'Now, we can inspect the content of this directory and navigate to the various
     paths available to find the container root directory where we wrote that file
     in the previous commands:'
+  id: totrans-106
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，我们可以检查这个目录的内容，并浏览可用的各种路径，以找到我们在前面命令中写入该文件的容器根目录：
 - en: '[PRE15]'
+  id: totrans-107
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE15]'
 - en: As we verified, the data is stored on the host operating system, but it is stored
     in a temporary layer that will sooner or later be removed once the container is
     removed!
+  id: totrans-108
   prefs: []
   type: TYPE_NORMAL
+  zh: 正如我们验证过的那样，数据存储在主机操作系统上，但它存储在一个临时层中，一旦容器被删除，它就会被删除！
 - en: Now, coming back to the original topic that sent us on this small trip under
     the hood of the overlay storage driver, we were talking about `/etc/containers/storage.conf`.
     This file holds all the configurations for the *containers/storage* project that
     is responsible for sharing an underlying common method to access container storage
     on a host.
+  id: totrans-109
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，回到最初让我们走到这个覆盖存储驱动程序底层的小旅程的主题，我们在谈论的是`/etc/containers/storage.conf`。这个文件包含了所有关于*containers/storage*项目的配置，负责为在主机上访问容器存储提供共享的底层通用方法。
 - en: The other options available in this file are related to the customization of
     the storage driver as well as changing the default path for the internal storage
     directories.
+  id: totrans-110
   prefs: []
   type: TYPE_NORMAL
+  zh: 这个文件中可用的其他选项与存储驱动程序的定制以及更改内部存储目录的默认路径相关。
 - en: The last point we should briefly talk about is the `runroot` directory. In this
     folder, the container storage program will store all temporary writable content
     produced by the container.
+  id: totrans-111
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们应该简要谈论的最后一点是`runroot`目录。在这个文件夹中，容器存储程序将存储容器生成的所有临时可写内容。
 - en: 'If we inspect the folder on our running host where we started the container
     for the previous example, we will find that there is a folder named with its ID
     with various files that have been mounted on the container to replace the original
     files:'
+  id: totrans-112
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果我们检查在前一个示例中启动容器时我们主机上的文件夹，我们会发现有一个以容器ID命名的文件夹，里面有多个已挂载到容器上的文件，这些文件替换了原始文件：
 - en: '[PRE16]'
+  id: totrans-113
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE16]'
 - en: As you can see from the preceding output, the container's folder under the `runroot`
     path contains various files that have been mounted directly onto the container
     to customize it.
+  id: totrans-114
   prefs: []
   type: TYPE_NORMAL
+  zh: 如前所示，`runroot`路径下的容器文件夹包含了多个文件，这些文件已经直接挂载到容器中以进行定制。
 - en: To wrap up, in the previous examples, we analyzed the anatomy of a container
     image and what happens once we run a new container from that image. The technology
     behind the scenes is amazing and we saw that a lot of features are related to
     the isolation capabilities offered by the operating system. Here, storage offers
     other important functionalities that have made containers the greatest technology
     that we all now know about.
+  id: totrans-115
   prefs: []
   type: TYPE_NORMAL
+  zh: 总结一下，在之前的示例中，我们分析了容器镜像的结构，以及当我们从该镜像运行一个新容器时会发生什么。幕后技术令人惊叹，我们看到许多功能与操作系统提供的隔离能力相关。在这里，存储提供了其他重要功能，使得容器成为了我们现在所熟知的最伟大的技术。
 - en: Copying files in and out of a container
+  id: totrans-116
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 复制文件进出容器
 - en: Podman enables users to move files into and out of a running container. This
     result is achieved using the `podman cp` command, which can move files and folders
     to and from a container. Its usage is quite simple and will be illustrated in
     the next example.
+  id: totrans-117
   prefs: []
   type: TYPE_NORMAL
+  zh: Podman允许用户将文件进出运行中的容器。这一结果是通过使用`podman cp`命令实现的，该命令可以将文件和文件夹移动到容器内外。它的使用非常简单，接下来的示例将展示这一点。
 - en: 'First, let''s start a new Alpine container:'
+  id: totrans-118
   prefs: []
   type: TYPE_NORMAL
+  zh: 首先，让我们启动一个新的Alpine容器：
 - en: '[PRE17]'
+  id: totrans-119
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE17]'
 - en: 'Now, let''s grab a file from the container – we have chosen the `/etc/os-release`
     file, which provides some information about the distribution and its version ID:'
+  id: totrans-120
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，让我们从容器中获取一个文件——我们选择了`/etc/os-release`文件，它提供了一些关于操作系统发行版及其版本ID的信息：
 - en: '[PRE18]'
+  id: totrans-121
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE18]'
 - en: 'The file has been copied to the host `/tmp` folder and can be inspected:'
+  id: totrans-122
   prefs: []
   type: TYPE_NORMAL
+  zh: 文件已经被复制到主机的`/tmp`文件夹中，可以进行检查：
 - en: '[PRE19]'
+  id: totrans-123
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE19]'
 - en: 'In the opposite direction, we can copy files or folders from the host to the
     running container:'
+  id: totrans-124
   prefs: []
   type: TYPE_NORMAL
+  zh: 在相反的方向，我们可以将文件或文件夹从主机复制到正在运行的容器中：
 - en: '[PRE20]'
+  id: totrans-125
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE20]'
 - en: This example copies the `/tmp/build_folder` folder, and all its content, under
     the root filesystem of the Alpine container. We can then inspect the result of
     the copy command by using `podman exec` with the `ls` utility command.
+  id: totrans-126
   prefs: []
   type: TYPE_NORMAL
+  zh: 这个示例将`/tmp/build_folder`文件夹及其所有内容复制到Alpine容器的根文件系统下。然后，我们可以使用`podman exec`命令结合`ls`工具来检查复制命令的结果。
 - en: Interacting with overlayfs
+  id: totrans-127
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 与overlayfs交互
 - en: There is another way to copy files from a container to the host, which is by
     using the `podman mount` command and interacting directly with the merged overlays.
+  id: totrans-128
   prefs: []
   type: TYPE_NORMAL
+  zh: 还有另一种从容器复制文件到主机的方法，那就是使用`podman mount`命令并直接与合并的覆盖层交互。
 - en: 'To mount a running rootless container''s filesystem, we first need to run the
     `podman unshare` command, which permits users to run commands inside a modified
     user namespace:'
+  id: totrans-129
   prefs: []
   type: TYPE_NORMAL
+  zh: 要挂载一个正在运行的无根容器的文件系统，我们首先需要运行`podman unshare`命令，这允许用户在修改后的用户命名空间内运行命令：
 - en: '[PRE21]'
+  id: totrans-130
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE21]'
 - en: 'This command drops a root shell in a new user namespace configured with *UID
     0* and *GID 0*. It is now possible to run the `podman mount` command and obtain
     the absolute path of the mount point:'
+  id: totrans-131
   prefs: []
   type: TYPE_NORMAL
+  zh: 该命令在一个新用户命名空间中启动一个根shell，并配置了*UID 0*和*GID 0*。现在可以运行`podman mount`命令，并获取挂载点的绝对路径：
 - en: '[PRE22]'
+  id: totrans-132
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE22]'
 - en: The preceding command uses shell expansion to change to the path of the `MergedDir`,
     which, as the name says, merges the `LowerDir` and `UpperDir` contents to provide
     a unified view of the different layers. From now on, it is possible to copy files
     to and from the container root filesystem.
+  id: totrans-133
   prefs: []
   type: TYPE_NORMAL
+  zh: 上述命令使用了Shell扩展，切换到`MergedDir`的路径，正如其名所示，它将`LowerDir`和`UpperDir`的内容合并，提供一个统一的视图，展示不同层的内容。从现在开始，我们可以复制文件到容器的根文件系统，也可以从容器复制文件。
 - en: 'The previous examples were based on rootless containers, but the same logic
     applies to rootful containers. Let''s start a rootful Nginx container:'
+  id: totrans-134
   prefs: []
   type: TYPE_NORMAL
+  zh: 之前的示例基于无根容器，但相同的逻辑适用于有根容器。让我们启动一个有根的Nginx容器：
 - en: '[PRE23]'
+  id: totrans-135
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE23]'
 - en: 'To copy files in and out, we need to prepend the `sudo` command:'
+  id: totrans-136
   prefs: []
   type: TYPE_NORMAL
+  zh: 要复制文件进出容器，我们需要在命令前加上`sudo`命令：
 - en: '[PRE24]'
+  id: totrans-137
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE24]'
 - en: The preceding command copies the default `index.html` page to the host `/tmp`
     directory. Keep in mind that `sudo` elevates the user privileges to root, and
     therefore copied files will have *UID 0* and *GID 0* ownership.
+  id: totrans-138
   prefs: []
   type: TYPE_NORMAL
+  zh: 上述命令将默认的`index.html`页面复制到主机的`/tmp`目录。请记住，`sudo`会提升用户权限至root，因此复制的文件将具有*UID 0*和*GID
+    0*的所有权。
 - en: The practice of copying files and folders from a container is especially useful
     for troubleshooting purposes. The opposite action of copying them inside a running
     container can be useful for updating and testing secrets or configuration files.
     In that case, we have the option of persisting those changes, as described in
     the next subsection.
+  id: totrans-139
   prefs: []
   type: TYPE_NORMAL
+  zh: 从容器中复制文件和文件夹的做法对于故障排除特别有用。将它们复制到正在运行的容器内的相反操作，对于更新和测试机密或配置文件也很有用。在这种情况下，我们可以选择保存这些更改，具体方法将在下一小节中描述。
 - en: Persisting changes with podman commit
+  id: totrans-140
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 使用`podman commit`持久化更改
 - en: The previous examples are not a method for permanently customizing running containers,
     since the immutable nature of containers implies that persistent modifications
     should go through an image rebuild.
+  id: totrans-141
   prefs: []
   type: TYPE_NORMAL
+  zh: 之前的示例并不是一种永久定制正在运行的容器的方法，因为容器的不可变性意味着持久性修改应该通过镜像重建来实现。
 - en: However, if we need to preserve the changes and produce a new image without
     starting a new build, the `podman commit` command provides a way to persist the
     changes to a container into a new image.
+  id: totrans-142
   prefs: []
   type: TYPE_NORMAL
+  zh: 然而，如果我们需要保存更改并生成一个新的镜像而不重新构建，可以使用`podman commit`命令将容器中的更改保存到一个新的镜像中。
 - en: The commit concept is of primary importance in Docker and OCI image builds.
     In fact, we can see the different steps of a Dockerfile as a series of commits
     applied during the build process.
+  id: totrans-143
   prefs: []
   type: TYPE_NORMAL
+  zh: 提交（commit）概念在 Docker 和 OCI 镜像构建中非常重要。事实上，我们可以将 Dockerfile 的不同步骤视为构建过程中应用的一系列提交。
 - en: 'The following example shows how to persist a file copied into a running container
     and produce a new image. Let''s say we want to update the default `index.html`
     page of our Nginx container:'
+  id: totrans-144
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下示例展示了如何将复制到运行中的容器中的文件持久化，并生成一个新镜像。假设我们想要更新 Nginx 容器的默认 `index.html` 页面：
 - en: '[PRE25]'
+  id: totrans-145
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE25]'
 - en: 'Let''s test the changes applied:'
+  id: totrans-146
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们测试应用的更改：
 - en: '[PRE26]'
+  id: totrans-147
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE26]'
 - en: 'Now we want to persist the changed `index.html` file into a new image, starting
     from the running container with `podman commit`:'
+  id: totrans-148
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在我们希望将更改后的 `index.html` 文件持久化到一个新镜像中，从运行中的容器使用 `podman commit` 开始：
 - en: '[PRE27]'
+  id: totrans-149
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE27]'
 - en: The preceding command persists the changes by effectively creating a new image
     layer containing the updated files and folders.
+  id: totrans-150
   prefs: []
   type: TYPE_NORMAL
+  zh: 前述命令通过有效地创建一个包含更新文件和文件夹的新镜像层来持久化更改。
 - en: 'The previous container can now be safely stopped and removed before testing
     the new custom image:'
+  id: totrans-151
   prefs: []
   type: TYPE_NORMAL
+  zh: 之前的容器现在可以在测试新自定义镜像之前安全地停止和删除：
 - en: '[PRE28]'
+  id: totrans-152
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE28]'
 - en: 'Let''s test the new custom image and inspect the changed `index.html` file:'
+  id: totrans-153
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们测试一下新的自定义镜像，并检查更改后的 `index.html` 文件：
 - en: '[PRE29]'
+  id: totrans-154
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE29]'
 - en: In this section, we have learned how to copy files to and from a running container
     and how to commit the changes on the fly by producing a new image.
+  id: totrans-155
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本节中，我们学会了如何将文件复制到运行中的容器以及如何通过生成新镜像即时提交更改。
 - en: In the next section, we are going to learn how host storage is attached to a
     container by introducing the concept of **volumes** and **bind mounts**.
+  id: totrans-156
   prefs: []
   type: TYPE_NORMAL
+  zh: 在下一节中，我们将学习如何通过引入**卷（volumes）**和**绑定挂载（bind mounts）**的概念将主机存储附加到容器。
 - en: Attaching host storage to a container
+  id: totrans-157
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 将主机存储附加到容器
 - en: We have already talked about the immutable nature of containers. Starting from
     pre-built images, when we run a container, we instance a read/write layer on top
     of a stack of read-only layers using a copy-on-write approach.
+  id: totrans-158
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们已经讨论过容器的不可变特性。从预构建镜像开始，当我们运行一个容器时，我们会在一层只读层的堆栈上实例化一个读/写层，采用写时复制（copy-on-write）的方法。
 - en: Containers are ephemeral objects based on a stateful image. This implies that
     containers are not meant to store data inside them – if a container crashes or
     is removed, all the data would be lost. We need a way to store data in a separate
     location that is mounted inside the running container, preserved when the container
     is removed, and ready to be reused by a new container.
+  id: totrans-159
   prefs: []
   type: TYPE_NORMAL
+  zh: 容器是基于有状态镜像的短暂对象。这意味着容器不应该存储数据在其中——如果容器崩溃或被删除，所有数据都会丢失。我们需要一种方法，将数据存储在一个独立的位置，并将其挂载到正在运行的容器中，在容器删除时保留数据，并准备好被新容器重用。
 - en: There is another important caveat that should not be forgotten – **secrets**
     and **config files**. When we build an image, we can pass all the files and folders
     we need inside it. However, sealing secrets like certificates or keys inside a
@@ -722,91 +1051,133 @@
     we must rebuild the whole image from scratch. In the same way, changing a config
     file that resides inside an image implies a new rebuild every time we change a
     setting.
+  id: totrans-160
   prefs: []
   type: TYPE_NORMAL
+  zh: 还有一个重要的警告不容忽视——**机密**和**配置文件**。当我们构建一个镜像时，可以将所需的所有文件和文件夹传递到镜像中。然而，将机密如证书或密钥封装到构建中并不是一个好做法。如果我们需要，例如，轮换一个证书，我们必须从头开始重新构建整个镜像。同样，改变一个位于镜像内的配置文件也意味着每次更改设置时都需要重新构建。
 - en: For these reasons, OCI specifications support **volumes** and **bind mounts**
     to manage storage attached to a container. In the next sections, we will learn
     how volumes and bind mounts work and how to attach them to a container.
+  id: totrans-161
   prefs: []
   type: TYPE_NORMAL
+  zh: 由于这些原因，OCI 规范支持**卷（volumes）**和**绑定挂载（bind mounts）**来管理附加到容器的存储。在接下来的章节中，我们将学习卷和绑定挂载是如何工作的，以及如何将它们附加到容器中。
 - en: Managing and attaching bind mounts to a container
+  id: totrans-162
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 管理和附加绑定挂载到容器
 - en: Let's start with bind mounts since they leverage a native Linux feature. According
     to the official Linux man pages, a bind mount is *a way to remount a part of the
     filesystem hierarchy somewhere else*. This means that using bind mounts, we can
     replicate the view of a directory under another mount point in the host.
+  id: totrans-163
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们从绑定挂载（bind mounts）开始，因为它们利用了 Linux 的原生功能。根据官方的 Linux 手册页，绑定挂载是*一种将文件系统层次结构的某部分重新挂载到其他地方的方法*。这意味着，通过使用绑定挂载，我们可以在主机的另一个挂载点下复制目录的视图。
 - en: 'Before learning how containers use bind mounts, let''s see a basic example
     where we simply bind mount the `/etc` directory under the `/mnt` directory:'
+  id: totrans-164
   prefs: []
   type: TYPE_NORMAL
+  zh: 在学习容器如何使用绑定挂载之前，先来看一个基本示例，我们将`/etc`目录绑定挂载到`/mnt`目录下：
 - en: '[PRE30]'
+  id: totrans-165
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE30]'
 - en: 'After issuing this command, we will see the exact contents of `/etc` under
     `/mnt`. To unmount, simply run the following command:'
+  id: totrans-166
   prefs: []
   type: TYPE_NORMAL
+  zh: 执行此命令后，我们将看到`/mnt`下的`/etc`目录的精确内容。要卸载，只需运行以下命令：
 - en: '[PRE31]'
+  id: totrans-167
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE31]'
 - en: The same concept can be applied to containers – Podman can bind mount host directories
     inside a container and offers dedicated CLI options to simplify the mount process.
+  id: totrans-168
   prefs: []
   type: TYPE_NORMAL
+  zh: 同样的概念可以应用于容器——Podman 可以将主机目录绑定挂载到容器内，并提供专门的 CLI 选项来简化挂载过程。
 - en: 'Podman offers two options that can be used to bind mount: `-v|--volume` and
     `–mount`. Let''s cover these in more detail.'
+  id: totrans-169
   prefs: []
   type: TYPE_NORMAL
+  zh: Podman 提供了两个可以用于绑定挂载的选项：`-v|--volume` 和 `–mount`。我们将更详细地介绍这两个选项。
 - en: -v|--volume option
+  id: totrans-170
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: -v|--volume 选项
 - en: 'This option uses a compact, single field argument to define the source host
     directory and the container mount point with the pattern `/HOST_DIR:/CONTAINER_DIR`.
     The following example mounts the `/host_files` directory on the `/mnt` mount point
     inside the container:'
+  id: totrans-171
   prefs: []
   type: TYPE_NORMAL
+  zh: 此选项使用紧凑的单字段参数来定义源主机目录和容器挂载点，模式为`/HOST_DIR:/CONTAINER_DIR`。以下示例将主机的`/host_files`目录挂载到容器内的`/mnt`挂载点：
 - en: '[PRE32]'
+  id: totrans-172
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE32]'
 - en: 'It is possible to pass extra arguments to define mount behavior; for example,
     to mount the host directory as read-only:'
+  id: totrans-173
   prefs: []
   type: TYPE_NORMAL
+  zh: 可以传递额外的参数来定义挂载行为；例如，将主机目录挂载为只读：
 - en: '[PRE33]'
+  id: totrans-174
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE33]'
 - en: Other viable options for bind mounts using the `-v|--volume` option can be found
     in the run command man page (`man podman-run`).
+  id: totrans-175
   prefs: []
   type: TYPE_NORMAL
+  zh: 使用`-v|--volume`选项的其他可行绑定挂载选项可以在运行命令的手册页（`man podman-run`）中找到。
 - en: --mount option
+  id: totrans-176
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: --mount选项
 - en: 'This option is more verbose since it uses a *key=value* syntax to define source
     and destinations as well as the mount type and extra arguments. This option accepts
     different mount types (bind mounts, volumes, tmpfs, images, and devpts) in the
     `type=TYPE,source=HOST_DIR,destination=CONTAINER_DIR` pattern. The source and
     destination keys can be replaced with the shorter `src` and `dst`, respectively.
     The previous example can be rewritten as follows:'
+  id: totrans-177
   prefs: []
   type: TYPE_NORMAL
+  zh: 此选项更加详细，因为它使用*key=value*语法来定义源和目标，以及挂载类型和额外的参数。该选项接受不同的挂载类型（绑定挂载、卷、tmpfs、镜像和devpts），格式为`type=TYPE,source=HOST_DIR,destination=CONTAINER_DIR`。源和目标键可以分别用更短的`src`和`dst`替代。之前的示例可以重写为：
 - en: '[PRE34]'
+  id: totrans-178
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE34]'
 - en: 'We can also pass an extra option by adding an extra comma; for example, to
     mount the host directory as read-only:'
+  id: totrans-179
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们还可以通过添加额外的逗号传递额外的选项；例如，将主机目录挂载为只读：
 - en: '[PRE35]'
+  id: totrans-180
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE35]'
 - en: Despite being very simple to use and understand, bind mounts have some limitations
     that could impact the life cycle of the container in some cases. Host files and
     directories must exist before running the containers and permissions must be set
@@ -814,313 +1185,473 @@
     in mind is that a bind mount always obfuscates the underlying mount point in the
     container if populated by files or directories. A useful alternative to bind mounts
     is **volumes**, described in the next subsection.
+  id: totrans-181
   prefs: []
   type: TYPE_NORMAL
+  zh: 尽管绑定挂载非常简单易用，但它也有一些限制，在某些情况下可能会影响容器的生命周期。主机文件和目录必须在运行容器之前存在，并且必须根据需要设置权限，使其可读或可写。另一个需要注意的重要问题是，如果绑定挂载由文件或目录填充，绑定挂载会始终遮掩容器内的底层挂载点。**卷**是绑定挂载的有用替代方案，接下来会详细描述。
 - en: Managing and attaching volumes to a container
+  id: totrans-182
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 管理和附加卷到容器
 - en: A volume is a directory created and managed directly by the container engine
     and mounted to a mount point inside the container. They offer a great solution
     for persisting data generated by a container.
+  id: totrans-183
   prefs: []
   type: TYPE_NORMAL
+  zh: 卷是由容器引擎直接创建和管理的目录，并挂载到容器内的挂载点。它们为持久化容器生成的数据提供了一个很好的解决方案。
 - en: 'Volumes can be managed using the `podman volume` command, which can be used
     to list, inspect, create, and remove volumes in the system. Let''s start with
     a basic example, with a volume automatically created by Podman on top of the Nginx
     document root:'
+  id: totrans-184
   prefs: []
   type: TYPE_NORMAL
+  zh: 卷可以通过 `podman volume` 命令进行管理，使用该命令可以列出、检查、创建和删除系统中的卷。让我们从一个基本的示例开始，Podman 会在
+    Nginx 文档根目录上自动创建一个卷：
 - en: '[PRE36]'
+  id: totrans-185
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE36]'
 - en: This time, the `–v` option has an argument with only one item – the document
     root directory. In this case, Podman automatically creates a volume and bind mounts
     it to the target mount point.
+  id: totrans-186
   prefs: []
   type: TYPE_NORMAL
+  zh: 这次，`–v`选项有一个只有一个项目的参数——文档根目录。在这种情况下，Podman 会自动创建一个卷并将其绑定挂载到目标挂载点。
 - en: 'To prove that a new volume has been created, we can inspect the container:'
+  id: totrans-187
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了证明新卷已创建，我们可以检查容器：
 - en: '[PRE37]'
+  id: totrans-188
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE37]'
 - en: In the `Mounts` section, we have a list of objects mounted in the container.
     The only item is an object of the `volume` type, with a generated UID as its `Name`
     and a `Source` field that represents its path in the host, while the `Destination`
     field is the mount point inside the container.
+  id: totrans-189
   prefs: []
   type: TYPE_NORMAL
+  zh: 在`Mounts`部分，我们列出了容器中挂载的对象。唯一的项目是一个`volume`类型的对象，具有生成的UID作为其`Name`，并且`Source`字段表示它在主机中的路径，而`Destination`字段则是容器内的挂载点。
 - en: 'We can double-check the existence of the volume with the `podman volume ls`
     command:'
+  id: totrans-190
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们可以通过`podman volume ls`命令再次检查卷是否存在：
 - en: '[PRE38]'
+  id: totrans-191
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE38]'
 - en: 'Looking inside the source path, we will find the default files in the container
     document root:'
+  id: totrans-192
   prefs: []
   type: TYPE_NORMAL
+  zh: 查看源路径时，我们会找到容器文档根目录中的默认文件：
 - en: '[PRE39]'
+  id: totrans-193
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE39]'
 - en: This demonstrated that when an empty volume is created, it is populated with
     the content of the target mount point. When a container stops, the volume is preserved
     along with all the data and can be reused when the container is restarted by another
     container.
+  id: totrans-194
   prefs: []
   type: TYPE_NORMAL
+  zh: 这演示了当创建一个空卷时，它会被填充到目标挂载点的内容中。当容器停止时，卷会保留下来并保存所有数据，在容器重新启动时可以被其他容器重新使用。
 - en: 'The preceding example shows a volume with a generated UID, but it is possible
     to choose the name of the attached volume, as in the following example:'
+  id: totrans-195
   prefs: []
   type: TYPE_NORMAL
+  zh: 上述示例显示了一个具有生成UID的卷，但也可以选择附加卷的名称，如下例所示：
 - en: '[PRE40]'
+  id: totrans-196
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE40]'
 - en: In the preceding example, Podman creates a new volume named `nginx_vol` and
     stores it under the default volumes directory. When a named volume is created,
     Podman does not need to generate a UID.
+  id: totrans-197
   prefs: []
   type: TYPE_NORMAL
+  zh: 在上述示例中，Podman创建了一个名为`nginx_vol`的新卷，并将其存储在默认的卷目录下。当创建命名卷时，Podman无需生成UID。
 - en: 'The default volumes directory has different paths for rootless and rootful
     containers:'
+  id: totrans-198
   prefs: []
   type: TYPE_NORMAL
+  zh: 默认的卷目录在无根容器和有根容器中有不同的路径：
 - en: For rootless containers, the default volume storage path is `<USER_HOME>/.local/share/containers/storage/volumes`.
+  id: totrans-199
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 对于无根容器，默认的卷存储路径是`<USER_HOME>/.local/share/containers/storage/volumes`。
 - en: For rootful containers, the default volume storage path is `/var/lib/containers/storage/volumes`.
+  id: totrans-200
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 对于有根容器，默认的卷存储路径是`/var/lib/containers/storage/volumes`。
 - en: Volumes created in those paths are persisted after the container is destroyed
     and can be reused by other containers.
+  id: totrans-201
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这些路径中创建的卷在容器销毁后会被保留下来，并可以被其他容器重用。
 - en: 'To manually remove a volume, use the `podman volume rm` command:'
+  id: totrans-202
   prefs: []
   type: TYPE_NORMAL
+  zh: 要手动删除一个卷，可以使用`podman volume rm`命令：
 - en: '[PRE41]'
+  id: totrans-203
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE41]'
 - en: 'When dealing with multiple volumes, the `podman volume prune` command removes
     all the unused volumes. The following example prunes all the volumes in the user
     default volume storage (the one used by rootless containers):'
+  id: totrans-204
   prefs: []
   type: TYPE_NORMAL
+  zh: 当处理多个卷时，`podman volume prune`命令会删除所有未使用的卷。以下示例会清理用户默认卷存储中的所有卷（即无根容器使用的存储）：
 - en: '[PRE42]'
+  id: totrans-205
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE42]'
 - en: 'The next example shows how to remove volumes used by rootful containers by
     using the `sudo` prefix:'
+  id: totrans-206
   prefs: []
   type: TYPE_NORMAL
+  zh: 下一个示例显示了如何使用`sudo`前缀删除有根容器使用的卷：
 - en: '[PRE43]'
+  id: totrans-207
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE43]'
 - en: Important Note
+  id: totrans-208
   prefs: []
   type: TYPE_NORMAL
+  zh: 重要提示
 - en: Do not forget to monitor volumes accumulating in the host since they consume
     disk space that could be reclaimed, and prune unused volumes periodically to avoid
     cluttering the host storage.
+  id: totrans-209
   prefs: []
   type: TYPE_NORMAL
+  zh: 不要忘记监控主机上累积的卷，因为它们会消耗磁盘空间，可能会被回收，并定期清理未使用的卷，以避免主机存储杂乱无章。
 - en: 'Users can also preliminarily create and populate volumes before running the
     container. The following example uses the `podman create volume` command to create
     the volume mounted to the Nginx document root and then populates it with a test
     `index.html` file:'
+  id: totrans-210
   prefs: []
   type: TYPE_NORMAL
+  zh: 用户还可以在运行容器之前预先创建并填充卷。以下示例使用`podman create volume`命令创建挂载到Nginx文档根目录的卷，然后用一个测试的`index.html`文件填充它：
 - en: '[PRE44]'
+  id: totrans-211
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE44]'
 - en: 'We can now run a new Nginx container using the pre-populated volume:'
+  id: totrans-212
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，我们可以使用预填充的卷运行一个新的Nginx容器：
 - en: '[PRE45]'
+  id: totrans-213
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE45]'
 - en: 'The HTTP test shows the updated contents:'
+  id: totrans-214
   prefs: []
   type: TYPE_NORMAL
+  zh: HTTP测试显示了更新后的内容：
 - en: '[PRE46]'
+  id: totrans-215
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE46]'
 - en: This time, the volume, which was not empty in the beginning, obfuscated the
     container target directory with its contents.
+  id: totrans-216
   prefs: []
   type: TYPE_NORMAL
+  zh: 这次，卷在一开始并非为空，且它用其中的内容覆盖了容器目标目录。
 - en: Mounting volumes with the --mount option
+  id: totrans-217
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 使用`--mount`选项挂载卷
 - en: 'As with bind mounts, we can freely choose between the `-v|--volume` and the
     `--mount` options. The following example runs an Nginx container using the `--mount`
     flag:'
+  id: totrans-218
   prefs: []
   type: TYPE_NORMAL
+  zh: 与绑定挂载一样，我们可以自由选择使用`-v|--volume`和`--mount`选项。以下示例使用`--mount`标志运行Nginx容器：
 - en: '[PRE47]'
+  id: totrans-219
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE47]'
 - en: While the `-v|--volume` option is compact and widely adopted, the advantage
     of the `--mount` option is a more clear and expressive syntax, along with an exact
     statement of the mount type.
+  id: totrans-220
   prefs: []
   type: TYPE_NORMAL
+  zh: 虽然`-v|--volume`选项简洁且广泛采用，但`--mount`选项的优点在于语法更清晰易懂，并且准确地说明了挂载类型。
 - en: Volume drivers
+  id: totrans-221
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 卷驱动程序
 - en: The preceding volume examples are all based on the same `/usr/share/containers/containers.conf`
     file in the `[engine.volume_plugins]` section by passing the plugin name followed
     by the file or socket path.
+  id: totrans-222
   prefs: []
   type: TYPE_NORMAL
+  zh: 之前的卷示例都基于同一个 `/usr/share/containers/containers.conf` 文件中的 `[engine.volume_plugins]`
+    部分，传递插件名称后跟文件或套接字路径。
 - en: 'The local volume driver can also be used to mount `/data/db` directory:'
+  id: totrans-223
   prefs: []
   type: TYPE_NORMAL
+  zh: 本地卷驱动程序也可以用于挂载 `/data/db` 目录：
 - en: '[PRE48]'
+  id: totrans-224
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE48]'
 - en: A prerequisite of the preceding example is the preliminary configuration of
     the NFS server, which should be accessible by the host running the container.
+  id: totrans-225
   prefs: []
   type: TYPE_NORMAL
+  zh: 上述示例的前提是已经配置好 NFS 服务器，且该服务器能够被运行容器的主机访问。
 - en: Volumes in builds
+  id: totrans-226
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 构建中的卷
 - en: 'Volumes can be pre-defined during the image build process. This lets image
     maintainers define which container directories will be automatically attached
     to volumes. To understand this concept, let''s inspect this minimal Dockerfile:'
+  id: totrans-227
   prefs: []
   type: TYPE_NORMAL
+  zh: 卷可以在镜像构建过程中预先定义。这让镜像维护者定义哪些容器目录会自动附加到卷上。为了理解这一概念，让我们检查一下这个最小的 Dockerfile：
 - en: '[PRE49]'
+  id: totrans-228
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE49]'
 - en: The only change made to the `docker.io/library/nginx` image is a **VOLUME**
     directive, which defines which directory should be externally mounted as an anonymous
     volume in the host. This is simply metadata, and the volume will be created only
     at runtime when a container is started from this image.
+  id: totrans-229
   prefs: []
   type: TYPE_NORMAL
+  zh: 对 `docker.io/library/nginx` 镜像唯一的修改是 **VOLUME** 指令，该指令定义了哪个目录应作为匿名卷在主机上外部挂载。这仅仅是元数据，卷仅会在容器从此镜像启动时创建。
 - en: 'If we build the image and run a container based on the example Dockerfile,
     we can see an automatically created anonymous volume:'
+  id: totrans-230
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果我们构建镜像并运行一个基于示例 Dockerfile 的容器，我们可以看到一个自动创建的匿名卷：
 - en: '[PRE50]'
+  id: totrans-231
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE50]'
 - en: Without an explicit volume creation option, Podman has already created and mounted
     the container volume. This automatic volume definition at build time is a common
     practice in all containers that are expected to persist data, like databases.
+  id: totrans-232
   prefs: []
   type: TYPE_NORMAL
+  zh: 在没有明确创建卷选项的情况下，Podman 已经创建并挂载了容器卷。这种在构建时自动定义卷的做法，在所有需要持久化数据的容器中是常见的，比如数据库。
 - en: For example, the `docker.io/library/mongo` image is already configured to create
     two volumes, one for `/data/configdb` and one for `/data/db`. The same behavior
     can be identified in the most common databases, including PostgreSQL, MariaDB,
     and MySQL.
+  id: totrans-233
   prefs: []
   type: TYPE_NORMAL
+  zh: 例如，`docker.io/library/mongo` 镜像已经配置好创建两个卷，一个用于 `/data/configdb`，另一个用于 `/data/db`。这种行为在最常见的数据库中也可以看到，包括
+    PostgreSQL、MariaDB 和 MySQL。
 - en: 'It is possible to define how pre-defined anonymous volumes should be mounted
     when the container is started. The default ID `--image-volume` option. The following
     example starts a MongoDB container with its default volumes mounted as tmpfs:'
+  id: totrans-234
   prefs: []
   type: TYPE_NORMAL
+  zh: 可以定义预先定义的匿名卷在容器启动时如何挂载。默认的 ID `--image-volume` 选项。以下示例启动一个 MongoDB 容器，并将其默认卷挂载为
+    tmpfs：
 - en: '[PRE51]'
+  id: totrans-235
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE51]'
 - en: In [*Chapter 6*](B17908_06_epub.xhtml#_idTextAnchor116), *Meet Buildah – Building
     Containers from Scratch*, we will cover the build process in greater detail. We
     now close this subsection with an example of how to mount volumes across multiple
     containers.
+  id: totrans-236
   prefs: []
   type: TYPE_NORMAL
+  zh: 在 [*第 6 章*](B17908_06_epub.xhtml#_idTextAnchor116) 中，*认识 Buildah - 从零构建容器*，我们将更详细地介绍构建过程。我们现在用一个跨多个容器挂载卷的示例来结束这一小节。
 - en: Mounting volumes across containers
+  id: totrans-237
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 跨容器挂载卷
 - en: 'One of the greatest advantages of volumes is their flexibility. For example,
     a container can mount volumes from an already running container to share the same
     data. To accomplish this result, we can use the `--volumes-from` option. The following
     example starts a MongoDB container and then cross mounts its volumes on a Fedora
     container:'
+  id: totrans-238
   prefs: []
   type: TYPE_NORMAL
+  zh: 卷的最大优点之一是它们的灵活性。例如，容器可以挂载来自已经运行的容器的卷，以共享相同的数据。为了实现这个结果，我们可以使用 `--volumes-from`
+    选项。以下示例启动一个 MongoDB 容器，并在 Fedora 容器上交叉挂载其卷：
 - en: '[PRE52]'
+  id: totrans-239
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE52]'
 - en: 'The second container drops an interactive root shell we can use to inspect
     the filesystem content:'
+  id: totrans-240
   prefs: []
   type: TYPE_NORMAL
+  zh: 第二个容器启动一个交互式的 root shell，我们可以用来检查文件系统内容：
 - en: '[PRE53]'
+  id: totrans-241
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE53]'
 - en: As expected, we can find the MongoDB volumes mounted in the Fedora container.
     If we stop and even remove the first `mongodb01` container, the volumes remain
     active and mounted inside the Fedora container.
+  id: totrans-242
   prefs: []
   type: TYPE_NORMAL
+  zh: 正如预期的那样，我们可以在 Fedora 容器中找到挂载的 MongoDB 卷。如果我们停止甚至移除第一个 `mongodb01` 容器，卷依然会保持活跃并挂载在
+    Fedora 容器中。
 - en: Until now, we have seen basic use cases with no specific segregation between
     containers or mounted resources. If the host has SELinux enabled and in enforcing
     mode, some extra considerations must be applied.
+  id: totrans-243
   prefs: []
   type: TYPE_NORMAL
+  zh: 到目前为止，我们已经看到了没有特定容器或挂载资源隔离的基本用例。如果主机启用了 SELinux 并且处于强制模式，必须应用一些额外的考虑。
 - en: SELinux considerations for mounts
+  id: totrans-244
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: SELinux 对挂载的考虑
 - en: SELinux recursively applies labels to files and directories to define their
     context. Those labels are usually stored as extended filesystem attributes. SELinux
     uses contexts to manage policies and define which processes can access a specific
     resource.
+  id: totrans-245
   prefs: []
   type: TYPE_NORMAL
+  zh: SELinux 会递归地为文件和目录应用标签以定义它们的上下文。这些标签通常存储为扩展文件系统属性。SELinux 使用上下文来管理策略，并定义哪些进程可以访问特定资源。
 - en: 'The `ls` command is used to see the type context of a resource:'
+  id: totrans-246
   prefs: []
   type: TYPE_NORMAL
+  zh: '`ls` 命令用于查看资源的类型上下文：'
 - en: '[PRE54]'
+  id: totrans-247
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE54]'
 - en: In the preceding example, the `passwd_file_t` label defines the type context
     of the `/etc/passwd` file. Depending on the type context, a program can or cannot
     access a file while SELinux is running in enforcing mode.
+  id: totrans-248
   prefs: []
   type: TYPE_NORMAL
+  zh: 在前面的示例中，`passwd_file_t` 标签定义了 `/etc/passwd` 文件的类型上下文。根据类型上下文，程序可以或不能在 SELinux
+    处于强制模式时访问该文件。
 - en: Processes also have their type context – containers run with the label `container_t`
     and have read/write access to files and directories labeled with `container_file_t`
     type context, and read/execute access to `container_share_t` labeled resources.
+  id: totrans-249
   prefs: []
   type: TYPE_NORMAL
+  zh: 进程也有其类型上下文——容器运行时标签为 `container_t`，并对标记为 `container_file_t` 类型上下文的文件和目录具有读/写访问权限，对标记为
+    `container_share_t` 的资源具有读/执行权限。
 - en: Other host directories accessible by default are `/etc` as read-only and `/usr`
     as read/execute. Also, resources under `/var/lib/containers/overlay/` are labeled
     as `container_share_t`.
+  id: totrans-250
   prefs: []
   type: TYPE_NORMAL
+  zh: 默认情况下，其他主机目录是可访问的，其中 `/etc` 以只读方式访问，`/usr` 以读/执行方式访问。此外，`/var/lib/containers/overlay/`
+    下的资源被标记为 `container_share_t`。
 - en: What happens if we try to mount a directory not correctly labeled?
+  id: totrans-251
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果我们尝试挂载一个没有正确标记的目录会发生什么？
 - en: 'Podman still executes the container without complaining about the wrong labeling,
     but the mounted directory or file will not be accessible from a process running
     inside the containers, which are labeled with the `container_t` context type.
     The following example tries to mount a custom document root for an Nginx container
     without respecting the labeling constraints:'
+  id: totrans-252
   prefs: []
   type: TYPE_NORMAL
+  zh: Podman 仍然会执行容器，而不会因标签错误而报错，但挂载的目录或文件将无法从容器内运行的进程访问，而这些进程是以 `container_t` 类型标签运行的。以下示例尝试在不考虑标签约束的情况下，为
+    Nginx 容器挂载一个自定义的文档根目录：
 - en: '[PRE55]'
+  id: totrans-253
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE55]'
 - en: 'Apparently, everything went fine – the container started properly and the processes
     inside it are running, but if we try to contact the Nginx server, we see the error:'
+  id: totrans-254
   prefs: []
   type: TYPE_NORMAL
+  zh: 显然，一切顺利——容器正常启动，内部的进程也在运行，但如果我们尝试联系 Nginx 服务器，我们会看到以下错误：
 - en: '[PRE56]'
+  id: totrans-255
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE56]'
 - en: '`403 – Forbidden` shows that the Nginx process cannot access the `index.html`
     page. To fix this error, we have two options – put SELinux in **permissive** mode
     or relabel the mounted resources. By putting SELinux in permissive mode, it continues
@@ -1128,329 +1659,496 @@
     practice and should be used only when we cannot correctly troubleshoot access
     issues and need to put SELinux out of the equation. The following command sets
     SELinux to permissive mode:'
+  id: totrans-256
   prefs: []
   type: TYPE_NORMAL
+  zh: '`403 – Forbidden` 表明 Nginx 进程无法访问 `index.html` 页面。为了解决这个错误，我们有两个选择——将 SELinux
+    设置为 **宽松** 模式，或者重新标记挂载的资源。将 SELinux 设置为宽松模式时，它会继续跟踪违规情况，但不会阻止它们。无论如何，这不是一种好习惯，只有在我们无法正确排查访问问题，并需要将
+    SELinux 排除在外时，才应使用这种方式。以下命令将 SELinux 设置为宽松模式：'
 - en: '[PRE57]'
+  id: totrans-257
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE57]'
 - en: Important Note
+  id: totrans-258
   prefs: []
   type: TYPE_NORMAL
+  zh: 重要说明
 - en: Permissive mode is not equal to disabling SELinux entirely. When working in
     this mode, SELinux still logs AVC denials without blocking. System admins can
     immediately switch between permissive and enforcing modes without rebooting. Disabling,
     on the other hand, implies a full system reboot.
+  id: totrans-259
   prefs: []
   type: TYPE_NORMAL
+  zh: 宽松模式并不等于完全禁用 SELinux。在这种模式下，SELinux 仍然会记录 AVC 拒绝日志，但不会阻止操作。系统管理员可以在无需重启的情况下立即在宽松模式和强制模式之间切换。而禁用
+    SELinux 则意味着需要重启整个系统。
 - en: 'The second preferred option is to simply relabel the resources we need to mount.
     To achieve this result, we could use SELinux command-line tools. As a shortcut,
     Podman offers a simpler way – the `:z` and `:Z` suffixes applied to the volume
     mount arguments. The difference between the two suffixes is subtle:'
+  id: totrans-260
   prefs: []
   type: TYPE_NORMAL
+  zh: 第二个优选方案是简单地重新标记我们需要挂载的资源。为了实现这个目标，我们可以使用 SELinux 的命令行工具。作为快捷方式，Podman 提供了一种更简单的方法——在卷挂载参数中应用
+    `:z` 和 `:Z` 后缀。这两个后缀之间的区别很微妙：
 - en: The `:z` suffix tells Podman to relabel the mounted resources in order to enable
     all containers to read and write it. It works with both volumes and bind mounts.
+  id: totrans-261
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`:z` 后缀告诉 Podman 重新标记挂载的资源，以使所有容器都能够读写它。它适用于卷和绑定挂载。'
 - en: The `:Z` suffix tells Podman to relabel the mounted resources in order to enable
     only the current container to read and write it exclusively. This also works with
     both volumes and bind mounts.
+  id: totrans-262
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`:Z`后缀告诉Podman重新标记挂载的资源，以便仅允许当前容器独占读取和写入。这对于卷和绑定挂载都适用。'
 - en: 'To test the difference, let''s try to run the container again with the `:z`
     suffix and see what happens:'
+  id: totrans-263
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了测试差异，让我们再次尝试使用`:z`后缀运行容器，看看会发生什么：
 - en: '[PRE58]'
+  id: totrans-264
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE58]'
 - en: 'Now, the HTTP calls return the expected results since the process was able
     to access the `index.html` file without being blocked by SELinux:'
+  id: totrans-265
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，HTTP调用返回了预期的结果，因为进程能够访问`index.html`文件，并且没有被SELinux阻止：
 - en: '[PRE59]'
+  id: totrans-266
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE59]'
 - en: 'Let''s look at the SELinux file context automatically applied to the mounted
     directory:'
+  id: totrans-267
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们看看自动应用于挂载目录的SELinux文件上下文：
 - en: '[PRE60]'
+  id: totrans-268
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE60]'
 - en: Let's focus on the `system_u:object_r:container_file_t:s0` label. The final
     `s0` field is a `s0` sensitivity level will be able to mount the resource with
     read/write access privileges. This also represents a security issue since a malicious
     container on the same host would be able to attack other containers by stealing
     or overwriting data.
+  id: totrans-269
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们关注`system_u:object_r:container_file_t:s0`标签。最终的`s0`字段表示一个`s0`敏感级别，它将能够以读写权限挂载资源。这也代表了一个安全问题，因为同一主机上的恶意容器可能会通过窃取或覆盖数据来攻击其他容器。
 - en: The solution to this problem is called **Multi-Category Security** (**MCS**).
     SELinux uses MCS to configure additional categories, which are plaintext labels
     applied to the resources along with the other SELinux labels. MCS-labeled objects
     are then accessible only to processes with the same categories assigned.
+  id: totrans-270
   prefs: []
   type: TYPE_NORMAL
+  zh: 解决这个问题的方法称为**多类别安全**（**MCS**）。SELinux使用MCS来配置额外的类别，这些类别是与其他SELinux标签一起应用于资源的明文标签。MCS标签的对象仅能被分配相同类别的进程访问。
 - en: When a container is started, processes inside it are labeled with MCS categories,
     following the pattern **cXXX,cYYY**, where XXX and YYY are randomly picked integers.
+  id: totrans-271
   prefs: []
   type: TYPE_NORMAL
+  zh: 当容器启动时，容器内的进程会被标记为MCS类别，格式为**cXXX,cYYY**，其中XXX和YYY是随机选择的整数。
 - en: 'Podman automatically applies MCS categories to mounted resources when `Z` (uppercase)
     is passed. To test this behavior, let''s run the Nginx container again with the
     `:Z` suffix:'
+  id: totrans-272
   prefs: []
   type: TYPE_NORMAL
+  zh: 当传递`Z`（大写）时，Podman会自动将MCS类别应用于挂载的资源。为了测试这一行为，让我们再次使用`:Z`后缀运行Nginx容器：
 - en: '[PRE61]'
+  id: totrans-273
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE61]'
 - en: 'We can immediately see that the mounted folder has been relabeled with MCS
     categories:'
+  id: totrans-274
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们可以立即看到挂载的文件夹已经被重新标记为MCS类别：
 - en: '[PRE62]'
+  id: totrans-275
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE62]'
 - en: 'A simple test will return the expected `Hello World!` text, proving that the
     processes inside the container are allowed to access the target resources:'
+  id: totrans-276
   prefs: []
   type: TYPE_NORMAL
+  zh: 一个简单的测试将返回预期的`Hello World!`文本，证明容器内的进程被允许访问目标资源：
 - en: '[PRE63]'
+  id: totrans-277
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE63]'
 - en: What happens if we run a second container with the same approach, by applying
     `:Z` again to the same bind mount?
+  id: totrans-278
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果我们使用相同的方法再次运行第二个容器，并对相同的绑定挂载应用`:Z`，会发生什么？
 - en: '[PRE64]'
+  id: totrans-279
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE64]'
 - en: 'This time, we run the HTTP test on port `8081` and `HTTP GET` still works correctly:'
+  id: totrans-280
   prefs: []
   type: TYPE_NORMAL
+  zh: 这次，我们在端口`8081`上运行HTTP测试，`HTTP GET`仍然能够正常工作：
 - en: '[PRE65]'
+  id: totrans-281
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE65]'
 - en: 'However, if we test once again the container mapped to port `8080`, we will
     get an unexpected `403 Forbidden` message:'
+  id: totrans-282
   prefs: []
   type: TYPE_NORMAL
+  zh: 然而，如果我们再次测试映射到端口`8080`的容器，我们会得到一个意外的`403 Forbidden`消息：
 - en: '[PRE66]'
+  id: totrans-283
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE66]'
 - en: Not surprisingly, the second container was executed with the `:Z` suffix and
     relabeled the directory with a new pair of MCS categories, thus making the first
     container unable to access the previously available content.
+  id: totrans-284
   prefs: []
   type: TYPE_NORMAL
+  zh: 不出所料，第二个容器使用了`:Z`后缀并重新标记了目录，赋予了新的MCS类别，使得第一个容器无法访问之前可用的内容。
 - en: Important Note
+  id: totrans-285
   prefs: []
   type: TYPE_NORMAL
+  zh: 重要提示
 - en: The previous examples were conducted with bind mounts, but applied to volumes
     in the same way. Use these techniques with caution to avoid unwanted relabels
     of a bind mounted system or home directories.
+  id: totrans-286
   prefs: []
   type: TYPE_NORMAL
+  zh: 前面的示例是通过绑定挂载进行的，但同样适用于卷。使用这些技术时要小心，以避免不必要的重新标签化绑定挂载的系统或主目录。
 - en: In this subsection, we demonstrated the power of SELinux to manage containers
     and resource isolation. Let's conclude this chapter with an overview of other
     types of storage that can be attached to containers.
+  id: totrans-287
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这一小节中，我们展示了SELinux在管理容器和资源隔离方面的强大功能。让我们以对其他类型存储的概述来结束这一章。
 - en: Attaching other types of storage to a container
+  id: totrans-288
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 将其他类型的存储附加到容器
 - en: Along with bind mounts and volumes, it is possible to attach other types of
     storage to containers, more specifically, of the kinds **tmpfs**, **image**, and
     **devpts**.
+  id: totrans-289
   prefs: []
   type: TYPE_NORMAL
+  zh: 除了绑定挂载和卷之外，还可以将其他类型的存储附加到容器，具体来说，包括**tmpfs**、**image**和**devpts**。
 - en: Attaching tmpfs storage
+  id: totrans-290
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 附加tmpfs存储
 - en: Sometimes, we need to attach storage to containers that is not meant to be persistent
     (for example, cache usage). Using volumes or bind mounts would clutter the host
     local disk (or any other backend if using different storage drivers). In those
     particular cases, we can use a **tmpfs** volume.
+  id: totrans-291
   prefs: []
   type: TYPE_NORMAL
+  zh: 有时，我们需要将存储附加到容器中，而这些存储不打算持久化（例如，缓存使用）。使用卷或绑定挂载会混乱主机本地磁盘（或如果使用不同的存储驱动则混乱任何其他后端）。在这些特定情况下，我们可以使用
+    **tmpfs** 卷。
 - en: tmpfs is a virtual memory filesystem, which means that all its contents are
     created inside the host virtual memory. A benefit of tmpfs is that it provides
     faster I/O since all the read/write operations mostly happen in the RAM.
+  id: totrans-292
   prefs: []
   type: TYPE_NORMAL
+  zh: tmpfs 是一个虚拟内存文件系统，这意味着它的所有内容都在主机的虚拟内存中创建。tmpfs 的一个优点是提供更快的 I/O，因为所有的读写操作大多数发生在
+    RAM 中。
 - en: To attach a tmpfs volume to a container, we can use the `--mount` option or
     the `--tmpfs` option.
+  id: totrans-293
   prefs: []
   type: TYPE_NORMAL
+  zh: 要将 tmpfs 卷附加到容器中，我们可以使用 `--mount` 选项或 `--tmpfs` 选项。
 - en: 'The `--mount` flag has the great advantage of being more verbose and expressive
     regarding the storage type, source, destination, and extra mount options. The
     following example runs an `httpd` container with a tmpfs volume attached to the
     container:'
+  id: totrans-294
   prefs: []
   type: TYPE_NORMAL
+  zh: '`--mount` 标志的一个重要优点是，它在存储类型、来源、目标和额外挂载选项方面更加详细和具有表现力。以下示例运行一个附加了 tmpfs 卷的 `httpd`
+    容器：'
 - en: '[PRE67]'
+  id: totrans-295
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE67]'
 - en: 'The preceding command creates a tmpfs volume of 512 MB and mounts it on the
     `/tmp` folder of the container. We can test the correct mount creation by running
     the `mount` command inside the container:'
+  id: totrans-296
   prefs: []
   type: TYPE_NORMAL
+  zh: 前面的命令创建了一个 512 MB 的 tmpfs 卷，并将其挂载到容器的 `/tmp` 文件夹中。我们可以通过在容器中运行 `mount` 命令来测试是否正确挂载：
 - en: '[PRE68]'
+  id: totrans-297
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE68]'
 - en: 'This demonstrates that the tmpfs filesystem has been correctly mounted inside
     the container. Stopping the container will automatically discard tmpfs:'
+  id: totrans-298
   prefs: []
   type: TYPE_NORMAL
+  zh: 这表明 tmpfs 文件系统已在容器中正确挂载。停止容器时，tmpfs 会自动丢弃：
 - en: '[PRE69]'
+  id: totrans-299
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE69]'
 - en: 'The following example mounts a tmpfs volume using the `--tmpfs` option:'
+  id: totrans-300
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下示例使用 `--tmpfs` 选项挂载一个 tmpfs 卷：
 - en: '[PRE70]'
+  id: totrans-301
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE70]'
 - en: 'This example provides the same results as the previous one: a running container
     with a 512 MB tmpfs volume mounted on the `/tmp` directory in read/write mode
     and `1777` permissions.'
+  id: totrans-302
   prefs: []
   type: TYPE_NORMAL
+  zh: 这个示例与前一个示例的结果相同：一个运行中的容器，带有一个 512 MB 的 tmpfs 卷，挂载在 `/tmp` 目录上，具有读写模式和 `1777`
+    权限。
 - en: By default, the tmpfs volume is mounted inside the container with the following
     mount options – **rw**, **noexec**, **nosuid**, and **nodev**.
+  id: totrans-303
   prefs: []
   type: TYPE_NORMAL
+  zh: 默认情况下，tmpfs 卷会以以下挂载选项挂载到容器中——**rw**、**noexec**、**nosuid** 和 **nodev**。
 - en: Another interesting feature is the automatic MCS labeling from SELinux. This
     provides automatic segregation of the filesystem and prevents any other container
     from accessing the data in memory.
+  id: totrans-304
   prefs: []
   type: TYPE_NORMAL
+  zh: 另一个有趣的特性是 SELinux 的自动 MCS 标签。它提供了文件系统的自动隔离，并防止任何其他容器访问内存中的数据。
 - en: Attaching images
+  id: totrans-305
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 附加镜像
 - en: OCI images are the base that provides layers and metadata to start containers,
     but they can also be attached to a container filesystem at runtime. This can be
     useful for troubleshooting purposes or for attaching binaries that are available
     in a foreign image. When an OCI image is mounted inside a container, an extra
     overlay is created. This implies that even when the image is mounted with read/write
     permissions, users never alter the original image but the upper overlay only.
+  id: totrans-306
   prefs: []
   type: TYPE_NORMAL
+  zh: OCI 镜像是提供启动容器的层和元数据的基础，但它们也可以在运行时附加到容器文件系统。这对于故障排除或附加外部镜像中的可用二进制文件非常有用。当 OCI
+    镜像被挂载到容器中时，会创建一个额外的叠加层。这意味着即使镜像以读写权限挂载，用户也不会修改原始镜像，而仅修改上层叠加层。
 - en: 'The following example mounts a `busybox` image with read/write permissions
     inside an Alpine container:'
+  id: totrans-307
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下示例在 Alpine 容器中挂载一个具有读写权限的 `busybox` 镜像：
 - en: '[PRE71]'
+  id: totrans-308
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE71]'
 - en: Important Note
+  id: totrans-309
   prefs: []
   type: TYPE_NORMAL
+  zh: 重要提示
 - en: The mounted image must already be cached in the host. Podman only pulls the
     base container image if it is available when a container is created, but it expects
     the mounted images to already be available. A preliminary pull of the images will
     solve the issue.
+  id: totrans-310
   prefs: []
   type: TYPE_NORMAL
+  zh: 挂载的镜像必须已经缓存到主机中。Podman 只有在创建容器时镜像可用时才会拉取基础容器镜像，但它期望挂载的镜像已经存在。提前拉取这些镜像将解决此问题。
 - en: Attaching devpts
+  id: totrans-311
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 附加 devpts
 - en: This option is useful for attaching a `/dev/` from the host into the container,
     while still creating a terminal. The `/dev` pseudo filesystem of the host enables
     containers to gain direct access to the machine's physical or virtual devices.
+  id: totrans-312
   prefs: []
   type: TYPE_NORMAL
+  zh: 这个选项对于将主机的 `/dev/` 附加到容器中非常有用，同时仍然可以创建一个终端。主机的 `/dev` 伪文件系统使容器能够直接访问机器的物理或虚拟设备。
 - en: 'To create a container with the `/dev` filesystem and a `devpts` device attached,
     run the following command:'
+  id: totrans-313
   prefs: []
   type: TYPE_NORMAL
+  zh: 要创建一个带有 `/dev` 文件系统并附加了 `devpts` 设备的容器，请运行以下命令：
 - en: '[PRE72]'
+  id: totrans-314
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE72]'
 - en: 'To check the result of the mount option, we require an extra tool inside the
     container. For this reason, we can install it with the following command:'
+  id: totrans-315
   prefs: []
   type: TYPE_NORMAL
+  zh: 要检查挂载选项的结果，我们需要在容器内使用一个额外的工具。为此，我们可以使用以下命令进行安装：
 - en: '[PRE73]'
+  id: totrans-316
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE73]'
 - en: 'The resulting container has an extra, non-isolated, `devpts` device mounted
     on `/dev/pts`:'
+  id: totrans-317
   prefs: []
   type: TYPE_NORMAL
+  zh: 生成的容器在 `/dev/pts` 上挂载了一个额外的、非隔离的 `devpts` 设备：
 - en: '[PRE74]'
+  id: totrans-318
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE74]'
 - en: The preceding output was extracted by running the `mount` command inside the
     container.
+  id: totrans-319
   prefs: []
   type: TYPE_NORMAL
+  zh: 上述输出是通过在容器内运行 `mount` 命令提取的。
 - en: Summary
+  id: totrans-320
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 总结
 - en: In this chapter, we have completed a journey on container storage and Podman
     features offered to manipulate it. The material in this chapter is crucial to
     understanding how Podman manages both ephemeral and persistent data and provides
     best practices to users to manipulate their data.
+  id: totrans-321
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本章中，我们完成了关于容器存储和 Podman 提供的操作功能的学习。本章的内容对于理解 Podman 如何管理临时数据和持久数据非常关键，并为用户提供了操作数据的最佳实践。
 - en: In the first section, we learned why container storage matters and how it should
     be correctly managed both in single host and orchestrated, multi-host environments.
+  id: totrans-322
   prefs: []
   type: TYPE_NORMAL
+  zh: 在第一部分，我们学习了容器存储的重要性，以及如何在单一主机和编排的多主机环境中正确管理它。
 - en: In the second section, we took a deep dive into container storage features and
     storage drivers, with a special focus on overlayfs.
+  id: totrans-323
   prefs: []
   type: TYPE_NORMAL
+  zh: 在第二部分，我们深入研究了容器存储特性和存储驱动，特别关注了 overlayfs。
 - en: In the third section, we learned how to copy files to and from a container.
     We also saw how changes could be committed to a new image.
+  id: totrans-324
   prefs: []
   type: TYPE_NORMAL
+  zh: 在第三部分，我们学习了如何将文件复制到容器中或从容器中复制文件。我们还看到了如何将更改提交到新镜像。
 - en: The fourth section described the different possible scenarios of storage attached
     to a container, covering bind mounts, volumes, tmpfs, images, and devpts. This
     section was also a perfect fit to discuss SELinux interaction with storage management
     and see how we can use it to isolate storage resources across containers on the
     same host.
+  id: totrans-325
   prefs: []
   type: TYPE_NORMAL
+  zh: 第四部分描述了附加到容器的不同存储场景，涵盖了绑定挂载、卷、tmpfs、镜像和 devpts。本节也是讨论 SELinux 与存储管理交互的完美契机，展示了如何利用
+    SELinux 隔离同一主机上容器之间的存储资源。
 - en: In the next chapter, we will learn a very important topic for both developers
     and operations teams, which is how to build OCI images with both Podman and **Buildah**,
     an advanced and specialized image-building tool.
+  id: totrans-326
   prefs: []
   type: TYPE_NORMAL
+  zh: 在下一章，我们将学习一个对开发人员和运维团队都非常重要的话题，即如何使用 Podman 和 **Buildah**（一个高级专门的镜像构建工具）来构建
+    OCI 镜像。
 - en: Further reading
+  id: totrans-327
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 进一步阅读
 - en: 'Refer to the following resources for more information:'
+  id: totrans-328
   prefs: []
   type: TYPE_NORMAL
+  zh: 请参考以下资源以获取更多信息：
 - en: 'Containers Storage project page: [https://github.com/containers/storage](https://github.com/containers/storage)'
+  id: totrans-329
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 容器存储项目页面：[https://github.com/containers/storage](https://github.com/containers/storage)
 - en: 'Container Labeling: [https://danwalsh.livejournal.com/81269.html](https://danwalsh.livejournal.com/81269.html
     )'
+  id: totrans-330
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 容器标签：[https://danwalsh.livejournal.com/81269.html](https://danwalsh.livejournal.com/81269.html)
 - en: 'Why you should be using Multi-Category Security for your Linux containers:
     [https://www.redhat.com/en/blog/why-you-should-be-using-multi-category-security-your-linux-containers](https://www.redhat.com/en/blog/why-you-should-be-using-multi-category-security-your-linux-containers)'
+  id: totrans-331
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 为什么你应该在 Linux 容器中使用多类别安全（Multi-Category Security）：[https://www.redhat.com/en/blog/why-you-should-be-using-multi-category-security-your-linux-containers](https://www.redhat.com/en/blog/why-you-should-be-using-multi-category-security-your-linux-containers)
 - en: 'Udica: Generate SELinux policies: [https://github.com/containers/udica](https://github.com/containers/udica)'
+  id: totrans-332
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: Udica：生成 SELinux 策略：[https://github.com/containers/udica](https://github.com/containers/udica)
 - en: 'Overlay source code: [https://github.com/containers/storage/blob/main/drivers/overlay/overlay.go](https://github.com/containers/storage/blob/main/drivers/overlay/overlay.go)'
+  id: totrans-333
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: Overlay 源代码：[https://github.com/containers/storage/blob/main/drivers/overlay/overlay.go](https://github.com/containers/storage/blob/main/drivers/overlay/overlay.go)

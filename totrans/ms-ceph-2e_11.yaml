@@ -1,7 +1,9 @@
 - en: Tuning Ceph
+  id: totrans-0
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 调优 Ceph
 - en: While the default configuration of Linux and Ceph will likely provide reasonable
     performance due to many years of research and tweaking by developers, it is likely
     that a Ceph administrator may want to try to squeeze more performance out of the
@@ -9,97 +11,144 @@
     be realized. In [Chapter 1](0f4119df-b421-4349-86c8-b68444743f8a.xhtml), *Planning
     for Ceph*, you learned about how to choose hardware for a Ceph cluster; now, let's
     learn how to make the most of it.
+  id: totrans-1
   prefs: []
   type: TYPE_NORMAL
+  zh: 虽然 Linux 和 Ceph 的默认配置通常能提供合理的性能，得益于开发人员多年来的研究和调整，但 Ceph 管理员可能希望从硬件中榨取更多性能。通过调优操作系统和
+    Ceph 配置，可能会实现性能提升。在[第 1 章](0f4119df-b421-4349-86c8-b68444743f8a.xhtml)《Ceph 规划》中，你学习了如何为
+    Ceph 集群选择硬件；现在，让我们学习如何最大化其性能。
 - en: 'In this chapter, you will learn about the following topics:'
+  id: totrans-2
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本章中，你将学习以下内容：
 - en: Latency and why it matters
+  id: totrans-3
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 延迟及其重要性
 - en: The importance of being able to observe the results of your tuning
+  id: totrans-4
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 能够观察调优结果的重要性
 - en: Key tuning options that you should look at
+  id: totrans-5
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 你应该关注的关键调优选项
 - en: Latency
+  id: totrans-6
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 延迟
 - en: When running benchmarks to test the performance of a Ceph cluster, you are ultimately
     measuring the result of latency. All other forms of benchmarking metrics, including
     IOPS, MBps, or even higher-level application metrics, are derived from the latency
     of that request.
+  id: totrans-7
   prefs: []
   type: TYPE_NORMAL
+  zh: 在运行基准测试以测试 Ceph 集群性能时，你最终是在测量延迟的结果。所有其他类型的基准测试指标，包括 IOPS、MBps，甚至是更高层次的应用程序指标，都是由该请求的延迟推导出来的。
 - en: 'IOPS are the number of I/O requests done in a second; the latency of each request
     directly effects the possible IOPS and can be calculated using this formula:'
+  id: totrans-8
   prefs: []
   type: TYPE_NORMAL
+  zh: IOPS 是每秒执行的 I/O 请求次数；每个请求的延迟直接影响可能的 IOPS，并可以通过以下公式进行计算：
 - en: '![](img/f5fd78a4-b1c7-40f5-b8d5-12584e9ad356.png)'
+  id: totrans-9
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/f5fd78a4-b1c7-40f5-b8d5-12584e9ad356.png)'
 - en: 'An average latency of 2 milliseconds per request will result in roughly 500
     IOPS, assuming each request is submitted in a synchronous fashion:'
+  id: totrans-10
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果每个请求的平均延迟为 2 毫秒，则假设每个请求是同步提交的，将得到大约 500 IOPS：
 - en: '*1/0.002 = 500*'
+  id: totrans-11
   prefs: []
   type: TYPE_NORMAL
+  zh: '*1/0.002 = 500*'
 - en: 'MBps is simply the number of IOPS multiplied by the I/O size:'
+  id: totrans-12
   prefs: []
   type: TYPE_NORMAL
+  zh: MBps 只是 IOPS 乘以 I/O 大小：
 - en: '*500 IOPS * 64 KB = 32,000 KBps*'
+  id: totrans-13
   prefs: []
   type: TYPE_NORMAL
+  zh: '*500 IOPS * 64 KB = 32,000 KBps*'
 - en: When you are carrying out benchmarks, you are actually measuring the end result
     of a latency. Therefore, any tuning that you are carrying out should be done to
     reduce end-to-end latency for each I/O request.
+  id: totrans-14
   prefs: []
   type: TYPE_NORMAL
+  zh: 在进行基准测试时，实际上是在测量延迟的最终结果。因此，进行的任何调优都应旨在减少每个 I/O 请求的端到端延迟。
 - en: Before moving on to learning how to benchmark various components of your Ceph
     cluster and the various tuning options available, we first need to understand
     the various sources of latency from a typical I/O request. Once we can break down
     each source of latency into its own category, it will be possible to perform benchmarking
     on each one so that we can reliably track both negative and positive tuning outcomes
     at each stage.
+  id: totrans-15
   prefs: []
   type: TYPE_NORMAL
+  zh: 在学习如何基准测试 Ceph 集群的各个组件及可用的各种调优选项之前，我们首先需要了解典型 I/O 请求的各种延迟来源。一旦我们能够将每个延迟来源分解为独立的类别，就可以对每个类别进行基准测试，从而在每个阶段可靠地跟踪正负调优效果。
 - en: 'The following diagram shows an example Ceph write request with the main sources
     of latency:'
+  id: totrans-16
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下图示展示了一个示例 Ceph 写请求及其主要的延迟来源：
 - en: '![](img/19cd3ca9-1804-4e22-be90-1e22d540bfd2.png)'
+  id: totrans-17
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/19cd3ca9-1804-4e22-be90-1e22d540bfd2.png)'
 - en: Client to Primary OSD
+  id: totrans-18
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 客户端到主 OSD
 - en: Starting with the client, we can see that, on average, there is probably around
     100 microseconds of latency for it to talk to the primary OSD. With 1 G networking,
     this latency figure could be nearer to 1 millisecond. We can confirm this figure
     by either using `ping` or `iperf` to measure the round-trip delay between two
     nodes.
+  id: totrans-19
   prefs: []
   type: TYPE_NORMAL
+  zh: 从客户端开始，我们可以看到，平均而言，客户端与主 OSD 通信大约需要 100 微秒的延迟。使用 1 G 网络时，这个延迟可能接近 1 毫秒。我们可以通过使用
+    `ping` 或 `iperf` 来测量两个节点之间的往返延迟，从而确认这一数字。
 - en: From the previous formula, we can see that with 1 G networking, even if there
     were no other sources of latency, the maximum synchronous write IOPS would be
     around 1,000.
+  id: totrans-20
   prefs: []
   type: TYPE_NORMAL
+  zh: 从前面的公式中，我们可以看出，即使没有其他延迟来源，使用 1 G 网络时，最大同步写入 IOPS 也将接近 1,000。
 - en: Although the client introduces some latency of its own, it is minimal compared
     to the other sources, and so it is not included in the diagram.
+  id: totrans-21
   prefs: []
   type: TYPE_NORMAL
+  zh: 尽管客户端本身会引入一些延迟，但与其他来源的延迟相比，这部分延迟是微不足道的，因此在图示中没有列出。
 - en: Primary OSD to Replica OSD(s)
+  id: totrans-22
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 主 OSD 到副本 OSD（们）
 - en: Next, the OSD that runs the Ceph code introduces latency as it processes the
     request. It is hard to put an exact figure on this, but it is affected by the
     speed of the CPU. A faster CPU with a higher frequency will run through the code
@@ -107,21 +156,30 @@
     the request to the other two OSDs in the replica set. These are both processed
     in parallel so that there is minimal increase in latency going from 2x to 3x replicas,
     assuming the backend disks can cope with the load.
+  id: totrans-23
   prefs: []
   type: TYPE_NORMAL
+  zh: 接下来，运行 Ceph 代码的 OSD 在处理请求时会引入延迟。很难准确给出这个延迟的数字，但它受 CPU 速度的影响。更高频率的快速 CPU 会更快地运行代码路径，从而减少延迟。本书前面提到，主
+    OSD 会将请求发送到副本集中的另两个 OSD。这两个请求会并行处理，因此从 2x 到 3x 副本的延迟增加最小，假设后端磁盘能够承受负载。
 - en: There is also an extra network hop between the primary and the replicated OSDs,
     which introduces latency into each request.
+  id: totrans-24
   prefs: []
   type: TYPE_NORMAL
+  zh: 主 OSD 和复制的 OSD 之间还存在一个额外的网络跳跃，这会导致每个请求的延迟增加。
 - en: Primary OSD to Client
+  id: totrans-25
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 从主 OSD 到客户端
 - en: Once the primary OSD has committed the request to its journal and has had an
     acknowledgement back from all the replica OSDs that they have also done so, it
     can then send an acknowledgment back to the client and submit the next I/O request.
+  id: totrans-26
   prefs: []
   type: TYPE_NORMAL
+  zh: 一旦主 OSD 将请求提交到其日志并从所有复制 OSD 收到确认它们也已提交，主 OSD 就可以向客户端发送确认并提交下一个 I/O 请求。
 - en: Regarding the journal, depending on the type of media being used, the commit
     latency can vary. NVMe SSDs will tend to service requests in the 10-20 microseconds
     range, whereas SATA/SAS-based SSDs will typical service requests in the 50-100
@@ -130,22 +188,32 @@
     disks might use a single SSD as the same journal. Way ahead are the hard drives
     that are measured in tens of milliseconds, although they are fairly consistent
     in terms of latency as the I/O size increases.
+  id: totrans-27
   prefs: []
   type: TYPE_NORMAL
+  zh: 关于日志，提交延迟可能会有所不同，取决于所使用的介质类型。NVMe SSD 通常会在 10-20 微秒范围内响应请求，而基于 SATA/SAS 的 SSD
+    通常在 50-100 微秒范围内响应请求。NVMe 设备还倾向于在队列深度增加时保持更一致的延迟特性，使它们非常适合多个磁盘可能共享同一个 SSD 作为日志的情况。相比之下，硬盘的延迟通常在数十毫秒范围内，尽管随着
+    I/O 大小的增加，它们的延迟比较一致。
 - en: It should be obvious that for small, high-performance workloads, hard drive
     latency would dominate the total latency figures, and so, SSDs, preferably NVMe,
     should be used for it.
+  id: totrans-28
   prefs: []
   type: TYPE_NORMAL
+  zh: 很明显，对于小型高性能工作负载，硬盘延迟将主导总延迟，因此应该使用 SSD，最好是 NVMe。
 - en: Overall, in a well-designed and well-tuned Ceph cluster, all of these parts
     combined should allow an average write 4 KB request to be serviced in around 500-750
     microseconds.
+  id: totrans-29
   prefs: []
   type: TYPE_NORMAL
+  zh: 总体而言，在一个设计良好且经过优化的 Ceph 集群中，所有这些部分结合起来应该能够让平均写入 4 KB 请求在大约 500-750 微秒内得到服务。
 - en: Benchmarking
+  id: totrans-30
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 基准测试
 - en: '**Benchmarking** is an important tool to quickly be able to see the effects
     of your tuning efforts and to determine the limits of what your cluster is capable
     of. However, it''s important that your benchmarks reflect the type of workload
@@ -156,46 +224,67 @@
     that actually use the same software as your real-life workload. Again, in the
     example of the OLTP database, look to see whether there are benchmarks for your
     database software, which will give the most accurate results.'
+  id: totrans-31
   prefs: []
   type: TYPE_NORMAL
+  zh: '**基准测试**是一个重要的工具，能够快速查看调优工作的效果，并确定集群的能力极限。然而，重要的是，您的基准测试应该反映您通常在 Ceph 集群上运行的工作负载类型。如果您的最终目的是在集群上运行对延迟非常敏感的
+    **在线事务处理** (**OLTP**) 数据库，那么调优您的 Ceph 集群，使其在大块顺序读取和写入方面表现出色是没有意义的。如果可能，您应该尽量包含一些实际使用与您实际工作负载相同软件的基准测试。以
+    OLTP 数据库为例，查看是否有针对您数据库软件的基准测试，这将给出最准确的结果。'
 - en: Benchmarking tools
+  id: totrans-32
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 基准测试工具
 - en: 'The following list of tools is the recommended set of tools to get you started
     with benchmarking:'
+  id: totrans-33
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下是推荐的工具集，用于开始进行基准测试：
 - en: '**Fio**: Fio, the flexible I/O testing tool, allows you to simulate a variety
     of complex I/O patterns through its extensive configuration options. It has plugins
     for both local block devices and RBD, meaning that you can test RBDs from your
     Ceph cluster either directly or by mounting them via the Linux RBD kernel driver.'
+  id: totrans-34
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**Fio**：Fio 是一个灵活的 I/O 测试工具，它通过其广泛的配置选项，允许你模拟各种复杂的 I/O 模式。它有针对本地块设备和 RBD 的插件，这意味着你可以直接或通过
+    Linux RBD 内核驱动程序挂载 RBD，从 Ceph 集群中测试 RBD。'
 - en: '**Sysbench**: Sysbench has a MySQL OLTP test suite that simulates an OLTP application.'
+  id: totrans-35
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**Sysbench**：Sysbench 具有一个 MySQL OLTP 测试套件，可以模拟 OLTP 应用程序。'
 - en: '**Ping**: Don''t underestimate the humble ping tool; along with being able
     to diagnose many network problems, its round-trip time is helpful in determining
     the latency of a network link.'
+  id: totrans-36
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**Ping**：不要低估这个简单的 ping 工具；它不仅能够诊断许多网络问题，还能通过往返时间帮助确定网络链路的延迟。'
 - en: '**iPerf**: iPerf allows you to conduct a series of network tests to determine
     the bandwidth between two servers.'
+  id: totrans-37
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**iPerf**：iPerf 允许你进行一系列网络测试，以确定两个服务器之间的带宽。'
 - en: Network benchmarking
+  id: totrans-38
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 网络基准测试
 - en: There are a number of areas that we need to benchmark on the network to be able
     to understand any limitation and make sure there are no misconfigurations.
+  id: totrans-39
   prefs: []
   type: TYPE_NORMAL
+  zh: 在网络上有多个区域需要基准测试，以便了解任何限制并确保没有配置错误。
 - en: A standard Ethernet frame is 1,500 bytes, while a **jumbo frame** is typically
     9,000 bytes. This increased frame size reduces the overheads for sending data.
     If you have configured your network with a jumbo frame, the first thing to check
@@ -204,164 +293,251 @@
     behavior that is very hard to trace; therefore, it is essential that jumbo frames
     are configured correctly and confirmed to be working before deploying Ceph over
     the top of your network.
+  id: totrans-40
   prefs: []
   type: TYPE_NORMAL
+  zh: 标准以太网帧大小为 1,500 字节，而**jumbo 帧**通常为 9,000 字节。增加的数据帧大小减少了发送数据的开销。如果你已经配置了 jumbo
+    帧，首先需要检查它们是否在所有服务器和网络设备上正确配置。如果 jumbo 帧配置错误，Ceph 将表现出奇怪的、随机的行为，且很难追踪。因此，在部署 Ceph
+    之前，确保 jumbo 帧已正确配置并且正常工作是非常重要的。
 - en: 'To confirm whether jumbo frames are working correctly, you can use `ping` to
     send large packets with the **don''t fragment** flag set:'
+  id: totrans-41
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了确认 jumbo 帧是否正常工作，你可以使用`ping`命令发送大数据包，并设置**不分段**标志：
 - en: '[PRE0]'
+  id: totrans-42
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE0]'
 - en: This command should be run across all your nodes to make sure they can ping
     each other using jumbo frames. If it fails, investigate the issue and resolve
     it before deploying Ceph.
+  id: totrans-43
   prefs: []
   type: TYPE_NORMAL
+  zh: 该命令应在所有节点上运行，以确保它们可以使用 jumbo 帧互相 ping。如果失败，需调查问题并解决后再部署 Ceph。
 - en: The next test to undertake is to measure the round-trip time, also with the
     ping tool. Using the packet size parameter again but with the don't fragment flag,
     it is possible to test the round-trip time of certain packet sizes up to 64 KB,
     which is the maximum IP packet size.
+  id: totrans-44
   prefs: []
   type: TYPE_NORMAL
+  zh: 接下来的测试是测量往返时间，也可以使用 ping 工具。再次使用数据包大小参数，但同时设置不分段标志，你可以测试某些数据包大小的往返时间，直到 64 KB，这是最大
+    IP 数据包大小。
 - en: 'Here are some example readings between two hosts on a **10GBase-T** network:'
+  id: totrans-45
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下是两个主机在**10GBase-T**网络上的一些示例读数：
 - en: 32 B = 85 microseconds
+  id: totrans-46
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 32 B = 85 微秒
 - en: 4 KB = 112 microseconds
+  id: totrans-47
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 4 KB = 112 微秒
 - en: 16 KB = 158 microseconds
+  id: totrans-48
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 16 KB = 158 微秒
 - en: 64 KB = 248 microseconds
+  id: totrans-49
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 64 KB = 248 微秒
 - en: As you can see, larger packet sizes impact the round-trip time; this is one
     reason why larger I/O sizes will see a decrease in IOPS in Ceph.
+  id: totrans-50
   prefs: []
   type: TYPE_NORMAL
+  zh: 如你所见，较大的数据包大小会影响往返时间；这是为什么在 Ceph 中较大的 I/O 大小会导致 IOPS 下降的原因之一。
 - en: Finally, let's test the bandwidth between two hosts to determine whether we
     get the expected performance.
+  id: totrans-51
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后，让我们测试两个主机之间的带宽，以确定我们是否获得了预期的性能。
 - en: 'Run `iperf -s` on the server that will run the iPerf server role:'
+  id: totrans-52
   prefs: []
   type: TYPE_NORMAL
+  zh: 在将充当 iPerf 服务器角色的服务器上运行 `iperf -s`：
 - en: '![](img/4d070ce1-8ae2-4abd-8372-106808543485.png)'
+  id: totrans-53
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/4d070ce1-8ae2-4abd-8372-106808543485.png)'
 - en: 'Then, run the `iperf -c <address of iperf server>` command:'
+  id: totrans-54
   prefs: []
   type: TYPE_NORMAL
+  zh: 然后，运行`iperf -c <iperf 服务器地址>`命令：
 - en: '![](img/daaba4d2-f02a-49d7-89c2-5f65a17c2187.png)'
+  id: totrans-55
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/daaba4d2-f02a-49d7-89c2-5f65a17c2187.png)'
 - en: In this example, the two hosts are connected via a 10 G network and obtain near
     the maximum theoretical throughput. If you do not see the correct throughput,
     an investigation into the network, including host configuration, needs to be done.
+  id: totrans-56
   prefs: []
   type: TYPE_NORMAL
+  zh: 在此示例中，两个主机通过 10 G 网络连接，并获得接近理论最大吞吐量的性能。如果你没有看到正确的吞吐量，需要对网络进行调查，包括主机配置。
 - en: Disk benchmarking
+  id: totrans-57
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 磁盘基准测试
 - en: It is a good idea to understand the underlying performance of the hard disks
     and SSDs in your Ceph cluster, as this will enable you to predict the overall
     performance of your Ceph cluster. To benchmark the disks in your cluster, the
     fio tool will be used.
+  id: totrans-58
   prefs: []
   type: TYPE_NORMAL
+  zh: 理解你 Ceph 集群中硬盘和 SSD 的底层性能是个好主意，因为这将帮助你预测整个 Ceph 集群的性能。为了基准测试集群中的磁盘，将使用 fio 工具。
 - en: Use fio carefully if you're operating in write mode. If you specify a block
     device, fio will happily write over any data that exists on that disk.
+  id: totrans-59
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你在写模式下操作，请小心使用 fio。如果你指定了块设备，fio 会毫不犹豫地覆盖该磁盘上现有的任何数据。
 - en: 'Fio is a complex tool with many configuration options. For the purpose of this
     chapter, we will concentrate on using it to perform basic read and write benchmarks:'
+  id: totrans-60
   prefs: []
   type: TYPE_NORMAL
+  zh: Fio 是一个功能复杂的工具，具有许多配置选项。在本章中，我们将专注于使用它进行基本的读写基准测试：
 - en: 'Install the fio tool on a Ceph OSD node:'
+  id: totrans-61
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在 Ceph OSD 节点上安装 fio 工具：
 - en: '[PRE1]'
+  id: totrans-62
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE1]'
 - en: 'The preceding command gives the following output:'
+  id: totrans-63
   prefs: []
   type: TYPE_NORMAL
+  zh: 上述命令会输出以下内容：
 - en: '![](img/6bc4ebec-f7eb-4ac6-857c-0075659ca86f.png)'
+  id: totrans-64
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/6bc4ebec-f7eb-4ac6-857c-0075659ca86f.png)'
 - en: 'Create a new file and place the following fio configuration into it:'
+  id: totrans-65
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 创建一个新文件，并将以下 fio 配置放入其中：
 - en: '[PRE2]'
+  id: totrans-66
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE2]'
 - en: The previous fio configuration will run a single-threaded 4 KB random write
     test for 30 seconds. It will create a 1G `test.fio` file in the root of the filesystem.
     If you wish to target a block device directly, simply set the filename to the
     block device. However note that with the preceding warning, fio will overwrite
     any data on that block device.
+  id: totrans-67
   prefs: []
   type: TYPE_NORMAL
+  zh: 上述 fio 配置会运行一个单线程的 4 KB 随机写入测试，持续 30 秒。它将在文件系统的根目录下创建一个 1G 的 `test.fio` 文件。如果你希望直接对块设备进行测试，只需将文件名设置为块设备名称。但请注意，根据前述警告，fio
+    会覆盖该块设备上的任何数据。
 - en: Notice that the job is set to use direction, so the page cache will not accelerate
     any I/O operations.
+  id: totrans-68
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意，作业设置为使用方向，因此页面缓存不会加速任何 I/O 操作。
 - en: 'To run the fio job, simply call `fio` with the name of the file to which you
     saved the previous configuration:'
+  id: totrans-69
   prefs: []
   type: TYPE_NORMAL
+  zh: 要运行 fio 作业，只需调用 `fio` 并指定先前配置文件的名称：
 - en: '[PRE3]'
+  id: totrans-70
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE3]'
 - en: 'The preceding command gives the following output:'
+  id: totrans-71
   prefs: []
   type: TYPE_NORMAL
+  zh: 上述命令会输出以下内容：
 - en: '![](img/89a59553-d4de-4a05-9d45-e95acf0c2bff.png)'
+  id: totrans-72
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/89a59553-d4de-4a05-9d45-e95acf0c2bff.png)'
 - en: Once the job is done, fio will produce an output similar to what's shown in
     the previous screenshot. You can see that the fio job runs 39 IOPS and 162 MBps
     on an average, and that the average latency was 25 milliseconds.
+  id: totrans-73
   prefs: []
   type: TYPE_NORMAL
+  zh: 一旦作业完成，fio 会生成类似于前述截图中的输出。你可以看到，fio 作业运行了 39 IOPS 和 162 MBps 的平均速度，且平均延迟为 25
+    毫秒。
 - en: There is also a breakdown of latency percentiles, which can be useful for understanding
     the spread of the request latency.
+  id: totrans-74
   prefs: []
   type: TYPE_NORMAL
+  zh: 还有延迟百分位数的详细信息，这对于理解请求延迟的分布非常有用。
 - en: RADOS benchmarking
+  id: totrans-75
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: RADOS 基准测试
 - en: The next step is to benchmark the RADOS layer. This will give you a combined
     figure, including the performance of the disks, networking—along with the overheads
     of the Ceph code—and extra replicated copies of data.
+  id: totrans-76
   prefs: []
   type: TYPE_NORMAL
+  zh: 下一步是基准测试 RADOS 层。这将给出一个综合数据，包括磁盘性能、网络性能——加上 Ceph 代码的开销——以及额外的复制数据副本。
 - en: 'The RADOS command-line tool has a built-in benchmarking command, which by default
     initiates 16 threads, all writing 4 MB objects. To run the RADOS benchmark, run
     the following command:'
+  id: totrans-77
   prefs: []
   type: TYPE_NORMAL
+  zh: RADOS 命令行工具具有内建的基准测试命令，默认启动 16 个线程，所有线程写入 4 MB 的对象。要运行 RADOS 基准测试，运行以下命令：
 - en: '[PRE4]'
+  id: totrans-78
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE4]'
 - en: 'This will run the write benchmark for 10 seconds:'
+  id: totrans-79
   prefs: []
   type: TYPE_NORMAL
+  zh: 这将运行一个持续 10 秒的写入基准测试：
 - en: '![](img/672192f0-a7a5-452c-975e-36c69e8ba536.png)'
+  id: totrans-80
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/672192f0-a7a5-452c-975e-36c69e8ba536.png)'
 - en: In the previous example, it can be seen that the cluster was able to sustain
     a write bandwidth of around 480 MBps. The output also gives you latency and other
     useful figures. Notice that at the end of the test, it deletes the objects that
@@ -370,66 +546,94 @@
     to leave the objects in place, and then run the benchmark again with the benchmark
     type specified as `seq` instead of `write`. You will manually need to clear the
     bench objects afterward.
+  id: totrans-81
   prefs: []
   type: TYPE_NORMAL
+  zh: 在前面的示例中，可以看到集群能够维持约 480 MBps 的写入带宽。输出还给出了延迟和其他有用的数字。请注意，在测试结束时，它会自动删除作为基准测试一部分创建的对象。如果你希望使用
+    RADOS 工具进行读取基准测试，则需要指定 `--no-cleanup` 选项，以保留对象，然后将基准测试类型指定为 `seq` 而不是 `write`，然后再次运行基准测试。之后，你需要手动清理基准对象。
 - en: RBD benchmarking
+  id: totrans-82
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: RBD 基准测试
 - en: Finally, we will test the performance of RBDs using our favorite tool, fio.
     This will test the entire software and hardware stack, and the results will be
     very close to what clients would expect to observe. By configuring fio to emulate
     certain client applications, we can also get a feel for the expected performance
     of these applications.
+  id: totrans-83
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后，我们将使用我们喜爱的工具 fio 来测试 RBD 的性能。这将测试整个软件和硬件堆栈，其结果将非常接近客户预期的观察结果。通过配置 fio 来模拟某些客户应用程序，我们还可以感受到这些应用程序的预期性能。
 - en: 'To test the performance of an RBD, we will use the fio RBD engine, which allows
     fio to talk directly to the RBD image. Create a new fio configuration and place
     the following into it:'
+  id: totrans-84
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了测试 RBD 的性能，我们将使用 fio RBD 引擎，这使得 fio 可以直接与 RBD 镜像通信。创建一个新的 fio 配置，并将以下内容放入其中：
 - en: '[PRE5]'
+  id: totrans-85
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE5]'
 - en: You can see that, unlike the disk benchmarking configuration, instead of using
     the `libaio` engine, this configuration file now uses the `rbd` engine. When using
     the `rbd` engine, you also need to specify the RADOS pool and the `cephx` user.
     Finally, instead of specifying a filename or block device, you simply need to
     specify an RBD image that exists in the RADOS pool that you configured.
+  id: totrans-86
   prefs: []
   type: TYPE_NORMAL
+  zh: 您可以看到，与磁盘基准配置不同，此配置文件现在使用 `rbd` 引擎而不是 `libaio` 引擎。使用 `rbd` 引擎时，您还需要指定 RADOS
+    池和 `cephx` 用户。最后，而不是指定文件名或块设备，您只需指定已存在于您配置的 RADOS 池中的 RBD 镜像。
 - en: 'Then, run the fio job to test the performance of your RBD:'
+  id: totrans-87
   prefs: []
   type: TYPE_NORMAL
+  zh: 然后，运行 fio 作业来测试您的 RBD 的性能：
 - en: '![](img/44af914a-1fba-4077-a0ac-ebfc30b6b656.png)'
+  id: totrans-88
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/44af914a-1fba-4077-a0ac-ebfc30b6b656.png)'
 - en: As can be seen in the preceding output, the fio tool is using the RBD engine
     directly, bypassing the requirement for an RBD to be mounted to the Linux operating
     system before it can be tested.
+  id: totrans-89
   prefs: []
   type: TYPE_NORMAL
+  zh: 如前述输出所示，fio 工具直接使用 RBD 引擎，无需将 RBD 挂载到 Linux 操作系统即可进行测试。
 - en: Recommended tunings
+  id: totrans-90
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 推荐的调整
 - en: Tuning your Ceph cluster will enable you to get the best performance and the
     most benefits from your hardware. In this section, we will look at recommended
     Ceph tuning options.
+  id: totrans-91
   prefs: []
   type: TYPE_NORMAL
+  zh: 通过调整您的 Ceph 集群，您可以获得最佳性能，并从您的硬件中获得最大的好处。在本节中，我们将看看推荐的 Ceph 调整选项。
 - en: It's important to understand that by tuning, all you are doing is reducing bottlenecks.
     If you manage to reduce enough bottlenecks in one area, the bottleneck will simply
     shift to another area. You will always have a bottleneck somewhere, and eventually,
     you will reach a point where you are simply over the limit of what a particular
     hardware can provide. Therefore, the goal should be to reduce bottlenecks in the
     software and operating system to unlock the entire potential of your hardware.
+  id: totrans-92
   prefs: []
   type: TYPE_NORMAL
+  zh: 重要的是要理解，通过调整，您所做的只是减少瓶颈。如果您成功地减少了一个区域的足够多的瓶颈，那么瓶颈将简单地转移到另一个区域。您总会在某个地方遇到瓶颈，并最终会达到一个硬件能够提供的极限。因此，目标应该是减少软件和操作系统中的瓶颈，以释放硬件的全部潜力。
 - en: CPU
+  id: totrans-93
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: CPU
 - en: As Ceph is software-defined for storage, its performance is heavily affected
     by the speed of the CPUs in the OSD nodes. Faster CPUs mean that the Ceph code
     can run faster and will spend less time processing each I/O request. The result
@@ -438,8 +642,12 @@
     *Planning for Ceph*, stated a preference for high Ghz processors rather than high
     core count, for performance reasons; however, there are additional concerns with
     high-core-count CPUs when they are over-specified for the job.
+  id: totrans-94
   prefs: []
   type: TYPE_NORMAL
+  zh: 由于 Ceph 是存储的软件定义，其性能受 OSD 节点中 CPU 速度的影响较大。更快的 CPU 意味着 Ceph 代码可以更快地运行，并且在处理每个
+    I/O 请求时花费的时间更少。结果是每个 I/O 的更低延迟，如果底层存储可以处理，将减少 CPU 作为瓶颈，并提供更高的整体性能。[第一章](0f4119df-b421-4349-86c8-b68444743f8a.xhtml)《规划
+    Ceph》指出，出于性能原因，高 GHz 处理器比高核心数更受青睐；然而，对于高核心数 CPU，当它们被过度规定用于作业时，还存在其他问题。
 - en: 'To understand these concerns, we will need to cover a brief history on CPU
     design. During the early 2000s, CPUs were all single-core designs, which ran constantly
     at the same frequency and didn''t support many low-power modes. As they moved
@@ -448,14 +656,20 @@
     heat generated from the CPU package was simply too great. Fast forward to today,
     and this still holds true: there is no such thing as a 4 GHz 20-core CPU; it would
     simply generate too much heat to be feasible.'
+  id: totrans-95
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了理解这些问题，我们需要简要回顾 CPU 设计的历史。在 2000 年代初期，所有的 CPU 都是单核设计，始终以相同的频率运行，并且不支持许多低功耗模式。随着它们频率的提高和核心数的增加，显而易见，并非每个核心都能始终运行在其最大频率上。CPU
+    包装产生的热量实在是太大了。快进到今天，这一情况仍然成立：没有所谓的 4 GHz 20 核 CPU，它会产生过多的热量，根本不可行。
 - en: However, the clever people who designed CPUs came up with a solution, which
     allowed each core to run at a different frequency and also allowed them to power
     themselves down into deep sleep states. Both approaches lowered the power and
     cooling requirements of the CPU down to single-digit watts.
+  id: totrans-96
   prefs: []
   type: TYPE_NORMAL
+  zh: 然而，设计 CPU 的聪明人想出了一个解决方案，这使得每个核心可以在不同的频率下运行，并且可以将其自身关闭进入深度睡眠状态。这两种方法都降低了 CPU
+    的功耗和冷却需求，将其降至单个位数瓦特。
 - en: The CPUs have much lower clock speeds, but with the ability for a certain total
     number of cores to engage turbo mode, higher GHz are possible. There is normally
     a gradual decrease in the top turbo frequency as the number of active cores increases
@@ -463,50 +677,73 @@
     started, the CPU wakes up a couple of cores and speeds them up to a much higher
     frequency to get better single-threaded performance. In Intel CPUs, the different
     frequency levels are called **P-states** and sleep levels are called **C-states**.
+  id: totrans-97
   prefs: []
   type: TYPE_NORMAL
+  zh: 这些 CPU 的时钟速度较低，但通过一定数量的核心启动涡轮模式，较高的 GHz 变得可能。通常随着活跃核心数的增加，最高涡轮频率会逐渐降低，以保持热输出在某个阈值以下。如果启动了一个低线程的进程，CPU
+    会唤醒几个核心，并将它们加速到更高的频率，以提高单线程性能。在 Intel 的 CPU 中，不同的频率级别称为**P 状态**，而睡眠级别称为**C 状态**。
 - en: 'This all sounds like the perfect package: a CPU that, when idle, consumes hardly
     any power, and yet when needed, it can turbo boost a handful of cores to achieve
     high clock speed. Unfortunately, there is no such thing as a free lunch. There
     are some overheads with this approach that have a detrimental effect on the latency
     of sensitive applications, with Ceph being one of them.'
+  id: totrans-98
   prefs: []
   type: TYPE_NORMAL
+  zh: 这一切听起来像是完美的方案：当 CPU 闲置时，几乎不消耗任何功率，而当需要时，它可以通过涡轮加速几个核心来实现高时钟速度。不幸的是，世上没有免费的午餐。这种方法确实存在一些开销，这些开销对对延迟敏感的应用程序产生不利影响，其中
+    Ceph 就是一个例子。
 - en: 'There are two main problems with this approach that impact the latency of sensitive
     applications, the first being that it takes time for a core to wake up from a
     sleep state. The deeper the sleep, the longer it takes to wake up. The core has
     to reinitialize certain internal components before it is ready to be used. Here
     is a list from an Intel E3-1200v5 CPU; older CPUs may fare slightly worse:'
+  id: totrans-99
   prefs: []
   type: TYPE_NORMAL
+  zh: 这种方法有两个主要问题，它们影响着对延迟敏感的应用程序，第一个问题是核心从睡眠状态唤醒需要时间。睡眠越深，唤醒所需的时间就越长。核心必须重新初始化某些内部组件，才能准备好使用。以下是来自
+    Intel E3-1200v5 CPU 的列表；较旧的 CPU 可能会稍微差一些：
 - en: POLL = 0 microsecond
+  id: totrans-100
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: POLL = 0 微秒
 - en: C1-SKL = 2 microseconds
+  id: totrans-101
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: C1-SKL = 2 微秒
 - en: C1E-SKL = 10 microseconds
+  id: totrans-102
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: C1E-SKL = 10 微秒
 - en: C3-SKL = 70 microseconds
+  id: totrans-103
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: C3-SKL = 70 微秒
 - en: C6-SKL = 85 microseconds
+  id: totrans-104
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: C6-SKL = 85 微秒
 - en: C7s-SKL = 124 microseconds
+  id: totrans-105
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: C7s-SKL = 124 微秒
 - en: C8-SKL = 200 microseconds
+  id: totrans-106
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: C8-SKL = 200 微秒
 - en: We can see that in the worst case, it may take a core up to 200 microseconds
     to wake up from its deepest sleep. When you consider that a single Ceph I/O may
     require several threads across several nodes to wake up a CPU core, these exit
@@ -515,8 +752,10 @@
     frequency doesn't immediately increase in a speed to maximum as soon as its in
     use. This means that under low utilization, the CPU cores may only be operating
     at a low GHz. This leads us to the second problem, which lies with the Linux scheduler.
+  id: totrans-107
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们可以看到，在最坏的情况下，一个核心可能需要最多200微秒才能从其最深的休眠状态中唤醒。考虑到单个Ceph I/O可能需要多个线程跨多个节点来唤醒CPU核心，这些退出延迟可能会累积起来。虽然P状态影响核心频率的程度不如C状态的退出延迟那样大，但核心的频率不会在被使用时立即以最大速度增加。这意味着在低利用率下，CPU核心可能仅在较低的GHz频率下运行。这就引出了第二个问题，即Linux调度程序的问题。
 - en: Linux is aware of what core is active and which C-state and P-state each core
     is running at. It can fully control each core's behavior. Unfortunately, Linux's
     scheduler doesn't take any of this information into account; instead, it prefers
@@ -524,8 +763,10 @@
     all the CPU cores will spend the bulk on their time in their lowest C-state and
     will operate at a low frequency. During a low utilization, this can impact the
     latency for small I/Os by 4-5x, which is a significant impact.
+  id: totrans-108
   prefs: []
   type: TYPE_NORMAL
+  zh: Linux知道哪个核心是活跃的，以及每个核心正在运行的C状态和P状态。它可以完全控制每个核心的行为。不幸的是，Linux的调度程序并没有考虑到这些信息，而是倾向于尝试均衡地将线程分配到各个核心。这意味着在低利用率情况下，所有CPU核心大部分时间都会处于最低的C状态，并以较低的频率运行。在低利用率时，这会对小I/O的延迟产生4-5倍的影响，这是一个显著的影响。
 - en: Until Linux has a power-aware scheduler that will take into account which cores
     are already active and schedules threads on them to reduce latency, the best approach
     is to force the CPU to only sleep down to a certain C-state and force it to run
@@ -533,47 +774,68 @@
     in the newest models of CPU, this has somewhat been reduced. For this reason,
     it should be clear why it is recommended to size your CPU to your workload. Running
     a 40-core server at a high C-state and high frequency will consume a lot of power.
+  id: totrans-109
   prefs: []
   type: TYPE_NORMAL
+  zh: 直到Linux拥有一个能够根据哪些核心已经处于活动状态并将线程调度到这些核心上以减少延迟的电源感知调度程序为止，最佳的方法是强制CPU只进入某个C状态，并始终以最高频率运行。这确实会增加功耗，但在最新的CPU型号中，这一情况有所减少。因此，应该清楚为什么建议根据工作负载为CPU选择适当的配置。将一个40核的服务器以高C状态和高频率运行将消耗大量电力。
 - en: 'To force Linux to only drop-down to the C1 C-state, add this to your GRUB configuration:'
+  id: totrans-110
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了强制Linux仅降至C1 C状态，请将以下内容添加到你的GRUB配置中：
 - en: '[PRE6]'
+  id: totrans-111
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE6]'
 - en: 'Some Linux distributions have a performance mode where this runs the CPUs at
     a maximum frequency. However, the manual way to achieve this is to echo values
     via `sysfs`. Sticking the following in `/etc/rc.local` will set all your cores
     to run at their maximum frequency on the boot:'
+  id: totrans-112
   prefs: []
   type: TYPE_NORMAL
+  zh: 一些Linux发行版提供了一个性能模式，该模式将CPU运行在最大频率下。然而，手动实现此模式的方法是通过`sysfs`回显值。将以下内容添加到`/etc/rc.local`中将在启动时设置所有核心运行在其最大频率下：
 - en: '[PRE7]'
+  id: totrans-113
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE7]'
 - en: 'After you restart your OSD node, these changes should be in effect. Confirm
     this by running these commands:'
+  id: totrans-114
   prefs: []
   type: TYPE_NORMAL
+  zh: 重启你的OSD节点后，这些更改应该会生效。通过运行以下命令来确认这一点：
 - en: '[PRE8]'
+  id: totrans-115
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE8]'
 - en: As mentioned earlier in this chapter, before making these changes, run a reference
     benchmark, and then do it again afterward so that you can understand the gains
     made by this change.
+  id: totrans-116
   prefs: []
   type: TYPE_NORMAL
+  zh: 如本章前文所述，在进行这些更改之前，请先运行基准测试，然后再进行一次，以便了解通过此更改所获得的收益。
 - en: BlueStore
+  id: totrans-117
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: BlueStore
 - en: The latest versions of Ceph contain an auto-tuning functionality for BlueStore
     OSDs. The auto-tuning works by analyzing the cache utilization of the OSDs and
     adjusting the caching thresholds for the OSD, RocksDB, and data caches, depending
     on the current hit rate. It also limits the sum of these caches to try to limit
     the total OSD memory usage to the limit set by the `osd_memory_target` variable,
     which is set to 4 GB by default.
+  id: totrans-118
   prefs: []
   type: TYPE_NORMAL
+  zh: Ceph的最新版本包含了针对BlueStore OSD的自动调优功能。自动调优通过分析OSD的缓存利用率，并根据当前的命中率调整OSD、RocksDB和数据缓存的缓存阈值。它还限制这些缓存的总和，以尽量将总的OSD内存使用量限制在`osd_memory_target`变量设置的限制范围内，默认值为4
+    GB。
 - en: Obviously, if you have less RAM in the Ceph node and therefore it unable to
     provide 4 GB for each OSD, this figure would need to be reduced to avoid the node
     running out of memory. However, if the Ceph node has sufficient memory, it would
@@ -584,17 +846,26 @@
     auto-tuning algorithm is fairly slow and takes a while to ramp up, so at least
     24-48 hours should be given to see the full effect of a change to the `osd_memory_target`
     variable.
+  id: totrans-119
   prefs: []
   type: TYPE_NORMAL
+  zh: 显然，如果 Ceph 节点的内存较少，因此无法为每个 OSD 提供 4 GB 内存，则需要减少该值，以避免节点内存不足。然而，如果 Ceph 节点内存充足，建议增加
+    `osd_memory_target` 变量，以便 Ceph 尽可能多地利用已安装的内存。分配足够的 RAM 给 OSD 和 RocksDB 后，任何额外的内存将被用作数据缓存，并能更有效地服务于高百分比的读
+    IO。当前的自动调节算法比较缓慢，需要一些时间才能充分发挥作用，因此应该给 `osd_memory_target` 变量调整至少 24-48 小时，以观察其完全效果。
 - en: WAL deferred writes
+  id: totrans-120
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: WAL 延迟写入
 - en: BlueStore can journal writes in the RocksDB WAL and flush them at a later date,
     allowing for write coalescing and ordering. This can bring large performance improvements
     for clusters that use spinning disks with flash-based devices for RocksDB.
+  id: totrans-121
   prefs: []
   type: TYPE_NORMAL
+  zh: BlueStore 可以在 RocksDB WAL 中记录写入操作，并在稍后的时间进行刷新，从而实现写入合并和排序。这可以为使用旋转磁盘和基于闪存的设备的
+    RocksDB 的集群带来显著的性能提升。
 - en: By default, if the OSD is identified as a spinning HDD, writes less or equal
     to 32 KB are written into the WAL of the OSD and are then acknowledged and sent
     back to the client. This is controlled by the `bluestore_prefer_deferred_size_hdd` variable;
@@ -602,37 +873,53 @@
     from also deferring larger writes via the WAL to achieve lower latency and higher
     IOPS. Thought should also be given to the write load of the flash device holding
     the WAL, both for bandwidth and endurance reasons.
+  id: totrans-122
   prefs: []
   type: TYPE_NORMAL
+  zh: 默认情况下，如果 OSD 被识别为旋转硬盘，则小于或等于 32 KB 的写入操作会写入 OSD 的 WAL，然后进行确认并发送回客户端。这由 `bluestore_prefer_deferred_size_hdd`
+    变量控制；如果确定您的工作负载有利于通过 WAL 延迟更大的写入以实现更低的延迟和更高的 IOPS，可以调整该值。同时，还应考虑持有 WAL 的闪存设备的写入负载，既要考虑带宽，也要考虑耐久性。
 - en: The BlueStore configuration also limits how many writes can be queued up before
     the OSD is forced to flush them down to the disk; this can be controlled via the
     `bluestore_deferred_batch_ops` variable and is set by default to `64`. Increasing
     this value may increase total throughput, but also runs the risk of the HDD spending
     large amounts of time being saturated and raising the average latency.
+  id: totrans-123
   prefs: []
   type: TYPE_NORMAL
+  zh: BlueStore 配置还限制了在 OSD 强制刷新数据到磁盘之前，最多可以排队多少写入操作；这个值可以通过 `bluestore_deferred_batch_ops`
+    变量进行控制，默认设置为 `64`。增加这个值可能会提高总吞吐量，但也有可能导致硬盘花费大量时间处于饱和状态，进而增加平均延迟。
 - en: Filestore
+  id: totrans-124
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: Filestore
 - en: In nearly all cases, BlueStore outperforms filestore and solves several limitations,
     and therefore it is recommended that your cluster be upgraded to BlueStore. However,
     for completeness, the following are the items you can tune to improve the performance
     of filestore, should your cluster still be running it.
+  id: totrans-125
   prefs: []
   type: TYPE_NORMAL
+  zh: 在几乎所有情况下，BlueStore 的性能优于 filestore，并解决了多个限制，因此建议将您的集群升级到 BlueStore。不过，为了完整性，以下是可以调整的项，以提高
+    filestore 性能，前提是您的集群仍在运行它。
 - en: VFS cache pressure
+  id: totrans-126
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: VFS 缓存压力
 - en: As the name suggests, the filestore object store works by storing RADOS objects
     as files on a standard Linux filesystem. In most cases, this will be XFS. As each
     object is stored as a file, there will likely be hundreds of thousands, if not
     millions, of files per disk. A Ceph cluster is composed of 8 TB disks and is used
     for an RBD workload. Assuming that the RBD is made up of the standard 4 MB objects,
     there would be nearly 2,000,000 objects per disk.
+  id: totrans-127
   prefs: []
   type: TYPE_NORMAL
+  zh: 顾名思义，filestore 对象存储通过将 RADOS 对象作为文件存储在标准 Linux 文件系统中来工作。在大多数情况下，这将是 XFS。由于每个对象都作为文件存储，因此每个磁盘上可能会有数十万甚至百万个文件。一个
+    Ceph 集群由 8 TB 磁盘组成，用于 RBD 工作负载。假设 RBD 由标准的 4 MB 对象组成，那么每个磁盘上大约会有 200 万个对象。
 - en: When an application asks Linux to read or write to a file on a filesystem, it
     needs to know where that file actually exists on the disk. To find this location,
     it needs to follow the structure of directory entries and inodes. Each one of
@@ -641,28 +928,41 @@
     to be read or written to, haven't been accessed in a while and are hence not cached.
     This penalty is a lot higher in spinning disk clusters as opposed to SSD-based
     clusters, due to the impact of the random reads.
+  id: totrans-128
   prefs: []
   type: TYPE_NORMAL
+  zh: 当一个应用程序请求 Linux 读取或写入文件系统上的文件时，它需要知道该文件在磁盘上的实际位置。为了找到这个位置，它需要遵循目录项和 inode 的结构。如果这些查找项没有被缓存到内存中，每一次查找都需要磁盘访问。如果
+    Ceph 对象在一段时间内没有被访问，因此没有被缓存，这可能会导致在某些情况下性能不佳。由于随机读取的影响，在旋转磁盘集群中这种惩罚会比在基于 SSD 的集群中更高。
 - en: 'By default, Linux favors the caching of data in the page cache versus the caching
     of inodes and directory entries. In many cases in Ceph, this is the opposite of
     what you want to happen. Luckily, there is a tuneable kernel that allows you to
     tell Linux to prefer directory entries and inodes over page caches; this can be
     controlled with the following `sysctl` setting:'
+  id: totrans-129
   prefs: []
   type: TYPE_NORMAL
+  zh: 默认情况下，Linux 偏好将数据缓存到页缓存中，而不是缓存 inode 和目录项。在 Ceph 中的许多情况下，这正是你不希望发生的。幸运的是，Linux
+    提供了一个可调的内核参数，允许你告诉系统优先缓存目录项和 inode 而不是页缓存；这一设置可以通过以下 `sysctl` 设置进行控制：
 - en: '[PRE9]'
+  id: totrans-130
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE9]'
 - en: Where a lower number sets a preference to cache inodes and directory entries,
     do not set this to zero. A zero setting tells the kernel not to flush old entries,
     even in the event of a low-memory condition, and can have adverse effects. A value
     of `1` is recommended.
+  id: totrans-131
   prefs: []
   type: TYPE_NORMAL
+  zh: 在设置较低数值时，系统会偏好缓存 inode 和目录项，绝对不要将此值设置为零。零值会告诉内核即使在低内存情况下，也不刷新旧的条目，这可能带来不良影响。推荐设置为
+    `1`。
 - en: WBThrottle and/or nr_requests
+  id: totrans-132
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: WBThrottle 和/或 nr_requests
 - en: Filestore uses buffered I/O to write; this brings a number of advantages if
     the filestore journal is on a faster media. Client requests are acknowledged as
     soon as they are written to the journal, and are then flushed to the data disk
@@ -673,55 +973,78 @@
     a more optimal path across the platters. The end effect is that you can squeeze
     some more I/O out of each disk than what would be possible with a direct or sync
     I/O.
+  id: totrans-133
   prefs: []
   type: TYPE_NORMAL
+  zh: Filestore 使用缓冲 I/O 进行写入；如果 Filestore 日志位于更快的存储介质上，这带来了一些优势。客户端请求在写入日志后立即得到确认，然后由
+    Linux 中的标准写回功能在稍后的时间刷新到数据磁盘。这使得旋转磁盘 OSD 在小规模写入时能够提供与 SSD 相似的写入延迟。延迟写回还允许内核重新排列对磁盘的
+    I/O 请求，以期将它们合并，或者使磁头在盘片上沿着更优路径移动。最终效果是，你可以从每个磁盘中挤出更多的 I/O，相比直接或同步 I/O，性能得到了提升。
 - en: However, the problem occurs when the amount of incoming writes to the Ceph cluster
     outstrips the capabilities of the underlying disks. In this scenario, the number
     of pending I/Os waiting to be written on disk can increase uncontrollably, and
     the resulting queue of I/Os can saturate the disk and Ceph queues. Read requests
     are particularly poorly effected, as they get stuck behind potentially thousands
     of write requests, which may take several seconds to flush to the disk.
+  id: totrans-134
   prefs: []
   type: TYPE_NORMAL
+  zh: 然而，问题出现在 Ceph 集群中写入请求的数量超出了底层磁盘的处理能力。在这种情况下，待写入磁盘的挂起 I/O 数量可能会失控地增加，导致 I/O 队列饱和，进而饱和磁盘和
+    Ceph 队列。读取请求尤其会受到较大影响，因为它们会被数千个写入请求堵塞，这些写入请求可能需要几秒钟才能刷新到磁盘上。
 - en: To combat this problem, Ceph has a writeback throttle mechanism built into filestore
     called **WBThrottle**. It is designed to limit the amount of writeback I/Os that
     can queue up and start the flushing process earlier than what would be naturally
     triggered by the kernel. Unfortunately, testing has shown that the defaults may
     still not curtail the behavior that can reduce the impact on the read latency.
+  id: totrans-135
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了解决这个问题，Ceph 在 Filestore 中内建了一种写回节流机制，叫做 **WBThrottle**。它的设计目的是限制可以排队的写回 I/O
+    的数量，并比内核自然触发的写回过程提前启动刷新。然而，测试显示，默认设置仍可能无法遏制这种行为，从而减轻对读取延迟的影响。
 - en: Tuning can alter this behavior to reduce the write queue lengths and allow reads
     not to get too impacted. However, there is a trade-off; by reducing the maximum
     number of writes allowed to be queued up, you can reduce the kernel's opportunity
     to maximize the efficiency of reordering the requests. Some thought needs to be
     given to what is important for your given use case, workloads, and tune to match
     it.
+  id: totrans-136
   prefs: []
   type: TYPE_NORMAL
+  zh: 调优可以改变这种行为，以减少写队列的长度，并且允许读取不受太大影响。然而，这也有一个权衡；通过减少允许排队的最大写入数量，您可以减少内核最大化重排请求效率的机会。需要根据您给定的使用案例、工作负载进行思考，并进行调整以匹配它。
 - en: To control the writeback queue depth, you can either reduce the maximum amount
     of outstanding I/Os using Ceph's WBThrottle settings, or lower the maximum outstanding
     requests at the block layer in the kernel. Both can effectively control the same
     behavior, and it's really a preference of how you want to implement the configuration.
+  id: totrans-137
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了控制写回队列深度，您可以通过调整 Ceph 的 WBThrottle 设置来减少最大未完成 I/O 的数量，或者在内核的块层面降低最大未完成请求数。这两种方法都能有效地控制相同的行为，实际上只是在于您希望如何实现该配置。
 - en: 'It should also be noted that the operation priorities in Ceph are more effective
     with a shorter queue at the disk level. By shortening the queue at the disk, the
     main queuing location moves up into Ceph, where it has more control over what
     I/O has priority. Consider the following example:'
+  id: totrans-138
   prefs: []
   type: TYPE_NORMAL
+  zh: 还应该注意，Ceph 中的操作优先级在磁盘级别的队列较短时更为有效。通过缩短磁盘上的队列，主要的排队位置会移到 Ceph 中，Ceph 可以更好地控制哪些
+    I/O 具有优先权。考虑以下示例：
 - en: '[PRE10]'
+  id: totrans-139
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE10]'
 - en: With the release of the Linux 4.10 kernel, a new feature was introduced, which
     deprioritizes writeback I/O; this greatly reduces the impact of write-starvation
     with Ceph and is worth investigating if running the 4.10 kernel is feasible.
+  id: totrans-140
   prefs: []
   type: TYPE_NORMAL
+  zh: 随着 Linux 4.10 内核的发布，引入了一项新特性，即降低写回 I/O 的优先级；这大大减少了 Ceph 写饥饿的影响，如果可以运行 4.10 内核，值得考虑进行调查。
 - en: Throttling filestore queues
+  id: totrans-141
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 节流 filestore 队列
 - en: In the default configuration, when a disk becomes saturated, its disk queue
     will gradually fill up. Then, the filestore queue will start to fill up. Until
     this point, I/O would have been accepted as fast as the journal could accept it.
@@ -729,127 +1052,186 @@
     suddenly be stopped until the queues fall back below the thresholds. This behavior
     will lead to large spikes and, most likely, periods of low performance, where
     other client requests will experience high latency.
+  id: totrans-142
   prefs: []
   type: TYPE_NORMAL
+  zh: 在默认配置下，当磁盘变得饱和时，其磁盘队列将逐渐填满。然后，filestore 队列将开始填满。直到此时，I/O 会以日志能够接受的最快速度被接受。一旦
+    filestore 队列填满和/或 WBThrottle 生效，I/O 将突然停止，直到队列恢复到低于阈值的状态。这种行为会导致大幅波动，并且很可能会出现低性能的时段，其他客户端请求会遇到较高的延迟。
 - en: To reduce the spikiness of filestore when the disks become saturated, there
     are some additional configuration options that can be set to gradually throttle
     back operations as the filestore queue fills up, instead of bouncing around the
     hard limit.
+  id: totrans-143
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了减少磁盘饱和时 filestore 的波动性，可以设置一些额外的配置选项，以便在 filestore 队列填满时逐渐降低操作速率，而不是在硬限制下反复波动。
 - en: filestore_queue_low_threshhold
+  id: totrans-144
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: filestore_queue_low_threshhold
 - en: This is expressed as a percentage between 0.0 and 1.0\. Below this threshold,
     no throttling is performed.
+  id: totrans-145
   prefs: []
   type: TYPE_NORMAL
+  zh: 这个值是一个介于 0.0 和 1.0 之间的百分比。低于该阈值时，不进行节流。
 - en: filestore_queue_high_threshhold
+  id: totrans-146
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: filestore_queue_high_threshhold
 - en: This is expressed as a percentage between 0.0 and 1.0\. Between the low and
     high threshold, throttling is carried out by introducing a per-I/O delay, which
     is linearly increased from 0 to `filestore_queue_high_delay_multiple/filestore_expected_throughput_ops`.
+  id: totrans-147
   prefs: []
   type: TYPE_NORMAL
+  zh: 这个值是一个介于 0.0 和 1.0 之间的百分比。在低阈值和高阈值之间，通过引入每个 I/O 的延迟进行节流，延迟会线性增加，从 0 增加到 `filestore_queue_high_delay_multiple/filestore_expected_throughput_ops`。
 - en: From the high threshold to the maximum, it will throttle at the rate determined
     by `filestore_queue_max_delay_multiple/filestore_expected_throughput_ops`.
+  id: totrans-148
   prefs: []
   type: TYPE_NORMAL
+  zh: 从高阈值到最大值，会按 `filestore_queue_max_delay_multiple/filestore_expected_throughput_ops`
+    确定的速率进行节流。
 - en: Both of these throttle rates use the configured one, which is the expected throughput
     of the disk to calculate the correct delay to introduce. The `delay_multiple`
     variables are there to allow an increase of this delay if the queue goes over
     the high threshold.
+  id: totrans-149
   prefs: []
   type: TYPE_NORMAL
+  zh: 这两个节流速率使用配置的值，即磁盘的预期吞吐量来计算要引入的正确延迟。`delay_multiple` 变量的存在是为了允许在队列超过高阈值时增加这个延迟。
 - en: filestore_expected_throughput_ops
+  id: totrans-150
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: filestore_expected_throughput_ops
 - en: This should be set to the expected IOPS's performance of the underlying disk
     where the OSD is running.
+  id: totrans-151
   prefs: []
   type: TYPE_NORMAL
+  zh: 该值应设置为 OSD 运行所在底层磁盘的预期 IOPS 性能。
 - en: filestore_queue_high_delay_multiple
+  id: totrans-152
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: filestore_queue_high_delay_multiple
 - en: Between the low and high thresholds, this multiple is used to calculate the
     correct amount of delay to introduce.
+  id: totrans-153
   prefs: []
   type: TYPE_NORMAL
+  zh: 在低阈值和高阈值之间，使用此倍数来计算应引入的正确延迟量。
 - en: filestore_queue_max_delay_multiple
+  id: totrans-154
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: filestore_queue_max_delay_multiple
 - en: Above the maximum queue size, this multiplier is used to calculate an even greater
     delay to hopefully stop the queue from ever filling up.
+  id: totrans-155
   prefs: []
   type: TYPE_NORMAL
+  zh: 当超过最大队列大小时，此乘数用于计算更大的延迟，以期望防止队列填满。
 - en: Splitting PGs
+  id: totrans-156
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 拆分 PG
 - en: 'A filesystem has a limit on the number of files that can be stored in a directory
     before performance starts to degrade when asked to list the contents:'
+  id: totrans-157
   prefs: []
   type: TYPE_NORMAL
+  zh: 文件系统对于可以存储在目录中的文件数量有一个限制，当要求列出内容时，性能会开始下降：
 - en: As Ceph is storing millions of objects per disk—which are just files. It splits
     the files across a nested directory structure to limit the number of files placed
     in each directory.
+  id: totrans-158
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 由于 Ceph 每个磁盘存储数百万个对象——它们就是文件。它通过嵌套的目录结构拆分文件，以限制每个目录中放置的文件数量。
 - en: As the number of objects in the cluster increases, so does the number of files
     per directory.
+  id: totrans-159
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 随着集群中对象数量的增加，每个目录中的文件数量也会增加。
 - en: When the number of files in these directories exceeds these limits, Ceph splits
     the directory into further subdirectories and migrates the objects to them.
+  id: totrans-160
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 当这些目录中的文件数量超过限制时，Ceph 会将目录拆分成更多的子目录，并将对象迁移到它们中。
 - en: This operation can have a significant performance penalty when it occurs. Furthermore,
     XFS tries to place its files in the same directory close together on the disk.
     When PG splitting occurs, fragmentation of the XFS filesystem can occur, leading
     to further performance degradation.
+  id: totrans-161
   prefs: []
   type: TYPE_NORMAL
+  zh: 此操作在发生时可能会产生显著的性能惩罚。此外，XFS 尝试将文件尽可能地放在磁盘上同一目录的相近位置。当 PG 拆分发生时，XFS 文件系统可能会出现碎片化，进一步导致性能下降。
 - en: By default, Ceph will split a PG when it contains 320 objects. An 8 TB disk
     in a Ceph cluster configured with the recommended number of PGs per OSD will likely
     have over 5,000 objects per PG. This PG would have gone through several PG split
     operations in its lifetime, resulting in a deeper and more complex directory structure.
+  id: totrans-162
   prefs: []
   type: TYPE_NORMAL
+  zh: 默认情况下，当 PG 包含 320 个对象时，Ceph 会拆分该 PG。配置了推荐每 OSD PG 数量的 8 TB 磁盘，可能每个 PG 会有超过 5000
+    个对象。这个 PG 在其生命周期中可能已经经历了多次 PG 拆分操作，导致目录结构更深、更复杂。
 - en: As mentioned in the *VFS cache pressure* section, to avoid costly dentry lookups,
     the kernel tries to cache them. The result of PG splitting means that there is
     a higher number of directories to cache, and there may not be enough memory to
     cache them all, leading to poorer performance.
+  id: totrans-163
   prefs: []
   type: TYPE_NORMAL
+  zh: 如 *VFS 缓存压力* 部分所述，为了避免高昂的目录项查找，内核会尝试缓存它们。PG 拆分的结果是需要缓存更多的目录，可能没有足够的内存来缓存它们，从而导致性能下降。
 - en: 'A common approach to this problem is to increase the allowed number of files
     in each directory by setting the OSD configuration options, as follows:'
+  id: totrans-164
   prefs: []
   type: TYPE_NORMAL
+  zh: 解决此问题的常见方法是通过设置 OSD 配置选项来增加每个目录中允许的文件数量，具体如下：
 - en: '[PRE11]'
+  id: totrans-165
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE11]'
 - en: 'Also, use the following setting:'
+  id: totrans-166
   prefs: []
   type: TYPE_NORMAL
+  zh: 此外，使用以下设置：
 - en: '[PRE12]'
+  id: totrans-167
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE12]'
 - en: 'With the following formula, you can set at what threshold Ceph will split a
     PG:'
+  id: totrans-168
   prefs: []
   type: TYPE_NORMAL
+  zh: 使用以下公式，您可以设置 Ceph 何时拆分 PG 的阈值：
 - en: '![](img/3f606921-6845-425b-80be-548fee6c4353.png)'
+  id: totrans-169
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/3f606921-6845-425b-80be-548fee6c4353.png)'
 - en: Care should be taken, however. Although increasing the threshold will reduce
     the occurrences of PG splitting and also reduce the complexity of the directory
     structure, when a PG split does occur, it will have to split far more objects.
@@ -857,35 +1239,49 @@
     on performance, which may even lead to OSDs timing out. There is a trade-off of
     split frequency to split time; the defaults may be slightly on the conservative
     side, especially with larger disks.
+  id: totrans-170
   prefs: []
   type: TYPE_NORMAL
+  zh: 然而，必须小心。尽管增加阈值将减少 PG 拆分的发生次数，并减少目录结构的复杂性，但当 PG 拆分发生时，它将必须拆分更多的对象。需要拆分的对象数量越多，对性能的影响越大，甚至可能导致
+    OSD 超时。拆分频率与拆分时间之间存在权衡；默认值可能稍显保守，尤其是在较大的磁盘上。
 - en: Doubling or tripling the split threshold can probably be done safely without
     too much concern; greater values should be tested with the cluster under I/O load
     before putting it into production.
+  id: totrans-171
   prefs: []
   type: TYPE_NORMAL
+  zh: 将拆分阈值加倍或三倍通常可以安全地完成，无需过多担心；更大的值应在集群处于 I/O 负载时进行测试，然后再投入生产环境。
 - en: Scrubbing
+  id: totrans-172
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 刷新
 - en: Scrubbing is Ceph's way of verifying that the objects stored in RADOS are consistent,
     and to protect against bit rot or other corruptions. Scrubbing can either be normal
     or deep, depending on the set schedule. During a normal scrub operation, Ceph
     reads all objects for a certain PG and compares the copies to make sure that their
     size and attributes match.
+  id: totrans-173
   prefs: []
   type: TYPE_NORMAL
+  zh: 清理是 Ceph 用于验证存储在 RADOS 中的对象是否一致的方式，并防止位腐化或其他损坏。清理操作可以是正常的或深度的，取决于设定的计划。在正常的清理操作中，Ceph
+    会读取某个 PG 的所有对象，并比较它们的副本，以确保它们的大小和属性匹配。
 - en: A deep scrub operation goes one step further and compares the actual data contents
     of the objects. This generates a lot more I/O than the simpler standard scrubbing
     routine. Normal scrubbing is carried out daily, whereas deep scrubbing should
     be carried out weekly due to the extra I/O load.
+  id: totrans-174
   prefs: []
   type: TYPE_NORMAL
+  zh: 深度清理操作进一步比较对象的实际数据内容。这会比简单的标准清理例程产生更多的I/O。正常的清理操作每天执行，而深度清理由于额外的I/O负载，应该每周执行一次。
 - en: Despite being deprioritized, scrubbing does have an impact on client IO, and
     so, there are a number of OSD settings that can be tweaked to guide Ceph as to
     when it should carry out the scrubbing.
+  id: totrans-175
   prefs: []
   type: TYPE_NORMAL
+  zh: 尽管清理操作的优先级被降低，但清理仍然会对客户端I/O产生影响，因此，有许多OSD设置可以调整，指导Ceph何时进行清理操作。
 - en: The `osd _scrub_begin_hour` and `osd _scrub_end_hour` OSD configuration options
     determine the window Ceph will try to schedule scrubs in. By default, these are
     set to allow scrubbing to occur throughout a 24-hour period. If your workload
@@ -895,27 +1291,39 @@
     waits between each chunk—this can help to allow the client IO to be serviced in-between
     the reading of each object. The chunk size is determined by the two variables `osd_scrub_chunk_min`
     and `osd_scrub_chunk_max`.
+  id: totrans-176
   prefs: []
   type: TYPE_NORMAL
+  zh: '`osd_scrub_begin_hour` 和 `osd_scrub_end_hour` OSD 配置选项决定了 Ceph 尝试安排清理的时间窗口。默认情况下，这些值设置为允许清理操作在24小时内进行。如果你的工作负载只在白天运行，你可能希望调整清理开始和结束的时间，以告诉
+    Ceph 你只希望它在非高峰时段进行清理。`osd_scrub_sleep` 配置选项控制清理操作在每个块之间等待的时间（以秒为单位），这有助于在读取每个对象之间为客户端I/O提供服务。块大小由两个变量
+    `osd_scrub_chunk_min` 和 `osd_scrub_chunk_max` 决定。'
 - en: It should be noted that this time, a window is only honored if the PG has not
     fallen outside its maximum scrub interval. If it has, it will be scrubbed, regardless
     of the time window settings. The default maximum intervals for both normal and
     deep scrubs are set to one week.
+  id: totrans-177
   prefs: []
   type: TYPE_NORMAL
+  zh: 需要注意的是，这次只有当PG没有超出其最大清理间隔时，窗口才会生效。如果超出了最大间隔，它将被清理，无论时间窗口设置如何。正常和深度清理的默认最大间隔都设置为一周。
 - en: OP priorities
+  id: totrans-178
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 操作优先级
 - en: 'Ceph has the ability to prioritize certain operations over others, with the
     idea that the client I/Os should have precedence over the recovery, scrubbing,
     and snapshot trimming IO. These priorities are controlled by the following configuration
     options:'
+  id: totrans-179
   prefs: []
   type: TYPE_NORMAL
+  zh: Ceph 能够优先执行某些操作，目的是确保客户端I/O优先于恢复、清理和快照修剪I/O。这些优先级由以下配置选项控制：
 - en: '[PRE13]'
+  id: totrans-180
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE13]'
 - en: Here, the higher the value, the higher priority. The default values work fairly
     well, and there shouldn't be much requirement to change them. But there can be
     some benefit in lowering the priority of scrub and recovery operations to limit
@@ -923,83 +1331,122 @@
     prioritize the I/O in the sections of the I/O path that it controls. Therefore,
     tuning the disk queue lengths in the previous section may be needed to get the
     maximum benefits.
+  id: totrans-181
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这里，值越高，优先级越高。默认值通常效果很好，通常不需要更改它们。但是，降低清理和恢复操作的优先级可能有助于限制它们对客户端I/O的影响。需要理解的是，Ceph只能优先处理其控制的I/O路径部分的I/O。因此，可能需要调整上一部分中磁盘队列的长度以获得最大效果。
 - en: The network
+  id: totrans-182
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 网络
 - en: The network is a core component of a Ceph cluster, and its performance will
     greatly affect the overall performance of the cluster. 10 GB should be treated
     as a minimum; 1 GB networking will not provide the required latency for a high
     performance Ceph cluster. There are a number of tunings that can help to improve
     network performance which is done by decreasing latency and increasing throughput.
+  id: totrans-183
   prefs: []
   type: TYPE_NORMAL
+  zh: 网络是 Ceph 集群的核心组件，其性能会极大地影响集群的整体性能。10 GB 应被视为最低要求；1 GB 的网络无法为高性能的 Ceph 集群提供所需的延迟。通过减少延迟和提高吞吐量，有许多调整可以帮助提高网络性能。
 - en: The first thing to consider if you wish to use jumbo frames is using an MTU
     of 9,000 instead of 1,500; each I/O request can be sent using fewer Ethernet frames.
     As each Ethernet frame has a small overhead, increasing the maximum Ethernet frame
     to 9,000 can help. In practice, gains are normally less than 5% and should be
     weighed against the disadvantages of having to make sure every device is configured
     correctly.
+  id: totrans-184
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你希望使用 Jumbo 帧，首先要考虑的是使用 9,000 的 MTU 而不是 1,500；这样每个 I/O 请求可以通过较少的以太网帧发送。由于每个以太网帧都有小的开销，增加最大以太网帧到
+    9,000 可以有所帮助。实际上，性能提升通常不到 5%，且需要权衡每个设备都配置正确的劣势。
 - en: 'The following network options set in your `sysctl.conf` file are recommended
     to maximize network performance:'
+  id: totrans-185
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下网络选项建议在你的 `sysctl.conf` 文件中设置，以最大化网络性能：
 - en: '[PRE14]'
+  id: totrans-186
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE14]'
 - en: If you are using IPv6 for your Ceph cluster, make sure you use the appropriate
     IPv6 `sysctl` options.
+  id: totrans-187
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你正在为 Ceph 集群使用 IPv6，请确保使用适当的 IPv6 `sysctl` 选项。
 - en: General system tuning
+  id: totrans-188
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 一般系统调优
 - en: There are a number of general system parameters that are recommended to be tuned
     to best suit Ceph's performance requirements. The following settings can be added
     to your `/etc/sysctl.conf` file.
+  id: totrans-189
   prefs: []
   type: TYPE_NORMAL
+  zh: 有许多一般的系统参数建议进行调优，以便更好地满足 Ceph 的性能要求。可以将以下设置添加到 `/etc/sysctl.conf` 文件中。
 - en: 'Make sure that the system has sufficient memory free at all times:'
+  id: totrans-190
   prefs: []
   type: TYPE_NORMAL
+  zh: 确保系统始终有足够的空闲内存：
 - en: '[PRE15]'
+  id: totrans-191
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE15]'
 - en: 'Increase the maximum number of allowed processes:'
+  id: totrans-192
   prefs: []
   type: TYPE_NORMAL
+  zh: 增加允许的最大进程数：
 - en: '[PRE16]'
+  id: totrans-193
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE16]'
 - en: 'Use the following to set the maximum number of file handles:'
+  id: totrans-194
   prefs: []
   type: TYPE_NORMAL
+  zh: 使用以下命令设置最大文件句柄数：
 - en: '[PRE17]'
+  id: totrans-195
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE17]'
 - en: Kernel RBD
+  id: totrans-196
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 内核 RBD
 - en: The Linux kernel RBD driver allows you to directly map Ceph RBDs as standard
     Linux block devices and use them in the same way as any other device. Generally,
     kernel-mapped RBDs need minimum configuration, but in some special cases, some
     tuning may be necessary.
+  id: totrans-197
   prefs: []
   type: TYPE_NORMAL
+  zh: Linux 内核 RBD 驱动允许你将 Ceph RBD 直接映射为标准 Linux 块设备，并像使用其他设备一样使用它们。通常，内核映射的 RBD 需要最小的配置，但在某些特殊情况下，可能需要一些调整。
 - en: Firstly, it is recommended to use a kernel that is as new as possible because
     newer kernels will have better RBD support, and in some cases, improved performance.
+  id: totrans-198
   prefs: []
   type: TYPE_NORMAL
+  zh: 首先，建议使用尽可能新的内核，因为较新的内核将提供更好的 RBD 支持，并且在某些情况下，性能也有所提升。
 - en: Queue depth
+  id: totrans-199
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 队列深度
 - en: Since kernel 4.0, the RBD driver uses `blk-mq`, which is designed to offer higher
     performance than the older queuing system. By default, the maximum outstanding
     requests possible with RBD when using `blk-mq` are 128\. For most use cases, this
@@ -1007,12 +1454,18 @@
     of a large Ceph cluster, you may find that only having 128 outstanding requests
     is not enough. There is an option that can be specified when mapping the RBD to
     increase this value, which can be set next.
+  id: totrans-200
   prefs: []
   type: TYPE_NORMAL
+  zh: 从内核 4.0 开始，RBD 驱动使用 `blk-mq`，该系统旨在提供比旧有排队系统更高的性能。默认情况下，当使用 `blk-mq` 时，RBD 的最大未完成请求数为
+    128。对于大多数使用场景，这已经足够；然而，如果你的工作负载需要充分利用大型 Ceph 集群的全部性能，你可能会发现仅有 128 个未完成请求不够用。映射
+    RBD 时有一个选项可以增加这个值，接下来可以进行设置。
 - en: readahead
+  id: totrans-201
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 预读
 - en: By default, RBD will be configured with a 128 KB `readahead`. If your workload
     mainly involves large sequential reading, you can get a significant boost in performance
     by increasing the `readahead` value. In kernels before 4.4, there was a limitation
@@ -1020,26 +1473,36 @@
     this was not an issue, as the stripe sizes would have been smaller than 2 MB.
     As long as `readahead` is bigger than the stripe size, all the disks will be involved
     and performance will increase.
+  id: totrans-202
   prefs: []
   type: TYPE_NORMAL
+  zh: 默认情况下，RBD 会配置为 128 KB 的 `readahead`。如果你的工作负载主要涉及大规模顺序读取，通过增加 `readahead` 值可以显著提升性能。在
+    4.4 版本之前的内核中，`readahead` 值大于 2 MB 会被忽略。在大多数存储系统中，这不是问题，因为条带大小通常小于 2 MB。只要 `readahead`
+    大于条带大小，所有磁盘都会参与进来，性能也会提升。
 - en: By default, a Ceph RBD is striped across 4 MB objects, and so an RBD has a chunk
     size of 4 MB and *a* *stripe size of 4 MB * number of OSDS in the cluster*. Therefore,
     with a `readahead` size smaller than 4 MB, most of the time, `readahead` will
     be doing very little to improve performance, and you will likely see that read's
     performance is struggling to exceed that of a single OSD.
+  id: totrans-203
   prefs: []
   type: TYPE_NORMAL
+  zh: 默认情况下，Ceph RBD 会在 4 MB 的对象上进行条带化，因此 RBD 的块大小为 4 MB，*条带大小为 4 MB* × 集群中的 OSD 数量。因此，如果
+    `readahead` 大于 4 MB，大多数情况下，`readahead` 对性能的提升作用非常有限，你可能会发现读取性能难以超过单个 OSD 的性能。
 - en: In kernel 4.4 and above, you can set the `readahead` value much higher and experience
     read performance in the range of hundreds of MBs in a second.
+  id: totrans-204
   prefs: []
   type: TYPE_NORMAL
 - en: Tuning CephFS
+  id: totrans-205
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
 - en: There are two main performance characteristics that determine CephFS performance—the
     speed of metadata access and the speed of data access, although in the majority
     of cases, both of these contribute to access requests.
+  id: totrans-206
   prefs: []
   type: TYPE_NORMAL
 - en: It is important to understand that in CephFS, once the metadata has been retrieved
@@ -1048,6 +1511,7 @@
     only when dirty data is flushed by the client is the metadata updated. Thus, for
     a large, sequential buffered IO, metadata operations will likely only make up
     a small proportion of the total cluster IO.
+  id: totrans-207
   prefs: []
   type: TYPE_NORMAL
 - en: Similarly, for CephFS filesystems that are dealing with a large number of clients
@@ -1055,11 +1519,13 @@
     have a much bigger role to play in determining overall performance. Additionally,
     metadata is used to supply client information surrounding the filesystem, such
     as providing directory listings.
+  id: totrans-208
   prefs: []
   type: TYPE_NORMAL
 - en: Dealing with CephFS's data pool performance should be handled like any other
     Ceph performance requirements that were covered in this chapter, so for the purpose
     of this section, metadata performance will be the focus.
+  id: totrans-209
   prefs: []
   type: TYPE_NORMAL
 - en: 'Metadata performance is determined by two factors: the speed of reading/writing
@@ -1069,6 +1535,7 @@
     order of magnitude, if not more. However, as was discussed earlier in the *Latency*
     section of this chapter, the latency introduced by a distributed network-storage
     platform can also have an impact on metadata performance.'
+  id: totrans-210
   prefs: []
   type: TYPE_NORMAL
 - en: To work around some of this latency, the MDS has the concept of a local cache
@@ -1078,12 +1545,14 @@
     the amount of memory the MDS can use as a cache, the number of requests having
     to go to the RADOS pool are reduced, and the locality of the RAM will reduce metadata
     access latency.
+  id: totrans-211
   prefs: []
   type: TYPE_NORMAL
 - en: There will come a point when adding additional RAM brings very little benefit.
     This may either be due to the cache being sufficiently sized that the majority
     of requests are being served from cache, or that the number of requests the actual
     MDS can handle has been reached.
+  id: totrans-212
   prefs: []
   type: TYPE_NORMAL
 - en: Regarding the later point, the MDS process is single-threaded and so there will
@@ -1094,61 +1563,87 @@
     nearing 4 GHz for a reasonable price. Compared to some of the lower-clocked Xeon
     CPUs, often with high core counts, the performance gain could almost be double
     by ensuring a fast CPU is used.
+  id: totrans-213
   prefs: []
   type: TYPE_NORMAL
+  zh: 关于后者，MDS 进程是单线程的，因此会有一个时刻，元数据请求的数量使得 MDS 占用 100% 的单个 CPU 核心，任何额外的缓存或 SSD 都无法解决。当前的建议是尽可能在高频率
+    CPU 上运行 MDS。四核 Xeon E3 处理器非常适合这种用途，并且通常可以以接近 4 GHz 的频率以合理的价格获得。与一些低频率的 Xeon CPU（通常具有较高的核心数）相比，确保使用快速
+    CPU 可以带来接近双倍的性能提升。
 - en: If you have purchased the fastest CPU possible and are finding that a single
     MDS process is still the bottleneck, the last option should be to start deploying
     multiple active MDSes, so that the metadata requests are sharded across multiple
     MDSes.
+  id: totrans-214
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你已经购买了最快的 CPU，且发现单个 MDS 进程仍然是瓶颈，最后的选择应该是开始部署多个活动 MDS，这样元数据请求就能在多个 MDS 之间分散。
 - en: RBDs and erasure-coded pools
+  id: totrans-215
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: RBD 和纠删码池
 - en: When using RBDs stored in erasure-coded pools, to maintain the best performance,
     you should try to generate full stripe writes wherever possible. When an erasure-coded
     pool performs a full stripe write, the operation can be done via a single IO and
     not have the penalties associated with the read-modify-write cycle with partial
     writes.
+  id: totrans-216
   prefs: []
   type: TYPE_NORMAL
+  zh: 当使用存储在纠删码池中的 RBD 时，为了保持最佳性能，应该尽量生成完整的条带写入。纠删码池进行完整条带写入时，可以通过单次 IO 完成该操作，而不会受到读取-修改-写入周期和部分写入操作的性能惩罚。
 - en: The RBD clients have some intelligence where they will issue RADOS, thus writing
     full commands if they detect that the higher-level client IO is overwriting an
     entire object. Making sure that the filesystem on top of the RBD is formatted
     with the correct stripe alignment is important to ensure that as many write fulls
     are generated as possible.
+  id: totrans-217
   prefs: []
   type: TYPE_NORMAL
+  zh: RBD 客户端具备一些智能功能，它们会发出 RADOS 请求，从而在检测到更高级别的客户端 IO 覆盖整个对象时，写入完整的命令。确保 RBD 上的文件系统格式化时具有正确的条带对齐非常重要，以确保生成尽可能多的完整写入操作。
 - en: 'An example of formatting an XFS filesystem on an RBD on a 4 + 2 EC pool is
     as follows:'
+  id: totrans-218
   prefs: []
   type: TYPE_NORMAL
+  zh: 在 4 + 2 EC 池上格式化 RBD 上的 XFS 文件系统的示例如下：
 - en: '[PRE18]'
+  id: totrans-219
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE18]'
 - en: This would instruct XFS to align allocations that are best suited for the 4x1
     MB shards that make up a 4 MB object stored on a 4 + 2 erasure pool.
+  id: totrans-220
   prefs: []
   type: TYPE_NORMAL
+  zh: 这将指示 XFS 对齐分配，以便最佳地适应由 4 + 2 纠删池中存储的 4 MB 对象组成的 4x1 MB 条带。
 - en: Additionally, if the use case requires the direct mounting of RBDs to a Linux
     server rather than through a QEMU/KVM virtual machine, it is also worth considering
     using `rbd-nbd`. The userspace RBD client makes use of librbd, whereas the kernel
     RBD client relies fully on the Ceph code present in the running kernel.
+  id: totrans-221
   prefs: []
   type: TYPE_NORMAL
+  zh: 此外，如果使用案例要求直接将 RBD 挂载到 Linux 服务器，而不是通过 QEMU/KVM 虚拟机，则也值得考虑使用`rbd-nbd`。用户空间的
+    RBD 客户端使用 librbd，而内核 RBD 客户端完全依赖于运行内核中存在的 Ceph 代码。
 - en: Not only does librbd mean that you can use the latest features, which may not
     be present in the running kernel, but it also has the additional feature of a
     writeback cache. The writeback cache performs a much better job of coalescing
     writes into full-sized object writes than the kernel client is capable of and
     so less performance overhead is incurred. Keep in mind that the writeback cache
     in librbd is not persistent, so any synchronous writes will not benefit.
+  id: totrans-222
   prefs: []
   type: TYPE_NORMAL
+  zh: 不仅 librbd 使得你可以使用最新的功能（这些功能可能在运行中的内核中不存在），它还具有额外的写回缓存功能。写回缓存在将写入合并为完整对象写入时，比内核客户端更有效，从而减少了性能开销。请记住，librbd
+    中的写回缓存是非持久性的，因此任何同步写入都无法从中受益。
 - en: PG distributions
+  id: totrans-223
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: PG 分布
 - en: While not strictly a performance-tuning option, ensuring even PG distribution
     across your Ceph cluster is an essential task that should be undertaken during
     the early stages of the deployment of your cluster. As Ceph uses CRUSH to pseudo-randomly
@@ -1156,21 +1651,27 @@
     OSD. A Ceph cluster that is not balanced will be unable to take full advantage
     of the raw capacity, as the most oversubscribed OSD will effectively become the
     limit to the capacity.
+  id: totrans-224
   prefs: []
   type: TYPE_NORMAL
+  zh: 虽然这不是一个严格意义上的性能调优选项，但确保Ceph集群中的PG均匀分布是一个关键任务，应在集群部署的早期阶段进行。由于Ceph使用CRUSH算法伪随机地决定数据的位置，它不会总是将PG均匀分布到每个OSD上。一个不平衡的Ceph集群将无法充分利用原始容量，因为最过载的OSD实际上将成为容量的瓶颈。
 - en: An unevenly balanced cluster will mean that a higher number of requests will
     be targeted at the OSDs holding the most PGs. These OSDs will then place an artificial
     performance ceiling on the cluster, especially if the cluster is composed of spinning-disk
     OSDs.
+  id: totrans-225
   prefs: []
   type: TYPE_NORMAL
+  zh: 不均衡的集群意味着更多的请求将被定向到持有最多PG的OSD。这些OSD将给集群带来人工的性能瓶颈，尤其是在集群由旋转磁盘OSD组成的情况下。
 - en: To rebalance PGs across a Ceph cluster, you simply have to reweight the OSD
     so that CRUSH adjusts how many PGs will be stored on it. It's important to note
     that, by default, the weight of every OSD is 1, and you cannot weight an underutilized
     OSD above 1 to increase its utilization. The only option is to decrease the reweight
     value of over-utilized OSDs, which should move PGs to the less-utilized OSDs.
+  id: totrans-226
   prefs: []
   type: TYPE_NORMAL
+  zh: 要在Ceph集群中重新平衡PG，只需重新加权OSD，以便CRUSH调整存储在它上的PG数量。需要注意的是，默认情况下，每个OSD的权重为1，且不能将一个未充分利用的OSD的权重提高到1以上来增加其利用率。唯一的选择是降低过度利用的OSD的加权值，这将把PG移动到利用率较低的OSD上。
 - en: It is also important to understand that there is a difference between the CRUSH
     weight of an OSD and the reweight value. The reweight value is used as an override
     to correct the misplacement from the CRUSH algorithm. The reweight command only
@@ -1181,48 +1682,67 @@
     would have likely made any reweight value incorrect. Therefore, reweighting OSDs
     should not be looked at as a one-time operation, but something that is being continuously
     done and will adjust to the changes in the cluster.
+  id: totrans-227
   prefs: []
   type: TYPE_NORMAL
+  zh: 还需要了解的是，OSD的CRUSH权重和重载加权值之间是有区别的。重载加权值用于覆盖CRUSH算法的错误分配。重载命令只会影响OSD本身，不会影响它所属于的桶（例如，主机）的权重。重载值在OSD重启时也会被重置为1.0。虽然这可能令人沮丧，但需要理解的是，任何未来对集群的修改，无论是增加PG数量还是添加额外的OSD，都可能导致任何重载值变得不准确。因此，重新加权OSD不应视为一次性的操作，而应视为一个持续进行的过程，它会随着集群的变化而进行调整。
 - en: 'To reweight an OSD, use this simple command:'
+  id: totrans-228
   prefs: []
   type: TYPE_NORMAL
+  zh: 要重新加权一个OSD，可以使用以下简单命令：
 - en: '[PRE19]'
+  id: totrans-229
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE19]'
 - en: Once executed, Ceph will start backfilling to move PGs to their newly-assigned
     OSDs.
+  id: totrans-230
   prefs: []
   type: TYPE_NORMAL
+  zh: 执行完命令后，Ceph将开始回填操作，将PG移动到它们新分配的OSD上。
 - en: 'Of course, searching through all your OSDs and trying to find the OSD that
     needs weighting and then running this command for every one would be a very lengthy
     process. Luckily, there is another Ceph tool that can automate a large part of
     this process:'
+  id: totrans-231
   prefs: []
   type: TYPE_NORMAL
+  zh: 当然，遍历所有的OSD并尝试找到需要重新加权的OSD，然后为每个OSD执行此命令，将是一个非常漫长的过程。幸运的是，还有一个Ceph工具可以自动化这个过程的大部分操作：
 - en: '[PRE20]'
+  id: totrans-232
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE20]'
 - en: 'This command will compare all the OSDs in your cluster and change the override
     weighting of the top *N* OSDs, where *N* is controlled by the last parameter,
     which is over the threshold value. You can also limit the maximum change applied
     to each OSD by specifying the second parameter: 0.05 or 5% is normally a recommended
     figure.'
+  id: totrans-233
   prefs: []
   type: TYPE_NORMAL
+  zh: 此命令将比较集群中的所有OSD，并更改前*N*个OSD的重载加权值，其中*N*由最后一个参数控制，该值超出了阈值。你还可以通过指定第二个参数来限制应用于每个OSD的最大更改：通常推荐的数值是0.05或5%。
 - en: There is also a `test-reweight-by-utilization` command, which will allow you
     to see what the command will do before running it.
+  id: totrans-234
   prefs: []
   type: TYPE_NORMAL
+  zh: 还有一个`test-reweight-by-utilization`命令，它允许你在运行命令之前查看它将会执行的操作。
 - en: 'While this command is safe to use, there are a number of things that should
     be taken into consideration before running it:'
+  id: totrans-235
   prefs: []
   type: TYPE_NORMAL
+  zh: 虽然这个命令是安全的，但在执行之前需要考虑一些事项：
 - en: It has no concept of different pools on different OSDs. If, for example, you
     have an SSD tier and an HDD tier, the `reweight-by-utilization` command will still
     try to balance data across all OSDs. If your SSD tier is not as full as the HDD
     tier, the command will not work as expected. If you wish to balance OSDs confined
     to a single bucket, look into the script version of this command that was created
     by CERN.
+  id: totrans-236
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
@@ -1230,17 +1750,20 @@
     determine placement for some PGs. If recovery halts and one or more PGs are left
     in a remapped state, this is likely what happened. Simply increase or reset the
     reweight values to fix it.
+  id: totrans-237
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: Once you are confident with the operation of the command, it is possible to
     schedule it via `cron` so that your cluster is kept in a more balanced state automatically.
+  id: totrans-238
   prefs: []
   type: TYPE_NORMAL
 - en: Since the Luminous release, a new manager module has been included, called **Ceph
     balancer**. This new module works continuously in the background to optimize PG
     distribution and ensure that the maximum amount of capacity is available on your
     Ceph cluster.
+  id: totrans-239
   prefs: []
   type: TYPE_NORMAL
 - en: The Ceph balancer module can use one of two methods to balance data distribution.
@@ -1250,20 +1773,26 @@
     fine-grained PG mapping than is possible with crush-compat as it uses new capabilities
     in the OSD map to influence PG mapping. The downside is that due to these new
     capabilities, Ceph clients need to be running Luminous or a newer release.
+  id: totrans-240
   prefs: []
   type: TYPE_NORMAL
 - en: 'To enable ceph balancer, simply run these two commands:'
+  id: totrans-241
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE21]'
+  id: totrans-242
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE21]'
 - en: You will see Ceph start to backfill as PGs are remapped to new OSDs to balance
     out the space utilization; this will continue to occur until the Ceph balancer
     has reduced deviation of OSD utilization.
+  id: totrans-243
   prefs: []
   type: TYPE_NORMAL
 - en: Summary
+  id: totrans-244
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
@@ -1273,39 +1802,48 @@
     have had the desired effect. It is worth reviewing the official Ceph documentation
     to get a better understanding of some of the other configuration options that
     may be beneficial to your cluster.
+  id: totrans-245
   prefs: []
   type: TYPE_NORMAL
 - en: You have also learned about some of the key factors that effect Ceph performance
     and how to tune them, such as CPU clock speed and sleep states. Ensuring that
     the infrastructure your Ceph cluster is running on is running at peak performance
     will ensure that Ceph can perform at its very best.
+  id: totrans-246
   prefs: []
   type: TYPE_NORMAL
 - en: In the next chapter we will discuss tiering and how it can be used to increase
     performance by combining different disk technologies together.
+  id: totrans-247
   prefs: []
   type: TYPE_NORMAL
 - en: Questions
+  id: totrans-248
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
 - en: Is PG distribution uniform by default?
+  id: totrans-249
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: Why is a full stripe write on an EC pool preferred?
+  id: totrans-250
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: For low latency, what type of CPU should be preferred?
+  id: totrans-251
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: What three factors largely impact latency?
+  id: totrans-252
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: What automated tool can be used to balance space utilization in your cluster?
+  id: totrans-253
   prefs:
   - PREF_OL
   type: TYPE_NORMAL

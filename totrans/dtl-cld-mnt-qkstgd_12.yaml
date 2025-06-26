@@ -1,64 +1,92 @@
 - en: '*Chapter 10*: Working with Monitoring Standards'
+  id: totrans-0
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: '*第10章*：使用监控标准'
 - en: You have already seen how Datadog-supplied integrations and REST APIs are useful
     in extending Datadog's features. In this chapter, we will explore more options
     available for extending these features that are essentially an implementation
     of standards in the monitoring space, and how they can be used for rolling out
     your custom monitoring requirements.
+  id: totrans-1
   prefs: []
   type: TYPE_NORMAL
+  zh: 你已经看到Datadog提供的集成和REST API在扩展Datadog功能方面的实用性。本章将探讨更多可用于扩展这些功能的选项，这些选项本质上是监控领域标准的实现，以及如何使用它们来部署自定义的监控需求。
 - en: 'These are the topics that are covered in this chapter:'
+  id: totrans-2
   prefs: []
   type: TYPE_NORMAL
+  zh: 本章涵盖的主题包括：
 - en: Monitoring networks using SNMP
+  id: totrans-3
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 使用SNMP监控网络
 - en: Consuming application metrics using JMX
+  id: totrans-4
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 使用JMX消费应用程序指标
 - en: Working with the DogStatsD interface
+  id: totrans-5
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 使用DogStatsD接口
 - en: Technical requirements
+  id: totrans-6
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 技术要求
 - en: 'To try out the examples mentioned in this book, you need to have the following
     tools installed and resources available:'
+  id: totrans-7
   prefs: []
   type: TYPE_NORMAL
+  zh: 要尝试本书中提到的示例，你需要安装以下工具并准备好相关资源：
 - en: An **Ubuntu 18.04** environment with a Bash shell. The examples might work on
     other Linux distributions also, but suitable changes must be made to the Ubuntu-specific
     commands.
+  id: totrans-8
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 带有Bash shell的**Ubuntu 18.04**环境。示例可能也适用于其他Linux发行版，但需要对特定于Ubuntu的命令做出相应更改。
 - en: A Datadog account with admin-level access.
+  id: totrans-9
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 具有管理员级别访问权限的Datadog账户。
 - en: The Datadog Agent running at the host level or as a microservice, depending
     on the example, pointing to the Datadog account.
+  id: totrans-10
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: Datadog代理运行在主机级别或作为微服务，具体取决于示例，指向Datadog账户。
 - en: curl.
+  id: totrans-11
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: curl。
 - en: '**Python 2.7**, **Python 3.8**, or higher'
+  id: totrans-12
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**Python 2.7**，**Python 3.8**或更高版本'
 - en: Monitoring networks using SNMP
+  id: totrans-13
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 使用SNMP监控网络
 - en: '**Simple Network Management Protocol** (**SNMP**) is a protocol for managing
     equipment within a network. It has been used to track the devices in networks
     and their performance, and vendors have adopted it as the standard for publishing
@@ -68,158 +96,231 @@
     internally is always possible. Plugging in that equipment to the existing Datadog
     platform could be handy, instead of rolling out a different monitoring solution
     for that.'
+  id: totrans-14
   prefs: []
   type: TYPE_NORMAL
+  zh: '**简单网络管理协议**（**SNMP**）是一种用于管理网络设备的协议。它已被用来跟踪网络中的设备及其性能，供应商也将其作为发布相关数据的标准。即使在公共云环境中，网络监控的需求几乎为零，在大规模操作环境中，设置一个同机房连接客户或内部管理一些物理网络设备始终是可能的。将这些设备接入现有的Datadog平台可能会很方便，而不是为此推出另一个监控解决方案。'
 - en: On SNMP-enabled devices, the agent collects the performance metrics from the
     devices and stores them in a `snmpwalk` is a popular command-line tool that is
     used to scan devices for such data. Datadog integrates with SNMP and an agent
     can be configured to scan multiple network devices to collect metrics.
+  id: totrans-15
   prefs: []
   type: TYPE_NORMAL
+  zh: 在启用了SNMP的设备上，代理从设备收集性能指标并将其存储在`snmpwalk`中，`snmpwalk`是一个流行的命令行工具，用于扫描设备以获取此类数据。Datadog与SNMP集成，可以配置代理扫描多个网络设备以收集指标。
 - en: As it's not easy to find a network device for testing, especially when you are
     in a cloud environment, we will run the SNMP service on a virtual machine and
     look at the metrics using `snmpwalk`. Also, the steps to enable SNMP integration
     in Datadog will be explained using that environment.
+  id: totrans-16
   prefs: []
   type: TYPE_NORMAL
+  zh: 由于网络设备并不容易找到，特别是在云环境中，我们将运行SNMP服务在虚拟机上，并使用`snmpwalk`查看指标。此外，启用Datadog中的SNMP集成的步骤也将通过该环境进行说明。
 - en: 'You need an Ubuntu host to try out the following SNMP tutorial. These steps
     were tested on an AWS EC2 node running **Ubuntu 18.04**:'
+  id: totrans-17
   prefs: []
   type: TYPE_NORMAL
+  zh: 你需要一台Ubuntu主机来尝试以下的SNMP教程。这些步骤是在运行**Ubuntu 18.04**的AWS EC2节点上测试的：
 - en: 'Install the SNMP packages:'
+  id: totrans-18
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 安装SNMP包：
 - en: '[PRE0]'
+  id: totrans-19
   prefs:
   - PREF_IND
   type: TYPE_PRE
+  zh: '[PRE0]'
 - en: Edit `/etc/snmp/snmp.conf` and comment out the configuration for `mibs`.
+  id: totrans-20
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 编辑`/etc/snmp/snmp.conf`并注释掉`mibs`的配置。
 - en: 'Restart the SNMP daemon:'
+  id: totrans-21
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 重启SNMP守护进程：
 - en: '[PRE1]'
+  id: totrans-22
   prefs:
   - PREF_IND
   type: TYPE_PRE
+  zh: '[PRE1]'
 - en: 'These steps are enough to have an SNMP service up and running locally and you
     can use `snmpwalk` to scan the service:'
+  id: totrans-23
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 这些步骤足以让SNMP服务在本地启动并运行，你可以使用`snmpwalk`扫描该服务：
 - en: '[PRE2]'
+  id: totrans-24
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE2]'
 - en: '*(This output is only an excerpt.)*'
+  id: totrans-25
   prefs: []
   type: TYPE_NORMAL
+  zh: '*(此输出仅为摘录。)*'
 - en: 'As you can see in the sample output, different system performance metrics are
     available in the scanning result. Let''s look at the command-line options used
     for `snmpwalk`. Similar information is needed to enable the Datadog SNMP integration
     also:'
+  id: totrans-26
   prefs: []
   type: TYPE_NORMAL
+  zh: 如示例输出所示，扫描结果中可以获取不同的系统性能度量。我们来看看 `snmpwalk` 使用的命令行选项。启用 Datadog SNMP 集成时也需要类似的信息：
 - en: The `-mALL` option directs `snmpwalk` to look at all the MIBs available. On
     the Ubuntu host, those files are stored under the `/usr/share/snmp/mibs` directory.
+  id: totrans-27
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`-mALL` 选项指示 `snmpwalk` 查看所有可用的 MIB。在 Ubuntu 主机上，这些文件存储在 `/usr/share/snmp/mibs`
+    目录下。'
 - en: '`-v2c` points to the version of the SNMP protocol to be used. There are three
     versions and in Datadog it defaults to `v2`, the same as what''s used here.'
+  id: totrans-28
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`-v2c` 指定将使用的 SNMP 协议版本。共有三个版本，在 Datadog 中默认为 `v2`，与此处使用的版本相同。'
 - en: '`-cpublic` indicates that the community string used for the scan is `public`.
     A community string in `v1` and `v2` of the SNMP protocol is like a passphrase.
     In `v3`, that is replaced with credential-based authentication.'
+  id: totrans-29
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`-cpublic` 表示扫描所使用的社区字符串是 `public`。在 SNMP 协议的 `v1` 和 `v2` 版本中，社区字符串类似于密码。在
+    `v3` 中，社区字符串被凭证认证取代。'
 - en: 'Now, let''s see how the SNMP integration in Datadog can be configured to access
     the SNMP service running on the Ubuntu host:'
+  id: totrans-30
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，我们来看一下如何配置 Datadog 中的 SNMP 集成，以访问在 Ubuntu 主机上运行的 SNMP 服务：
 - en: 'Set up `conf.yaml` by copying it from the example file:'
+  id: totrans-31
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 通过复制示例文件来设置 `conf.yaml`：
 - en: '[PRE3]'
+  id: totrans-32
   prefs:
   - PREF_IND
   type: TYPE_PRE
+  zh: '[PRE3]'
 - en: 'Edit `conf.yaml` and enable the following: under the `instances` section, point
     `ip_address` to `127.0.0.1`, which corresponds to localhost.'
+  id: totrans-33
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 编辑 `conf.yaml` 并启用以下设置：在 `instances` 部分，将 `ip_address` 指向 `127.0.0.1`，即本地主机。
 - en: Set `community_string` to `public`.
+  id: totrans-34
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 将 `community_string` 设置为 `public`。
 - en: 'Add two custom tags so the metrics published by SNMP integration can easily
     be tracked:'
+  id: totrans-35
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 添加两个自定义标签，以便轻松跟踪 SNMP 集成发布的度量：
 - en: '[PRE4]'
+  id: totrans-36
   prefs:
   - PREF_IND
   type: TYPE_PRE
+  zh: '[PRE4]'
 - en: 'Restart the Datadog Agent for these changes to take effect. Check the status
     and verify that the Datadog Agent can query the SNMP service locally by running
     the following:'
+  id: totrans-37
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 重新启动 Datadog 代理，以使这些更改生效。检查状态并通过运行以下命令验证 Datadog 代理是否可以本地查询 SNMP 服务：
 - en: '[PRE5]'
+  id: totrans-38
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE5]'
 - en: 'The metrics that get published to Datadog from this integration could be looked
     up in the **Metrics Explorer**, as in the following screenshot:'
+  id: totrans-39
   prefs: []
   type: TYPE_NORMAL
+  zh: 通过此集成发布到 Datadog 的度量可以在**Metrics Explorer**中查看，如下截图所示：
 - en: '![Figure 10.1 – Looking up metrics from the SNMP integration'
+  id: totrans-40
   prefs: []
   type: TYPE_NORMAL
+  zh: '![图 10.1 – 从 SNMP 集成中查看度量'
 - en: '](img/Figure_10.1_B16483.jpg)'
+  id: totrans-41
   prefs: []
   type: TYPE_NORMAL
+  zh: '](img/Figure_10.1_B16483.jpg)'
 - en: Figure 10.1 – Looking up metrics from the SNMP integration
+  id: totrans-42
   prefs: []
   type: TYPE_NORMAL
+  zh: 图 10.1 – 从 SNMP 集成中查看度量
 - en: Multiple network devices can be specified under the `instances` section of the
     SNMP integration configuration file and the metrics could be differentiated using
     appropriate tags. The Datadog Agent can be configured to scan an entire network
     subnet for devices that are SNMP-enabled. For the details and configuration, consult
     the official documentation at [https://docs.datadoghq.com/network_performance_monitoring/devices/setup](https://docs.datadoghq.com/network_performance_monitoring/devices/setup).
+  id: totrans-43
   prefs: []
   type: TYPE_NORMAL
+  zh: 可以在 SNMP 集成配置文件的 `instances` 部分指定多个网络设备，并且可以使用适当的标签区分这些度量。Datadog 代理可以配置为扫描整个网络子网，查找支持
+    SNMP 的设备。有关详细信息和配置，请参考官方文档 [https://docs.datadoghq.com/network_performance_monitoring/devices/setup](https://docs.datadoghq.com/network_performance_monitoring/devices/setup)。
 - en: In the next section, we will discuss **JMX**, which is an important area related
     to the monitoring of Java applications, and you will learn how Datadog is integrated
     with it.
+  id: totrans-44
   prefs: []
   type: TYPE_NORMAL
+  zh: 在接下来的部分，我们将讨论**JMX**，这是一个与 Java 应用程序监控相关的重要领域，您将了解 Datadog 如何与其集成。
 - en: Consuming application metrics using JMX
+  id: totrans-45
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 使用 JMX 消费应用程序度量
 - en: '**Java Management Extensions** (**JMX**) is a Java technology that Java applications
     can use to publish their operational statistics. JMX has additional features that
     help with managing the application overall, but we are focused only on its ability
     to expose application metrics that could be used for monitoring. Datadog provides
     support for collecting those metrics.'
+  id: totrans-46
   prefs: []
   type: TYPE_NORMAL
+  zh: '**Java 管理扩展** (**JMX**) 是一种 Java 技术，Java 应用程序可以使用它发布其操作统计信息。JMX 具有额外的功能，可以帮助管理应用程序整体，但我们这里只关注其暴露应用程序度量的能力，这些度量可用于监控。Datadog
+    提供对这些度量的收集支持。'
 - en: Typically, a JMX-compliant client application such as **JConsole** could be
     used to consume the metrics published by JMX and view them. As it's common for
     Java applications to publish operational metrics using JMX, most modern monitoring
     platforms provide options to integrate with JMX, and Datadog is no exception.
+  id: totrans-47
   prefs: []
   type: TYPE_NORMAL
+  zh: 通常，可以使用符合 JMX 标准的客户端应用程序，如**JConsole**，来消费 JMX 发布的指标并查看它们。由于 Java 应用程序通常使用 JMX
+    发布操作性指标，大多数现代监控平台都提供与 JMX 集成的选项，Datadog 也不例外。
 - en: Rolling out application-level monitoring is inherently challenging as it relies
     on publishing custom metrics that track the health and performance of the application.
     As some customization is needed in the application and monitoring tool to publish
@@ -232,96 +333,135 @@
     platform components such as **Cassandra** and **Tomcat** that publish operational
     metrics via JMX, in addition to providing a general-purpose JMX integration. You
     will learn about both features in this section with the help of examples.
+  id: totrans-48
   prefs: []
   type: TYPE_NORMAL
+  zh: 推出应用级别的监控本身就很具挑战性，因为它依赖于发布自定义指标来跟踪应用程序的健康状况和性能。由于应用程序和监控工具需要做一些定制化工作才能发布和消费自定义指标，因此这类工作并不容易实现，因此在许多组织中，监控通常仅限于基础设施和平台监控功能，这些功能是开箱即用的。对于
+    Java 应用程序而言，使用 JMX 发布指标要比为监控构建 API 接口容易得多。Datadog 通过为流行的基于 Java 的平台组件，如**Cassandra**
+    和 **Tomcat**，提供特定的 JMX 集成，简化了 JMX 的使用，这些组件通过 JMX 发布操作性指标，此外还提供了通用的 JMX 集成。你将在本节中通过示例了解这两种特性。
 - en: Cassandra as a Java application
+  id: totrans-49
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: Cassandra 作为一个 Java 应用程序
 - en: '**Apache Cassandra** is a highly scalable NoSQL database system that can manage
     both structured and unstructured data across multiple data centers and cloud regions.
     It can run on commodity hardware with a highly resilient design.'
+  id: totrans-50
   prefs: []
   type: TYPE_NORMAL
+  zh: '**Apache Cassandra** 是一个高可扩展性的 NoSQL 数据库系统，可以管理跨多个数据中心和云区域的结构化和非结构化数据。它可以在普通硬件上运行，并具有高度的韧性设计。'
 - en: 'In production, Cassandra is run on a cluster of machines that might span multiple
     data centers for reliability. To demonstrate its JMX features, we will run it
     in a single node using a binary **tarball** installable that you can download
     from [https://cassandra.apache.org/download/](https://cassandra.apache.org/download/),
     where you can also pick up the latest stable version:'
+  id: totrans-51
   prefs: []
   type: TYPE_NORMAL
+  zh: 在生产环境中，Cassandra 运行在一个由多台机器组成的集群中，这些机器可能跨越多个数据中心以保证可靠性。为了演示其 JMX 特性，我们将在单节点上运行它，使用可以从[https://cassandra.apache.org/download/](https://cassandra.apache.org/download/)下载的二进制**tarball**安装包，你还可以从该网址下载最新的稳定版本：
 - en: 'The selected tarball can be downloaded as in the following sample command:'
+  id: totrans-52
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 选择的 tarball 可以通过以下示例命令下载：
 - en: '[PRE6]'
+  id: totrans-53
   prefs:
   - PREF_IND
   type: TYPE_PRE
+  zh: '[PRE6]'
 - en: 'Extract the tarball and change the directory to where it''s extracted:'
+  id: totrans-54
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 解压 tarball 并切换到解压后的目录：
 - en: '[PRE7]'
+  id: totrans-55
   prefs:
   - PREF_IND
   type: TYPE_PRE
+  zh: '[PRE7]'
 - en: 'Make sure **Java 8** is available in the environment. If not, install it. On
     an Ubuntu host, this can be done by installing from a package, as follows:'
+  id: totrans-56
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 确保环境中可用**Java 8**。如果没有，安装它。在 Ubuntu 主机上，可以通过安装包来完成，方法如下：
 - en: '[PRE8]'
+  id: totrans-57
   prefs:
   - PREF_IND
   type: TYPE_PRE
+  zh: '[PRE8]'
 - en: 'Start the Cassandra service as follows:'
+  id: totrans-58
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 如下所示启动 Cassandra 服务：
 - en: '[PRE9]'
+  id: totrans-59
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE9]'
 - en: That's pretty much it if everything goes smoothly and if this instance is not
     intended for use with an application. You could use this service for testing Datadog's
     JMX support.
+  id: totrans-60
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果一切顺利，且此实例不打算与应用程序一起使用，那基本就是这样了。你可以使用此服务来测试 Datadog 的 JMX 支持。
 - en: 'Now, let''s look at the runtime details of Cassandra and the corresponding
     `nodetool`, and you could also look at the log for any issues:'
+  id: totrans-61
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，让我们看看 Cassandra 的运行时细节和相应的 `nodetool`，你还可以查看日志以排查问题：
 - en: '[PRE10]'
+  id: totrans-62
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE10]'
 - en: 'One important thing to note here is the way the Cassandra Java application
     was started up, enabling JMX. If you look at the Java command line, the following
     options can be found:'
+  id: totrans-63
   prefs: []
   type: TYPE_NORMAL
+  zh: 这里需要注意的一点是 Cassandra Java 应用程序的启动方式，启用了 JMX。如果查看 Java 命令行，可以找到以下选项：
 - en: '`-Dcassandra.jmx.local.port=7199`: This specifies on which port the JMX service
     is available for the client applications, such as a monitoring tool to consume
     data. You will see later that this port is used in client configurations so the
     client applications can locate the service.'
+  id: totrans-64
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: '`-Dcom.sun.management.jmxremote.authenticate=false`: This option indicates
     whether the JMX service can be accessed remotely.'
+  id: totrans-65
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: '`-Dcom.sun.management.jmxremote.password.file=/etc/cassandra/jmxremote.password`:
     This is the authentication.'
+  id: totrans-66
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: We have looked at how Datadog can be configured to consume application metrics
     via the JMX interface using the example of Cassandra in this section. You will
     learn more about JMX-based integration in the next section.
+  id: totrans-67
   prefs: []
   type: TYPE_NORMAL
 - en: Using Cassandra integration
+  id: totrans-68
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
@@ -329,67 +469,87 @@
     and have made it available on port `7199`. Datadog takes it from there and provides
     an integration with Cassandra that consumes the monitoring information available
     via the JMX interface.
+  id: totrans-69
   prefs: []
   type: TYPE_NORMAL
 - en: 'To enable Cassandra integration, you need to follow these standard steps:'
+  id: totrans-70
   prefs: []
   type: TYPE_NORMAL
 - en: 'On the Cassandra host, there should also be a Datadog Agent running. Under
     the `/etc/datadog-agent/conf.d/cassandra.d` directory, use the example configuration
     file to set up the configuration file for Cassandra integration:'
+  id: totrans-71
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: '[PRE11]'
+  id: totrans-72
   prefs:
   - PREF_IND
   type: TYPE_PRE
+  zh: '[PRE11]'
 - en: 'The configuration file copied from the example is good to enable the integration.
     Note that port `7199` and the metrics specified in the configuration file for
     collecting data are compatible with the JMX. Also, the nature of this integration
     is very clear from the following setting in the configuration file:'
+  id: totrans-73
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
 - en: '[PRE12]'
+  id: totrans-74
   prefs:
   - PREF_IND
   type: TYPE_PRE
+  zh: '[PRE12]'
 - en: 'After setting up the configuration file, restart the Datadog Agent service:'
+  id: totrans-75
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: '[PRE13]'
+  id: totrans-76
   prefs:
   - PREF_IND
   type: TYPE_PRE
+  zh: '[PRE13]'
 - en: 'Check the status of the Cassandra integration, specifically that listed under
     the `JMXFetch` section:'
+  id: totrans-77
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: '[PRE14]'
+  id: totrans-78
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE14]'
 - en: 'The metrics fetched by this integration can be looked up in the **Metrics Explorer**.
     For example, see how one of the metrics fetched from the JMX interface is looked
     up and charted on the **Metrics Explorer**:'
+  id: totrans-79
   prefs: []
   type: TYPE_NORMAL
 - en: '![Figure 10.2 – A Cassandra metric listed on the Metrics Explorer'
+  id: totrans-80
   prefs: []
   type: TYPE_NORMAL
 - en: '](img/Figure_10.2_B16483.jpg)'
+  id: totrans-81
   prefs: []
   type: TYPE_NORMAL
 - en: Figure 10.2 – A Cassandra metric listed on the Metrics Explorer
+  id: totrans-82
   prefs: []
   type: TYPE_NORMAL
 - en: In this case, you don't need to know anything about JMX to consume monitoring
     data that is published through the JMX interface.
+  id: totrans-83
   prefs: []
   type: TYPE_NORMAL
 - en: Accessing the Cassandra JMX interface
+  id: totrans-84
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
@@ -399,113 +559,145 @@
     from a third-party application for which there is no Datadog integration available.
     That approach is also applicable to your own Java application if it publishes
     application metrics via JMX:'
+  id: totrans-85
   prefs: []
   type: TYPE_NORMAL
 - en: Before the generic JMX integration is enabled, disable the Cassandra integration
     by renaming the `conf.yaml` configuration file at `/etc/datadog-agent/conf.d/cassandra.d`
     to `conf.yaml.BAK`.
+  id: totrans-86
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: Make the `conf.yaml` configuration file from the example file, `conf.yaml.example`,
     available at `/etc/datadog-agent/conf.d/jmx.d`.
+  id: totrans-87
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: 'You can verify that the JMX port specified in the configuration file is `7199`:'
+  id: totrans-88
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
 - en: '[PRE15]'
+  id: totrans-89
   prefs:
   - PREF_IND
   type: TYPE_PRE
+  zh: '[PRE15]'
 - en: 'Add these tags to the configuration file so you can filter the metrics later
     using them:'
+  id: totrans-90
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: '[PRE16]'
+  id: totrans-91
   prefs:
   - PREF_IND
   type: TYPE_PRE
+  zh: '[PRE16]'
 - en: 'Restart the Datadog Agent to have the JMX integration enabled:'
+  id: totrans-92
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: '[PRE17]'
+  id: totrans-93
   prefs:
   - PREF_IND
   type: TYPE_PRE
+  zh: '[PRE17]'
 - en: 'Check the status of `JMXFetch` to make sure that the integration is working
     as expected:'
+  id: totrans-94
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: '[PRE18]'
+  id: totrans-95
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE18]'
 - en: Note that Cassandra was mentioned under the `JMXFetch` status in the previous
     example and this time it is `jmx` instead.
+  id: totrans-96
   prefs: []
   type: TYPE_NORMAL
 - en: 'With the JMX integration working, you will be able to look up any default JMX
     metrics in the **Metrics Explorer** as in the following screenshot:'
+  id: totrans-97
   prefs: []
   type: TYPE_NORMAL
 - en: '![Figure 10.3 – Default metrics from the Cassandra JMX interface'
+  id: totrans-98
   prefs: []
   type: TYPE_NORMAL
 - en: '](img/Figure_10.3_B16483.jpg)'
+  id: totrans-99
   prefs: []
   type: TYPE_NORMAL
 - en: Figure 10.3 – Default metrics from the Cassandra JMX interface
+  id: totrans-100
   prefs: []
   type: TYPE_NORMAL
 - en: 'To collect the application-specific metrics from the JMX interface, those metrics
     should be specified explicitly in the configuration file for JMX integration as
     follows:'
+  id: totrans-101
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE19]'
+  id: totrans-102
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE19]'
 - en: This is just a sample set of the metrics available. Cassandra publishes a large
     set of metrics that you can look up in `/etc/datadog-agent/conf.d/cassandra.d/metrics.yaml`.
     The point to note here is that for Datadog to collect application metrics from
     the JMX interface, they must be indicated in the configuration file as you have
     done in the sample.
+  id: totrans-103
   prefs: []
   type: TYPE_NORMAL
 - en: Also, set the value of the `metrics-type` tag to `cassandra` for the easy filtering
     of metrics collected by Datadog from this example. As usual, for these configuration
     changes to take effect, you need to restart the Datadog Agent.
+  id: totrans-104
   prefs: []
   type: TYPE_NORMAL
 - en: 'You will be able to look up the new metrics collected by Datadog on the **Metrics
     Explorer**, as in the following screenshot:'
+  id: totrans-105
   prefs: []
   type: TYPE_NORMAL
 - en: '![Figure 10.4 – Application metrics specific to Cassandra'
+  id: totrans-106
   prefs: []
   type: TYPE_NORMAL
 - en: '](img/Figure_10.4_B16483.jpg)'
+  id: totrans-107
   prefs: []
   type: TYPE_NORMAL
 - en: Figure 10.4 – Application metrics specific to Cassandra
+  id: totrans-108
   prefs: []
   type: TYPE_NORMAL
 - en: The details of how Datadog integrates with JMX are available in the official
     documentation at [https://docs.datadoghq.com/integrations/java](https://docs.datadoghq.com/integrations/java).
     If you plan to configure Datadog for consuming metrics from your Java applications,
     that is a good starting point.
+  id: totrans-109
   prefs: []
   type: TYPE_NORMAL
 - en: In the next section, you will learn about StatsD, a popular monitoring standard,
     and how Datadog supports it.
+  id: totrans-110
   prefs: []
   type: TYPE_NORMAL
 - en: Working with the DogStatsD interface
+  id: totrans-111
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
@@ -513,6 +705,7 @@
     conceived by the photo-sharing website **Flickr**. It went through multiple implementations
     and its latest version is a Node.js application. The StatsD code and documentation
     can be found at [https://github.com/statsd/statsd](https://github.com/statsd/statsd).'
+  id: totrans-112
   prefs: []
   type: TYPE_NORMAL
 - en: The StatsD service typically runs on port `8125` and listens for statistics
@@ -520,23 +713,29 @@
     to charting and monitoring applications such as Graphite. Datadog bundles this
     service as DogStatsD and it's available out of the box as a UDP service running
     on port `8125`, where the Datadog Agent runs.
+  id: totrans-113
   prefs: []
   type: TYPE_NORMAL
 - en: 'The status of the DogStatsD service can be checked for in the `datadog-agent
     status` output on the host where the Datadog Agent is running, and it would look
     like the following:'
+  id: totrans-114
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE20]'
+  id: totrans-115
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE20]'
 - en: The preceding steps describe the process to access JMX metrics from a Java application.
     While some applications, such as Cassandra, provide application-specific integration
     to access JMX metrics, this generic integration is enough to consume JMX metrics
     from any Java application.
+  id: totrans-116
   prefs: []
   type: TYPE_NORMAL
 - en: Publishing metrics
+  id: totrans-117
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
@@ -544,39 +743,50 @@
     means so that they can be used in monitors and dashboards. As an example, an arbitrary
     metric value can be sent to the DogStatsD service running on localhost as in the
     following example:'
+  id: totrans-118
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE21]'
+  id: totrans-119
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE21]'
 - en: 'The test metric value sent to the DogStatsD service will be consumed by Datadog
     as a backend application and that metric value can be looked up in the **Metrics
     Explorer**, as in the following screenshot:'
+  id: totrans-120
   prefs: []
   type: TYPE_NORMAL
 - en: '![Figure 10.5 – Looking up a metric value sent via DogStatsD in the Metrics
     Explorer'
+  id: totrans-121
   prefs: []
   type: TYPE_NORMAL
 - en: '](img/Figure_10.5_B16483.jpg)'
+  id: totrans-122
   prefs: []
   type: TYPE_NORMAL
 - en: Figure 10.5 – Looking up a metric value sent via DogStatsD in the Metrics Explorer
+  id: totrans-123
   prefs: []
   type: TYPE_NORMAL
 - en: 'Values for a variety of metric types, such as **count**, **gauge**, **set**,
     and **histogram**, can be posted to the Datadog backend using the DogStatsD interface.
     The following Python code example demonstrates how such a time series dataset
     could be published:'
+  id: totrans-124
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE22]'
+  id: totrans-125
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE22]'
 - en: The program basically picks a random number between `50` and `70` and posts
     it as the outdoor temperature with the tag `metric-source:dogstatsd`. It runs
     in an infinite loop with a wait of *10* seconds for posting the metric each time,
     mimicking a time series dataset.
+  id: totrans-126
   prefs: []
   type: TYPE_NORMAL
 - en: An important thing you should note here is that there is no authentication required
@@ -585,20 +795,25 @@
     the preceding sample program can post the metrics. While this offers flexibility,
     it could also be a security hole if the network where the Datadog Agents run is
     not hardened.
+  id: totrans-127
   prefs: []
   type: TYPE_NORMAL
 - en: 'The data posted into the Datadog backend can be looked up in the **Metrics
     Explorer** using the metric name and tags if needed, as shown in the following
     screenshot:'
+  id: totrans-128
   prefs: []
   type: TYPE_NORMAL
 - en: '![Figure 10.6 – Time series metric values posted via the DogStatsD interface'
+  id: totrans-129
   prefs: []
   type: TYPE_NORMAL
 - en: '](img/Figure_10.6_B16483.jpg)'
+  id: totrans-130
   prefs: []
   type: TYPE_NORMAL
 - en: Figure 10.6 – Time series metric values posted via the DogStatsD interface
+  id: totrans-131
   prefs: []
   type: TYPE_NORMAL
 - en: StatsD is a general-purpose interface for publishing only metrics. However,
@@ -607,96 +822,139 @@
     useful if DogStatsD were used as a hub for posting status and updates to the Datadog
     backend from your integration, especially if your application uses DogStatsD as
     the primary channel to publish monitoring information into the Datadog backend.
+  id: totrans-132
   prefs: []
   type: TYPE_NORMAL
+  zh: StatsD 是一个用于发布度量数据的通用接口。然而，由 Datadog 实现的 DogStatsD 扩展了对 Datadog 特定资源（如事件和服务检查）的支持。如果
+    DogStatsD 被用作将状态和更新发布到 Datadog 后端的中心，特别是在你的应用程序使用 DogStatsD 作为主要通道将监控信息发布到 Datadog
+    后端时，这些附加功能将非常有用。
 - en: Posting events
+  id: totrans-133
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 发布事件
 - en: 'Posting an event to the Datadog events stream is simple and is illustrated
     in the following Python program:'
+  id: totrans-134
   prefs: []
   type: TYPE_NORMAL
+  zh: 向 Datadog 事件流发布事件很简单，以下 Python 程序进行了说明：
 - en: '[PRE23]'
+  id: totrans-135
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE23]'
 - en: 'This program will post an event to the events stream as shown in the following
     screenshot:'
+  id: totrans-136
   prefs: []
   type: TYPE_NORMAL
+  zh: 该程序将向事件流发布事件，如下图所示：
 - en: '![Figure 10.7 – Event posted by DogStatsD integration'
+  id: totrans-137
   prefs: []
   type: TYPE_NORMAL
+  zh: '![Figure 10.7 – DogStatsD 集成发布的事件'
 - en: '](img/Figure_10.7_B16483.jpg)'
+  id: totrans-138
   prefs: []
   type: TYPE_NORMAL
+  zh: '](img/Figure_10.7_B16483.jpg)'
 - en: Figure 10.7 – Event posted by DogStatsD integration
+  id: totrans-139
   prefs: []
   type: TYPE_NORMAL
+  zh: Figure 10.7 – DogStatsD 集成发布的事件
 - en: If you'd like to keep the StatsD interface more generic so other compatible
     monitoring applications can also consume metrics from it, it's better to use it
     only for publishing metrics following the StatsD standard. For publishing Datadog-specific
     resources, it's better to use the Datadog API.
+  id: totrans-140
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你希望保持 StatsD 接口的通用性，以便其他兼容的监控应用程序也能从中获取度量数据，最好仅将其用于发布符合 StatsD 标准的度量数据。对于发布
+    Datadog 特定资源，最好使用 Datadog API。
 - en: You have learned about three different monitoring standards, very different
     but very powerful options to roll out comprehensive monitoring solutions, and
     next, let's see what the best practices related to them are.
+  id: totrans-141
   prefs: []
   type: TYPE_NORMAL
+  zh: 你已经了解了三种不同的监控标准，它们虽然差异很大，但都是非常强大的选项，可以用于部署全面的监控解决方案。接下来，让我们看看与它们相关的最佳实践。
 - en: Best practices
+  id: totrans-142
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 最佳实践
 - en: 'Now, let''s look at the best practices in making use of monitoring standards
     and the support provided by Datadog:'
+  id: totrans-143
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，让我们看看如何利用监控标准和 Datadog 提供的支持来实现最佳实践：
 - en: When monitoring network devices using SNMP integration, the number of metrics
     that you must handle can be overwhelming. So, it's important to identify a few
     key metrics that can track performance and proactively identify issues, and implement
     monitors using those.
+  id: totrans-144
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 在使用 SNMP 集成监控网络设备时，你必须处理的度量数据数量可能会让人不知所措。因此，识别出几个关键的度量数据，能够跟踪性能并主动识别问题，并使用这些数据来实施监控是非常重要的。
 - en: JMX can be used to manipulate the workings of the application and such things
     shouldn't be implemented on the monitoring infrastructure side because monitoring
     is essentially a *ready-only* activity. In other words, monitoring applications
     won't initiate any corrective actions usually because monitoring is not considered
     part of the application system and the non-availability of a monitoring tool should
     not hamper the workings of the main application it monitors.
+  id: totrans-145
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: JMX 可以用来操作应用程序的工作方式，而这些操作不应该在监控基础设施端实现，因为监控本质上是一个*只读*活动。换句话说，监控应用程序通常不会主动采取任何纠正措施，因为监控不被认为是应用程序系统的一部分，而且监控工具的不可用不应妨碍它所监控的主应用程序的正常工作。
 - en: StatsD is designed to handle only metrics that can be consumed by applications
     such as Datadog. It's better to publish only metrics via DogStatsD if there are
     multiple monitoring tools in your environment and Datadog is just one of them,
     to maintain the flexibility of moving data between multiple systems.
+  id: totrans-146
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: StatsD 仅设计用于处理可由 Datadog 等应用程序消费的度量数据。如果你的环境中有多个监控工具，且 Datadog 只是其中之一，最好仅通过
+    DogStatsD 发布度量数据，以保持在多个系统之间移动数据的灵活性。
 - en: As DogStatsD doesn't require any authentication besides access to the service
     port, the environment where DogStatsD runs, a host or container, should be secured
     well so no unauthorized posting of information can happen.
+  id: totrans-147
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 由于 DogStatsD 除了访问服务端口外不需要任何认证，因此运行 DogStatsD 的环境（如主机或容器）应该得到充分的安全保护，以防止未经授权的信息发布。
 - en: Summary
+  id: totrans-148
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 摘要
 - en: In this chapter, you have learned about three important monitoring standards,
     SNMP, JMX, and StatsD, that help with integrating network devices and custom applications
     in Datadog. As these are general-purpose standards, they are supported by most
     of the popular monitoring tools. The general pattern of using these standards
     is to stick with the standard features and not to use the extensions as the former
     approach would make your monitoring friendly with other monitoring tools as well.
+  id: totrans-149
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本章中，你已经学习了三种重要的监控标准：SNMP、JMX和StatsD，它们有助于将网络设备和自定义应用程序集成到Datadog中。由于这些是通用标准，它们得到了大多数流行监控工具的支持。使用这些标准的一般模式是坚持使用标准功能，而不是使用扩展，因为前者的方法能够使你的监控与其他监控工具兼容。
 - en: In the next chapter, the last chapter of the integration part of the book, we
     will discuss how integration is handled directly from custom applications. There
     are both official and community-developed programming libraries available to integrate
     applications directly with Datadog. We will explore how some of those libraries
     and the Datadog REST APIs are used to integrate custom applications with Datadog.
+  id: totrans-150
   prefs: []
   type: TYPE_NORMAL
+  zh: 在下一章，本书集成部分的最后一章，我们将讨论如何直接从自定义应用程序处理中集成。可以使用官方和社区开发的编程库，将应用程序直接与Datadog进行集成。我们将探讨如何使用这些库以及Datadog
+    REST API来将自定义应用程序与Datadog集成。

@@ -1,12 +1,16 @@
 - en: Packaging Kubernetes Applications
+  id: totrans-0
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 打包 Kubernetes 应用
 - en: We faced quite a few challenges thus far. The good news is that we managed to
     solve most of them. The bad news is that, in some cases, our solutions felt sub-optimum
     (politically correct way to say *horrible*).
+  id: totrans-1
   prefs: []
   type: TYPE_NORMAL
+  zh: 到目前为止，我们遇到了不少挑战。好消息是，我们成功地解决了其中大部分问题。坏消息是，在某些情况下，我们的解决方案感觉并不完美（政治正确地说就是*糟糕*）。
 - en: We spent a bit of time trying to define Jenkins resources while we were in the
     [Deploying Stateful Applications At Scale](part0009.html#sts) chapter. That was
     a good exercise that can be characterized as a learning experience, but there’s
@@ -20,8 +24,12 @@
     look for a Maven repository. Maybe there is something similar for Kubernetes applications.
     Perhaps there is a community-maintained repository with installation solutions
     for commonly used tools. We’ll make it our mission to find such a place.
+  id: totrans-2
   prefs: []
   type: TYPE_NORMAL
+  zh: 在我们进行[大规模部署有状态应用](part0009.html#sts)这一章节时，我们花了一些时间来定义 Jenkins 资源。那是一次很好的练习，可以被视为一种学习经历，但我们仍然需要做一些工作才能让它成为一个真正有用的定义。我们定义
+    Jenkins 的主要问题是，它仍然没有自动化。我们可以启动一个主节点，但仍然需要手动通过设置向导。一旦设置完成，我们还需要安装一些插件，并且需要更改其配置。在我们走这条路之前，我们可能需要先探索一下是否有其他人已经为我们完成了这项工作。如果我们要找一个
+    Java 库来帮助我们解决应用中的某个问题，我们可能会寻找一个 Maven 仓库。也许 Kubernetes 应用也有类似的东西。也许有一个由社区维护的仓库，里面包含了常用工具的安装解决方案。我们将把找到这样的地方作为我们的任务。
 - en: Another problem we faced was customization of our YAML files. As a minimum,
     we’ll need to specify different image tag every time we deploy a release. In the
     [Defining Continuous Deployment](part0011.html#manual-cd) chapter, we had to use
@@ -44,8 +52,14 @@
     is not the one we’ll take. It leads towards a cliff. What we need is a templating
     mechanism that will allow us to modify definitions before sending them to Kube
     API.
+  id: totrans-3
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们面临的另一个问题是自定义我们的 YAML 文件。至少，每次部署新版本时，我们都需要指定不同的镜像标签。在[定义持续部署](part0011.html#manual-cd)章节中，我们必须使用`sed`来修改定义，然后通过`kubectl`将其发送到
+    Kube API。虽然这样能工作，但我相信你会同意，像`sed -e "s@:latest@:1.7@g"`这样的命令并不是很直观。它们看起来和感觉都很笨拙。更复杂的是，镜像标签通常不是从一个部署到另一个部署之间唯一变化的内容。我们可能需要更改
+    Ingress 控制器的域名或路径，以适应将应用程序部署到不同环境（例如，暂存环境和生产环境）的需求。相同的情况也适用于副本数以及许多定义我们要安装内容的其他因素。使用串联的`sed`命令可能很快变得复杂，而且不太友好。没错，我们可以每次例如发布新版本时修改
+    YAML 文件。我们也可以为每个我们计划使用的环境创建不同的定义。但是，我们不会那样做。那样只会导致重复和维护上的噩梦。我们已经有了两个 YAML 文件用于`go-demo-3`应用程序（一个用于测试，另一个用于生产）。如果我们继续这样下去，最终可能会有十个、二十个，甚至更多版本的相同定义。我们可能还会被迫在每次代码提交时更改它，以确保标签始终是最新的。那条路不是我们要走的路，它通向悬崖。我们需要的是一个模板机制，允许我们在将定义发送到
+    Kube API 之前进行修改。
 - en: The last issue we’ll try to solve in this chapter is the need to describe our
     applications and the possible changes others might apply to them before installing
     them inside a cluster. Truth be told, that is already possible. Anyone can read
@@ -59,8 +73,13 @@
     use Kubernetes and the fact that not everyone will be a Kubernetes expert, it
     becomes apparent that we need a more descriptive, easier to customize, and more
     user-friendly way to discover and deploy applications.
+  id: totrans-4
   prefs: []
   type: TYPE_NORMAL
+  zh: 本章我们要尝试解决的最后一个问题是描述我们的应用程序及其他人在将其安装到集群之前可能进行的更改。说实话，这已经是可以做到的。任何人都可以读取我们的 YAML
+    文件来推断出应用程序的组成。任何人都可以拿着我们的 YAML 文件并修改它，以适应他们自己的需求。在某些情况下，即使是有 Kubernetes 经验的人也可能觉得有挑战性。然而，我们的主要关注点是那些不是
+    Kubernetes 专家的人员。我们不能指望我们组织中的每个人都花一年的时间学习 Kubernetes，只有这样他们才能部署应用程序。另一方面，我们确实希望为每个人提供这种能力。我们希望赋能每个人。当我们面临每个人都需要使用
+    Kubernetes，而并非每个人都将成为 Kubernetes 专家的现实时，我们显然需要一种更具描述性、易于自定义且更用户友好的方式来发现和部署应用程序。
 - en: We’ll try to tackle those and a few other issues in this chapter. We’ll try
     to find a place where community contributes with definitions of commonly used
     applications (e.g., Jenkins). We’ll seek for a templating mechanism that will
@@ -71,28 +90,45 @@
     *apt*, *yum*, *apk*, [Homebrew](https://brew.sh/), or [Chocolatey](https://chocolatey.org/),
     combined with the ability to document our packages in a way that anyone can use
     them.
+  id: totrans-5
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们将在本章中尝试解决这些问题以及一些其他问题。我们将尽力找到一个地方，在这里社区可以为常用应用（例如，Jenkins）提供定义。我们将寻求一种模板机制，使我们能够在安装应用之前进行定制。最后，我们将尝试找到一种更好的方式来记录我们的定义。我们将尽力简化到即使是不懂
+    Kubernetes 的人也能安全地将应用部署到集群中。我们需要的是一个 Kubernetes 版的包管理器，类似于*apt*、*yum*、*apk*、[Homebrew](https://brew.sh/)
+    或 [Chocolatey](https://chocolatey.org/)，并结合能够以任何人都能使用的方式来记录我们的包。
 - en: I’ll save you from searching for a solution and reveal it right away. We’ll
     explore [Helm](https://helm.sh/) as the missing piece that will make our deployments
     customizable and user-friendly. If we are lucky, it might even turn out to be
     the solution that will save us from reinventing the wheel with commonly used applications.
+  id: totrans-6
   prefs: []
   type: TYPE_NORMAL
+  zh: 我会帮你省去寻找解决方案的麻烦，直接揭示答案。我们将探索 [Helm](https://helm.sh/)，作为让我们部署变得可定制和用户友好的关键。如果幸运的话，它甚至可能是那个能帮助我们避免为常用应用重新发明轮子的解决方案。
 - en: Before we proceed, we’ll need a cluster. It’s time to get our hands dirty.
+  id: totrans-7
   prefs: []
   type: TYPE_NORMAL
+  zh: 在我们继续之前，我们需要一个集群。是时候让我们动手了。
 - en: Creating A Cluster
+  id: totrans-8
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 创建集群
 - en: It’s hands-on time again. We’ll need to go back to the local copy of the [vfarcic/k8s-specs](https://github.com/vfarcic/k8s-specs)
     repository and pull the latest version.
+  id: totrans-9
   prefs: []
   type: TYPE_NORMAL
+  zh: 又到动手操作的时刻了。我们需要回到本地的 [vfarcic/k8s-specs](https://github.com/vfarcic/k8s-specs)
+    仓库并拉取最新版本。
 - en: '[PRE0]'
+  id: totrans-10
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE0]'
 - en: '[PRE1]'
+  id: totrans-11
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE1]'

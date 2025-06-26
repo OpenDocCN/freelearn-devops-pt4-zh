@@ -1,243 +1,357 @@
 - en: Monitoring with Prometheus
+  id: totrans-0
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 使用 Prometheus 进行监控
 - en: In this chapter, we will explore how to monitor using the Prometheus time series,
     and we will also run some automated security tests. The built-in security tests
     in GitLab are only available when running with a GitLab Ultimate license on-premises
     or with a Gold subscription on [http://gitlab.com](http://gitlab.com).
+  id: totrans-1
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本章中，我们将探讨如何使用 Prometheus 时间序列进行监控，同时还将运行一些自动化的安全测试。GitLab 中内置的安全测试仅在使用 GitLab
+    Ultimate 许可证的本地部署或使用 [http://gitlab.com](http://gitlab.com) 上的 Gold 订阅时可用。
 - en: 'In this chapter, we will cover following topics:'
+  id: totrans-2
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本章中，我们将覆盖以下主题：
 - en: Setting up Prometheus
+  id: totrans-3
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 配置 Prometheus
 - en: Customizing monitoring
+  id: totrans-4
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 自定义监控
 - en: The static analysis of security vulnerabilities
+  id: totrans-5
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 静态安全漏洞分析
 - en: '**Dynamic Application Security Testing** (**DAST**)'
+  id: totrans-6
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**动态应用安全测试**（**DAST**）'
 - en: Dependency checking
+  id: totrans-7
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 依赖性检查
 - en: Technical requirements
+  id: totrans-8
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 技术要求
 - en: To be able to manage Omnibus installs, there is one central configuration file
     required, called `gitlab.rb`. You need to create this file or copy an example.
     There is a template available at [https://gitlab.com/gitlab-org/omnibus-gitlab/blob/master/files/gitlab-config-template/gitlab.rb.template](https://gitlab.com/gitlab-org/omnibus-gitlab/blob/master/files/gitlab-config-template/gitlab.rb.template).
     This file is not updated after upgrades. Throughout this chapter, we will quote
     and discuss elements of this file.
+  id: totrans-9
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了能够管理 Omnibus 安装，需要一个中央配置文件，名为 `gitlab.rb`。你需要创建这个文件或复制一个示例。可以在 [https://gitlab.com/gitlab-org/omnibus-gitlab/blob/master/files/gitlab-config-template/gitlab.rb.template](https://gitlab.com/gitlab-org/omnibus-gitlab/blob/master/files/gitlab-config-template/gitlab.rb.template)
+    找到模板。此文件在升级后不会更新。在本章中，我们将引用并讨论此文件的元素。
 - en: To follow along with the instructions in this chapter, please download the Git
     repository with examples, available at GitHub: [https://github.com/PacktPublishing/Mastering-GitLab-12/tree/master/Chapter12](https://github.com/PacktPublishing/Mastering-GitLab-12/tree/master/Chapter12)[.](https://github.com/PacktPublishing/Mastering-GitLab-12/tree/master/Chapter12)
+  id: totrans-10
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了跟随本章的指示，请下载包含示例的 Git 仓库，地址位于 GitHub：[https://github.com/PacktPublishing/Mastering-GitLab-12/tree/master/Chapter12](https://github.com/PacktPublishing/Mastering-GitLab-12/tree/master/Chapter12)[.](https://github.com/PacktPublishing/Mastering-GitLab-12/tree/master/Chapter12)
 - en: You will also need to have Python installed to create the Python sample exporter.
+  id: totrans-11
   prefs: []
   type: TYPE_NORMAL
+  zh: 你还需要安装 Python 来创建 Python 示例导出器。
 - en: Setting up Prometheus
+  id: totrans-12
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 配置 Prometheus
 - en: Prometheus is an open source monitoring system inspired by Borgmon, Google's
     production monitoring system. Since it was introduced in 2012, the project has
     built up an active community and has already been used by many companies. It is
     an example of a TSDB, a time-series monitoring database. This means that time
     is a deliberate X-axis in all of your measurements. Every new entry is an insert
     and not an update of a data-row.
+  id: totrans-13
   prefs: []
   type: TYPE_NORMAL
+  zh: Prometheus 是一个开源监控系统，灵感来源于 Google 的生产监控系统 Borgmon。自 2012 年推出以来，该项目已经建立了一个活跃的社区，并被许多公司使用。它是一个
+    TSDB（时间序列数据库）的例子。这意味着时间在所有度量中都是一个刻意设定的 X 轴。每一个新的条目都是插入，而不是数据行的更新。
 - en: 'This is best visualized in a table:'
+  id: totrans-14
   prefs: []
   type: TYPE_NORMAL
+  zh: 这一点最好通过表格来呈现：
 - en: '| **Time(x)** | **Key ** | **Value** |'
+  id: totrans-15
   prefs: []
   type: TYPE_TB
+  zh: '| **时间(x)** | **关键** | **值** |'
 - en: '| 12.01.33 | ping-latency | 0.234556 |'
+  id: totrans-16
   prefs: []
   type: TYPE_TB
+  zh: '| 12.01.33 | ping-latency | 0.234556 |'
 - en: '| 12.03.33 | ping-latency | 0.223344 |'
+  id: totrans-17
   prefs: []
   type: TYPE_TB
+  zh: '| 12.03.33 | ping-latency | 0.223344 |'
 - en: 'The two main advantages of this approach are as follows:'
+  id: totrans-18
   prefs: []
   type: TYPE_NORMAL
+  zh: 这种方法的两个主要优势如下：
 - en: '**Scalability**: These databases are tuned to ingest data and do so very efficiently.'
+  id: totrans-19
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**可扩展性**：这些数据库经过调优，能够非常高效地摄取数据。'
 - en: '**Usability**: They provide all kinds of tools and functions, for example,
     data retention and continuous queries.'
+  id: totrans-20
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**可用性**：它们提供各种工具和功能，例如数据保留和持续查询。'
 - en: Whereas most monitoring systems focus on measuring external system behaviors
     through health checks, Prometheus emphasizes measuring internal system behaviors
     by requesting metrics from the software itself. With Prometheus, you can set up
     monitoring dynamically, making it a valuable tool for gaining insight into distributed
     setups, such as software on a Kubernetes cluster.
+  id: totrans-21
   prefs: []
   type: TYPE_NORMAL
+  zh: 而大多数监控系统侧重于通过健康检查来衡量外部系统行为，Prometheus 强调通过从软件本身请求度量来衡量内部系统行为。使用 Prometheus，你可以动态地设置监控，这使其成为了解分布式环境（例如
+    Kubernetes 集群上运行的软件）的一种有价值的工具。
 - en: The Prometheus project provides client librariesthat make it easier to export
     metrics from software. These libraries enable you to integrate monitoring as part
     of your software. It opens a port to metrics inside your application, so to speak.
+  id: totrans-22
   prefs: []
   type: TYPE_NORMAL
+  zh: Prometheus 项目提供了客户端库，便于从软件中导出指标。这些库使您能够将监控功能集成到您的软件中。可以说，它为您的应用程序内部的指标打开了一个端口。
 - en: You can also use functions and objects from client libraries to expose the metrics
     inside your application.
+  id: totrans-23
   prefs: []
   type: TYPE_NORMAL
+  zh: 您还可以使用客户端库中的函数和对象，暴露应用程序内部的指标。
 - en: 'Another method is to run separate smaller programs that gather data that will
     be scraped by the Prometheus server. Some officially endorsed exporters are available
     in the Prometheus group on GitHub: [https://github.com/prometheus](https://github.com/prometheus).'
+  id: totrans-24
   prefs: []
   type: TYPE_NORMAL
+  zh: 另一种方法是运行一些独立的小型程序，收集 Prometheus 服务器将抓取的数据。GitHub 上的 Prometheus 组织提供了一些官方推荐的导出器：[https://github.com/prometheus](https://github.com/prometheus)。
 - en: 'GitLab is packaged with both methods. When enabled, it can expose metrics from
     within GitLab itself, but the omnibus package can also deliver extra exporter
     instances that are able to monitor a number of components. The monitoring architecture
     is as follows (as you can see, the functionality runs on the GitLab application
     server):'
+  id: totrans-25
   prefs: []
   type: TYPE_NORMAL
+  zh: GitLab 同时集成了这两种方法。启用后，它可以暴露 GitLab 本身的指标，但全包（Omnibus）包也可以提供额外的导出器实例，能够监控多个组件。监控架构如下所示（如您所见，功能运行在
+    GitLab 应用程序服务器上）：
 - en: '![](img/f570a655-b4e2-4232-86a6-ae6470d40845.png)'
+  id: totrans-26
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/f570a655-b4e2-4232-86a6-ae6470d40845.png)'
 - en: 'You can see several exporters in the image; let''s go through them:'
+  id: totrans-27
   prefs: []
   type: TYPE_NORMAL
+  zh: 您可以在图像中看到几个导出器；让我们逐个查看它们：
 - en: 'The (GitLab) Metrics Exporter: GitLab has incorporated the client functions
     into itself and can expose metrics if the setting is enabled. You can find this
     feature in the **Admin |** Settings | Metrics and profiling | Metrics Prometheus,
     as shown in the following screenshot:'
+  id: totrans-28
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: （GitLab）指标导出器：GitLab 已将客户端功能集成到自身，并且可以在启用设置的情况下暴露指标。您可以在**管理员 |** 设置 | 指标与分析
+    | 指标 Prometheus 中找到此功能，如下图所示：
 - en: '![](img/eb1415e4-1073-4f57-9d01-dd146f279b8f.png)'
+  id: totrans-29
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/eb1415e4-1073-4f57-9d01-dd146f279b8f.png)'
 - en: 'This works by allowing you to view the exporters'' output on `http://{your
     gitlab url}}/-/metrics?token=something`. An example is given on the Health Check
     page via Monitoring | Health check, as shown in the following screenshot:'
+  id: totrans-30
   prefs: []
   type: TYPE_NORMAL
+  zh: 通过允许您在 `http://{your gitlab url}}/-/metrics?token=something` 查看导出器的输出，这个方法得以实现。健康检查页面中提供了一个示例，通过 监控
+    | 健康检查，如下图所示：
 - en: '![](img/4cd04fa5-9c88-4dcc-8155-a9e8d0bb13ea.png)'
+  id: totrans-31
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/4cd04fa5-9c88-4dcc-8155-a9e8d0bb13ea.png)'
 - en: 'Make sure that you append the token to the request otherwise you won''t see
     any data. An example output shown when visiting the URL is as follows:'
+  id: totrans-32
   prefs: []
   type: TYPE_NORMAL
+  zh: 确保在请求中附加 token，否则您将看不到任何数据。访问该 URL 时，示例输出如下所示：
 - en: '![](img/261b4612-c78d-4f46-8b9f-59fab5a8232d.png)'
+  id: totrans-33
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/261b4612-c78d-4f46-8b9f-59fab5a8232d.png)'
 - en: 'The Redis Exporter: This is an external program you can find at [https://github.com/oliver006/redis_exporter/blob/master/README.md#whats-exported](https://github.com/oliver006/redis_exporter/blob/master/README.md#whats-exported).
     It is a Go binary that exposes metrics about Redis, the in-memory database and
     cache that GitLab uses for storing background job queues, and session state and
     UI caching.'
+  id: totrans-34
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: Redis 导出器：这是一个外部程序，您可以在 [https://github.com/oliver006/redis_exporter/blob/master/README.md#whats-exported](https://github.com/oliver006/redis_exporter/blob/master/README.md#whats-exported)
+    找到它。它是一个 Go 二进制文件，暴露关于 Redis 的指标，Redis 是 GitLab 用于存储后台作业队列、会话状态和 UI 缓存的内存数据库和缓存。
 - en: 'When used together with Grafana, dashboards can be quickly set up, as shown
     in the following screenshot:'
+  id: totrans-35
   prefs: []
   type: TYPE_NORMAL
+  zh: 与 Grafana 配合使用时，可以快速设置仪表盘，如下图所示：
 - en: '![](img/9b1797ed-1f0f-43da-b37d-7e096cb02a68.png)'
+  id: totrans-36
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/9b1797ed-1f0f-43da-b37d-7e096cb02a68.png)'
 - en: 'The Postgres Exporter: Again, this is a Go binary and external project available
     at: [https://github.com/wrouesnel/postgres_exporter](https://github.com/wrouesnel/postgres_exporter).'
+  id: totrans-37
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: Postgres 导出器：这是一个 Go 二进制文件和外部项目，网址为：[https://github.com/wrouesnel/postgres_exporter](https://github.com/wrouesnel/postgres_exporter)。
 - en: 'The GitLab Monitor: This exporter is a bit different in that it is built-in
     with Ruby and exposes metrics with the Sinatra web server gem. The project page
     is [https://gitlab.com/gitlab-org/gitlab-monitor](https://gitlab.com/gitlab-org/gitlab-monitor).'
+  id: totrans-38
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: GitLab 监控器：这个导出器有些不同，它是用 Ruby 编写的，并通过 Sinatra Web 服务器 gem 来暴露指标。项目页面为：[https://gitlab.com/gitlab-org/gitlab-monitor](https://gitlab.com/gitlab-org/gitlab-monitor)。
 - en: 'When you query the GitLab Monitor, you can provide different parameters, which
     represent the kind of metric you want to scrape; they include the following:'
+  id: totrans-39
   prefs: []
   type: TYPE_NORMAL
+  zh: 当你查询GitLab监控时，可以提供不同的参数，这些参数表示你想抓取的指标种类；它们包括以下内容：
 - en: '**Database**: Provides information about tables, rows, and CI build'
+  id: totrans-40
   prefs:
   - PREF_OL
   - PREF_OL
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**数据库**：提供关于表格、行和CI构建的信息'
 - en: '**Git**: Provides information about Git pulls'
+  id: totrans-41
   prefs:
   - PREF_IND
   - PREF_IND
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**Git**：提供关于Git拉取的信息'
 - en: '**Process**: Provides information about CPU, process count, sidekiq stats,
     and more'
+  id: totrans-42
   prefs:
   - PREF_IND
   - PREF_IND
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**进程**：提供关于CPU、进程数量、sidekiq统计信息等的信息'
 - en: 'The Node Exporter: This is perhaps one of the best-known exporters for Prometheus.
     It consists of a lot of basic metrics for an application node. Again, this exporter
     is written in Go and is available at [https://github.com/prometheus/node_exporter](https://github.com/prometheus/node_exporter).'
+  id: totrans-43
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: Node Exporter：这可能是Prometheus中最知名的导出器之一。它包含了应用节点的许多基本指标。同样，这个导出器是用Go编写的，并可以在[https://github.com/prometheus/node_exporter](https://github.com/prometheus/node_exporter)找到。
 - en: To enable the built-in Prometheus server on the GitLab application server, edit
     the `/etc/gitlab/gitlab.rb` file. Search for `prometheus['enable']`, uncomment
     it, and set it to `true`. There are several other options, but just enabling it
     will already deliver you a working instance.
+  id: totrans-44
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 要在GitLab应用服务器上启用内置的Prometheus服务器，编辑`/etc/gitlab/gitlab.rb`文件。搜索`prometheus['enable']`，取消注释并设置为`true`。还有一些其他选项，但仅启用它就能让你得到一个工作的实例。
 - en: 'The part of the `gitlab.rb` file you should change is as follows:'
+  id: totrans-45
   prefs: []
   type: TYPE_NORMAL
+  zh: 你应该修改的`gitlab.rb`文件部分如下所示：
 - en: '[PRE0]'
+  id: totrans-46
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE0]'
 - en: After changing `gitlab.rb`, you should run a reconfiguration to activate the
     changes. You will see messages explaining that certain exporters and the Prometheus
     server have been started.
+  id: totrans-47
   prefs: []
   type: TYPE_NORMAL
+  zh: 修改`gitlab.rb`后，你应该运行重新配置以激活这些更改。你将看到消息，说明某些导出器和Prometheus服务器已经启动。
 - en: 'You can navigate to the Prometheus console by going to the address configured
     in `prometheus[''listen_address'']`. You will be presented with a query interface.
     If you click the drop-down list, you should see a list of metrics that can be
     queried, as shown in the following screenshot:'
+  id: totrans-48
   prefs: []
   type: TYPE_NORMAL
+  zh: 你可以通过访问`prometheus['listen_address']`中配置的地址来进入Prometheus控制台。你将看到一个查询界面。如果点击下拉列表，你应该能看到一系列可以查询的指标，如下图所示：
 - en: '![](img/54af35bc-dbc6-4de2-a8e5-963c48a55fb9.png)'
+  id: totrans-49
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/54af35bc-dbc6-4de2-a8e5-963c48a55fb9.png)'
 - en: 'Once you have chosen a metric, it will display all values it has recorded in
     the database (including data that was actively scraped from Prometheus exporters).
     In this case, the chose view mode was probably Console. You can also view the
     data as a graph by clicking on Graph, as shown in the following screenshot:'
+  id: totrans-50
   prefs: []
   type: TYPE_NORMAL
+  zh: 一旦你选择了一个指标，它将显示它在数据库中记录的所有值（包括从Prometheus导出器主动抓取的数据）。在这种情况下，选择的视图模式可能是控制台。你还可以通过点击“图表”查看数据的图形表示，如下图所示：
 - en: '![](img/13390e57-6aa6-4383-88c2-40120dde5c69.png)'
+  id: totrans-51
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/13390e57-6aa6-4383-88c2-40120dde5c69.png)'
 - en: Using an external Prometheus host
+  id: totrans-52
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 使用外部Prometheus主机
 - en: If you are not using the omnibus package to manage GitLab or insist on using
     an external Prometheus server, the picture will be a bit different. You should
     be aware that the default security model that Prometheus uses is rather simple;
@@ -245,468 +359,722 @@
     no authentication, authorization, or encryption. If you need these features, you
     should prepare a reverse proxy in front of the Prometheus server to help. More
     information about this can be found at [https://prometheus.io/docs/operating/security/](https://prometheus.io/docs/operating/security/).
+  id: totrans-53
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你没有使用Omnibus包来管理GitLab，或者坚持使用外部Prometheus服务器，那么情况会有所不同。你需要注意的是，Prometheus使用的默认安全模型相当简单；它假设任何人都可以查看存储的时间序列数据，并且服务器不提供身份验证、授权或加密功能。如果你需要这些功能，应该在Prometheus服务器前准备一个反向代理来帮助。更多关于这方面的信息，可以在[https://prometheus.io/docs/operating/security/](https://prometheus.io/docs/operating/security/)找到。
 - en: 'The monitoring architecture for this situation is shown in the following diagram
     (as you can see, some functionality is running on a separate server):'
+  id: totrans-54
   prefs: []
   type: TYPE_NORMAL
+  zh: 这种情况的监控架构如下图所示（如你所见，某些功能运行在单独的服务器上）：
 - en: '![](img/847051bd-70e3-4b4d-a840-2d4aec4d79fd.png)'
+  id: totrans-55
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/847051bd-70e3-4b4d-a840-2d4aec4d79fd.png)'
 - en: 'Now we have to make sure we have an external Prometheus host configured that
     is ready to scrape the data. As we''ve previously mentioned, Prometheus is a single
     Go binary. To specify which configuration file to load, use the `--config.file`
     flag. This configuration file has to have the YAML format. How a single Prometheus
     server monitors the GitLab Metrics Exporter embedded in GitLab is shown in the
     following `prometheus.yml` example:'
+  id: totrans-56
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在我们必须确保我们配置了一个准备好从中抓取数据的外部Prometheus主机。正如我们之前提到的，Prometheus是一个单独的Go二进制文件。要指定要加载的配置文件，请使用`--config.file`标志。此配置文件必须具有YAML格式。下面显示了一个单个Prometheus服务器如何监视内嵌在GitLab中的GitLab指标导出程序的`prometheus.yml`示例：
 - en: '[PRE1]'
+  id: totrans-57
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE1]'
 - en: 'The `gitlab_metrics_exporter_sd.yml` file contains the following code:'
+  id: totrans-58
   prefs: []
   type: TYPE_NORMAL
+  zh: '`gitlab_metrics_exporter_sd.yml`文件包含以下代码：'
 - en: '[PRE2]'
+  id: totrans-59
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE2]'
 - en: If you put both files in `/tmp`, or elsewhere, and run Prometheus as a Docker
     container (as seen in the following example), you should have an external Prometheus
     ready for action. Of course, you can also install it from source and run it on
     a dedicated server somewhere else if preferred.
+  id: totrans-60
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果您将这两个文件放在`/tmp`或其他位置，并作为Docker容器运行Prometheus（如下例所示），则应该已准备好进行外部Prometheus操作。当然，如果愿意，您也可以从源代码安装并在其他地方的专用服务器上运行它。
 - en: '[PRE3]'
+  id: totrans-61
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE3]'
 - en: You now know how Prometheus runs on the GitLab application server itself, as
     well as on a separate server.
+  id: totrans-62
   prefs: []
   type: TYPE_NORMAL
+  zh: 您现在知道Prometheus如何在GitLab应用程序服务器本身以及在单独的服务器上运行。
 - en: Enabling the external dashboard link
+  id: totrans-63
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 启用外部仪表板链接
 - en: Since GitLab 12.0 it also possible to enable a link to an external dashboard
     from inside of GitLab.
+  id: totrans-64
   prefs: []
   type: TYPE_NORMAL
+  zh: 自GitLab 12.0以来，还可以在GitLab内部启用链接到外部仪表板的选项。
 - en: Go to Settings | Operations and navigate to External dashboard
+  id: totrans-65
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 转到设置 | 操作并导航到外部仪表板
 - en: 'Insert the location to your external dashboard and click on Save Changes:'
+  id: totrans-66
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 插入位置到您的外部仪表板并点击保存更改：
 - en: '![](img/fdc121f6-4512-4700-80dc-c0ac29f13d41.png)'
+  id: totrans-67
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/fdc121f6-4512-4700-80dc-c0ac29f13d41.png)'
 - en: Customizing monitoring
+  id: totrans-68
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 自定义监控
 - en: There are several ways to create custom monitoring scripts that will supply
     time series data to your Prometheus server. As noted earlier in the *Setting up
     Prometheus* section,there are many client libraries available, such as [https://github.com/prometheus/client_python](https://github.com/prometheus/client_python).
+  id: totrans-69
   prefs: []
   type: TYPE_NORMAL
+  zh: 有几种方法可以创建自定义监控脚本，这些脚本将向您的Prometheus服务器提供时间序列数据。正如前面在*设置Prometheus*部分中提到的那样，有许多客户端库可用，例如[https://github.com/prometheus/client_python](https://github.com/prometheus/client_python)。
 - en: In the following screenshot, you can see that the preceding project is not very
     big but does have stars on GitHub.
+  id: totrans-70
   prefs: []
   type: TYPE_NORMAL
+  zh: 在以下截图中，您可以看到前述项目不是很大，但在GitHub上有星标。
 - en: '![](img/b6a6c593-5b1e-4777-8060-5b123cb8eb66.png)'
+  id: totrans-71
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/b6a6c593-5b1e-4777-8060-5b123cb8eb66.png)'
 - en: 'To use this library, install it using pip (a Python package manager for modules)
     with the following code:'
+  id: totrans-72
   prefs: []
   type: TYPE_NORMAL
+  zh: 要使用此库，请使用pip（用于模块的Python包管理器）使用以下代码进行安装：
 - en: '[PRE4]'
+  id: totrans-73
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE4]'
 - en: 'You can also create a simple exporter by running the following code from a
     Python interpreter or via a file:'
+  id: totrans-74
   prefs: []
   type: TYPE_NORMAL
+  zh: 您还可以通过从Python解释器或通过文件运行以下代码创建一个简单的导出程序：
 - en: '[PRE5]'
+  id: totrans-75
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE5]'
 - en: 'The exporter will start on `localhost`, on port 8000, and the following page
     will appear when called:'
+  id: totrans-76
   prefs: []
   type: TYPE_NORMAL
+  zh: 导出程序将在`localhost`的8000端口上启动，并在调用时显示以下页面：
 - en: '![](img/da943227-3d2d-4991-98b3-8c5e657809f9.png)'
+  id: totrans-77
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/da943227-3d2d-4991-98b3-8c5e657809f9.png)'
 - en: 'You can add this exporter to your Prometheus server by adding the following
     code to `prometheus.yml` and restarting Prometheus with `gitlab-ctl restart prometheus` on
     an omnibus-installed GitLab application server, or you can use `service prometheus
     restart` on an externally-installed Prometheus:'
+  id: totrans-78
   prefs: []
   type: TYPE_NORMAL
+  zh: 您可以通过将以下代码添加到`prometheus.yml`并使用`gitlab-ctl restart prometheus`在Omnibus安装的GitLab应用程序服务器上重新启动Prometheus，或者您可以在外部安装的Prometheus上使用`service
+    prometheus restart`将此导出程序添加到您的Prometheus服务器中：
 - en: '[PRE6]'
+  id: totrans-79
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE6]'
 - en: You now have the option to modify your own Python application to report metrics,
     or you can create Python code that gathers metrics from your system. For instance,
     you may want to parse a log file for certain patterns and accumulate the relevant
     metrics.
+  id: totrans-80
   prefs: []
   type: TYPE_NORMAL
+  zh: 您现在可以选择修改自己的Python应用程序以报告指标，或者您可以创建Python代码来从系统中收集指标。例如，您可能希望解析某个日志文件以查找特定模式并累积相关指标。
 - en: The static analysis of security vulnerabilities
+  id: totrans-81
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 安全漏洞的静态分析
 - en: '**Static Application Security Testing** (**SAST**) is used to analyze source
     code or binaries and to detect holes or weak points in security. When automated,
     this contributes to making your DevOps methodology resemble DevSecOps, where security
     testing and awareness is part of the DevOps life cycle.'
+  id: totrans-82
   prefs: []
   type: TYPE_NORMAL
+  zh: '**静态应用安全测试**（**SAST**）用于分析源代码或二进制文件，检测安全漏洞或弱点。当自动化进行时，它有助于使你的 DevOps 方法学更像
+    DevSecOps，其中安全测试和意识成为 DevOps 生命周期的一部分。'
 - en: GitLab, in its Ultimate license model, provides automated testing as part of
     the development of your application.
+  id: totrans-83
   prefs: []
   type: TYPE_NORMAL
+  zh: GitLab 在其 Ultimate 许可证模式下，提供自动化测试，作为应用程序开发的一部分。
 - en: 'Currently, the following languages and frameworks are supported:'
+  id: totrans-84
   prefs: []
   type: TYPE_NORMAL
+  zh: 目前，以下语言和框架是受支持的：
 - en: '| Language/Framework | Scan tool |'
+  id: totrans-85
   prefs: []
   type: TYPE_TB
+  zh: '| 语言/框架 | 扫描工具 |'
 - en: '| --- | --- |'
+  id: totrans-86
   prefs: []
   type: TYPE_TB
+  zh: '| --- | --- |'
 - en: '| .NET | Security Code Scan |'
+  id: totrans-87
   prefs: []
   type: TYPE_TB
+  zh: '| .NET | Security Code Scan |'
 - en: '| C/C++ | Flawfinder |'
+  id: totrans-88
   prefs: []
   type: TYPE_TB
+  zh: '| C/C++ | Flawfinder |'
 - en: '| Go | gosec |'
+  id: totrans-89
   prefs: []
   type: TYPE_TB
+  zh: '| Go | gosec |'
 - en: '| Groovy (Gradle and Grail) | find-sec-bugs |'
+  id: totrans-90
   prefs: []
   type: TYPE_TB
+  zh: '| Groovy（Gradle 和 Grail） | find-sec-bugs |'
 - en: '| Java (Maven and Gradle)  | find-sec-bugs |'
+  id: totrans-91
   prefs: []
   type: TYPE_TB
+  zh: '| Java（Maven 和 Gradle） | find-sec-bugs |'
 - en: '| JavaScript | ESLint security plugin |'
+  id: totrans-92
   prefs: []
   type: TYPE_TB
+  zh: '| JavaScript | ESLint 安全插件 |'
 - en: '| Node.js | NodeJsScan |'
+  id: totrans-93
   prefs: []
   type: TYPE_TB
+  zh: '| Node.js | NodeJsScan |'
 - en: '| PHP | phpcs-security-audit |'
+  id: totrans-94
   prefs: []
   type: TYPE_TB
+  zh: '| PHP | phpcs-security-audit |'
 - en: '| Python | bandit |'
+  id: totrans-95
   prefs: []
   type: TYPE_TB
+  zh: '| Python | bandit |'
 - en: '| Ruby on Rails | brakeman |'
+  id: totrans-96
   prefs: []
   type: TYPE_TB
+  zh: '| Ruby on Rails | brakeman |'
 - en: '| Scala (sbt) | find-sec-bugs |'
+  id: totrans-97
   prefs: []
   type: TYPE_TB
+  zh: '| Scala（sbt） | find-sec-bugs |'
 - en: '| Typescript | TSLint Config Security |'
+  id: totrans-98
   prefs: []
   type: TYPE_TB
+  zh: '| Typescript | TSLint 配置安全 |'
 - en: First, you need GitLab Runner with a Docker-in-Docker executor.
+  id: totrans-99
   prefs: []
   type: TYPE_NORMAL
+  zh: 首先，你需要一个带有 Docker-in-Docker 执行器的 GitLab Runner。
 - en: This is a normal Docker executor, but it runs in privileged mode. This means
     it can run its own Docker daemon and therefore run containers itself.
+  id: totrans-100
   prefs: []
   type: TYPE_NORMAL
+  zh: 这是一个普通的 Docker 执行器，但它以特权模式运行。这意味着它可以运行自己的 Docker 守护进程，从而能够自行运行容器。
 - en: 'You enable this functionality by changing the GitLab Runner configuration file
     (`config.toml`), making sure it has `privileged = true`. After changing this,
     restart the runner as follows:'
+  id: totrans-101
   prefs: []
   type: TYPE_NORMAL
+  zh: 你可以通过更改 GitLab Runner 配置文件（`config.toml`），确保它有 `privileged = true`，来启用此功能。更改后，重新启动
+    Runner，如下所示：
 - en: '[PRE7]'
+  id: totrans-102
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE7]'
 - en: 'Secondly, you need a specific `.gitlab-ci.yml` in your GitLab project folder
     to make the actual coupling, as shown in the following snippet:'
+  id: totrans-103
   prefs: []
   type: TYPE_NORMAL
+  zh: 其次，你需要在 GitLab 项目文件夹中添加一个特定的 `.gitlab-ci.yml` 文件，以实现实际的耦合，如下片段所示：
 - en: '[PRE8]'
+  id: totrans-104
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE8]'
 - en: 'As an example, we downloaded the following code from [https://github.com/CSPF-Founder/JavaVulnerableLab](https://github.com/CSPF-Founder/JavaVulnerableLab)
     into our own project. We added `.gitlab-ci.yml` to run a scan. When the code was
     pushed, the workflow started and prepared for the scan:'
+  id: totrans-105
   prefs: []
   type: TYPE_NORMAL
+  zh: 作为示例，我们从 [https://github.com/CSPF-Founder/JavaVulnerableLab](https://github.com/CSPF-Founder/JavaVulnerableLab)
+    下载了以下代码到我们的项目中。我们添加了 `.gitlab-ci.yml` 文件来运行扫描。当代码被推送时，工作流开始并为扫描做准备：
 - en: '[PRE9]'
+  id: totrans-106
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE9]'
 - en: 'In the next stage, the repository containing the code to be scanned is cloned,
     shown as follows:'
+  id: totrans-107
   prefs: []
   type: TYPE_NORMAL
+  zh: 在下一阶段，将克隆包含待扫描代码的仓库，如下所示：
 - en: '[PRE10]'
+  id: totrans-108
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE10]'
 - en: 'In the next step, the run tries to get a specific Docker image for the scan.
     It will not find that locally and will instead try to get it from `gitlab.org`,
     as follows:'
+  id: totrans-109
   prefs: []
   type: TYPE_NORMAL
+  zh: 在下一步中，执行将尝试获取特定的 Docker 镜像进行扫描。如果在本地找不到，它将尝试从 `gitlab.org` 获取，如下所示：
 - en: '[PRE11]'
+  id: totrans-110
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE11]'
 - en: 'After successfully downloading the image, it will start the scan, as follows:'
+  id: totrans-111
   prefs: []
   type: TYPE_NORMAL
+  zh: 成功下载镜像后，它将开始扫描，如下所示：
 - en: '[PRE12]'
+  id: totrans-112
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE12]'
 - en: 'After 10 minutes, the results should be as follows:'
+  id: totrans-113
   prefs: []
   type: TYPE_NORMAL
+  zh: 10 分钟后，结果应如下所示：
 - en: '[PRE13]'
+  id: totrans-114
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE13]'
 - en: 'The scan will report on which plugin or module can be use (in other words,
     it checks project compatibility), as follows:'
+  id: totrans-115
   prefs: []
   type: TYPE_NORMAL
+  zh: 扫描将报告哪些插件或模块可以使用（换句话说，它检查项目兼容性），如下所示：
 - en: '[PRE14]'
+  id: totrans-116
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE14]'
 - en: 'You should now see a report of the findings, as in the following example (which
     is not entirely complete):'
+  id: totrans-117
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在你应该能看到报告中的发现，如下例所示（这并不是完全的）：
 - en: '[PRE15]'
+  id: totrans-118
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE15]'
 - en: 'As you can see in the following snippet, a lot of security issues were discovered:'
+  id: totrans-119
   prefs: []
   type: TYPE_NORMAL
+  zh: 如下片段所示，你可以看到发现了很多安全问题：
 - en: '[PRE16]'
+  id: totrans-120
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE16]'
 - en: The scan finally finishes by uploading the report.
+  id: totrans-121
   prefs: []
   type: TYPE_NORMAL
+  zh: 扫描最终通过上传报告完成。
 - en: Essentially, SAST tries to analyze your code and applies plugins based on which
     code could be scanned. It will look for security hazards in your code. The scan
     is done in a special container delivered by GitLab. After scanning, a report is
     available.
+  id: totrans-122
   prefs: []
   type: TYPE_NORMAL
+  zh: 本质上，SAST 试图分析你的代码，并根据哪些代码可以被扫描来应用插件。它会查找代码中的安全隐患。扫描在 GitLab 提供的一个特殊容器中进行。扫描完成后，会生成报告。
 - en: Dynamic Application Security Testing
+  id: totrans-123
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 动态应用安全测试
 - en: '**Dynamic Application Security Testing** (**DAST**) runs PEN tests like scans
     of your application.'
+  id: totrans-124
   prefs: []
   type: TYPE_NORMAL
+  zh: '**动态应用安全测试**（**DAST**）运行像你的应用程序扫描的 PEN 测试。'
 - en: The test uses OWASP ZAProxy ([https://github.com/zaproxy/zaproxy](https://github.com/zaproxy/zaproxy))
     to scan a running instance in your web application. It runs a passive scan, which
     means it only tries to discover your application by exploring links, will not
     find links created dynamically, and will not attack your application actively.
+  id: totrans-125
   prefs: []
   type: TYPE_NORMAL
+  zh: 该测试使用 OWASP ZAProxy ([https://github.com/zaproxy/zaproxy](https://github.com/zaproxy/zaproxy))
+    扫描您的 web 应用程序中运行的实例。它执行的是被动扫描，这意味着它仅通过探索链接来发现您的应用程序，无法发现动态创建的链接，也不会主动攻击您的应用程序。
 - en: Before GitLab 12.0, this scan also used the Docker-in-Docker mechanism, but
     now it just retrieves and runs a container and the test. This means the image
     is cached on GitLab runners, and after retrieving the image for the first time,
     the security test will run faster.
+  id: totrans-126
   prefs: []
   type: TYPE_NORMAL
+  zh: 在 GitLab 12.0 之前，这个扫描也使用了 Docker-in-Docker 机制，但现在它只是检索并运行一个容器和测试。这意味着镜像被缓存到
+    GitLab 运行器上，第一次检索镜像后，安全测试将更快地运行。
 - en: 'As with SAST, you control how scanning happens through the `.gitlab-ci.yml`
     file, as follows:'
+  id: totrans-127
   prefs: []
   type: TYPE_NORMAL
+  zh: 与 SAST 一样，您通过 `.gitlab-ci.yml` 文件来控制扫描方式，具体如下：
 - en: '[PRE17]'
+  id: totrans-128
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE17]'
 - en: When you push code to the repository, the DAST scan will start preparing, as
     shown in the following snippet. First, it will try to find the ZAProxy Docker
     container and pull it.
+  id: totrans-129
   prefs: []
   type: TYPE_NORMAL
+  zh: 当您将代码推送到代码库时，DAST 扫描将开始准备，如下所示。首先，它会尝试查找 ZAProxy Docker 容器并拉取它。
 - en: '[PRE18]'
+  id: totrans-130
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE18]'
 - en: 'The scan will start as follows:'
+  id: totrans-131
   prefs: []
   type: TYPE_NORMAL
+  zh: 扫描将按如下方式开始：
 - en: '[PRE19]'
+  id: totrans-132
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE19]'
 - en: 'It will try to scan the whole website, as shown in the following example:'
+  id: totrans-133
   prefs: []
   type: TYPE_NORMAL
+  zh: 它会尝试扫描整个网站，如下例所示：
 - en: '[PRE20]'
+  id: totrans-134
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE20]'
 - en: 'It will then report vulnerabilities immediately, as shown in the following
     snippet:'
+  id: totrans-135
   prefs: []
   type: TYPE_NORMAL
+  zh: 然后它会立即报告漏洞，如下所示：
 - en: '[PRE21]'
+  id: totrans-136
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE21]'
 - en: 'After scanning, the report is created and uploaded as an artifact, as follows:'
+  id: totrans-137
   prefs: []
   type: TYPE_NORMAL
+  zh: 扫描完成后，报告将被创建并作为工件上传，如下所示：
 - en: '[PRE22]'
+  id: totrans-138
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE22]'
 - en: As you can see from the preceding examples, by utilizing GitLab Runners with
     Docker, it is very easy to start a dynamic security scan.
+  id: totrans-139
   prefs: []
   type: TYPE_NORMAL
+  zh: 从前面的示例可以看到，通过利用 GitLab Runners 和 Docker，启动动态安全扫描非常简单。
 - en: Dependency checking
+  id: totrans-140
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 依赖项检查
 - en: Known vulnerabilities in third-party components or dependencies are very common.
     They could even be part of the OWASP Top 10 List of Using Components with Known
     Vulnerabilities. The OWASP Web Malware Scanner (see [https://www.owasp.org](https://www.owasp.org))
     is a malware scanner for web applications. It can be used to scan a web application
     by using signatures from a community build and a managed database. It works by
     testing each file of the web application for known signatures of malware.
+  id: totrans-141
   prefs: []
   type: TYPE_NORMAL
+  zh: 第三方组件或依赖项中的已知漏洞非常常见。它们甚至可能是 OWASP Top 10 中的“使用已知漏洞的组件”之一。OWASP Web 恶意软件扫描器（见
+    [https://www.owasp.org](https://www.owasp.org)）是一个用于 web 应用程序的恶意软件扫描器。它可以使用社区构建的签名和管理的数据库来扫描
+    web 应用程序。它通过测试 web 应用程序的每个文件，查找已知的恶意软件签名来工作。
 - en: These known vulnerable components should be identified at an early development
     stage. It is also good practice to perform vulnerability scanning of the dependency
     components not only in the development stage but also in the production stage
     on a regular basis.
+  id: totrans-142
   prefs: []
   type: TYPE_NORMAL
+  zh: 这些已知的易受攻击组件应在早期开发阶段识别出来。定期在生产阶段进行依赖组件的漏洞扫描也是一种良好的实践，不仅仅是在开发阶段。
 - en: 'Again, the dependency scan in your GitLab workflow is controlled through the
     `.gitlab-ci.yml` file. It also uses the Docker-in-Docker technique, as follows:'
+  id: totrans-143
   prefs: []
   type: TYPE_NORMAL
+  zh: 同样，GitLab 工作流中的依赖项扫描是通过 `.gitlab-ci.yml` 文件来控制的。它也使用 Docker-in-Docker 技术，如下所示：
 - en: '[PRE23]'
+  id: totrans-144
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE23]'
 - en: 'For this test, we used the same code ([https://github.com/CSPF-Founder/JavaVulnerableLab](https://github.com/CSPF-Founder/JavaVulnerableLab))
     as we did in the SAST scan to show our results. Here, you can see the job as it
     prepares after being pushed some new code. It should pull the `stable-dind` image,
     as follows:'
+  id: totrans-145
   prefs: []
   type: TYPE_NORMAL
+  zh: 对于本次测试，我们使用了与 SAST 扫描中相同的代码（[https://github.com/CSPF-Founder/JavaVulnerableLab](https://github.com/CSPF-Founder/JavaVulnerableLab)）来展示我们的结果。在这里，您可以看到在推送了一些新代码后，作业正在准备中。它应该会拉取
+    `stable-dind` 镜像，如下所示：
 - en: '[PRE24]'
+  id: totrans-146
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE24]'
 - en: 'Running the image will execute the dependency scan, as shown in the following
     snippets:'
+  id: totrans-147
   prefs: []
   type: TYPE_NORMAL
+  zh: 运行镜像将执行依赖项扫描，如下所示：
 - en: '[PRE25]'
+  id: totrans-148
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE25]'
 - en: The technology used was formerly called Gemnasium. It was bought by GitLab in
     2018, as you can see in a statement at** [https://docs.gitlab.com/ee/user/project/import/gemnasium.html](https://docs.gitlab.com/ee/user/project/import/gemnasium.html).**
+  id: totrans-149
   prefs: []
   type: TYPE_NORMAL
+  zh: 使用的技术以前叫做 Gemnasium。它在 2018 年被 GitLab 收购，您可以在** [https://docs.gitlab.com/ee/user/project/import/gemnasium.html](https://docs.gitlab.com/ee/user/project/import/gemnasium.html)**中的声明中看到。
 - en: '[PRE26]'
+  id: totrans-150
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE26]'
 - en: 'As you can see in the following code, some vulnerabilities in the MySQL library
     used were found:'
+  id: totrans-151
   prefs: []
   type: TYPE_NORMAL
+  zh: 如下代码所示，发现了所使用的 MySQL 库中的一些漏洞：
 - en: '[PRE27]'
+  id: totrans-152
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE27]'
 - en: The job ends by uploading the scan report.
+  id: totrans-153
   prefs: []
   type: TYPE_NORMAL
+  zh: 任务通过上传扫描报告来结束。
 - en: Just like the other scans, dependency checking uses the same technique of running
     a specific scan program from inside a Docker container. In this case, the scan
     program in use is Gemnasium, which was taken over by GitLab last year. If a problematic
     dependency is found, it is displayed in the output and in the resulting report.
+  id: totrans-154
   prefs: []
   type: TYPE_NORMAL
+  zh: 就像其他扫描一样，依赖检查也使用相同的技术，在 Docker 容器内运行特定的扫描程序。在这种情况下，使用的扫描程序是 Gemnasium，它在去年被
+    GitLab 收购。如果发现有问题的依赖项，它将在输出中显示并出现在结果报告中。
 - en: 'A nice feature of GitLab 12.0 is that after your conducted your dependency
     scan, the resulting list of dependencies is saved in your project. This is a much
     wanted feature by security/compliance teams to keep track of what dependencies
     are used throughout the enterprise:'
+  id: totrans-155
   prefs: []
   type: TYPE_NORMAL
+  zh: GitLab 12.0 的一个不错的功能是，在你进行依赖扫描后，结果中列出的依赖项会被保存到你的项目中。这是安全/合规团队非常希望拥有的功能，能够跟踪整个企业中使用的依赖项：
 - en: '![](img/a03f0cc3-c028-4476-8ae9-02a52a7fed21.png)'
+  id: totrans-156
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/a03f0cc3-c028-4476-8ae9-02a52a7fed21.png)'
 - en: Summary
+  id: totrans-157
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 总结
 - en: In this chapter, we discussed the use of monitoring in the workflow, and the
     possibility to immediately integrate security monitoring. GitLab provides out-of-the-box
     opportunities to set up such things. In this chapter, we also looked at Prometheus
     and ways to write custom monitoring for it. In the next chapter, we will discuss
     integration options for GitLab, in case you need to connect to other tools.
+  id: totrans-158
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本章中，我们讨论了在工作流中使用监控的情况，以及如何立即集成安全监控。GitLab 提供了现成的机会来设置这些功能。在本章中，我们还了解了 Prometheus
+    及其自定义监控的编写方式。在下一章中，我们将讨论 GitLab 的集成选项，以便在需要连接其他工具时使用。
 - en: Questions
+  id: totrans-159
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 问题
 - en: On which system is Prometheus inspired?
+  id: totrans-160
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: Prometheus 是受哪个系统启发的？
 - en: What is the name of the Prometheus clients?
+  id: totrans-161
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: Prometheus 客户端的名称是什么？
 - en: On what path is the GitLab Metrics Exporter normally found?
+  id: totrans-162
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: GitLab Metrics Exporter 通常位于哪个路径？
 - en: What language was used for the GitLab Monitor Exporter?
+  id: totrans-163
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: GitLab 监控导出器使用了什么语言？
 - en: How do you enable the built-in Prometheus server in the omnibus package?
+  id: totrans-164
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 如何在 omnibus 包中启用内置的 Prometheus 服务器？
 - en: What does SAST mean?
+  id: totrans-165
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: SAST 是什么意思？
 - en: What does DAST mean?
+  id: totrans-166
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: DAST 是什么意思？
 - en: Which file is used to control security testing?
+  id: totrans-167
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 哪个文件用于控制安全测试？
 - en: Further reading
+  id: totrans-168
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 进一步阅读
 - en: 'Prometheus site: [https://prometheus.io](https://prometheus.io)'
+  id: totrans-169
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: Prometheus 网站：[https://prometheus.io](https://prometheus.io)
 - en: 'OWASP scan: [https://www.owasp.org](https://www.owasp.org)'
+  id: totrans-170
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: OWASP 扫描：[https://www.owasp.org](https://www.owasp.org)
 - en: '*Practical Site Reliability Engineering*, by *Pethuru Raj Chelliah*, *Shreyash
     Naithani*, and *Shailender Singh*: [https://www.packtpub.com/virtualization-and-cloud/practical-site-reliability-engineering](https://www.packtpub.com/virtualization-and-cloud/practical-site-reliability-engineering)'
+  id: totrans-171
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '*实用站点可靠性工程*，作者：*Pethuru Raj Chelliah*，*Shreyash Naithani*，和 *Shailender Singh*：[https://www.packtpub.com/virtualization-and-cloud/practical-site-reliability-engineering](https://www.packtpub.com/virtualization-and-cloud/practical-site-reliability-engineering)'
 - en: '*Hands-On Security in DevOps*, by *Tony Hsu*: [https://www.packtpub.com/in/networking-and-servers/hands-security-devops](https://www.packtpub.com/in/networking-and-servers/hands-security-devops)'
+  id: totrans-172
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '*DevOps 安全实战*，作者：*Tony Hsu*：[https://www.packtpub.com/in/networking-and-servers/hands-security-devops](https://www.packtpub.com/in/networking-and-servers/hands-security-devops)'
 - en: '*Industrial Internet Application Development*, by *Alena Traukina*, *Jayant
     Thomas*, *Prashant Tyagi*, and *Kishore Reddipalli*: [https://www.packtpub.com/in/application-development/industrial-internet-application-development](https://www.packtpub.com/in/application-development/industrial-internet-application-development)'
+  id: totrans-173
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '*工业互联网应用开发*，作者：*Alena Traukina*，*Jayant Thomas*，*Prashant Tyagi*，和 *Kishore
+    Reddipalli*：[https://www.packtpub.com/in/application-development/industrial-internet-application-development](https://www.packtpub.com/in/application-development/industrial-internet-application-development)'

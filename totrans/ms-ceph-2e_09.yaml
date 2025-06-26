@@ -1,34 +1,49 @@
 - en: Distributed Computation with Ceph RADOS Classes
+  id: totrans-0
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 使用 Ceph RADOS 类进行分布式计算
 - en: An often-overlooked feature of Ceph is the ability to load custom code directly
     into OSD, which can then be executed from within a librados application. This
     allows you to take advantage of the large distributed scale of Ceph to not only
     provide high-performance scale-out storage, but also to distribute computational
     tasks over OSDs to achieve mass parallel computing. This ability is realized by
     dynamically loading in RADOS classes to each OSD.
+  id: totrans-1
   prefs: []
   type: TYPE_NORMAL
+  zh: Ceph 的一个常被忽视的功能是将自定义代码直接加载到 OSD 中，然后可以在 librados 应用程序中执行。这使得您能够利用 Ceph 的大规模分布式特性，不仅提供高性能的扩展存储，还能将计算任务分配到
+    OSD 上，从而实现大规模并行计算。这一能力通过动态加载 RADOS 类到每个 OSD 来实现。
 - en: 'In this chapter, we will cover the following topics:'
+  id: totrans-2
   prefs: []
   type: TYPE_NORMAL
+  zh: 本章将涵盖以下主题：
 - en: Example applications and the benefits of using RADOS classes
+  id: totrans-3
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 示例应用程序及使用 RADOS 类的好处
 - en: Writing a simple RADOS class in Lua
+  id: totrans-4
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 编写简单的 Lua RADOS 类
 - en: Writing a RADOS class that simulates distributed computing
+  id: totrans-5
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 编写一个模拟分布式计算的 RADOS 类
 - en: Example applications and the benefits of using RADOS classes
+  id: totrans-6
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 示例应用程序及使用 RADOS 类的好处
 - en: As mentioned earlier, with RADOS classes, code is executed directly inside the
     OSD code base and so can harness the combined power of all of the OSD nodes. With
     a typical client application approach, where the client would have to read the
@@ -38,8 +53,12 @@
     power is much higher than that single client could provide. Offloading operations
     directly to the OSDs therefore enables a single client to dramatically increase
     its processing rate.
+  id: totrans-7
   prefs: []
   type: TYPE_NORMAL
+  zh: 如前所述，通过 RADOS 类，代码可以直接在 OSD 代码库内执行，从而利用所有 OSD 节点的集体计算能力。与典型的客户端应用程序方法不同，客户端需要从
+    Ceph 集群读取对象、对其进行计算，然后将其写回，这会带来大量的往返开销。使用 RADOS 类显著减少了与 OSD 之间的往返次数，而且可用的计算能力远高于单个客户端所能提供的。因此，将操作直接卸载到
+    OSD 上，可以使单个客户端显著提高处理速度。
 - en: A simple example of where RADOS classes could be used is where you need to calculate
     a hash of every object in a RADOS pool and store each object's hash as an attribute.
     Having a client perform this would highlight the bottlenecks and extra latency
@@ -47,12 +66,17 @@
     With a RADOS class that contains the required code to read the object, calculate
     the hash, and store it as an attribute, all that the client would need to do is
     send the command to OSD to execute the RADOS class.
+  id: totrans-8
   prefs: []
   type: TYPE_NORMAL
+  zh: 一个简单的使用 RADOS 类的例子是在需要计算 RADOS 池中每个对象的哈希值并将每个对象的哈希值作为属性存储时。让客户端执行此操作将突出显示由于客户端从远程集群执行这些操作而带来的瓶颈和额外延迟。而使用包含所需代码的
+    RADOS 类来读取对象、计算哈希并将其作为属性存储，客户端只需要向 OSD 发送执行该 RADOS 类的命令。
 - en: Writing a simple RADOS class in Lua
+  id: totrans-9
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 编写简单的 Lua RADOS 类
 - en: One of the default RADOS classes in Ceph from the Kraken release onward is one
     that can run Lua scripts. The Lua script is dynamically passed to the Lua RADOS
     object class, which then executes the contents of the script. The scripts are
@@ -61,62 +85,96 @@
     compiled before they can be used, it also limits the complexity of what the Lua
     scripts can accomplish. As such, thought should be given as to what method is
     appropriate for the task you wish to accomplish.
+  id: totrans-10
   prefs: []
   type: TYPE_NORMAL
+  zh: 从 Kraken 版本开始，Ceph 中的默认 RADOS 类之一是能够运行 Lua 脚本的类。Lua 脚本动态地传递给 Lua RADOS 对象类，然后该类执行脚本的内容。脚本通常以
+    JSON 格式的字符串传递给对象类。虽然这相较于传统的 RADOS 对象类（需要在使用前进行编译）具有优势，但它也限制了 Lua 脚本的功能复杂性。因此，在选择适合任务的方式时，应该考虑该方法是否合适。
 - en: The following Python code example demonstrates how to create and pass a Lua
     script to be executed on an OSD. The Lua script reads the contents of the specified
     object and returns the string of text back in uppercase—all processing is done
     on the remote OSD, which holds the object; the original object contents are never
     sent to the client.
+  id: totrans-11
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下 Python 代码示例演示了如何创建并传递 Lua 脚本，供 OSD 执行。Lua 脚本读取指定对象的内容，并将文本字符串以大写形式返回——所有处理都在持有对象的远程
+    OSD 上完成；原始对象内容不会发送到客户端。
 - en: 'Place the following into a file named `rados_lua.py`:'
+  id: totrans-12
   prefs: []
   type: TYPE_NORMAL
+  zh: 将以下内容放入名为 `rados_lua.py` 的文件中：
 - en: '[PRE0]'
+  id: totrans-13
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE0]'
 - en: 'Let''s now create a test object with all lowercase characters:'
+  id: totrans-14
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，让我们创建一个包含所有小写字母的测试对象：
 - en: '[PRE1]'
+  id: totrans-15
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE1]'
 - en: 'The Lua object class, by default, is not allowed to be called by OSDs; we need
     to add the following to all the OSDs in their `ceph.conf`:'
+  id: totrans-16
   prefs: []
   type: TYPE_NORMAL
+  zh: 默认情况下，Lua 对象类不允许 OSD 调用；我们需要在所有 OSD 的 `ceph.conf` 中添加以下内容：
 - en: '[PRE2]'
+  id: totrans-17
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE2]'
 - en: 'And now, run our Python librados application:'
+  id: totrans-18
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，运行我们的 Python librados 应用程序：
 - en: '[PRE3]'
+  id: totrans-19
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE3]'
 - en: 'The preceding command gives the following output:'
+  id: totrans-20
   prefs: []
   type: TYPE_NORMAL
+  zh: 上述命令将产生以下输出：
 - en: '![](img/a0adf336-56bf-4d42-ba72-f1ff32e6d768.png)'
+  id: totrans-21
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/a0adf336-56bf-4d42-ba72-f1ff32e6d768.png)'
 - en: You should see that the text from our object has been converted all into uppercase.
     You can see from the Python code earlier that we are not doing any of the conversion
     in the local Python code and it's all being done remotely on OSD.
+  id: totrans-22
   prefs: []
   type: TYPE_NORMAL
+  zh: 你应该会看到我们对象中的文本已经转换成了全大写。你可以从前面的 Python 代码看到，我们并没有在本地 Python 代码中做任何转换，所有转换操作都在远程的
+    OSD 上完成。
 - en: Writing a RADOS class that simulates distributed computing
+  id: totrans-23
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 编写一个模拟分布式计算的 RADOS 类
 - en: As mentioned in the example given earlier, although using the Lua object class
     reduces the complexity to use RADOS object classes, there is a limit to what you
     can currently achieve. In order to write a class that is capable of performing
     more advanced processing, we need to fall back to writing the class in C. We will
     then need to compile the new class in the Ceph source.
+  id: totrans-24
   prefs: []
   type: TYPE_NORMAL
+  zh: 如前面示例中提到的，尽管使用 Lua 对象类简化了 RADOS 对象类的使用，但当前仍然存在一些限制。为了编写一个能够执行更高级处理的类，我们需要回退到使用
+    C 语言编写类。然后，我们需要在 Ceph 源代码中编译这个新类。
 - en: To demonstrate this, we will write a new RADOS object class that will calculate
     the MD5 hash of the specified object and then store it as an attribute of the
     object. This process will be repeated 1,000 times to simulate a busy environment
@@ -127,279 +185,434 @@
     client-side, versus doing it directly on the OSD via a RADOS class. It will also
     serve as a good foundation to enable understanding on how to build more advanced
     applications.
+  id: totrans-25
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了演示这一点，我们将编写一个新的 RADOS 对象类，计算指定对象的 MD5 哈希值，然后将其作为对象的一个属性存储。此过程将重复 1,000 次，以模拟一个繁忙的环境，并且使得运行时间更容易测量。然后，我们将比较通过对象类执行此操作与在客户端计算
+    MD5 哈希值的速度。尽管这仍然是一个相对基础的任务，但它将使我们能够生成一个可控且可重复的场景，并比较客户端与直接通过 RADOS 类在 OSD 上执行任务的速度。它还将为我们提供一个良好的基础，帮助我们理解如何构建更复杂的应用程序。
 - en: Preparing the build environment
+  id: totrans-26
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 准备构建环境
 - en: 'Use the following command to clone the Ceph Git repository:'
+  id: totrans-27
   prefs: []
   type: TYPE_NORMAL
+  zh: 使用以下命令克隆 Ceph Git 仓库：
 - en: '[PRE4]'
+  id: totrans-28
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE4]'
 - en: 'The preceding command will give the following output:'
+  id: totrans-29
   prefs: []
   type: TYPE_NORMAL
+  zh: 上述命令将产生以下输出：
 - en: '![](img/69d09e92-d82c-46e7-b97d-43171512d2b1.png)'
+  id: totrans-30
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/69d09e92-d82c-46e7-b97d-43171512d2b1.png)'
 - en: Once we have cloned the Ceph Git repository, we need to edit the `CMakeLists.txt`
     file and add in a section for our new class that we are going to write.
+  id: totrans-31
   prefs: []
   type: TYPE_NORMAL
+  zh: 一旦我们克隆了 Ceph Git 仓库，我们需要编辑 `CMakeLists.txt` 文件，并为我们将要编写的新类添加一个部分。
 - en: 'Edit the following file in the source tree:'
+  id: totrans-32
   prefs: []
   type: TYPE_NORMAL
+  zh: 编辑源代码树中的以下文件：
 - en: '[PRE5]'
+  id: totrans-33
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE5]'
 - en: 'Also, place the following in the file:'
+  id: totrans-34
   prefs: []
   type: TYPE_NORMAL
+  zh: 另外，将以下内容放入文件中：
 - en: '[PRE6]'
+  id: totrans-35
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE6]'
 - en: 'Once the `cmakelist.txt` file is updated, we can get `cmake` to make the build
     environment by running the following command:'
+  id: totrans-36
   prefs: []
   type: TYPE_NORMAL
+  zh: 一旦 `cmakelist.txt` 文件更新完成，我们可以通过运行以下命令来使用 `cmake` 构建环境：
 - en: '[PRE7]'
+  id: totrans-37
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE7]'
 - en: 'The preceding command will give the following output:'
+  id: totrans-38
   prefs: []
   type: TYPE_NORMAL
+  zh: 上述命令将产生以下输出：
 - en: '![](img/10128218-376d-47c2-abc9-edbf69ae4819.png)'
+  id: totrans-39
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/10128218-376d-47c2-abc9-edbf69ae4819.png)'
 - en: This will create a `build` directory in the source tree.
+  id: totrans-40
   prefs: []
   type: TYPE_NORMAL
+  zh: 这将会在源代码树中创建一个 `build` 目录。
 - en: 'In order for us to build the RADOS class, we need to install the required packages
     that contain the `make` command:'
+  id: totrans-41
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了构建 RADOS 类，我们需要安装包含 `make` 命令的所需软件包：
 - en: '[PRE8]'
+  id: totrans-42
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE8]'
 - en: There is also an `install-deps.sh` file in the Ceph source tree, which will
     install the remaining packages required when run.
+  id: totrans-43
   prefs: []
   type: TYPE_NORMAL
+  zh: Ceph 源代码树中还包含一个 `install-deps.sh` 文件，运行时会安装所需的其他软件包。
 - en: RADOS classes
+  id: totrans-44
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: RADOS 类
 - en: 'The following code sample is a RADOS class which, when executed, reads the
     object, calculates the MD5 hash, and then writes it as an attribute to the object
     without any client involvement. Each time this class is called, it repeats this
     operation 1,000 times locally to OSD and only notifies the client at the end of
     this processing. We have the following steps to perform:'
+  id: totrans-45
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下代码示例是一个RADOS类，当执行时，它读取对象，计算MD5哈希，然后将其作为属性写回该对象，而无需客户端参与。每次调用此类时，它都会在本地对OSD重复执行此操作1,000次，并且仅在处理结束时通知客户端。我们需要执行以下步骤：
 - en: 'Create the directory for our new RADOS class:'
+  id: totrans-46
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 创建我们新RADOS类的目录：
 - en: '[PRE9]'
+  id: totrans-47
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE9]'
 - en: 'Create the C++ source file:'
+  id: totrans-48
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 创建C++源文件：
 - en: '[PRE10]'
+  id: totrans-49
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE10]'
 - en: 'Place the following code in it:'
+  id: totrans-50
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 将以下代码放入其中：
 - en: '[PRE11]'
+  id: totrans-51
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE11]'
 - en: 'Change into the `build` directory created previously and create our new RADOS
     class using `make`:'
+  id: totrans-52
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 进入之前创建的`build`目录，并使用`make`创建我们的新RADOS类：
 - en: '[PRE12]'
+  id: totrans-53
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE12]'
 - en: 'The preceding commands will give the following output:'
+  id: totrans-54
   prefs: []
   type: TYPE_NORMAL
+  zh: 上述命令将给出以下输出：
 - en: '![](img/097bb01b-db8d-47b9-b498-9f685877d95c.png)'
+  id: totrans-55
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/097bb01b-db8d-47b9-b498-9f685877d95c.png)'
 - en: 'Copy our new class to the OSDs in our cluster:'
+  id: totrans-56
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 将我们的新类复制到集群中的OSD：
 - en: '[PRE13]'
+  id: totrans-57
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE13]'
 - en: 'The preceding command will give the following output:'
+  id: totrans-58
   prefs: []
   type: TYPE_NORMAL
+  zh: 上述命令将给出以下输出：
 - en: '![](img/65c7d0ca-a32d-4bb6-8239-bb1956684a1c.png)'
+  id: totrans-59
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/65c7d0ca-a32d-4bb6-8239-bb1956684a1c.png)'
 - en: 'Also, restart the OSD for it to load the class. You will now see in the Ceph
     OSD log that it is loading our new class:'
+  id: totrans-60
   prefs: []
   type: TYPE_NORMAL
+  zh: 此外，重启OSD以加载该类。现在你将在Ceph OSD日志中看到它正在加载我们的新类：
 - en: '![](img/c9fb391a-ee0e-46f1-a28f-74491e44a1b6.png)'
+  id: totrans-61
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/c9fb391a-ee0e-46f1-a28f-74491e44a1b6.png)'
 - en: This needs to be repeated for all OSD nodes in the cluster.
+  id: totrans-62
   prefs: []
   type: TYPE_NORMAL
+  zh: 这需要对集群中的所有OSD节点重复进行。
 - en: Client librados applications
+  id: totrans-63
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 客户端librados应用程序
 - en: As mentioned earlier, we will use two librados applications, one to calculate
     the MD5 hash directly on the client, and another to call our RADOS class and have
     it calculate the MD5 hash. The applications both need to be run from the monitor
     nodes in the test cluster, but can be compiled on any node and copied across if
     desired. For the purpose of this example, we will compile the applications directly
     on the monitor nodes.
+  id: totrans-64
   prefs: []
   type: TYPE_NORMAL
+  zh: 如前所述，我们将使用两个librados应用程序，一个直接在客户端计算MD5哈希，另一个调用我们的RADOS类并让其计算MD5哈希。这些应用程序都需要从测试集群中的监视器节点运行，但可以在任何节点上编译并在需要时复制过去。为了这个示例，我们将直接在监视器节点上编译这些应用程序。
 - en: 'Before we start, let''s make sure that the build environment is present on
     the monitor node:'
+  id: totrans-65
   prefs: []
   type: TYPE_NORMAL
+  zh: 在我们开始之前，让我们确保监视器节点上存在构建环境：
 - en: '[PRE14]'
+  id: totrans-66
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE14]'
 - en: Calculating MD5 on the client
+  id: totrans-67
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 在客户端计算MD5
 - en: The following code sample is the librados client-side application, which will
     read the object from the OSD, calculate the MD5 hash of the object on the client,
     and write it back as an attribute to the object. This is doing the calculation
     and storage in the same way as the RADOS class, with the only difference being
     the location of the processing.
+  id: totrans-68
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下代码示例是librados客户端应用程序，它将从OSD读取对象，在客户端计算该对象的MD5哈希，并将其作为属性写回该对象。这与RADOS类中的计算和存储方式相同，唯一的区别是处理的位置不同。
 - en: 'Create a new file named `rados_md5.cc` and incorporate the following in it:'
+  id: totrans-69
   prefs: []
   type: TYPE_NORMAL
+  zh: 创建一个名为`rados_md5.cc`的新文件，并将以下内容合并到其中：
 - en: '[PRE15]'
+  id: totrans-70
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE15]'
 - en: Calculating MD5 on the OSD via the RADOS class
+  id: totrans-71
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 通过RADOS类在OSD上计算MD5
 - en: Finally, the last code sample is the librados application, which instructs OSD
     to calculate the MD5 hash locally without transferring any data to or from the
     client. You will note that the code given later has no librados read or write
     statements and relies purely on the `exec` function to trigger the MD5 hash creation.
+  id: totrans-72
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后，最后一个代码示例是librados应用程序，它指示OSD在本地计算MD5哈希，而不将任何数据传输到客户端或从客户端传输。你会注意到，稍后的代码中没有librados的读写语句，它完全依赖于`exec`函数来触发MD5哈希的创建。
 - en: 'Create a new file named `rados_class_md5.cc` and place the following in it:'
+  id: totrans-73
   prefs: []
   type: TYPE_NORMAL
+  zh: 创建一个名为`rados_class_md5.cc`的新文件，并将以下内容放入其中：
 - en: '[PRE16]'
+  id: totrans-74
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE16]'
 - en: 'We can now compile both applications:'
+  id: totrans-75
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们现在可以编译这两个应用程序：
 - en: '![](img/27f1e01a-244f-4c54-a5c4-4383f2cdc6fc.png)'
+  id: totrans-76
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/27f1e01a-244f-4c54-a5c4-4383f2cdc6fc.png)'
 - en: If the applications compile successfully, there will be no output.
+  id: totrans-77
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果应用程序成功编译，将不会有任何输出。
 - en: Testing
+  id: totrans-78
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 测试
 - en: 'We will run the two librados applications using the standard Linux `time` utility
     to measure how long each run takes:'
+  id: totrans-79
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们将使用标准的Linux `time`工具运行这两个librados应用程序，以测量每次运行所需的时间：
 - en: '[PRE17]'
+  id: totrans-80
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE17]'
 - en: 'The preceding command will give the following output:'
+  id: totrans-81
   prefs: []
   type: TYPE_NORMAL
+  zh: 上述命令将给出以下输出：
 - en: '![](img/968838b3-03ba-4f0f-b610-621c8175d5c2.png)'
+  id: totrans-82
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/968838b3-03ba-4f0f-b610-621c8175d5c2.png)'
 - en: 'Let''s make sure that the attribute was actually created:'
+  id: totrans-83
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们确保属性确实已创建：
 - en: '[PRE18]'
+  id: totrans-84
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE18]'
 - en: 'The preceding command will give the following output:'
+  id: totrans-85
   prefs: []
   type: TYPE_NORMAL
+  zh: 上述命令将会输出以下内容：
 - en: '![](img/4a84172d-0064-43f6-b64b-67c89c384e8e.png)'
+  id: totrans-86
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/4a84172d-0064-43f6-b64b-67c89c384e8e.png)'
 - en: 'Let''s delete the object attribute, so we can be certain that the RADOS class
     correctly creates it when it runs:'
+  id: totrans-87
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们删除对象属性，以便我们可以确认 RADOS 类在运行时确实创建了该属性：
 - en: '[PRE19]'
+  id: totrans-88
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE19]'
 - en: 'And now, run the application that performs the MD5 calculation via the RADOS
     class:'
+  id: totrans-89
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，运行通过 RADOS 类执行 MD5 计算的应用程序：
 - en: '[PRE20]'
+  id: totrans-90
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE20]'
 - en: 'The preceding command will give the following output:'
+  id: totrans-91
   prefs: []
   type: TYPE_NORMAL
+  zh: 上述命令将会输出以下内容：
 - en: '![](img/9e10f780-bbd9-42de-a0b8-cc195c17b215.png)'
+  id: totrans-92
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/9e10f780-bbd9-42de-a0b8-cc195c17b215.png)'
 - en: As you can see, using the RADOS class method is a lot faster, in fact, almost
     two orders of magnitude faster.
+  id: totrans-93
   prefs: []
   type: TYPE_NORMAL
+  zh: 如您所见，使用 RADOS 类方法要快得多，实际上，速度几乎提高了两个数量级。
 - en: 'However, let''s also confirm that the attribute was created and that the code
     ran 1,000 times:'
+  id: totrans-94
   prefs: []
   type: TYPE_NORMAL
+  zh: 然而，我们也需要确认该属性已被创建，并且代码确实运行了 1,000 次：
 - en: '[PRE21]'
+  id: totrans-95
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE21]'
 - en: 'The preceding command will give the following output:'
+  id: totrans-96
   prefs: []
   type: TYPE_NORMAL
+  zh: 上述命令将会输出以下内容：
 - en: '![](img/b22b796d-d358-49ba-a020-6338bcdfbb2d.png)'
+  id: totrans-97
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/b22b796d-d358-49ba-a020-6338bcdfbb2d.png)'
 - en: 'Due to the logging we inserted in the RADOS class, we can also check the OSD
     logs to confirm that the RADOS class did indeed run 1,000 times:'
+  id: totrans-98
   prefs: []
   type: TYPE_NORMAL
+  zh: 由于我们在 RADOS 类中插入了日志，我们还可以检查 OSD 日志，以确认 RADOS 类确实运行了 1,000 次：
 - en: '![](img/57ba3987-a567-471d-b4ac-8d4ef88a5e9f.png)'
+  id: totrans-99
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/57ba3987-a567-471d-b4ac-8d4ef88a5e9f.png)'
 - en: When repeating small tasks, the overhead of communication between the client
     and OSDs really adds up. By moving processing directly to OSD, we can eliminate
     this.
+  id: totrans-100
   prefs: []
   type: TYPE_NORMAL
+  zh: 在重复执行小任务时，客户端与 OSD 之间的通信开销会逐渐增加。通过将处理过程直接移至 OSD，我们可以消除这一问题。
 - en: RADOS class caveats
+  id: totrans-101
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: RADOS 类注意事项
 - en: Although we have seen the power that can be harnessed using Ceph's RADOS classes,
     it's important to note that this is achieved by calling your own customized code
     from deep inside OSDs. As a consequence, great care needs to be taken that your
@@ -409,12 +622,18 @@
     large-scale cluster operations, this has the ability to affect all OSDs in the
     cluster, so great care should be taken to ensure that error handling is done properly
     to avoid errors.
+  id: totrans-102
   prefs: []
   type: TYPE_NORMAL
+  zh: 尽管我们已经看到可以通过使用 Ceph 的 RADOS 类来利用强大的功能，但需要注意的是，这一切都是通过从 OSD 内部调用您自定义的代码实现的。因此，必须非常小心，确保您的
+    RADOS 类没有 bug。RADOS 类有能力修改 Ceph 集群中的任何数据，因此意外的数据损坏是很容易发生的。RADOS 类还可能导致 OSD 进程崩溃。如果该类在大规模集群操作中使用，可能会影响集群中的所有
+    OSD，因此必须确保错误处理得当，避免错误的发生。
 - en: Summary
+  id: totrans-103
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 总结
 - en: You should now have an understanding of what RADOS classes are and how they
     can be used to speed up processing by moving tasks directly to OSD. From building
     simple classes via Lua to developing classes in the Ceph source tree via C++,
@@ -422,29 +641,44 @@
     you are trying to solve. By building on this concept, there is nothing stopping
     you from creating a larger application that can take advantage of the scale-out
     nature of a Ceph cluster to provide large amounts of storage and compute resources.
+  id: totrans-104
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在您应该了解了什么是 RADOS 类，以及它们如何通过将任务直接移至 OSD 来加速处理。从通过 Lua 构建简单类，到通过 C++ 在 Ceph 源代码树中开发类，您现在应该具备了构建
+    RADOS 类以解决您所面临问题的知识。基于这个概念，您可以创建一个更大的应用程序，利用 Ceph 集群的横向扩展特性提供大量存储和计算资源。
 - en: In the next chapter, we will use some examples to explore the importance of
     monitoring in Ceph.
+  id: totrans-105
   prefs: []
   type: TYPE_NORMAL
+  zh: 在下一章中，我们将通过一些示例来探讨监控在 Ceph 中的重要性。
 - en: Questions
+  id: totrans-106
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 问题
 - en: What Ceph component are RADOS classes executed in?
+  id: totrans-107
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: RADOS 类在 Ceph 的哪个组件中执行？
 - en: What languages can RADOS classes be written in?
+  id: totrans-108
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: RADOS 类可以用什么语言编写？
 - en: What advantages do RADOS classes bring?
+  id: totrans-109
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: RADOS 类带来了什么优势？
 - en: What disadvantages do RADOS classes bring?
+  id: totrans-110
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: RADOS 类带来了什么缺点？

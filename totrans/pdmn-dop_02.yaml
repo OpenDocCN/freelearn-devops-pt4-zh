@@ -1,0 +1,1612 @@
+- en: '*Chapter 1*: Introduction to Container Technology'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '**Container technology** has old roots in operating system history. For example,
+    do you know that part of container technology was born back in the 1970s? Despite
+    their simple and intuitive approach, there are many concepts behind containers
+    that deserve a deeper analysis to fully grasp and appreciate how they made their
+    way in the IT industry.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We're going to explore this technology to better understand how it works under
+    the hood, the theory behind it, and its basic concepts. Knowing the mechanics
+    and the technology behind the tools will let you easily approach and learn the
+    whole technology's key concepts.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Then, we will also explore container technology's purpose and why it has spread
+    to every company today. Do you know that 50% of the world's organizations are
+    running half of their application base as containers in production nowadays?
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's dive into this great technology!
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we''re going to ask the following questions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: What are containers?
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Why do I need a container?
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Where do containers come from?
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Where are containers used today?
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This chapter does not require any technical prerequisites, so feel free to read
+    it without worrying about installing or setting up any kind of software on your
+    workstation!
+  prefs: []
+  type: TYPE_NORMAL
+- en: Anyway, if you are new to containers, you will find here many technical concepts
+    useful to understand the next chapters. We recommend going through it carefully
+    and coming back when needed. Previous knowledge of the Linux operating system
+    would be helpful in understanding the technical concepts covered in this book.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Book conventions
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In the following chapters, we will learn many new concepts with practical examples
+    that will require active interaction with a Linux shell environment. In the practical
+    examples, we will use the following conventions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: For any shell command that will be anticipated by the `$` character, we will
+    use a standard user (not root) for the Linux system.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: For any shell command that will be anticipated by the `#` character, we will
+    use the root user for the Linux system.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Any output or shell command that would be too long to display in a single line
+    for the code block will be interrupted with the `\` character, and then it will
+    continue to a new line.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: What are containers?
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This section describes the container technology from the ground up, beginning
+    from basic concepts such as processes, filesystems, system calls, the process
+    isolation up to container engines, and runtimes. The purpose of this section is
+    to describe how containers implement process isolation. We also describe what
+    differentiates containers from virtual machines and highlight the best use case
+    of both scenarios.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Before asking ourselves what a container is, we should answer another question:
+    what is a process?'
+  prefs: []
+  type: TYPE_NORMAL
+- en: According to *The Linux Programming Interface*, an enjoyable book by *Michael
+    Kerrisk*, a *process* is an instance of an executing program. A program is a file
+    holding information necessary to execute the process. A program can be dynamically
+    linked to external libraries, or it can be statically linked in the program itself
+    (the Go programming language uses this approach by default).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This leads us to an important concept: a process is executed in the machine
+    CPU and allocates a portion of memory containing program code and variables used
+    by the code itself. The process is instantiated in the machine''s user space and
+    its execution is orchestrated by the operating system kernel. When a process is
+    executed, it needs to access different machine resources such as I/O (disk, network,
+    terminals, and so on) or memory. When the process needs to access those resources,
+    it performs a system call into the kernel space (for example, to read a disk block
+    or send packets via the network interface).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The process indirectly interacts with the host disks using a filesystem, a multi-layer
+    storage abstraction, that facilitates the write and read access to files and directories.
+  prefs: []
+  type: TYPE_NORMAL
+- en: How many processes usually run in a machine? A lot. They are orchestrated by
+    the OS kernel with complex scheduling logics that make the processes behave like
+    they are running on a dedicated CPU core, while the same is shared among many
+    of them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The same program can instantiate many processes of its kind (for example, multiple
+    web server instances running on the same machine). Conflicts, such as many processes
+    trying to access the same network port, must be managed accordingly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Nothing prevents us from running a different version of the same program on
+    the host, assuming that system administrators will have the burden of managing
+    potential conflicts of binaries, libraries, and their dependencies. This could
+    become a complex task, which is not always easy to solve with common practices.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This brief introduction was necessary to set the context.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Containers are a simple and smart answer to the need of running isolated process
+    instances. We can safely affirm that containers are a form of application isolation
+    that works on many levels:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Filesystem isolation**: Containerized processes have a separated filesystem
+    view, and their programs are executed from the isolated filesystem itself.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Process ID isolation**: This is a containerized process run under an independent
+    set of **process IDs** (**PIDs**).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**User isolation**: **User IDs** (**UIDs**) and **group IDs** (**GIDs**) are
+    isolated to the container. A process'' UID and GID can be different inside a container
+    and run with a privileged UID or GID inside the container only.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Network isolation**: This kind of isolation relates to the host network resources,
+    such as network devices, IPv4 and IPv6 stacks, routing tables, and firewall rules.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**IPC isolation**: Containers provide isolation for host IPC resources, such
+    as POSIX message queues or System V IPC objects.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Resource usage isolation**: Containers rely on Linux **control groups** (**cgroups**)
+    to limit or monitor the usage of certain resources, such as CPU, memory, or disk.
+    We will discuss more about cgroups later in this chapter.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'From an adoption point of view, the main purpose of containers, or at least
+    the most common use case, is to run applications in isolated environments. To
+    better understand this concept, we can look at the following diagram:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 1.1 – Native applications versus containerized ones'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B17908_01_01.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 1.1 – Native applications versus containerized ones
+  prefs: []
+  type: TYPE_NORMAL
+- en: Applications running natively on a system that does not provide containerization
+    features share the same binaries and libraries, as well as the same kernel, filesystem,
+    network, and users. This could lead to many issues when an updated version of
+    an application is deployed, especially conflicting library issues or unsatisfied
+    dependencies.
+  prefs: []
+  type: TYPE_NORMAL
+- en: On other hand, containers offer a consistent layer of isolation for applications
+    and their related dependencies that ensures seamless coexistence on the same host.
+    A new deployment only consists of the execution of the new containerized version,
+    as it will not interact or conflict with the other containers or native applications.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Linux containers are enabled by different native kernel features, with the most
+    important being **Linux namespaces**. Namespaces abstract specific system resources
+    (notably, the ones described before, such as network, filesystem mount, users,
+    and so on) and make them appear as unique to the isolated process. In this way,
+    the process has the illusion of interacting with the host resource, for example,
+    the host filesystem, while an alternative and isolated version is being exposed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Currently, we have a total of eight kinds of namespaces:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**PID namespaces**: These isolate the process ID number in a separate space,
+    allowing processes in different PID namespaces to retain the same PID.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**User namespaces**: These isolate user and group IDs, root directory, keyrings,
+    and capabilities. This allows a process to have a privileged UID and GID inside
+    the container while simultaneously having unprivileged ones outside the namespace.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**UTS namespaces**: These allow the isolation of hostname and NIS domain name.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Network namespaces**: These allow isolation of networking system resources,
+    such as network devices, IPv4 and IPv6 protocol stacks, routing tables, firewall
+    rules, port numbers, and so on. Users can create virtual network devices called
+    **veth pairs** to build tunnels between network namespaces.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**IPC namespaces**: These isolate IPC resources such as System V IPC objects
+    and POSIX message queues. Objects created in an IPC namespace can be accessed
+    only by the processes that are members of the namespace. Processes use IPC to
+    exchange data, events, and messages in a client-server mechanism.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**cgroup namespaces**: These isolate cgroup directories, providing a virtualized
+    view of the process''s cgroups.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Mount namespaces**: These provide isolation of the mount point list that
+    is seen by the processes in the namespace.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Time namespaces**: These provide an isolated view of system time, letting
+    processes in the namespace run with a time offset against the host time.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Now's, let's move on to resource usage.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Resource usage with cgroups
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: cgroups are a native feature of the Linux kernel whose purpose is to organize
+    processes in a hierarchical tree and limit or monitor their resource usage.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The kernel cgroups interface, similar to what happens with `/proc`, is exposed
+    with a `cgroupfs` pseudo-filesystem. This filesystem is usually mounted under
+    `/sys/fs/cgroup` in the host.
+  prefs: []
+  type: TYPE_NORMAL
+- en: cgroups offer a series of controllers (also called subsystems) that can be used
+    for different purposes, such as limiting the CPU time share of a process, memory
+    usage, freeze and resume processes, and so on.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The organizational hierarchy of controllers has changed through time, and there
+    are currently two versions, V1 and V2\. In cgroups V1, different controllers could
+    be mounted against different hierarchies. Instead, cgroups V2 provide a unified
+    hierarchy of controllers, with processes residing in the leaf nodes of the tree.
+  prefs: []
+  type: TYPE_NORMAL
+- en: cgroups are used by containers to limit CPU or memory usage. For example, users
+    can limit CPU quota, which means limiting the number of microseconds the container
+    can use the CPU over a given period, or limit CPU shares, the weighted proportion
+    of CPU cycles for each container.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we have illustrated how process isolation works (both for namespaces
+    and resources), we can illustrate a few basic examples.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Running isolated processes
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: A useful fact to know is that GNU/Linux operating systems offer all the features
+    necessary to run a container manually. This result can be achieved by working
+    with a specific system call (notably `unshare()` and `clone()`) and utilities
+    such as the `unshare` command.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For example, to run a process, let''s say `/bin/sh`, in an isolated PID namespace,
+    users can rely on the `unshare` command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The result is the execution of a new shell process in an isolated PID namespace.
+    Users can try to monitor the process view and will get an output such as the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: Interestingly, the shell process of the preceding example is running with PID
+    1, which is correct, since it is the very first process running in the new isolated
+    namespace.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Anyway, the PID namespace will be the only one to be abstracted, while all
+    the other system resources still remain the original host ones. If we want to
+    add more isolation, for example on a network stack, we can add the `--net` flag
+    to the previous command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The result is a shell process isolated on both PID and network namespaces.
+    Users can inspect the network IP configuration and realize that the host native
+    devices are no longer directly seen by the unshared process:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The preceding examples are useful to understand a very important concept: containers
+    are strongly related to Linux native features. The OS provided a solid and complete
+    interface that helped container runtime development, and the capability to isolate
+    namespaces and resources was the key that unlocked containers adoption. The role
+    of the container runtime is to abstract the complexity of the underlying isolation
+    mechanisms, with the mount point isolation being probably the most crucial of
+    them. Therefore, it deserves a better explanation.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Isolating mounts
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: We have seen so far examples of unsharing that did not impact mount points and
+    the filesystem view from the process side. To gain the filesystem isolation that
+    prevents binary and library conflicts, users need to create another layer of abstraction
+    for the exposed mount points.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This result is achieved by leveraging mount namespaces and bind mounts. First
+    introduced in 2002 with the Linux kernel 2.4.19, mount namespaces isolate the
+    list of mount points seen by the process. Each mount namespace exposes a discrete
+    list of mount points, thus making processes in different namespaces aware of different
+    directory hierarchies.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With this technique, it is possible to expose to the executing process an alternative
+    directory tree that contains all the necessary binaries and libraries of choice.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Despite seeming a simple task, the management of a mount namespace is all but
+    straightforward and easy to master. For example, users should handle different
+    archive versions of directory trees from different distributions, extract them,
+    and bind mount on separate namespaces. We will see later that the first approaches
+    with containers in Linux followed this approach.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The success of containers is also bound to an innovative, multi-layered, copy-on-write
+    approach of managing the directory trees that introduced a simple and fast method
+    of copying, deploying, and using the tree necessary to run the container – container
+    images.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Container images to the rescue
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: We must thank Docker for the introduction of this smart method of storing data
+    for containers. Later, images would become an **Open Container Initiative** (**OCI**)
+    standard specification ([https://github.com/opencontainers/image-spec](https://github.com/opencontainers/image-spec)).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Images can be seen as a filesystem bundle that is downloaded (pulled) and unpacked
+    in the host before running the container for the first time.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Images are downloaded from repositories called `quay.io` or `docker.io`) and
+    private registries that can be executed in the customer private infrastructure,
+    on-premises, or in the cloud.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Images can be built by DevOps teams to fulfill special needs or embed artifacts
+    that must be deployed and executed on a host.
+  prefs: []
+  type: TYPE_NORMAL
+- en: During the image build, process developers can inject pre-built artifacts or
+    source code that can be compiled in the build container itself. To optimize image
+    size, it is possible to create multi-stage builds with a first stage that compiles
+    the source code using a base image with the necessary compilers and runtimes,
+    and a second stage where the built artifacts are injected into a minimal, lightweight
+    image, optimized for fast startup and minimal storage footprint.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The *recipe* of the build process is defined in a special text file called a
+    **Dockerfile**, which defines all the necessary steps to assemble the final image.
+  prefs: []
+  type: TYPE_NORMAL
+- en: After building them, users can push their own images on public or private registries
+    for later use or complex, orchestrated deployments.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following diagram summarizes the build workflow:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 1.2 – Image build workflow'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B17908_01_02.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 1.2 – Image build workflow
+  prefs: []
+  type: TYPE_NORMAL
+- en: We will cover the build topic more extensively later in this book.
+  prefs: []
+  type: TYPE_NORMAL
+- en: What makes a container image so special? The smart idea behind images is that
+    they can be considered as a packaging technology. When users build their own image
+    with all the binaries and dependencies installed in the OS directory tree, they
+    are effectively creating a self-consistent object that can be deployed everywhere
+    with no further software dependencies. From this point of view, container images
+    are an answer to the long-debated sentence, *It works on my machine*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Developer teams love them because they can be certain of the execution environment
+    of their applications, and operations teams love them because they simplify the
+    deployment process by removing the tedious task of maintaining and updating a
+    server's library dependencies.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Another smart feature of container images is their copy-on-write, multi-layered
+    approach. Instead of having a single bulk binary archive, an image is made up
+    of many `tar` archives called *blobs* or *layers*. Layers are composed together
+    using image metadata and squashed into a single filesystem view. This result can
+    be achieved in many ways, but the most common approach today is by using **union
+    filesystems**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**OverlayFS** ([https://www.kernel.org/doc/html/latest/filesystems/overlayfs.html](https://www.kernel.org/doc/html/latest/filesystems/overlayfs.html))
+    is the most used union filesystem nowadays. It is maintained in the kernel tree,
+    despite not being completely POSIX-compliant.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: According to kernel documentation, *"An overlay filesystem combines two filesystems
+    – an 'upper' filesystem and a 'lower' filesystem."* This means that it can combine
+    more directory trees and provide a unique, squashed view. The directories are
+    the layers and are referred to as `lowerdir` and `upperdir` to respectively define
+    the low-level directory and the one stacked on top of it. The unified view is
+    called *merged*. It supports up to 128 layers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: OverlayFS is not aware of the concept of container image; it is merely used
+    as a foundation technology to implement the multi-layered solution used by OCI
+    images.
+  prefs: []
+  type: TYPE_NORMAL
+- en: OCI images also implement the concept of **immutability**. The layers of an
+    image are all read-only and cannot be modified. The only way to change something
+    in the lower layers is to rebuild the image with appropriate changes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Immutability is an important pillar of the cloud computing approach. It simply
+    means that an infrastructure (such as an instance, container, or even complex
+    clusters) can only be replaced by a different version and not modified to achieve
+    the target deployment. Therefore, we usually do not change anything inside a running
+    container (for example, installing packages or updating config files manually),
+    even though it could be possible in some contexts. Rather, we replace its base
+    image with a new updated version. This also ensures that every copy of the running
+    containers stays in sync with others.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'When a container is executed, a new read/write thin layer is created on top
+    of the image. This layer is ephemeral, thus any changes on top of it will be lost
+    after the container is destroyed:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 1.3 – A container''s layers'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B17908_01_03.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 1.3 – A container's layers
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This leads to another important statement: we do not store anything inside
+    containers. Their only purpose is to offer a working and consistent runtime environment
+    for our applications. Data must be accessed externally, by using bind mounts inside
+    the container itself or network storage (such as **Network File System** (**NFS**),
+    **Simple Storage Service** (**S3**), **Internet Small Computer System Interface**
+    (**iSCSI**), and so on).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Containers' mount isolation and images layered design provide a consistent immutable
+    infrastructure, but more security restrictions are necessary to prevent processes
+    with malicious behaviors escape the container sandbox to steal the host's sensitive
+    information or use the host to attack other machines. The following subsection
+    introduces security considerations to show how container runtimes can limit those
+    behaviors.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Security considerations
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'From a security point of view, there is a hard truth to share: if a process
+    is running inside a container, it simply does not mean it is more secure than
+    others.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'A malicious attacker can still make its way through the host filesystem and
+    memory resources. To achieve better security isolation, additional features are
+    available:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Mandatory access control**: *SELinux* or *AppArmor* can be used to enforce
+    container isolation against the parent host. These subsystems, and their related
+    command-line utilities, use a policy-based approach to better isolate the running
+    processes in terms of filesystem and network access.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`0`), it is subject to permission checking based on the process credentials
+    (its effective UID). Those permissions, or privileges, are called capabilities
+    and can be enabled independently, assigning to an unprivileged process limited
+    privileged permissions to access specific resources. When running a container,
+    we can add or drop capabilities.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Secure Computing Mode** (**Seccomp**): This is a native kernel feature that
+    can be used to restrict the syscall that a process is able to make from user space
+    to kernel space. By identifying the strictly necessary privileges needed by a
+    process to run, administrators can apply seccomp profiles to limit the attack
+    surface.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Applying the preceding security features manually is not always easy and immediate,
+    as some of them require a shallow learning curve. Instruments that automate and
+    simplify (possibly in a declarative way) these security constraints provide a
+    high value.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We will discuss security topics in further detail later in this book.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Container engines and runtimes
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Despite being feasible and particularly useful from a learning point of view,
+    running and securing containers manually is an unreliable and complex approach.
+    It is too hard to reproduce and automate on production environments and can easily
+    lead to configuration drift among different hosts.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This is the reason container engines and runtimes were born – to help automate
+    the creation of a container and all the related tasks necessary that culminate
+    with a running container.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The two concepts are quite different and tend to be often confused, thus requiring
+    a clearance:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A **container engine** is a software tool that accepts and processes requests
+    from users to create a container with all the necessary arguments and parameters.
+    It can be seen as a sort of orchestrator, since it takes care of putting in place
+    all the necessary actions to have the container up and running; yet it is not
+    the effective executor of the container (the container runtime's role).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Engines usually solve the following problems:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Providing a command line and/or REST interface for user interaction
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Pulling and extracting container images (discussed later in this book)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Managing container mount point and bind-mounting the extracted image
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Handling container metadata
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Interacting with the container runtime
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We have already stated that when a new container is instantiated, a thin R/W
+    layer is created on top of the image; this task is achieved by the container engine,
+    which takes care of presenting a working stack of the merged directories to the
+    container runtime.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The container ecosystem offers a wide choice of container engines. **Docker**
+    is, without doubt, the most well-known (despite not being the first) engine implementation,
+    along with **Podman** (the core subject of this book), **CRI-O**, **rkt**, and
+    **LXD**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'A **container runtime** is a low-level piece of software used by container
+    engines to run containers in the host. The container runtime provides the following
+    functionalities:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Starting the containerized process in the target mount point (usually provided
+    by the container engine) with a set of custom metadata
+  prefs: []
+  type: TYPE_NORMAL
+- en: Managing the cgroups' resource allocation
+  prefs: []
+  type: TYPE_NORMAL
+- en: Managing mandatory access control policies (SELinux and AppArmor) and capabilities
+  prefs: []
+  type: TYPE_NORMAL
+- en: There are many container runtimes nowadays, and most of them implement the **OCI
+    runtime spec** reference ([https://github.com/opencontainers/runtime-spec](https://github.com/opencontainers/runtime-spec)).
+    This is an industry standard that defines how a runtime should behave and the
+    interface it should implement.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The most common OCI runtime is **runc**, used by most notable engines, along
+    with other implementations such as **crun**, **kata-containers**, **railcar**,
+    **rkt**, and **gVisor**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This modular approach lets container engines swap the container runtime as needed.
+    For example, when Fedora 33 came out, it introduced a new default cgroups hierarchy
+    called cgroups V2\. runc did not support cgroups V2 in the beginning, and Podman
+    simply swapped runc with another OCI-compatible container runtime (**crun**) that
+    was already compliant with the new hierarchy. Now that runc finally supports cgroups
+    V2, Podman will be able to safely use it again with no impact for the end user.
+  prefs: []
+  type: TYPE_NORMAL
+- en: After introducing container runtimes and engines, it's time for one of the most
+    debated and asked questions during container introductions – the difference between
+    containers and virtual machines.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Containers versus virtual machines
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Until now, we have talked about isolation achieved with native OS features and
+    enhanced with container engines and runtimes. Many users could be tricked into
+    thinking that containers are a form of virtualization.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There is nothing farther from the truth; containers are not virtual machines.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'So, what is the main difference between a container and a virtual machine?
+    Before answering, we can look at the following diagram:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 1.4 – A system call to a kernel from a container'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B17908_01_04.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 1.4 – A system call to a kernel from a container
+  prefs: []
+  type: TYPE_NORMAL
+- en: A container, despite being isolated, holds a process that directly interacts
+    with the host kernel using system calls. The process may not be aware of the host
+    namespaces, but it still needs to context-switch into kernel space to perform
+    operations such as I/O access.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'On the other hand, a virtual machine is always executed on top of a **hypervisor**,
+    running a guest operating system with its own filesystem, networking, storage
+    (usually as image files), and kernel. The hypervisor is software that provides
+    a layer of hardware abstraction and virtualization to the guest OS, enabling a
+    single bare-metal machine running on capable hardware to instantiate many virtual
+    machines. The hardware seen by the guest OS kernel is mostly virtualized hardware,
+    with some exceptions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 1.5 – Architecture – virtualization versus containers'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B17908_01_05.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 1.5 – Architecture – virtualization versus containers
+  prefs: []
+  type: TYPE_NORMAL
+- en: This means that when a process performs a system call inside a virtual machine,
+    it is always directed to the guest OS kernel.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To recap, we can affirm that containers share the same kernel with the host,
+    while virtual machines have their own guest OS kernel.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This statement implies a lot of considerations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: From a security point of view, virtual machines provide better isolation from
+    potential attacks. Anyway, some of the latest CPU-based attacks (Spectre or Meltdown,
+    most notably) could exploit CPU vulnerabilities to access VMs' address spaces.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Containers have refined the isolation features and can be configured with strict
+    security policies (such as CIS Docker, NIST, HIPAA, and so on) that make them
+    quite hard to exploit.
+  prefs: []
+  type: TYPE_NORMAL
+- en: From a scalability point of view, containers are faster to spin up than VMs.
+    Running a new container instance is a matter of milliseconds if the image is already
+    available in the host. These fast results are also achieved by the kernel-less
+    nature of the container. Virtual machines must boot a kernel and initramfs, pivot
+    into the root filesystem, run some kind of init (such as `systemd`), and start
+    a variable number of services.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A VM will usually consume more resources than a container. To spin up a guest
+    OS, we usually need to allocate more RAM, CPU, and storage than the resources
+    needed to start a container.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Another great differentiator between VMs and containers is the focus on workloads.
+    The best practice for containers is to spin up a container for every specific
+    workload. On the other hand, a VM can run different workloads together.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Imagine a LAMP or WordPress architecture: on non-production or small production
+    environments, it would not be strange to have everything (Apache, PHP, MySQL,
+    and WordPress) installed on the same virtual machine. This design would be split
+    into a multi-container (or multi-tier) architecture, with one container running
+    the frontend (Apache-PHP-WordPress) and one container running the MySQL database.
+    The container running MySQL could access storage volumes to persist the database
+    files. At the same time, it would be easier to scale up/down the frontend containers.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now that we understand how containers work and what differentiates them from
+    virtual machines, we can move on to the next big question: why do I need a container?'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Why do I need a container?
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This section describes the benefits and the value of containers in modern IT
+    systems, and how containers can provide benefits for both technology and business.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The preceding question could be rephrased as, what is the value of adopting
+    containers in production?
+  prefs: []
+  type: TYPE_NORMAL
+- en: IT has become a fast, market-driven environment where changes are dictated by
+    business and technological enhancements. When adopting emerging technologies,
+    companies are always looking to their **Return of Investment** (**ROI**) while
+    striving to keep the **Total Cost of Ownership** (**TCO**) under reasonable thresholds.
+    This is not always easy to attain.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This section will try to uncover the most important ones.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Open source
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The technologies that power container technology are open source and became
+    open standards widely adopted by many vendors or communities. Open source software,
+    today adopted by large companies, vendors, and cloud providers, has many advantages,
+    and provides great value for the enterprise. Open source is often associated with
+    high-value and innovative solutions – that's simply the truth!
+  prefs: []
+  type: TYPE_NORMAL
+- en: First, community-driven projects usually have a great evolutionary boost that
+    helps mature the code and bring new features continuously. Open source software
+    is available to the public and can be inspected and analyzed. This is a great
+    transparency feature that also has an impact on software reliability, both in
+    terms of robustness and security.
+  prefs: []
+  type: TYPE_NORMAL
+- en: One of the key aspects is that it promotes an evolutionary paradigm where only
+    the best software is adopted, contributed, and supported; container technology
+    is a perfect example of this behavior.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Portability
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: We have already stated that containers are a technology that enables users to
+    package and isolate applications with their entire runtime environment, which
+    means all the files necessary to run. This feature unlocks one key benefit – portability.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This means that a container image can be pulled and executed on any host that
+    has a container engine running, regardless of the OS distribution underneath.
+    A CentOS or nginx image can be pulled indifferently from a Fedora or Debian Linux
+    distribution running a container engine and executed with the same configuration.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Again, if we have a fleet of many identical hosts, we can choose to schedule
+    the application instance on one of them (for example, using load metrics to choose
+    the best fit) with the awareness of having the same result when running the container.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Container portability also reduces vendor lock-ins and provides better interoperability
+    between platforms.
+  prefs: []
+  type: TYPE_NORMAL
+- en: DevOps facilitators
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: As stated before, containers help solve the old *it works on my machine* pattern
+    between development and operations teams when it comes to deploying applications
+    for production.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As a smart and easy packaging solution for applications, they meet the developers'
+    need to create self-consistent bundles with all the necessary binaries and configurations
+    to run their workloads seamlessly. As a self-consistent way to isolate processes
+    and guarantee separation of namespaces and resource usage, they are appreciated
+    by operations teams who are no more forced to maintain complex dependencies constraints
+    or segregate every single application inside VMs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: From this point of view, containers can be seen as facilitators of DevOps best
+    practices, where developers and operators work closer to deploy and manage applications
+    without rigid separations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Developers who want to build their own container images are expected to be more
+    aware of the OS layer built into the image and work closely with operations teams
+    to define build templates and automations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Cloud readiness
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Containers are built for the cloud, designed with an immutable approach in mind.
+    The immutability pattern clearly states that changes in the infrastructure (be
+    it a single container or a complex cluster) must be applied by redeploying a modified
+    version and not by patching the current one. This helps to increase a system's
+    predictability and reliability.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When a new application version must be rolled out, it is built into a new image
+    and a new container is deployed in place of the previous version. Build pipelines
+    can be implemented to manage complex workflows, from application build and image
+    creation, image registry push and tagging, until deployment in the target host.
+    This approach drastically shortens provisioning time while reducing inconsistencies.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We will see later in this book that dedicated container orchestration solutions
+    such as Kubernetes also provide ways to automate the scheduling patterns of large
+    fleets of hosts and make containerized workloads easy to deploy, monitor, and
+    scale.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Infrastructure optimization
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Compared to virtual machines, containers have a lightweight footprint that drives
+    much greater efficiency in the consumption of compute and memory resources. By
+    providing a way to simplify workload execution, container adoption brings great
+    cost savings.
+  prefs: []
+  type: TYPE_NORMAL
+- en: IT resources optimization is achieved by reducing the computational cost of
+    applications; if an application server that was running on top of a virtual machine
+    can be containerized and executed on a host along with other containers (with
+    dedicated resource limits and requests), computing resources can be saved and
+    reused.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Whole infrastructures can be re-modulated with this new paradigm in mind; a
+    bare-metal machine previously configured as a hypervisor can be reallocated as
+    a worker node of a container orchestration system that simply runs more granular
+    containerized applications as containers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Microservices
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Microservice architectures split applications into multiple services that perform
+    fine-grained functions and are part of the application as a whole.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Traditional applications have a monolithic approach where all the functions
+    are part of the same instance. The purpose of microservices is to break the monolith
+    into smaller parts that interact independently.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Monolithic applications fit well into containers, but microservice applications
+    have an ideal match with them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Having one container for every single microservice helps to achieve important
+    benefits, such as the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Independent scalability of microservices
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: More defined responsibilities for development teams' cloud access program
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Potential adoption of different technology stacks over the different microservices
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: More control over security aspects (such as public-facing exposed services,
+    mTLS connections, and so on)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Orchestrating microservices can be a daunting task when dealing with large and
+    articulated architectures. The adoption of orchestration platforms such as **Kubernetes**,
+    service mesh solutions such as **Istio** or **Linkerd**, and tracing tools such
+    as **Jaeger** and **Kiali** becomes crucial to achieving control over complexity.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Where do containers come from? Containers' technology is not a new topic in
+    the computer industry, as we will see in the next paragraphs. It has deep roots
+    in OS history, and we'll discover that it could be even older than us!
+  prefs: []
+  type: TYPE_NORMAL
+- en: This section rewinds the tape and recaps the most important milestones of containers
+    in OS history, from Unix to GNU/Linux machines. A useful glance in the past to
+    understand how the underlying idea evolved through the years.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Chroot and Unix v7
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: If we want to create an events timeline for our travel time in the containers'
+    history, the first and older destination is 1979 – the year of Unix V7\. At that
+    time, way back in 1979, an important system call was introduced in the Unix kernel
+    – the *chroot* system call.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: A system call (or syscall) is a method used by an application to request something
+    from the OS's kernel.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This system call allows the application to change the root directory of the
+    running copy of itself and its children, removing any capability of the running
+    software to escape that jail. This feature allows you to prohibit the running
+    application access to any kind of files or directory outside the given subtree,
+    which was really a game changer for that time.
+  prefs: []
+  type: TYPE_NORMAL
+- en: After some years, way back in 1982, this system call was then introduced, also
+    in BSD systems.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Unfortunately, this feature was not built with security in mind, and over the
+    years, OS documentation and security literature strongly discouraged the use of
+    *chroot* jails as a security mechanism to achieve isolation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Chroot was only the first milestone in the journey towards complete process
+    isolation in *nix systems. The next was, from a historic point of view, the introduction
+    of FreeBSD jails.
+  prefs: []
+  type: TYPE_NORMAL
+- en: FreeBSD jails
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Making some steps forward in our history trip, we jump back (or forward, depending
+    on where we're looking from) to 2000, when the FreeBSD OS approved and released
+    a new concept that extends the old and good *chroot* system call – FreeBSD jails.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: FreeBSD is a free and open source Unix-like operating system first released
+    in 1993, born from the Berkeley Software Distribution, which was originally based
+    on Research Unix.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As we briefly reported previously, *chroot* was a great feature back in the
+    '80s, but the jail it creates can easily be escaped and has many limitations,
+    so it was not adequate for complex scenarios. For that reason, FreeBSD jails were
+    built on top of the *chroot* syscall with the goal of extending and enlarging
+    its feature set.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In a standard *chroot* environment, a running process has limitations and isolation
+    only at the filesystem level; all the other stuff, such as running processes,
+    system resources, the networking subsystem, and system users, is shared by the
+    processes inside the *chroot* and the host system's processes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Looking at FreeBSD jails, its main feature is the virtualization of the networking
+    subsystem, system users, and its processes; as you can imagine, this improves
+    so much the flexibility and the overall security of the solution.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s schematize the four key features of a FreeBSD jail:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**A directory subtree**: This is what we already saw also for the *chroot*
+    jail. Basically, once defined as a subtree, the running process is limited to
+    that, and it cannot escape from it.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**An IP address**: This is a great revolution; finally, we can define an independent
+    IP address for our jail and let our running process be isolated even from the
+    host system.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**A hostname**: Used inside the jail, this is, of course, different from the
+    host system.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**A command**: This is the running executable and has an option to be run inside
+    the system jail. The executable has a relative path that is self-contained in
+    the jail.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: One plus of this kind of jail is that every instance has also its own users
+    and root account that has no kind of privileges or permissions over the other
+    jails or the underlying host system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Another interesting feature of FreeBSD jails is that we have two ways of installing/creating
+    a jail:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: From binary-reflecting the ones we might install with the underlying OS
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: From the source, building from scratch what's needed by the final application
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Solaris Containers (also known as Solaris Zones)
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Moving back to our time machine, we must jump forward only a few years, to 2004
+    to be exact, to finally meet the first wording we can recognize – Solaris Containers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: Solaris is a proprietary Unix OS born from SunOS in 1993, originally developed
+    by Sun Microsystems.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To be honest, Solaris Containers was only a transitory naming of **Solaris Zones**,
+    a virtualization technology built-in Solaris OS, with help also from a special
+    filesystem, ZFS, that allows storage snapshots and cloning.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A *zone* is a virtualized application environment, built from the underlying
+    operating system, that allows complete isolation between the base host system
+    and any other applications running inside other *zones*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The cool feature that Solaris Zones introduced is the concept of a branded zone.
+    A branded zone is a completely different environment compared to the underlying
+    OS, and can container different binaries, toolkits, or even a different OS!
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, for ensuring isolation, a Solaris zone can have its own networking,
+    its own users, and even its own time zone.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Linux Containers (LXC)
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Let's jump forward four years more and meet **Linux Containers** (**LXC**).
+    We're in 2008, when Linux's first complete container management solution was released.
+  prefs: []
+  type: TYPE_NORMAL
+- en: LXC cannot just be simplified as a manager for one of the first container implementations
+    of Linux containers, because its authors developed a lot of the kernel features
+    that now are also used for other container runtimes in Linux.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'LXC has its own low-level container runtime, and its authors made it with the
+    goal of offering an isolated environment as close as possible to VMs but without
+    the overhead needed for simulating the hardware and running a brand-new kernel
+    instance. LXC achieves this a goal and isolation thanks to the following kernel
+    functionalities:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Namespaces
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Mandatory access control
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Control groups (also known as cgroups)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Let's recap the kernel functionalities that we saw earlier in the chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Linux namespaces
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: A namespace isolates processes that abstract a global system resource. If a
+    process makes changes to a system resource in a namespace, these changes are visible
+    only to other processes within the same namespace. The common use of the namespaces
+    feature is to implement containers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Mandatory access control
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In the Linux ecosystem, there are several MAC implementations available; the
+    most well-known project is **Security Enhanced Linux** (**SELinux**), developed
+    by the USA's **National Security Agency** (**NSA**).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: SELinux is a mandatory access control architecture implementation used in Linux
+    operating systems. It provides role-based access control and multi-level security
+    through a labeling mechanism. Every file, device, and directory has an associated
+    label (often described as a security context) that extends the common filesystem's
+    attributes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Control groups
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '**Control groups** (**cgroups**) is a built-in Linux kernel feature that can
+    help to organize in hierarchical groups various types of resources, including
+    processes. These resources can then be limited and monitored. The common interface
+    used for interacting with cgroups is a pseudo-filesystem called **cgroupfs**.
+    This kernel feature is really useful for tracking and limiting processes'' resources,
+    such as memory, CPU, and so on.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The main and greatest LXC feature coming from these three kernels' functionalities
+    is, for sure, the *unprivileged containers.*
+  prefs: []
+  type: TYPE_NORMAL
+- en: Thanks to namespaces, MAC, and cgroups, in fact, LXC can isolate a certain number
+    of UIDs and GIDs, mapping them with the underlying operating system. This ensures
+    that a UID of 0 in the container is (in reality) mapped to a higher UID at the
+    base system host.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Depending on the privileges and the feature set we want to assign to our container,
+    we can choose from a vast set of pre-built namespace types, such as the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Network: Offering access to network devices, stacks, ports, and so on'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Mount: Offering access to mount points'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'PID: Offering access to PIDs'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The next main evolution from LXC (and, without doubt, the one that triggered
+    the success of container adoption) was certainly Docker.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Docker
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: After just 5 years, back in 2013, Docker arises in the container landscape,
+    and it rapidly became so popular. But what features were used back in those days?
+    Well, we can easily discover that one of the first Docker container engines was
+    LXC!
+  prefs: []
+  type: TYPE_NORMAL
+- en: Just after one year of development, Docker's team introduced *libcontainer*
+    and finally replaced the LXC container engine with their own implementation. Docker,
+    similar to its predecessor, LXC, requires a daemon running on the base host system
+    to keep the containers running and working properly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: One most notable feature (apart from the use of namespaces, MAC, and cgroups)
+    was, for sure, OverlayFS, an overlay filesystem that helps combine multiple filesystems
+    in just one single filesystem.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: OverlayFS is a Linux union filesystem. It can combine multiple mount points
+    into one, creating a single directory structure that contains all the underlying
+    files and subdirectories from sources.
+  prefs: []
+  type: TYPE_NORMAL
+- en: At a high level, the Docker team introduced the concept of container images
+    and container registries, which really was the functionality game changer. The
+    registry and image concepts enabled the creation of a whole ecosystem to which
+    every developer, sysadmin, or tech enthusiast could collaborate and contribute
+    with their own custom container images. They also created a special file format
+    for creating brand-new container images (Dockerfile) to easily automate the steps
+    needed for building the container images from scratch.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Along with Docker, there is another engine/runtime project that caught the interest
+    of the communities – rkt.
+  prefs: []
+  type: TYPE_NORMAL
+- en: rkt
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Just a few years after Docker's arise, across 2014 and 2015, the CoreOS company
+    (acquired then by Red Hat) launched its own implementation of a container engine
+    that has a very particular main feature – it was **daemon-less**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This choice had an important impact: instead of having a central daemon administering
+    a bunch of containers, every container was on its own, like any other standard
+    process we may start on our base host system.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: But the rkt (pronounced *rocket*) project became very popular in 2017 when the
+    young **Cloud Native Computing Foundation** (**CNCF**), which aims to help and
+    coordinate container and cloud-related projects, decided to adopt the project
+    under their umbrella, together with another project donated by Docker itself –
+    *containerd*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In a few words, the Docker team extracted the project's core runtime from its
+    daemon and donated it to the CNCF, which was a great step that motivated and enabled
+    a great community around the topic of containers, as well as helping to develop
+    and improve rising container orchestration tools, such as Kubernetes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: Kubernetes (from the Greek term **κυβερνήτης**, meaning "helmsman"), also abbreviated
+    as K8s, is an open source container-orchestration system for simplifying the application
+    deployment and management in a multi-hosts environment. It was released as an
+    open source project by Google, but it is now maintained by the CNCF.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Even if this book's main topic is Podman, we cannot mention now and in the following
+    chapters the rising need of orchestrating complex projects made of many containers
+    on multi-machine environments; that's the scenario where Kubernetes rose as the
+    ecosystem leader.
+  prefs: []
+  type: TYPE_NORMAL
+- en: After Red Hat's acquisition of CoreOS, the rkt project was discontinued, but
+    its legacy was not lost and influenced the development of the Podman project.
+    But before introducing the main topic of this book, let's dive into the OCI specifications.
+  prefs: []
+  type: TYPE_NORMAL
+- en: OCI and CRI-O
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: As mentioned earlier, the *extraction* of containerd from Docker and the consequent
+    donation to the CNCF motivated the open source community to start working seriously
+    on container engines that could be injected under an orchestration layer, such
+    as Kubernetes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: On the same wave, in 2015, Docker, with the help of many other companies (Red
+    Hat, AWS, Google, Microsoft, IBM, and so on), started a governance committee under
+    the umbrella of the Linux Foundation, the **Open Container Initiative** (**OCI**).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Under this initiative, the working team developed the runtime specification
+    (**runtime spec**) and the image specification (**image spec**) for describing
+    how the API and the architecture for new container engines should be created in
+    the future.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The same year, the OCI team also released the first implementation of a container
+    runtime adhering to the OCI specifications; the project was named `runc`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The OCI defined not only a specification for running standalone containers but
+    also provided the base for linking the Kubernetes layer with the underlying container
+    engine more easily. At the same time, the Kubernetes community released the **Container
+    Runtime Interface** (**CRI**), a plugin interface to enable the adoption of a
+    wide variety of container runtimes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: That's where CRI-O jumps to 2017; released as an open source project by Red
+    Hat, it was one of the first implementations of the Kubernetes Container Runtime
+    Interface, enabling the use of OCI compatible runtimes. CRI-O represents a lightweight
+    alternative to using Docker, rkt, or any other engines as Kubernetes' runtime.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As the ecosystem continues to grow, standards and specifications become more
+    and more adopted, leading to a wider container ecosystem. The OCI specifications
+    showed previously were crucial to the development of the runc container runtime,
+    adopted by the Podman project.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Podman
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: We finally arrive at the end of our time travel; we reached 2017 in the previous
+    paragraph and, in the same year, the first commit of the Podman project was made
+    on GitHub.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The project's name reveals a lot about its purpose – *PODMAN = POD MANager*.
+    We are now ready to look at the basic definition of a *pod* in a container's world.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A pod is the smallest deployable computing unit that can be handled by Kubernetes;
+    it can be made of one or more containers. In the case of multiple containers in
+    the same pod, they are scheduled and run side by side in a shared context.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Podman manages containers and containers' images, their storage volumes, and
+    pods made of one or multiple containers, and it was built from scratch to adhere
+    to the OCI standards.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Podman, like its predecessor, rkt, has no central daemon managing the containers
+    but starts them as standard system processes. It also defines a Docker-compatible
+    CLI interface to ease the transition from Docker.
+  prefs: []
+  type: TYPE_NORMAL
+- en: One of the great features introduced by Podman is *rootless containers*. Usually,
+    when we think about Linux containers, we immediately think about a system administrator
+    that should set up some prerequisites at the OS level to prepare the environment
+    that lets our container get up and running.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Rootless containers can easily run as a normal user, without requiring root.
+    Using Podman with a non-privileged user will start restricted containers without
+    any privileges, such as the user running it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Without a doubt, Podman introduced greater flexibility and is a highly active
+    project whose adoption grows constantly. Every major release brings many new features;
+    for example, the 3.0 release introduced support for Docker Compose, which was
+    a highly requested feature. This is also a good health metric of the community
+    support.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's close the chapter with an overview of the most common container adoption
+    use cases.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Where are containers used today?
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This is an open-ended section. The intent is to tell where and how containers
+    are used today in a production environment. This section also introduces the concept
+    of container orchestration with Kubernetes, the most used open source orchestrator
+    solution, adopted by thousands of companies worldwide. Container adoption is spreading
+    across every enterprise company in every business sector.
+  prefs: []
+  type: TYPE_NORMAL
+- en: But if we investigate the success stories of companies already using containers
+    or a Kubernetes distribution, we'll discover that containerization and container
+    orchestration are accelerating the project development and delivery, speeding
+    up the creation of new use cases in every kind of industry – from automotive to
+    healthcare. And regardless of the economics, this is really has a great impact
+    on computer technology in general.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Companies are shifting from the old VM deployment model to a container one for
+    new applications. As we briefly introduced in the previous paragraphs, a container
+    could be easily represented as a new way for packaging applications.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Taking a step back to the VMs, what was their main purpose? It was creating
+    an isolated environment with a reserved number of resources for a target application
+    to be run.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With the introduction of containers, the enterprise companies realized that
+    they can better optimize their infrastructure, speeding up the development and
+    the deployment of new services introducing some kind of innovation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Looking back (again) to the history of containers' adoption and their usage,
+    we can see that at the beginning, they were used as a packaging method for old-style,
+    monolithic application runtimes, but then once the cloud-native wave rose and
+    concepts such as microservices became popular, containers became the de facto
+    standard for packaging next-generation, cloud-native applications.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: Cloud-native computing is a software development practice to build and deploy
+    scalable applications in public, private, or hybrid clouds.
+  prefs: []
+  type: TYPE_NORMAL
+- en: On the other hand, containers' format and orchestration tools were influenced
+    by the rise of microservice development and deployment; that's why today we find
+    in Kubernetes a lot of additional services and resources, such as a service mesh
+    and serverless computing, which are useful in a **microservice architecture**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: Microservice architecture is a practice to create applications based on loosely
+    coupled, fine-grained services, using lightweight protocols.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'From our daily job with customers adopting containers, we can confirm that
+    customers started packaging only standard applications in containers and orchestrated
+    them with a container orchestrator, such as Kubernetes, but once new development
+    models arrived at the developers'' teams, the containers and their orchestrators
+    started to also manage this new type of service more and more:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 1.6 – Microservice architecture on a real application'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B17908_01_06.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 1.6 – Microservice architecture on a real application
+  prefs: []
+  type: TYPE_NORMAL
+- en: Just to give us a bit more context around the microservice architecture topic,
+    consider the previous picture, where we find a simple web store application built
+    with microservices.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As we can see, depending on the type of client we're using (mobile phone or
+    web browser), we'll then be able to interact with the three underlying services,
+    all decoupled, communicating with a REST API. One of the great new features is
+    also decoupling at the data level; every microservice has its own database and
+    data structure, which makes them independent in every phase of development and
+    deployment.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, if we match a container for every microservice shown in the architecture
+    and we also add an orchestrator, such as Kubernetes, we'll find that the solution
+    is almost complete! Thanks to the containers' technology, every service could
+    have its own container base image with just the needed runtimes on board, which
+    ensures a lightweight pre-built package with all the resources needed by the service
+    once started.
+  prefs: []
+  type: TYPE_NORMAL
+- en: On the other hand, looking at the various automated processes around application
+    development and their maintenance, an architecture based on containers could also
+    be easily fitted on the tools of **CI/CD** for automating all the needed steps
+    to develop, test, and run an application.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: CI/CD stands for **continuous integration and continuous delivery/deployment**.
+    These practices try to fill the gap between development and operation activities,
+    increasing the automation in the process of building, testing, and deployment
+    applications.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We can say that containers' technology was born to fulfill system administrator
+    needs but ended up being the beloved tool of developers! This technology represented
+    in many companies the conjunction ring between the developers team and the operations
+    one, which enabled and speeded up the adoption of DevOps practices that were previously
+    isolated to increase collaboration between these two teams.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: DevOps is the group of practices that help link software development (Dev) and
+    IT operations (Ops). The goal of DevOps is to shorten an application's development
+    life cycle and to increase an application's delivery release.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Even though microservices and containers love to live together, enterprise companies
+    have a lot of applications, software, and solutions that are not based on microservices
+    architecture but previous monolithic approaches, for example, using clustered
+    application servers! But we don't have to worry too much, as containers and their
+    orchestrators evolved at the same time to support this kind of workload too.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Containers technology can be considered an evolved application packaging format
+    that can be optimized for containing all the necessary libraries and tools, even
+    complex monolithic applications. Over the years, the base container images evolved
+    to optimize the size and content for creating smaller runtimes, capable of improving
+    the overall management, even for complex monolithic applications.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If we look at the size of a Red Hat Enterprise Linux container base image in
+    its minimal flavor, we can see that the image is around 30 MB during download
+    and only 84 MB once extracted (through Podman, of course) in the target base system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Even the orchestrators adopted internal features and resources for handling
+    monolithic applications, too far from the cloud-native concepts. Kubernetes, for
+    example, introduced in the platform's core some features for ensuring the statefulness
+    of containers, as well as the concepts of persistent storage for saving locally
+    cached data or important stuff for the application.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we discovered the underlying functionalities of container technology,
+    from process isolation to container runtimes. Then, we looked at the main purposes
+    and advantages of containers against VMs. After that, we started our time machines,
+    looking into container history from 1979 to the current day. Finally, we discovered
+    today's market trends and current container adoption in enterprise companies.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This chapter provided an introduction to container technology and its history.
+    Podman is very close to Docker in terms of usability and CLI, and the next chapter
+    will cover the differences between the two projects, from an architectural point
+    of view and a user experience point of view.
+  prefs: []
+  type: TYPE_NORMAL
+- en: After introducing Docker high-level architecture, Podman daemon-less architecture
+    will be described in detail to understand how this container engine can manage
+    containers without the need for a running daemon.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Further reading
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'For more information on the topics covered in this chapter, please refer to
+    the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*The Linux Programming Interface*, *Michael Kerrisk* (ISBN 978-1-59327-220-3)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Demystifying namespaces and containers in Linux*: [https://opensource.com/article/19/10/namespaces-and-containers-linux](https://opensource.com/article/19/10/namespaces-and-containers-linux)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*OCI Runtime Specs*: [https://github.com/opencontainers/runtime-spec](https://github.com/opencontainers/runtime-spec)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*OCI Image Specs*: [https://github.com/opencontainers/image-spec](https://github.com/opencontainers/image-spec)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Container Runtime Interface announcement*: [https://kubernetes.io/blog/2016/12/container-runtime-interface-cri-in-kubernetes/](https://kubernetes.io/blog/2016/12/container-runtime-interface-cri-in-kubernetes/)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

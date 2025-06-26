@@ -1,0 +1,882 @@
+- en: BlueStore
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, you'll learn about BlueStore, the new object store in Ceph
+    designed to replace the existing filestore. Its increased performance and enhanced
+    feature set are designed to allow Ceph to continue to grow and provide a resilient
+    high-performance distributed storage system for the future. Since the Luminous
+    release, BlueStore is now the recommended and default object store that's used
+    when creating new OSDs. This chapter will cover how BlueStore works and why it
+    is much better suited than Filestore for Ceph's requirements. Then by following
+    a step by step tutorial you will be guided through how to upgrade a Ceph cluster
+    to BlueStore.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, you''ll learn the following topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: What is BlueStore?
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The limitations of filestore
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: What problems BlueStore overcome
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The components of BlueStore and how it works
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Introduction to `ceph-volume`
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: How to deploy BlueStore OSDs
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Approaches to upgrading live clusters from filestore to BlueStore
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: What is BlueStore?
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: BlueStore is a Ceph object store that's primarily designed to address the limitations
+    of filestore, which, prior to the Luminous release, was the default object store.
+    Initially, a new object store named NewStore was being developed to replace filestore.
+    NewStore was a combination of RocksDB, a key–value store that stored metadata
+    and a standard **Portable Operating System Interface** (**POSIX**) filesystem
+    for the actual objects. However, it quickly became apparent that using a POSIX
+    filesystem introduced high overheads and restrictions, which was one of the key
+    reasons for trying to move away from using filestore in the first place.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Hence, BlueStore was born. Using raw block devices in combination with RocksDB,
+    a number of problems that had stunted NewStore were solved. The name BlueStore
+    was a reflection of the combination of the words Block and NewStore:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Block + NewStore = BlewStore = BlueStore*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: BlueStore is designed to remove the double write penalty associated with filestore
+    and improve performance that can be obtained from the same hardware. Also, with
+    the new ability to have more control over the way objects are stored on disk,
+    additional features, such as checksums and compression, can be implemented.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Why was it needed?
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The previous object store in Ceph, filestore, has a number of limitations that
+    have started to limit the scale at which Ceph can operate, as well as the features
+    that it can offer. The following are some of the main reasons why BlueStore was
+    needed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Ceph's requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: An object in Ceph along with its data also has certain metadata associated with
+    it, and it's crucial that both the data and metadata are updated atomically. If
+    either of this metadata or data is updated without the other, the whole consistency
+    model of Ceph is at risk. To ensure that these updates occur atomically, they
+    need to be carried out in a single transaction.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Filestore limitations
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Filestore was originally designed as an object store to enable developers to
+    test Ceph on their local machines. Because of its stability, it quickly became
+    the standard object store and found itself in use in production clusters throughout
+    the world.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Initially, the thought behind filestore was that the upcoming **B-tree file
+    system** (**btrfs**), which offered transaction support, would allow Ceph to offload
+    the atomic requirements to btrfs. Transactions would allow an application to send
+    a series of requests to btrfs and only receive acknowledgement once all were committed
+    to stable storage. Without a transaction support, if there was an interruption
+    halfway through a Ceph write operation, either the data or metadata could have
+    been missing or one could be out of sync with the other.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Unfortunately, the reliance on btrfs to solve these problems turned out to be
+    a false hope, and several limitations were discovered. Btrfs can still be used
+    with filestore, but there are numerous known issues that can affect the stability
+    of Ceph.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the end, it turned out that XFS was the best choice to use with filestore,
+    but XFS had the major limitation that it didn't support transactions, meaning
+    that there was no way for Ceph to guarantee atomicity of its writes. The solution
+    to this was the write-ahead journal. All writes, including data and metadata,
+    would first be written into a journal, located on a raw block device. Once the
+    filesystem containing the data and metadata confirmed that all data had been safely
+    flushed to disk, the journal entries could be flushed. A beneficial side effect
+    of this is that, when using an SSD to hold the journal for a spinning disk, it
+    acts like a write back cache, lowering the latency of writes to the speed of the
+    SSD; however, if the filestore journal resides on the same storage device as the
+    data partition, then throughput will be at least halved.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the case of spinning-disk OSDs, this can lead to very poor performance,
+    as the disk heads will constantly be moving between two areas of the disks, even
+    for sequential operations. Although filestore on SSD-based OSDs doesn''t suffer
+    nearly the same performance penalty, their throughput is still effectively halved
+    because double the amount of data needs to be written due to the filestore journal.
+    In either case, this loss of performance is very undesirable, and in the case
+    of flash drives, this wears the device faster, requiring the more expensive version
+    of flash, called write endurance flash. The following diagram shows how filestore
+    and its journal interacts with a block device. You can see that all data operations
+    have to go through the filestore journal and the filesystems journal:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/ca1b8d3f-46d9-49a9-8838-b31ab0185876.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Additional challenges with filestore arose from developers trying to control
+    the actions of the underlying POSIX filesystem to perform and behave in a way
+    that Ceph required. A large amount of work has been done over the years by filesystem
+    developers to try and make filesystems intelligent and to predict how an application
+    might submit I/O. In the case of Ceph, a lot of these optimizations interfere
+    with what it's trying to instruct the filesystem to do, requiring more workarounds
+    and complexity.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Object metadata is stored in combinations of filesystem attributes, called **extended
+    attributes** (**XATTRs**), and in a **LevelDB** key–value store, which also resides
+    on the OSD disk. LevelDB was chosen at the time of filestore's creation rather
+    than RocksDB, as RocksDB wasn't available and LevelDB suited a lot of Ceph's requirements.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Ceph is designed to scale to petabytes of data and store billions of objects.
+    However, because of limitations around the number of files you can reasonably
+    store in a directory, further workarounds to help limit this were introduced.
+    Objects are stored in a hierarchy of hashed directory names; when the number of
+    files in one of these folders reaches the set limit, the directory is split into
+    another level and the objects are moved.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'However, there''s a trade-off to improving the speed of object enumeration:
+    when these directory splits occur, they impact performance as the objects are
+    moved into the correct directories. On larger disks, the increased number of directories
+    puts additional pressure on the VFS cache and can lead to additional performance
+    penalties for infrequently accessed objects.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: As this book will cover in the chapter on performance tuning, a major performance
+    bottleneck in filestore is when XFS has to start looking up inodes and directory
+    entries that aren't currently cached in RAM. For scenarios where there are a large
+    number of objects stored per OSD, there is currently no real solution to this
+    problem, and it's quite common to for a Ceph cluster to gradually slow down as
+    it fills up.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Moving away from storing objects on a POSIX filesystem is really the only way
+    to solve most of these problems.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Why is BlueStore the solution?
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: BlueStore was designed to address these limitations. Following the development
+    of NewStore, it was obvious that trying to use a POSIX filesystem as the underlying
+    storage layer in any approach would introduce a number of issues that were also
+    present in filestore. In order for Ceph to be able to achieve a guaranteed level
+    of performance, that was expected from the underlying storage, it also needed
+    to have direct block-level access to the storage devices without the additional overheads
+    of a separate Linux filesystem. By storing metadata in RocksDB and the actual
+    object data directly on block devices, Ceph can leverage much better control over
+    the underlying storage and at the same time provide better performance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: How BlueStore works
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The following diagram shows how BlueStore interacts with a block device. Unlike
+    filestore, data is directly written to the block device and metadata operations
+    are handled by RocksDB:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/946e9d75-d099-45a9-8452-85ca3c25db3a.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: The block device is divided between RocksDB data storage and the actual user
+    data stored in Ceph. Each object is stored as a number of blobs allocated from
+    the block device. RocksDB contains metadata for each object and tracks the utilization
+    and allocation information for the data blobs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: RocksDB
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: RocksDB is a high-performance key–value store that was originally forked from
+    LevelDB, but, after development, Facebook went on to offer significant performance
+    improvements suited for multiprocessor servers with low-latency storage devices.
+    It has also had numerous feature enhancements, some of which are used in BlueStore.
+  prefs: []
+  type: TYPE_NORMAL
+- en: RocksDB is used to store metadata about the stored objects, which was previously
+    handled using a combination of LevelDB and XATTRs in filestore.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A key characteristic of RocksDB is the way in which data is written down in
+    the levels of the database. It owes this characteristic to its origins in LevelDB.
+    New data is written into a memory-based table with an optional transaction log
+    on persistent storage, the WAL; as this memory-based table fills up, data is moved
+    down to the next level of the database by a process called compaction. When that
+    level fills up, data is migrated down again, and so on. All of these levels are
+    stored in what RocksDB calls SST files. In Ceph, each of these levels are configured
+    to be 10 times the size of the previous level, which brings some interesting factors
+    into play if you're trying to store the whole of the RocksDB on SSD in a hybrid
+    HDD–SSD layout.
+  prefs: []
+  type: TYPE_NORMAL
+- en: All new data is written into the memory-based table and WAL, the memory based
+    table is known as level 0. BlueStore configures level 0 as 256 MB. The default
+    size multiplier between levels is a factor of ten, this means that level 1 is
+    also 256 MB, level 2 is 2.56 GB, level 3 is 25.6 GB, and level 4 would be 256
+    GB. For most Ceph use cases the average total metadata size per OSD should be
+    around 20-30GB, with the hot data set typically being less than this. It would
+    be hoped that levels 0, 1, and 2 would contain most of the hot data for writes,
+    and so sizing an SSD partition to at least 3 GB should mean that these levels
+    are stored on SSD. Write performance should be good as the metadata for writes
+    will be hitting the SSDs; however, when reading metadata—say, during client read
+    requests—there is a chance that the metadata may live in level 3 or 4, and so
+    will have to be read off of a spinning disk, which would have a negative impact
+    on latency and increase disk load.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Therefore, the obvious solution would be to somehow calculate how big you believe
+    the BlueStore metadata may grow for your dataset and size the RocksDB storage
+    to ensure that it can all be stored on SSD. There are two difficulties in accomplishing
+    this.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Firstly, it's very difficult to precalculate the size of the metadata based
+    on the size of the actual data. Depending on the client model—RBD, CephFS, or
+    RGW—differing amounts of metadata will be stored. Additionally, things such as
+    snapshots and whether you are using replicated- or erasure-coded pools will also
+    lead to differing sizes of metadata.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The next challenge is sizing your flash device correctly to ensure that all
+    of the metadata fits. As mentioned previously, RocksDB compacts data down through
+    the various levels of the database. When BlueStore creates the files for the RocksDB,
+    it will only place a certain level on your flash device if the whole of that level
+    would fit in it. Therefore, there are minimum sizes required for each level to
+    ensure that the level is actually located on flash. For example, to ensure that
+    the 2.56 GB level 2 part of the DB fits on flash, you need to have at least a
+    4-5 GB SSD partition. This is because level 0 and level 1 and level 2 all need
+    to fit, as well as a small amount of overhead. For level 3 to fit in its entirety,
+    you would need just over 30 G; any smaller and the extra space over level 2 would
+    not be used. To ensure that level 4 would fit, you would likely need over 300
+    GB of flash space.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Storing the WAL on a faster storage device—which can help to lower the latency
+    of RocksDB operations—is recommended if you are using flash storage for the actual
+    data and you need further increases in performance. If you are using spinning
+    disks, moving the WAL to a dedicated device will likely show minimal improvement.
+    There are a number of possible storage layout configurations, where the WAL, DB,
+    and data can be placed on different storage devices. The following list shows
+    three examples of such configurations:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: WAL, DB, and data all on spinning disk or flash
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: WAL and DB on SSD, data on spinning disk
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: WAL on NVMe, DB on SSD, and data on spinning disk
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Compression
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Another handy feature introduced with BlueStore is that it enables compression
+    of data at the sub-object level, blobs inside BlueStore. This means that any data
+    written into Ceph, no matter the client access model, can benefit from this feature.
+    Compression is enabled on a per-pool basis but is disabled by default.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As well as the ability to enable compression per-pool, there are also a number
+    of extra options to control the behavior of the compression, as shown in the following
+    list:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`compression_algorithm`**:** This controls which compression library is used
+    to compress data. The default is snappy, a compression library written by Google.
+    Although its compression ratio isn''t the best, it has very high performance,
+    and unless you have specific capacity requirements, you should probably stick
+    with snappy. Other options are `zlib` and `zstd`.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`compression_mode`**:** This controls the operating status of compression on
+    a per-pool basis. It can be set to either `none`, `passive`, `aggressive`, or
+    `force`. The `passive` setting enables the use of compression, but will only compress
+    objects that are marked to be compressed from higher levels. The `aggressive`
+    setting will try and compress all objects unless explicitly told not to. The `force`
+    setting will always try and compress data.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`compress_required_ratio`**:** By default, this is set at 87.5%. An object
+    that has been compressed must have been compressed to at least below this value
+    to be considered worth compressing; otherwise, the object will be stored in an
+    uncompressed format.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Although compression does require additional CPU, snappy is very efficient,
+    and the distributed nature of Ceph lends itself well to this task as the compression
+    duties are spread over a large number of CPUs across the cluster. In comparison,
+    a legacy storage array would have to use more of its precious, finite dual controller
+    CPU's resource.
+  prefs: []
+  type: TYPE_NORMAL
+- en: An additional advantage of using compression over the reduction in space consumed
+    is also I/O performance when reading or writing large blocks of data. Because
+    of the data being compressed, the disks or flash devices will have less data to
+    read or write, meaning faster response times. Additionally, flash devices will
+    possibly see less write wear because of the reduced amount of total data written.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Checksums
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: For increased protection of stored data, BlueStore calculates and stores the
+    checksums of any data written. On each read request, BlueStore reads the checksum
+    and compares with the data read from the device. If a mismatch is discovered,
+    BlueStore will report a read error and repair the damage. Ceph will then retry
+    the read from another OSD holding that object. Although modern hardware has sophisticated
+    checksums and error detection of its own, introducing another level in BlueStore goes
+    a long way to eliminating the risk of silent data corruption. By default, BlueStore creates
+    checksums using crc32, which is highly likely to catch any silent data corruption;
+    however, alternative algorithms are available, if required.
+  prefs: []
+  type: TYPE_NORMAL
+- en: BlueStore cache tuning
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Unlike in filestore, where any free RAM in the OSD node is used by the page
+    cache, in BlueStore, RAM has to be statically assigned to the OSD on startup.
+    For spinning disk OSDs, this amount is 1 GB; flash-based SSDs have 3 GB assigned
+    to them. This RAM is used for a number of different caches internally: the RocksDB
+    cache, the BlueStore metadata cache, and the BlueStore data cache. The first two
+    are responsible for ensuring the smooth operating of the BlueStore internals when
+    looking up essential metadata; the defaults have been set to offer good performance
+    and increasing them further will show diminishing returns. The final BlueStore
+    data cache will actually cache user data stored in the Ceph cluster. It''s set
+    relatively low by default compared to what some filestore OSDs may have stored
+    in the page cache; this is to prevent BlueStore having high memory consumption
+    by default.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: If your OSD nodes have plenty of free memory after all your OSDs are running
+    and storing data, then it's possible to increase the amount of memory assigned
+    to each OSD and decide how it's split between the different caches.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Recent versions of Ceph contain a feature in BlueStore that auto-tunes the assignment
+    of memory between the different caches in BlueStore. By default, the OSD will
+    aim to consume around 4 GB of memory, and by continually analyzing the memory
+    usage will adjust the allocation to each cache. The major improvement that auto-tuning
+    brings is that different workloads utilize the different caches in BlueStore differently,
+    and trying to pre-allocate memory with static variables is an extremely difficult
+    task. Aside from potentially tweaking the target memory threshold, the rest of
+    the auto-tuning is largely automatic and hidden from the Ceph administrator.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If auto-tuning is disabled, then BlueStore will fall back to its manual cache
+    assignment behavior. The following section describes the various BlueStore caches
+    in detail that can be controlled via the manual mode. In this mode, there are
+    two OSD-based settings that control the amount of memory assigned to each OSD, `bluestore_cache_size_hdd`
+    and `bluestore_cache_size_ssd`. As per the name, you can adjust either one to
+    control the assigned memory for either HDDs or SSDs. However, we can do more than
+    just change the overall amount of memory assigned to an OSD; there are a number
+    of further settings to control the split between the three caches, as shown in
+    the following list:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `bluestore_cache_kv_ratio` setting, set by default to 0.5, will allocate
+    50% of the allocated memory to the RocksDB cache. This cache is used internally
+    by RocksDB and is not directly managed by Ceph. It's currently believed to offer
+    the best return in performance when deciding where to allocate memory.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The `bluestore_cache_meta_ratio` setting, set by default to 0.5, will allocate
+    50% of the available allocated memory to caching BlueStore metadata. Note that,
+    depending on the available memory and the value of `bluestore_cache_kv_min`, less
+    than 50% may end up being allocated to caching metadata. The BlueStore metadata
+    cache contains the raw metadata before it's stored in RocksDB.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The `bluestore_cache_kv_min` setting, set by default to 512 MB, ensures that
+    at least 512 MB of memory is used for the RocksDB cache. Anything over this value
+    will be shared 50:50 with the BlueStore metadata cache.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Finally, any memory left over from the preceding two ratios will be used for
+    caching actual data. By default, because of `kv` and `meta_ratios`, this will
+    be 0%. Most Ceph clients will have their own local read cache, which will hopefully
+    keep extremely hot data cached; however, in the case where clients are used that
+    don't have their own local cache, it might be worth investigating whether adjusting
+    the caching ratios to reserve a small amount of cache for data use brings improvements.
+  prefs: []
+  type: TYPE_NORMAL
+- en: By default, the auto-tuning of BlueStore should provide the best balance of
+    memory usage and provide the best performance, and it isn't recommended that you
+    change to the manual method.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Deferred writes
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Unlike in filestore, where every write is written in its entirety to both the
+    journal and then finally to disk, in BlueStore, the data part of the write in
+    most cases is written directly to the block device. This removes the double-write
+    penalty and, on pure spinning-disk OSDs, dramatically improves performance and
+    lowers SSD wear. However, as mentioned previously, this double write has a positive
+    side effect of decreasing write latency when the spinning disks are combined with
+    SSD journals. BlueStore can also use flash-based storage devices to lower write
+    latency by deferring writes, first writing data into the RocksDB WAL and then
+    later flushing these entries to disk. Unlike filestore, not every write is written
+    into the WAL; configuration parameters determine the I/O size cut-off as to what
+    writes are deferred. The configuration parameter is shown in the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: This controls the size of I/Os that will be written to the WAL first. For spinning
+    disks, this defaults to 32 KB, and SSDs by default don't defer writes. If write
+    latency is important and your SSD is sufficiently fast, then by increasing this
+    value, you can increase the size of I/Os that you wish to defer to WAL.
+  prefs: []
+  type: TYPE_NORMAL
+- en: BlueFS
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Although the main motivation for BlueStore's development was to not use an underlying
+    filesystem, BlueStore still needs a method to store RocksDB and the data on the
+    OSD disk. BlueFS was developed to meet this requirement, which is an extremely
+    minimal filesystem that provides just the minimal set of features that BlueStore
+    requires. It also means that it has been designed to operate in a dependable manner
+    for the slim set of operations that Ceph submits. It also removes the overhead
+    of the double filesystem journal write that would be present when using a standard
+    POSIX filesystem.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Unlike with filestore, you can't simply browse the folder structure and manually
+    look at the objects as BlueFS is not a native Linux filesystem; however, it's
+    possible to mount a BlueFS filesystem with the ceph-objectstore-tool to enable
+    exploration or to be able to manually correct errors. This will be covered further
+    in the section on disaster recovery.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ceph-volume
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Although not strictly part of BlueStore, the `ceph-volume` tool was released
+    around the same time as BlueStore and is the recommended tool for provisioning
+    Bluestore OSDs. It's a direct replacement for the `ceph-disk` tool, which had
+    a number of issues surrounding race conditions and the predictability of OSDs
+    being correctly enumerated and starting up. The `ceph-disk` tool used `udev` to
+    identify OSDs that were then mounted and activated. The `ceph-disk` tool has now
+    been deprecated, and all new OSDs should be created using `ceph-volume`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Although `ceph-volume` can function in a simple mode, the recommended approach
+    is to use the `lvm` mode. As the name suggests, this utilizes the Linux logical
+    volume manager to store information regarding the OSDs and to manage the block
+    devices. Additionally, the dm-cache, which is a part of `lvm`, can be used to
+    provide block-level caching underneath the OSDs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `ceph-volume` tool also has a batch mode, which aims to intelligently provision
+    OSDs given a list of block devices. Care should be taken to use the `--report`
+    mode to ensure that its intended action matches your expectations. Otherwise,
+    it's recommended that you manually partition and create OSDs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: How to use BlueStore
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'To create a BlueStore OSD using `ceph-volume`, you run the following command,
+    specifying the devices for the data and RocksDB storage. As previously mentioned,
+    you can separate the DB and WAL parts of RocksDB if you so wish:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: Shown in brackets is the encryption option. It's recommended that you encrypt
+    all new OSDs unless you have a specific reason not to. Encryption with modern
+    CPUs generates very little overhead, and makes the often-forgotten security measures
+    around disk replacements much simpler. With the recent introduction of various
+    new data-protection laws, such as GDPR in Europe, having data encrypted at rest
+    is highly recommended.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The preceding code assumes that your data disk is `/dev/sda`. For this example,
+    assume that you are using a spinning disk, and that you have a faster device,
+    such as an SSD (`/dev/sdb`) and a very fast NVMe device (`/dev/sdc`). The `ceph-volume` tool
+    would create two partitions on the data disk: one for storing the actual Ceph
+    objects and another small XFS partition for storing details about the OSD. It
+    would then place a link to the SSD to store the RocksDB on it and a link to the
+    NVMe device to store the WAL. You can create multiple OSDs sharing the same SSD
+    for DB and WAL by partitioning the devices, or by using `lvm` to carve logical
+    volumes out of them.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: However, as we discovered in [Chapter 2](dd1d6803-6e40-4bfb-8150-b605bcc08d59.xhtml),
+    *Deploying Ceph with Containers*, using a proper deployment tool for your Ceph
+    cluster helps to reduce deployment time and ensures consistent configuration across
+    the cluster. Although the Ceph Ansible modules also support deploying BlueStore
+    OSDs, at the time of writing, it doesn't currently support automatically creating
+    multiple DB and WAL partitions on a single device.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that you understand how to create BlueStore OSD's the next topic that is
+    required to be discussed is the upgrading of an existing cluster.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Strategies for upgrading an existing cluster to BlueStore
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: It's likely that some readers of this book are running existing Ceph clusters
+    that are utilizing filestore. These readers might be wondering if they should
+    upgrade to BlueStore, and if so, what the best method is for doing this.
+  prefs: []
+  type: TYPE_NORMAL
+- en: It should be understood that while filestore is still supported, it's very much
+    at the end of its life, with no further development work planned aside from any
+    critical bug fixes that may be required. Therefore, it's highly recommended that
+    you make plans to upgrade your cluster to BlueStore to take advantage of any current and future
+    enhancements and continue to run a supported Ceph release. The support path for
+    filestore in future releases hasn't been announced, but it would be wise to aim
+    to be running BlueStore OSDs by the Ceph release after Nautilus.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There is no special migration path for upgrading an OSD to BlueStore; the process
+    is to simply destroy the OSD, rebuild it as BlueStore, and then let Ceph recover
+    the data on the newly created OSD. It's more than likely that, because of the
+    differing size requirements between filestore journals and BlueStore's RocksDB,
+    altering partition sizes will require multiple OSDs to be destroyed at once. Therefore,
+    it may be worth considering whether operating system rebuilds should be carried
+    out at this point.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'There are two main approaches to the upgrade process that are largely determined
+    by the Ceph operator''s appetite for risk and the availability of spare capacity,
+    listed as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Degraded upgrade**:A degraded upgrade destroys the current OSDs without redistributing
+    their contents across the remaining OSDs. Once the OSDs come back online as BlueStore
+    OSDs, then the missing copies of data are rebuilt. Until the cluster returns to
+    full health, a portion of the data on the Ceph cluster will be in a degraded state,
+    and although multiple copies will still exist, they''ll be at a higher risk should
+    the cluster experience a failure of some sort. Recovery times will depend on the
+    number of OSDs that need to be recovered and the size of data stored on each OSD.
+    As it''s highly likely that several OSDs will be upgraded at once, expect the
+    recovery time to be higher than it would be for a single OSD. Please also note
+    that, with the default pool settings of `size=3` and `min_size=2`, should an additional
+    disk fail, some PGs will only have one copy, and now that they''re less than `min_size`,
+    the I/O will be suspended to these PGs until the recovery recreates a second copy.
+    The benefits of performing a degraded upgrade is that you only have to wait for
+    the cluster to re-balance once during recovery and you don''t require any additional
+    space, which may mean that this is the only option for clusters that are more
+    or less full.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Out-and-in upgrade**: If you want to guard against any possibility of data
+    loss or unavailability and have sufficient space to redistribute the contents
+    of the OSDs that are to be upgraded across the cluster, then an out-and-in upgrade
+    is the recommended approach. By marking the OSDs to be upgraded as out, Ceph will
+    re-balance the PGs across other OSDs. Once this process has finished, the OSDs
+    can be stopped and destroyed without impacting data durability or availability.
+    When the BlueStore OSDs are reintroduced, the PGs will flow back and, throughout
+    this period, there will be no reduction in the number of copies of data. Either
+    method will result in exactly the same configuration and so will ultimately come
+    down to personal preference. If your cluster has a large number of OSDs, then
+    some form of automation may be required to lessen the burden on the operator;
+    however, if you want to automate the process, then care should be taken around
+    the destruction of the filestore OSD step, as one mistake could easily wipe more
+    than the intended OSDs. A halfway measure may be to create a small script that
+    automates the zapping, partitioning, and creation steps. This can then be run
+    manually on each OSD node.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Upgrading an OSD in your test cluster
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: For the basis of demonstrating BlueStore, we will use `ceph-volume` to non-disruptively
+    manually upgrade a live Ceph cluster's OSDs from filestore to BlueStore. If you
+    wish to carry out this procedure for real, you could work through the *Ansible*
+    section in [Chapter 2](dd1d6803-6e40-4bfb-8150-b605bcc08d59.xhtml), *Deploying
+    Ceph with Containers*, to deploy a cluster with filestore OSDs and then go through
+    the following instructions to upgrade them. The OSDs will be upgraded following
+    the degraded method where OSDs are removed while still containing data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Make sure that your Ceph cluster is in full health by checking with the `ceph
+    -s` command, as shown in the following code. We''ll be upgrading OSD by first
+    removing it from the cluster and then letting Ceph recover the data onto the new
+    BlueStore OSD, so we need to be sure that Ceph has enough valid copies of your
+    data before we start. By taking advantage of the hot maintenance capability in
+    Ceph, you can repeat this procedure across all of the OSDs in your cluster without
+    downtime:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/209649af-637d-4d67-b4bc-167266f6bea1.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Now we need to stop all of the OSDs from running, unmount the disks, and then
+    wipe them by going through the following steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Use the following command to stop the OSD services:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The preceding command gives the following output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/9f1f231a-559f-4c9c-9d94-c7b87f8f7d35.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'We can confirm that the OSDs have been stopped and that Ceph is still functioning
+    using the `ceph -s` command again, as shown in the following screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/aaf5b105-8fd3-4ae0-adbe-1a80516d5358.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Now, unmount the XFS partitions; the errors can be ignored:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: '![](img/3955567f-f91f-4ed6-8226-2b8d16df40d3.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Unmounting the filesystems will mean that the disks are no longer locked and
+    we can wipe the disks using the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: '![](img/3c544ecc-0444-4bd8-9e95-cbcd8febd991.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Now we can also edit the partition table on the flash device to remove the
+    filestore journals and recreate them as a suitable size for BlueStore''s RocksDB
+    using the following code. In this example, the flash device is an NVMe:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: '![](img/790a2dfe-e3b2-45a0-a4e5-1dc99cb2e1eb.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Delete each Ceph journal partition using the `d` command, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/0f3fea3b-54c9-4487-ae0a-cc152cef9f8f.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Now create all of the new partitions for BlueStore, as shown in the following
+    screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/95fd7550-0ce1-4757-a6f2-3957f2d8cbb5.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Add one partition for each OSD you intend to create. When finished, your partition
+    table should look something like the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/09c9f9a7-a858-4149-b502-42847393ede2.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Use the `w` command to write the new partition table to disk, as shown in the
+    following screenshot. Upon doing so, you''ll be informed that the new partition
+    table is not currently in use, and so we need to run `sudo partprobe` to load
+    the table into the kernel:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/2b5f7d2f-b835-47cf-ad43-b091aa6ee533.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Go back to one of your monitors. First, confirm the OSDs we are going to remove
+    and remove the OSDs using the following `purge` commands:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The preceding command gives the following output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/460b52da-291b-493c-a81c-13eec9ea2a1e.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Now, remove the logical OSD entry from the Ceph cluster—in this example, OSD
+    36:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: '![](img/bfd1a0a0-6bd9-494f-8463-80ef62c5766c.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Check the status of your Ceph cluster with the `ceph -s` command. You should
+    now see that the OSD has been removed, as shown in the following screenshot:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/bf8d6dc8-19c7-46fb-9f15-96e5afb175fa.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Note that the number of OSDs has dropped, and that, because the OSDs have been
+    removed from the CRUSH map, Ceph has now started to try and recover the missing
+    data onto the remaining OSDs. It's probably a good idea not to leave Ceph in this
+    state for too long to avoid unnecessary data movement.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now issue the `ceph-volume` command to create the `bluestore` OSD using the
+    following code. In this example, we will be storing the DB on a separate flash
+    device, so we need to specify that option. Also, as per this book''s recommendation,
+    the OSD will be encrypted:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The preceding command gives a lot of output, but if successful, we will end
+    with the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/e7524e7d-1fc6-4ab1-820d-ab55ceedfa30.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Check the status of `ceph` again with `ceph-s` to make sure that the new OSDs
+    have been added and that Ceph is recovering the data onto them, as shown in the
+    following screenshot:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/9ac2b0ed-a22f-4d55-89d7-6e0409fee71c.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Note that the number of misplaced objects is now almost zero because of the
+    new OSDs that were placed in the same location in the CRUSH map before they were
+    upgraded. Ceph now only needs to recover the data, not redistribute the data layout.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If further nodes need to be upgraded, wait for the back-filling process to complete
+    and for the Ceph status to return to `HEALTH_OK`. Then the work can proceed on
+    the next node.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As you can see, the overall procedure is very simple and is identical to the
+    steps required to replace a failed disk.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we learned about the new object store in Ceph called BlueStore.
+    Hopefully, you have a better understanding of why it was needed and the limitations
+    in the existing filestore design. You should also have a basic understanding of
+    the inner workings of BlueStore and feel confident in how to upgrade your OSDs
+    to BlueStore.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next chapter we will look at how Ceph storage can be exported via commonly
+    used storage protocols to enable Ceph storage to be consumed by non-Linux clients.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Questions
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: What object store is the default when creating OSDs in Luminous and newer releases?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What database does BlueStore use internally?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What is the name of the process for moving data between levels in the database
+    part of BlueStore?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What is the name of the method where small writes can be temporarily written
+    to an SSD instead of an HDD?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: How can you mount BlueFS and browse it as a standard Linux filesystem?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What's the default compression algorithm used in BlueStore?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Moving up a level in the BlueStore database increases the size by what multiplier?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL

@@ -1,0 +1,940 @@
+- en: '*Chapter 10*: Troubleshooting and Monitoring Containers'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Running a container could be mistaken as the ultimate goal for a DevOps team,
+    but instead, this is only the first step of a long journey. System administrators
+    should ensure that their systems are working properly to keep the services up
+    and running; in the same way, the DevOps team should ensure that their containers
+    are working properly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In container management activities, having the right knowledge of troubleshooting
+    techniques could really help minimize any impact on the final services, reducing
+    downtime. Talking of issues and troubleshooting, a good practice is to keep monitoring
+    containers to easily intercept any issues or errors to speed up recovery.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we''re going to cover the following main topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Troubleshooting running containers
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Monitoring containers with health checks
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Inspecting our container build results
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Advanced troubleshooting with `nsenter`
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Before proceeding with the chapter information and examples, a machine with
+    a working Podman installation is required. As stated in [*Chapter 3*](B17908_03_epub.xhtml#_idTextAnchor068),
+    *Running the First Container*, all the examples in the book are executed on a
+    Fedora 34 system or later, but can be reproduced on your OS of choice.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A good understanding of the topics covered in [*Chapter 4*](B17908_04_epub.xhtml#_idTextAnchor083),
+    *Managing Running Containers*, and [*Chapter 5*](B17908_05_epub.xhtml#_idTextAnchor101),
+    *Implementing Storage for the Container's Data*, will be useful to easily grasp
+    concepts relating to container registries.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Troubleshooting running containers
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Troubleshooting containers is an important practice that we need experience
+    with to solve common issues and investigate any bugs we may encounter on the container
+    layer or in the application running inside our containers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Starting from [*Chapter 3*](B17908_03_epub.xhtml#_idTextAnchor068), *Running
+    the First Container*, we started working with basic Podman commands for running
+    and then inspecting containers on our host system. We saw how we can collect logs
+    with the `podman logs` command, and we also learned how to use the information
+    provided by the `podman inspect` command. Finally, we should also consider taking
+    a look at the output of the useful `podman system df` command, which will report
+    storage usage for our containers and images, and also the useful `podman system
+    info` command, which will show useful information on the host where we are running
+    Podman.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In general, we should always consider that the running container is just a process
+    on the host system so we always have available all the tools and commands for
+    troubleshooting the underlying OS and its available resources.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A best practice for troubleshooting containers could be a top-down approach,
+    analyzing the application layer first, then moving to the container layer, down
+    finally to the base host system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: At the container level, many of the issues that we may encounter have been summarized
+    by the Podman project team in a comprehensive list on the project page. We will
+    cover some of the more useful ones in the following sections.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Permission denied while using storage volumes
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: A very common issue that we may encounter during our activities on RHEL, Fedora,
+    or any Linux distribution that uses the SELinux security subsystem is related
+    to storage permission. The error described as follows is triggered when SELinux
+    is set to `Enforcing` mode, which is also the suggested approach to fully guarantee
+    the mandatory access security features of SELinux.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can try to test this on our Fedora workstation, first creating a directory
+    and then trying to use this as a volume in our container:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: As we can see, the `touch` command reports a `Permission denied` error, because
+    actually, it cannot write in the filesystem.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As we saw in detail in [*Chapter 5*](B17908_05_epub.xhtml#_idTextAnchor101),
+    *Implementing Storage for the Container's Data*, SELinux recursively applies labels
+    to files and directories to define their context. Those labels are usually stored
+    as extended filesystem attributes. SELinux uses contexts to manage policies and
+    define which processes can access a specific resource.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The container we just ran got its own Linux namespace and an SELinux label that
+    is completely different from the local user in the Fedora workstation, which is
+    why we actually got that error before.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Without a proper label, the SELinux system prevents the processes running in
+    the container from accessing the content. This is also because Podman does not
+    change the labels set by the OS if not explicitly requested through a command
+    option.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To let Podman change the label for a container, we can use either of two suffixes,
+    `:z` or `:Z`, for the volume mount. These options tell Podman to relabel file
+    objects on the volume.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `:z` option is used to instruct Podman that two containers share a storage
+    volume. So, in this case, Podman will label the content with a shared content
+    label that will allow two or more containers to read/write content on that volume.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `:Z` option is used to instruct Podman to label the volume's content with
+    a private unshared label that can only be used by the current container.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The command would result in something like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: As we can see, the command didn't report any error; it worked.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Issues with the ping command in rootless containers
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: On some hardened Linux systems, the `ping` command execution could be limited
+    to only a restricted group of users. This could cause the failure of the `ping`
+    command used in a container.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As we saw in [*Chapter 3*](B17908_03_epub.xhtml#_idTextAnchor068), *Running
+    the First Container*, when starting the container, the base OS will associate
+    with it a different user ID from the one used in the container itself. The user
+    ID associated to the container could fall outside the allowed range of user's
+    IDs enabled to use the `ping` command.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In a Fedora workstation installation, the default configuration will allow any
+    container to run the `ping` command without issues. To manage restrictions on
+    the usage of the `ping` command, Fedora uses the `ping_group_range` kernel parameter,
+    which defines the allowed system groups that can execute the `ping` command.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If we take a look at a just-installed Fedora workstation, the default range
+    is the following one:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: So, nothing to worry about for a brand-new Fedora system. But what about if
+    the range is smaller than this one?
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Well, we test this behavior by changing the allowed range with a simple command.
+    In this example, we are going to restrict the range and see that the `ping` command
+    will actually fail then:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: Just in case the range is smaller than the one reported in the previous output,
+    we can make it persistent by adding a file to `/etc/sysctl.d` that contains `net.ipv4.ping_group_range=0
+    0`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The applied change in the `ping` group range will impact the mapped user privileges
+    to run the `ping` command inside the container.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s start by building a Fedora-based image with the `iputils` package (not
+    included by default) using Buildah:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We can test it by running the following command inside a container:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: The command, executed on a system with a restricted range, produces a 100% packet
+    loss since the `ping` command is not able to send packets over a raw socket.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The example demonstrates how a restriction in `ping_group_range` impacts the
+    execution of `ping` inside a rootless container. By setting the range to a value
+    large enough to include the user private group GID (or one of the user's secondary
+    groups), the `ping` command will be able to send ICMP packets correctly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: Do not forget to restore the original `ping_group_range` before proceeding with
+    the next examples. On Fedora, the default configuration can be restored with the
+    `sudo sysctl -w "net.ipv4.ping_group_range=0 2147483647"` command and by removing
+    any persistent configuration applied under `/etc/sysctl.d` during the exercise.
+    For a base container image that we are building through a Dockerfile, we may need
+    to add a brand-new user with a large UID/GID. This will create a large, sparse
+    `/var/log/lastlog` file and this can cause the build to hang forever. This issue
+    is related to the Go language, which does not correctly support sparse files,
+    leading to the creation of this huge file in the container image.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Good to Know
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `/var/log/lastlog` file is a binary and sparse file that contains information
+    about the last time that the users logged in to the system. The apparent size
+    of a sparse file reported by `ls -l` is larger than the actual disk usage. A sparse
+    file attempts to use filesystem space in a more efficient way, writing the metadata
+    that represents the empty blocks to disk instead of the empty space that should
+    be stored in the block. This will use less disk space.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If we need to add a brand-new user to our base container image with a high
+    UID number, the best way would be to append the `--no-log-init` option to the
+    Dockerfile command, as shown here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: This option instructs the `useradd` command to stop creating the lastlog file,
+    solving the issue we may encounter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As mentioned in the early paragraphs of this section, the Podman team has created
+    a long but non-comprehensive list of common issues. We strongly suggest taking
+    a look at it if any issues are encountered: [https://github.com/containers/podman/blob/main/troubleshooting.md](https://github.com/containers/podman/blob/main/troubleshooting.md).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Troubleshooting could be tricky, but the first step is always the identification
+    of an issue. For this reason, a monitoring tool could help in alerting as soon
+    as possible in the case of issues. Let's see how to monitor containers with health
+    checks in the next section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Monitoring containers with health checks
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Starting with version 1.2, Podman supports the option to add a health check
+    to containers. We will go in depth in this section into these health checks and
+    how to use them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A health check is a Podman feature that can help determine the health or readiness
+    of the process running in a container. It could be as simple as checking that
+    the container's process is running but also more sophisticated, such as verifying
+    that both the container and its applications are responsive using, for example,
+    network connections.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'A health check is made up of five core components. The first is the main element
+    that will instruct Podman on the particular check to execute; the others are used
+    for configuring the schedule of the health check. Let''s see these elements in
+    detail:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`0`) or a failure (with other exit codes).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: If our container provides a web server, for example, our health check command
+    could be something really simple, such as a `curl` command that will try to connect
+    to the web server port to make sure it is responsive.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Retries**: This defines the number of consecutive failed commands that Podman
+    has to execute before the container will be marked as unhealthy. If a command
+    executes successfully, Podman will reset the retry counter.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Interval**: This option defines the interval time within which Podman will
+    run the health check command.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Finding the right interval time could be really difficult and requires some
+    trial and error. If we set it to a small value, then our system may spend a lot
+    of time running the health checks. But if we set it to a large value, we may struggle
+    and catch timeouts. This value can be defined with a widely used time format:
+    `30s` or `1h5m`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Start period**: This describes the time after which the health checks will
+    be started by Podman. In this period, Podman will ignore health check failures.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We can consider this as a grace period that should be used to allow our application
+    to successfully be up and start replying correctly to any clients as well as to
+    our health checks.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Timeout**: This defines the period of time the health check itself must complete
+    before being considered unsuccessful.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Let''s take a look at a real example, supposing we want to define a health
+    check for a container and run that health check manually:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: As we can see from the previous code block, we just started a brand-new container
+    named `checktest1`, defining a `healthcheck-command` that will run the `curl`
+    command on the `localhost` address inside the target container. Once the container
+    started, we manually ran `healthcheck` and verified that the exit code was `0`,
+    meaning that the check completed successfully and our container is healthy. In
+    the previous example, we also used the `--healthcheck-interval=0` option to actually
+    disable the run interval and make the health check manual.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Podman uses `cron`, to schedule the health checks, but these should be set manually.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s inspect how this automatic integration with systemd works by creating
+    an health check with an interval:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: As we can see from the previous code block, we just started a brand-new container
+    named `checktest2`, defining the same `healthcheck-command` of the previous example
+    but now specifying the `--healthcheck-interval=10s` option to actually schedule
+    the check every 10 seconds.
+  prefs: []
+  type: TYPE_NORMAL
+- en: After the `podman run` command, we also ran the `podman ps` command to actually
+    inspect whether the health check is working properly, and as we can see in the
+    output, we have the `healthy` status for our brand-new container.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'But how does this integration work? Let''s grab the container ID and search
+    for it in the following directory:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: The directory shown in the previous code block holds all the systemd resources
+    in use for our current user. In particular, we looked into the `transient` directory,
+    which holds temporary unit files for our current user.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When we start a container with a health check and a schedule interval, Podman
+    will perform a transient setup of a systemd service and timer unit file. This
+    means that these unit files are not permanent and can be lost on reboot.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s inspect what is defined inside these files:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: As we can see from the previous code block, the service unit file contains the
+    Podman health check command, while the timer unit file defines the scheduling
+    interval.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Finally, just because we may want a quick way to identify healthy or unhealthy
+    containers, we can use the following command to quickly output them:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: In this example, we used the `--filter health=healthy` option to display only
+    the healthy containers with the `podman ps` command.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We learned how to troubleshoot and monitor our containers in the previous sections,
+    but what about the container build process? Let's discover more about container
+    build inspection in the next section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Inspecting your container build results
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In previous chapters, we discussed in detail the container build process and
+    learned how to create custom images using Dockerfiles/Containerfiles or Buildah-native
+    commands. We also illustrated how the second approach helps achieve a greater
+    degree of control of the build workflow.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This section helps provide some best practices to inspect the build results
+    and understand potentially related issues.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Troubleshooting builds from Dockerfiles
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: When using Podman or Buildah to run a build based on a Dockerfile/Containerfile,
+    the build process prints all the instructions' outputs and related errors on the
+    terminal stdout. For all `RUN` instructions, errors generated from the executed
+    commands are propagated and printed for debugging purposes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's now try to test some potential build issues. This is not an exhaustive
+    list of errors; the purpose is to provide a method to analyze the root cause.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The first example shows a minimal build where a `RUN` instruction fails due
+    to an error in the executed command. Errors in `RUN` instructions can cover a
+    wide range of cases but the general rule of thumb is the following: the executed
+    command returns an exit code and if this is non-zero, the build fails and the
+    error, along with the exit status, is printed.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the next example, we use the `yum` command to install the `httpd` package,
+    but we have intentionally made a typo in the package name to generate an error.
+    Here is the Dockerfile transcript:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Chapter10/RUN_command_error/Dockerfile
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'If we try to execute the command, we will get an error generated by the `yum`
+    command not being able to find the missing `htpd` package:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: The first two lines print the error message generated by the `yum` command,
+    as in a standard command-line environment.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Next, Buildah (and, in the same way, Podman) produces a message to inform us
+    about the step that generated the error. This message is managed in the `imagebuildah`
+    package by the stage executor, which handles, as the name indicates, the execution
+    of the build stages and their statuses. The source code can be inspected in the
+    Buildah repository on GitHub: [https://github.com/containers/buildah/blob/main/imagebuildah/stage_executor.go](https://github.com/containers/buildah/blob/main/imagebuildah/stage_executor.go).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The message includes the Dockerfile instruction and the generated error, along
+    with the exit status.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The last line includes the `ERRO[0004]` error code and the final exit status
+    `1`, related to the `buildah` command execution.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`RUN` instruction that contains the failing command and fix or troubleshoot
+    the command error.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Another very common failure reason in builds is the missing parent image. It
+    could be related to a misspelled repository name, a missing tag, or an unreachable
+    registry.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The next example shows another variation of the previous Dockerfile, where
+    the image repository name is mistyped and thus does not exist in the remote registry:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Chapter10/FROM_repo_not_found/Dockerfile
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'When running a build from this Dockerfile, we will encounter an error caused
+    by the missing image repository, as in the next example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: The last line produces a different error code, `ERRO[0001]`, and an exit status,
+    `125`. This is a very easy error to troubleshoot and only requires passing a valid
+    repository to the `FROM` instruction.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Solution**: Fix the repository name and relaunch the build process. Alternatively,
+    verify that the target registry holds the wanted repository.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'What happens if we misspell the image tag? The next Dockerfile snippet shows
+    an invalid tag for the official Fedora image:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Chapter10/FROM_tag_not_found/Dockerfile
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This time, when we build the image, we will get a 404 error produced by the
+    registry, which is unable to find an associated manifest for the `sometag` tag:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: The missing tag will generate an `ERRO[0001]` error, while the exit status will
+    be set to `125` again.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`skopeo list-tags` to find all the available tags in a given repository.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Sometimes, the error caught from the `FROM` instruction is caused by the attempt
+    to access a private registry without authentication. This is a very common mistake
+    and simply requires an authenticating step on the target registry before any build
+    action takes place.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the next example, we have a Dockerfile that uses an image from a generic
+    private registry running using Docker Registry v2 APIs:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Chapter10/FROM_auth_error/Dockerfile
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Let''s try to build the image and see what happens:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: In this use case, the error is very clear. We are not authorized to pull the
+    image from the target registry and thus, we need to authenticate with a valid
+    auth token to access it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`podman login` or `buildah login` to the registry to retrieve the token or
+    provide an authentication file with a valid token.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: So far, we have inspected errors generated by builds with Dockerfiles. Let's
+    now see the behavior of Buildah in the case of errors when using its command-line
+    instructions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Troubleshooting builds with Buildah-native commands
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: When running Buildah commands, it is a common practice to put them inside a
+    shell script or a pipeline.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this example, we will use Bash as the interpreter. By default, Bash executes
+    the script up to the end, regardless of intermediate errors. This behavior can
+    generate unexpected errors if a Buildah instruction inside the script fails. For
+    this reason, the best practice is to add the following command at the beginning
+    of the script:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: The resulting configuration is a sort of safety net that blocks the execution
+    of the script as soon as we encounter an error and avoids common mistakes, such
+    as unset variables.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `set` command is a Bash internal instruction that configures the shell for
+    the script execution. The `-e` option inside this instruction tells the shell
+    to exit immediately if a pipeline or a single command fails and the `–o pipefail`
+    option tells the shell to exit with the error code of the rightmost command of
+    a failing pipeline that produced a non-zero exit code. The `-u` option tells the
+    shell to treat unset variables and parameters as an error during parameter expansion.
+    This keeps us safe from the missing expansion of unset variables.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The next script embeds the logic of a simple build of an `httpd` server on
+    top of the Fedora image:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The image tag was set wrong on purpose. Let''s see the results of the script
+    execution:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: The build produces a `manifest unknown` error with the `ERRO[0001]` error code
+    and the `125` exit status, just like the similar attempt with the Dockerfile.
+  prefs: []
+  type: TYPE_NORMAL
+- en: From this output, we can also learn that Buildah (and Podman, which uses Buildah
+    libraries for its build implementation) produces the same messages as a standard
+    build with a Dockerfile/Containerfile, with the only exception of not mentioning
+    the build step, which is obvious since we are running free commands inside a script.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`skopeo list-tags` to find all the available tags in a given repository.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this section, we have learned how to analyze and troubleshoot build errors,
+    but what can we do when the errors happen at runtime inside the container and
+    we do not have the proper tools for troubleshooting inside the image? For this
+    purpose, we have a native Linux tool that can be considered the real Swiss Army
+    knife of namespaces: `nsenter`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Advanced troubleshooting with nsenter
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Let''s start with a dramatic sentence: troubleshooting issues at runtime can
+    sometimes be complex.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Also, understanding and troubleshooting runtime issues inside a container implies
+    an understanding of how containers work in GNU/Linux. We explained these concepts
+    in [*Chapter 1*](B17908_01_epub.xhtml#_idTextAnchor015), *Introduction to Container
+    Technology*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Sometimes, troubleshooting can be very easy and, as stated in the previous sections,
+    the usage of basic commands, such as `podman logs`, `podman inspect`, and `podman
+    exec`, along with the usage of tailored health checks, can help us to gain access
+    to the necessary information to complete our analysis successfully.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Images nowadays tend to be as small as possible. What happens when we need more
+    specialized troubleshooting tools, and they are not available inside the image?
+    You could think to exec a shell process inside the container and install the missing
+    tool but sometimes (and this is a growing security pattern), package managers
+    are not available inside container images, sometimes not even the `curl` or `wget`
+    commands!
+  prefs: []
+  type: TYPE_NORMAL
+- en: We may feel a bit lost but we must remember that containers are processes executed
+    within dedicated namespaces and cgroups. What if we had a tool that could let
+    us exec inside one or more namespaces while keeping our access to the host tools?
+    That tool exists and is called `nsenter` (access the manual page with `man nsenter`).
+    It is not affiliated with any container engine or runtime and provides a simple
+    way to execute commands inside one or multiple namespaces unshared for a process
+    (the main container process).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Before diving into real examples, let''s discuss the main `nsenter` options
+    and arguments by running it with the `--help` option:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: From the output of this command, it is easy to spot that there are as many options
+    as the number of available namespaces.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Thanks to `nsenter`, we can capture the PID of the main process of a container
+    and then exec commands (including a shell) inside the related namespaces.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To extract the container''s main PID, we use can use the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The output can be inserted inside a variable for easier access:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: Hint
+  prefs: []
+  type: TYPE_NORMAL
+- en: All namespaces associated with a process are represented inside the `/proc/[pid]/ns`
+    directory. This directory contains a series of symbolic links mapping to a namespace
+    type and its corresponding inode number.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following command shows the namespaces associated with the process executed
+    by the container: `ls –al /proc/$CNT_PID/ns`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We are going to learn how to use `nsenter` with a practical example. In the
+    next subsection, we will try to network troubleshoot a database client application
+    that returns an HTTP internal server error without mentioning any useful information
+    in the application logs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Troubleshooting a database client with nsenter
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: It is not uncommon to work on alpha applications that still do not have logging
+    correctly implemented or that have poor handling of log messages.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The following example is a web application that extracts fields from a Postgres
+    database and prints out a JSON object with all the occurrences. The verbosity
+    of the application logs has been intentionally left to a minimum and no connection
+    or query errors are produced.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For the sake of space, we will not print the application source code in the
+    book; however, it is available at the following URL for inspection: [https://github.com/PacktPublishing/Podman-for-DevOps/tree/main/Chapter10/students](https://github.com/PacktPublishing/Podman-for-DevOps/tree/main/Chapter10/students).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The folder also contains a SQL script to populate a sample database. The application
+    is built using the following Dockerfile:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Chapter10/students/Dockerfile
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As usual, we are going to build the container with Buildah:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The container accepts a set of custom flags to define the database, host, port,
+    and credentials. To see the help information, simply run the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: We have been informed that the database is running on host `pghost.example.com`
+    on port `5432`, with username `students` and password `Podman_R0cks#`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The next command runs the `students` web application with the custom arguments:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The container starts successfully, and the only log message printed is the
+    following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'It is now time to test the application and see what happens when we run a query:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: The application can take some time to answer but after a while, it will print
+    an internal server error (`500`) HTTP message. We will find the reason in the
+    following paragraphs. Logs are not useful since nothing else other than the first
+    boot message is printed. Besides, the container was built with the UBI minimal
+    image, which has a small footprint of pre-installed binaries and no utilities
+    for troubleshooting. We can use `nsenter` to inspect the container behavior, especially
+    from a networking point of view, by attaching our current shell program to the
+    container network namespace while keeping access to our host binaries.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can now find out the main process PID and populate a variable with its value:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The following example runs Bash in the container network namespace, while retaining
+    all the other host namespaces (notice the `sudo` command to run it with elevated
+    privileges):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: Important Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'It is possible to run any host binary directly from `nsenter`. A command such
+    as the following is perfectly legitimate: `$ sudo nsenter -t $CNT_PID -n ip addr
+    show`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To demonstrate that we are really executing a shell attached to the container
+    network namespace, we can launch the `ip addr show` command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs: []
+  type: TYPE_PRE
+- en: The first command, `ip addr show`, prints the IP configuration, with a basic
+    `tap0` interface connected to the host and the loopback interface.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The second command, `ip route`, shows the default routing table inside the container
+    network namespace.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can take a first look at the active connections using the `ss` tool, already
+    available on our Fedora host:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE35]'
+  prefs: []
+  type: TYPE_PRE
+- en: We immediately spot that there are no established connections between the application
+    and the database host, which tells us that the issue is probably related to routing,
+    firewall rules, or name resolution causes that prevent us from reaching the host
+    correctly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The next step is to try to manually connect to the database with the `psql`
+    client tool, available from the rpm `postgresql` package:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE36]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This message is quite clear: the host is not resolved by the DNS service and
+    causes the application to fail. To finally confirm it, we can run the `dig` command,
+    which returns an `NXDOMAIN` error, a typical message from a DNS server to say
+    that the domain cannot be resolved and does not exist:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE37]'
+  prefs: []
+  type: TYPE_PRE
+- en: After checking with the development team, we discovered that the database name
+    had a missing dash that was misspelled, and the correct name was `pg-host.example.com`.
+    We can now fix the issue by running the container with the correct name.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We expect now to see the correct results when launching the query again:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE38]'
+  prefs: []
+  type: TYPE_PRE
+- en: In this example, we have focused on network namespace troubleshooting, but it
+    is possible to attach our current shell program to multiple namespaces by simply
+    adding the related flags.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can also simulate `podman exec` by running the command with the `-a` option:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE39]'
+  prefs: []
+  type: TYPE_PRE
+- en: This command attaches the process to all the unshared namespaces, including
+    the mount namespace, thus giving the same filesystem tree view that is seen by
+    processes inside the container.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we focused on container troubleshooting, trying to provide
+    a set of best practices and tools to find and fix issues inside a container at
+    build time or runtime.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We started by showing off some common use cases during container execution and
+    build stages and their related solutions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Afterward, we introduced the concept of health checks and illustrated how to
+    implement solid probes on containers to monitor their statuses, while showing
+    the architectural concepts behind them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the third section, we learned about a series of common error scenarios related
+    to builds and showed how to solve them quickly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the final section, we introduced the `nsenter` command and simulated a web
+    frontend application that needed network troubleshooting to find out the cause
+    of an internal server error. Thanks to this example, we learned how to conduct
+    advanced troubleshooting inside the container namespaces.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next chapter, we are going to discuss container security, a crucial concept
+    that deserves great attention. We will learn how to secure containers with a series
+    of best practices, the difference between rootless and rootful containers, and
+    how to sign container images to make them publicly available.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Further reading
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Podman troubleshooting guidelines: [https://github.com/containers/podman/blob/main/troubleshooting.md](https://github.com/containers/podman/blob/main/troubleshooting.md)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

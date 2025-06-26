@@ -1,0 +1,442 @@
+- en: An Overview of the Prometheus Ecosystem
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: With such a vast collection of components available for use, it can be daunting
+    to choose the ones that are required to solve a given monitoring gap. In this
+    chapter, we will go over the Prometheus ecosystem, which components perform what
+    job, and understand how everything works together logically.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Striving for simplicity and having a clear understanding of all the moving parts
+    of a Prometheus stack is invaluable to keep things manageable and reliable.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In brief, the following topics will be covered in this chapter:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Metrics collection with Prometheus
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Exposing internal state with exporters
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Alert routing and management with Alertmanager
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Visualizing your data
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Metrics collection with Prometheus
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Prometheus is a time series-based, open source monitoring system. It collects
+    data by sending HTTP requests to hosts and services on metrics endpoints, which
+    it then makes available for analysis and alerting using a powerful query language.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Even though Prometheus has graduated with the **Cloud Native Computing Foundation**
+    (**CNCF**) by demonstrating stability, maturity, and solid governance, it is still
+    evolving at a very rapid pace. At the time of writing, the current stable version
+    of Prometheus is 2.9.2, and every component or feature that is going to be discussed
+    will be based on this version. While there should be no major architectural changes
+    within version 2, care should be taken when applying specific configuration that's
+    been learned from this book to earlier or even later versions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: High-level overview of the Prometheus architecture
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The Prometheus ecosystem is composed of several components, each with its own
+    responsibility and clearly defined scope. Prometheus itself is essential as it
+    sits squarely in the middle of most interactions, but many components are in fact
+    optional, depending on your monitoring needs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As we can see in the following diagram, the main components in the Prometheus
+    ecosystem are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Prometheus server collects time series data, stores it, makes it available
+    for querying, and sends alerts based on it.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The Alertmanager receives alert triggers from Prometheus and handles routing
+    and dispatching of alerts.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The Pushgateway handles the exposition of metrics that have been pushed from
+    short-lived jobs such as cron or batch jobs.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Applications that support the Prometheus exposition format make internal state
+    available through an HTTP endpoint.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Community-driven exporters expose metrics from applications that do not support
+    Prometheus natively.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: First-party and third-party dashboarding solutions provide a visualization of
+    collected data.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Each one will be explored in depth later in this book:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/f52ac22e-763d-43fa-a8ad-d5f846effe39.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 2.1: High-level overview of the main components in the Prometheus ecosystem
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Prometheus server has its own internal processes, such as recording rules
+    and service discovery, which are thoroughly explained in [Chapter 9](9aa1e3da-13cf-4051-845d-1d1c924ef47b.xhtml),
+    *Defining Alerting and Recording Rules*, and [Chapter 12](5360e790-3884-4eeb-aaa1-8aad21dc6c1e.xhtml),
+    *Choosing the Right Service Discovery*, respectively.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Prometheus was originally created by Matt T. Proud and Julius Volz while working
+    at SoundCloud. It was inspired by Google''s Borgmon, which influenced a lot of
+    its earlier design: scraping plain text from metrics endpoints; exporters as proxies
+    for metrics collection; time series as multi-dimensional vectors, which can then
+    be transformed and filtered; and the use of ruleset evaluations for recording
+    and alerting, among other features.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: You might be tempted to try and make Prometheus fit into a push-based metrics
+    collection model, but this is ill-advised. Prometheus' core design is around pull,
+    so naturally, many assumptions break down when converting from push to pull. This
+    will be further explained when we approach the Pushgateway.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A singular attribute of Prometheus is that it unabashedly does not try to do
+    any type of clustering. By not relying on the network for coordination and storage
+    (although remote write is possible, as we'll see by the end of this book), it
+    makes a great argument for reliability and ease of use. It's trivial to just pick
+    up the appropriate binary distribution of Prometheus and run it locally on your
+    computer, and yet the same binary might be able to handle thousands of scrape
+    targets and the ingestion of millions of samples per second on server hardware.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Exposing internal state with exporters
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Not all applications are built with Prometheus-compatible instrumentation.
+    Sometimes, no metrics are exposed at all. In these cases, we can rely on exporters.
+    The following diagram shows how they work:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/4157b7b9-9713-4089-95bc-922807632f0b.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 2.2: A high-level overview of an exporter'
+  prefs: []
+  type: TYPE_NORMAL
+- en: An exporter is nothing more than a piece of software that collects data from
+    a service or application and exposes it via HTTP in the Prometheus format. Each
+    exporter usually targets a specific service or application and as such, their
+    deployment reflects this one-to-one synergy.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Nowadays, you can find exporters for pretty much any service you need, and if
+    a particular third-party service doesn't have an exporter available, it's quite
+    simple to build your own.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Exporter fundamentals
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: When the exporter starts, it binds to a configured port and exposes the internal
+    state of whatever is being collected in an HTTP endpoint of your choosing (the
+    default being `/metrics`). The instrumentation data is collected when an HTTP
+    GET request is made to the configured endpoint. For example, node exporter, one
+    of the most commonly used exporters, relies on a number of kernel statistics to
+    present data such as disk I/O, CPU, memory, network, filesystem usage, and much,
+    much more. Every single time that endpoint is scraped, the information is quickly
+    gathered and exposed in a synchronous operation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The HTTP GET request that's made by the Prometheus server to the observed system
+    for metric collection is called a **scrape**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If you are the one writing the service, the best option is to instrument the
+    code directly using a Prometheus client library. There are official client libraries
+    available for the following programming languages:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Go
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Java/JVM
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Python
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Ruby
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'There are community-driven client libraries for the following programming languages:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Bash
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: C++
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Common Lisp
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Elixir
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Erlang
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Haskell
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Lua for NGINX
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Lua for Tarantool
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: .NET
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: C#
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Node.js
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Perl
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: PHP
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Rust
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Due to an ever-growing community around Prometheus, this list is constantly
+    expanding.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Usually, exporters are very light and the performance footprint is mostly negligible
+    but, as always, there are exceptions for this rule, on which we will go into considerable
+    detail later in this book.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Alert routing and management with Alertmanager
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Alertmanager is the component from the Prometheus ecosystem that''s responsible
+    for the notifications that are triggered by the alerts that are generated from
+    the Prometheus server. As such, its availability is of the essence and the design
+    choices reflect this need. It''s the only component that''s truly conceived to
+    work in a highly available cluster setup, and uses gossip as the communication
+    protocol:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/ba795207-1d75-4eec-9a30-5b8229ed3ec3.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 2.3: A high-level overview of Alertmanager'
+  prefs: []
+  type: TYPE_NORMAL
+- en: At a very high level, Alertmanager is a service that receives HTTP POST requests
+    from Prometheus servers via its API, which it then deduplicates and acts on by
+    following a predefined set of routes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Alertmanager also exposes a web interface to allow, for instance, the visualization and
+    silencing of firing alerts or applying inhibition rules for them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: One of the core design choices is to value delivery over deduplication. This
+    means that if a network partition occurs between a cluster of Alertmanager instances,
+    notifications will be sent from both sides of the partition.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Alerting routes
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: A route, in its essence, can be seen as a tree-like structure. If an incoming
+    alert has a specific payload that triggers a particular route (branch), a pre-defined
+    integration will be invoked.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'There are multiple out-of-the-box integrations available for the most common
+    use cases, such as the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Email
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Hipchat
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: PagerDuty
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Slack
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Opsgenie
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: VictorOps
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: WeChat
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: There's also the webhook integration that issues an HTTP POST request with the
+    JSON payload of the firing alert to an endpoint of your choosing, opening a world
+    of possibilities for custom integrations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Visualizing your data
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Data visualization is one of the simplest ways to produce or consume information.
+    Prometheus exposes a well-defined API, where PromQL queries can produce raw data
+    for visualizations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Currently, the best external software for visualization is Grafana, which we
+    will explain thoroughly in [Chapter 10](02331a85-bad1-4a4f-b56e-150b69b46edb.xhtml),
+    *Discovering and Creating Grafana Dashboards*. The Grafana team has made its integration
+    with Prometheus seamless, and the result is a delightful user experience.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The Prometheus server also ships with two internal visualizations components:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Expression browser**: Here, you can run PromQL directly to quickly query
+    data and visualize it instantly:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![](img/dbe02ffd-3636-427d-98fb-05d6473f4aba.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 2.4: The Prometheus expression browser interface'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Consoles**: These are web pages that are built using the Golang templating
+    language and are served by the Prometheus server itself. This approach allows
+    you to have pre-defined data visualization interfaces without you having to constantly
+    type PromQL:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![](img/e481f288-10af-4749-bb39-6c138481a265.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 2.5: The Prometheus console interface'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: To better understand the Prometheus philosophy, it is essential to have an insight –
+    even if it's at a high level—into the main components of the Prometheus ecosystem,
+    from data collection via exporters to reliable alerting using Alertmanager, as
+    well as the available visualization options. This is what we covered in this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next chapter, we'll start building a test environment, so that all the
+    concepts we've discussed so far can start to materialize.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Questions
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: What are the main components of the Prometheus ecosystem?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Which components are essential and which are optional for a Prometheus deployment?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Why are out-of-process exporters needed?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: When an HTTP GET request hits the metrics endpoint of an exporter, what ensues?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What happens to a triggering alert in an Alertmanager cluster if a network partition
+    occurs?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: You realize you need to integrate Alertmanager with a custom-made API. What
+    would be your quickest option?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What visualizations options are included in a standard Prometheus server installation?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Further reading
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '**Prometheus overview**: [https://prometheus.io/docs/introduction/overview/](https://prometheus.io/docs/introduction/overview/)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

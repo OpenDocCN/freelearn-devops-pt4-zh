@@ -1,0 +1,1113 @@
+- en: '*Chapter 7*: Integrating with Existing Application Build Processes'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: After learning how to create custom container images using Podman and Buildah,
+    we can now focus on special use cases that can make our build workflows more efficient
+    and portable. For instance, small images are a very common requirement in an enterprise
+    environment, for performance and security reasons. We will explore how to achieve
+    this goal by breaking down the build process into different stages.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This chapter will also try to uncover scenarios where Buildah is not expected
+    to run directly on a developer machine but is driven instead by a container orchestrator
+    or embedded inside custom applications that are expected to call its libraries
+    or **command line interface** (**CLI**).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we''re going to cover the following main topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Multistage container builds
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Running Buildah inside a container
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Integrating Buildah with custom builders
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Before proceeding with this chapter, a machine with a working Podman installation
+    is required. As stated in [*Chapter 3*](B17908_03_epub.xhtml#_idTextAnchor068),
+    *Running the First Container*, all the examples in the book are executed on a
+    Fedora 34 system or later versions but can be reproduced on the reader's OS of
+    choice.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A good understanding of the topics covered in [*Chapter 6*](B17908_06_epub.xhtml#_idTextAnchor116),
+    *Meet Buildah – Building Containers from Scratch*, will be useful to easily grasp
+    concepts regarding builds, both with native Buildah commands and from Dockerfiles.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Multistage container builds
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: We have learned so far how to create builds with Podman and Buildah using Dockerfiles
+    or native Buildah commands that unleash potential advanced building techniques.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There is still an important point that we haven't already discussed – the size
+    of the images.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When creating a new image, we should always take care of its final size, which
+    is the result of the total number of layers and the number of changed files inside
+    them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Minimal images with a small size have the great advantage of being able to be
+    pulled faster from registries. Nevertheless, a large image will eat a lot of precious
+    disk space in the host's local store.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We already showed examples of some best practices to keep images compact in
+    size, such as building from scratch, cleaning up package manager caches, and reducing
+    the amount of `RUN`, `COPY`, and `ADD` instructions to the minimum necessary.
+    However, what happens when we need to build an application from its source and
+    create a final image with the final artifacts?
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's say we need to build a containerized Go application – we should start
+    from a base image that includes Go runtimes, copy the source code, and compile
+    to produce the final binary with a series of intermediate steps, most notably
+    downloading all the necessary Go packages inside the image cache. At the end of
+    the build, we should clean up all the source code and the downloaded dependencies
+    and put the final binary (which is statically linked in Go) in a working directory.
+    Everything will work, but the final image will still include the Go runtimes included
+    in the base image, which are no longer necessary at the end of the compilation
+    process.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When Docker was introduced and Dockerfiles gained momentum, this problem was
+    circumnavigated in different ways by DevOps teams who struggled to keep images
+    minimal. For example, **binary builds** were a way to inject the final artifact
+    compiled externally inside the built image. This approach solves the image size
+    problem but removes the advantage of a standardized environment for builds provided
+    by runtime/compiler images.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A better approach is to share volumes between containers and have the final
+    container image grab the compiled artifacts from a first build image.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To provide a standardized approach, Docker, and then the OCI specifications,
+    introduced the concept of `FROM` instructions and have subsequent images grab
+    contents from the previous ones.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next subsections, we will explore how to achieve this result with Dockerfiles/Containerfiles
+    and with Buildah's native commands.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Multistage builds with Dockerfiles
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The first approach to multistage builds is by creating multiple stages in a
+    single Dockerfile/Containerfile, with each block beginning with a `FROM` instruction.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Build stages can copy files and folders from previous ones using the `--from`
+    option to specify the source stage.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The next examples show how to create a minimal multistage build for the Go
+    application, with the first stage acting as a pure build context and the second
+    stage copying the final artifact inside a minimal image:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Chapter07/http_hello_world/Dockerfile
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: The first stage copies the source `main.go` file and the `go.mod` file to manage
+    the Go module dependencies. After downloading the dependency packages (`go get
+    -d -v ./...`), the final application is built (`go build –v ./...`).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The second stage grabs the final artifact (`/go/src/hello-world/hello-world`)
+    and copies it under the new image root. To specify that the source file should
+    be copied from the first stage, the `--from=0` syntax is used.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the first stage, we used the official `docker.io`/`library`/`golang` image,
+    which includes the latest version of the Go programming language. In the second
+    stage, we used the **ubi-micro** image, a minimal image from Red Hat with a reduced
+    footprint, optimized for microservices and statically linked binaries. Universal
+    Base Images will be covered in greater detail in [*Chapter 8*](B17908_08_epub.xhtml#_idTextAnchor149),
+    *Choosing the Container Base Image*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The Go application listed as follows is a basic web server that listens on
+    port `8080/tcp` and prints a crafted HTML page with the *"Hello World!"* message
+    when it receives a `GET /` request:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: For the purpose of this book, it is not necessary to be able to write or understand
+    the Go programming language. However, a basic understanding of the language syntax
+    and logic will prove to be very useful, since the greatest part of container-related
+    software (such as Podman, Docker, Buildah, Skopeo, Kubernetes, and OpenShift)
+    is written in Go.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Chapter07/http_hello_world/main.go
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The application can be built using either Podman or Buildah. In this example,
+    we choose to build the application with Buildah:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Finally, we can check the resulting image size:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: The final image has a size of only 45 MB!
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can improve our Dockerfile by adding custom names to the base images using
+    the keyword `AS`. The following example is a rework of the previous Dockerfile
+    following this approach, with the key elements highlighted in bold:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: In the preceding example, the name of the builder image is set as `builder`,
+    while the final image is named `srv`. Interestingly, the `COPY` instruction can
+    now specify the builder as using the custom name with the `--from=builder` option.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Dockerfile/Containerfile builds are the most common approach but still lack
+    some flexibility when it comes to implementing a custom build workflow. For those
+    special use cases, Buildah native commands come to our rescue.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Multistage builds with Buildah native commands
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: As mentioned before, the multistage build feature is a great approach to produce
+    images with a small footprint and a reduced attack surface. To provide greater
+    flexibility during the build process, the Buildah native commands come to our
+    rescue. As we mentioned earlier in [*Chapter 6*](B17908_06_epub.xhtml#_idTextAnchor116),
+    *Meet Buildah – Building Containers from Scratch*, Buildah offers a series of
+    commands that replicate the behavior of the Dockerfile instructions, thus offering
+    greater control over the build process when those commands are included in scripts
+    or automations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The same concept applies when working with multistage builds, where we can also
+    apply extra steps between the stages. For instance, we can mount the build container
+    overlay file system and extract the built artifact to release alternate packages,
+    all before building the final runtime image.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following example builds the same `hello-world` Go application by translating
+    the previous Dockerfile instructions into native Buildah commands, with everything
+    inside a simple shell script:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: In the preceding example, we highlighted the two working containers' creation
+    commands and the related `container1` and `container2` variables that store the
+    container ID.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Also, note the `buildah copy` command, where we have defined the source container
+    with the `--from` option, and used the `--chown` option to define user and group
+    owners of the copied resource. This approach proves to be more flexible than the
+    Dockerfile-based workflow, since we can enrich our script with variables, conditionals,
+    and loops.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For instance, we have tested with the `if` condition in the Bash script to check
+    the existence of the `go.mod` and `main.go` files before copying them inside the
+    working container dedicated to the build.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s now add an extra feature to the script. In the following example, we
+    evolved the previous one by adding a semantic versioning for the build and creating
+    a version archive before starting the build of the final runtime image:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The concept of semantic versioning is aimed to provide a clear and standardized
+    way to manage software versioning and dependency management. It is a set of standard
+    rules whose purpose is to define how software release versions are applied and
+    follows the **X.Y.Z** versioning pattern, where **X** is the major version, **Y**
+    is the minor version, and **Z** is the patch version. For more information, check
+    out the official specifications: [https://semver.org/](https://semver.org/).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: The key changes in the script are again highlighted in bold. First, we added
+    a `RELEASE` variable that tracks the release version of the application. Then,
+    we extracted the build artifact using the `buildah unshare` command, followed
+    by the `--mount` option to pass the container mount point. The user namespace
+    unshare was necessary to make the script capable of running rootless.
+  prefs: []
+  type: TYPE_NORMAL
+- en: After extracting the artifact, we created a gzipped archive using the `$RELEASE`
+    variable inside the archive name and removed the temporary files.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, we started the build of the runtime image and committed using the `$RELEASE`
+    variable again as the image tag.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this section, we have learned how to run multistage builds with Buildah using
+    both Dockerfiles/Containerfiles and native commands. In the next section, we will
+    learn how to isolate Buildah builds inside a container.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Running Buildah inside a container
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Podman and Buildah follow a fork/exec approach that makes them very easy to
+    run inside a container, including rootless containers scenarios.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There are many use cases that imply the need for containerized builds. Nowadays,
+    one of the most common adoption scenarios is the application build workflow running
+    on top of a **Kubernetes** cluster.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Kubernetes is basically a container orchestrator that manages the scheduling
+    of containers from a control plane over a set of worker nodes that run a container
+    engine compatible with the **Container Runtime Interface** (**CRI**). Its design
+    allows great flexibility in customizing networking, storage, and runtimes, and
+    leads to the great flourishing of side projects that are now incubating or matured
+    inside the **Cloud Native Computing Foundation** (**CNCF**).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Vanilla** Kubernetes (which is the basic community release without any customization
+    or add-ons) doesn''t have any native build feature but offers the proper framework
+    to implement one. Over time, many solutions appeared trying to address this need.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: For example, Red Hat **OpenShift** introduced, way back when Kubernetes 1.0
+    was released, its own build APIs and the *Source-to-Image* toolkit to create container
+    images from source code directly on top of the OpenShift cluster.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Another interesting solution is Google's **kaniko**, which is a build tool to
+    create container images inside a Kubernetes cluster that runs every build step
+    inside user space.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Besides using already implemented solutions, we can design our own running Buildah
+    inside containers that are orchestrated by Kubernetes. We can also leverage the
+    rootless-ready design to implement secure build workflows.
+  prefs: []
+  type: TYPE_NORMAL
+- en: It is possible to run CI/CD pipelines on top of a Kubernetes cluster and embed
+    containerized builds within a pipeline. One of the most interesting CNCF projects,
+    **Tekton Pipelines**, offers a cloud-native approach to accomplish this goal.
+    Tekton allows running pipelines that are driven by Kubernetes' custom resources
+    – special APIs that extend the basic API set.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Tekton Pipelines are made up of many different tasks, and users can either create
+    their own or grab them from **Tekton Hub** ([https://hub.tekton.dev/](https://hub.tekton.dev/)),
+    a free repository where many pre-baked tasks are available to be consumed immediately,
+    including examples from Buildah ([https://hub.tekton.dev/tekton/task/buildah](https://hub.tekton.dev/tekton/task/buildah)).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The preceding examples are useful to understand why containerized builds are
+    important. In this book, we want to focus on the details of running builds within
+    containers, with special attention paid to security-related constraints.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Running rootless Buildah containers with volume stores
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: For the examples in this subsection, the stable upstream `quay.io/buildah/stable`
+    Buildah image will be used. This image already embeds the latest stable Buildah
+    binary.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s run our first example with a rootless container that builds the contents
+    of the `~/build` directory in the host and stores the output in a local volume
+    named `storevol`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This example brings some peculiar options that deserve attention, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `--device /dev/fuse` option, which loads the fuse kernel module in the container,
+    which is necessary to run fuse-overlay commands
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The `-v ~/build:/build:z` option, which bind-mounts the `/root/build` directory
+    inside the container, assigning proper SELinux labeling with the `:z` suffix
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The `-v storevol:/var/lib/containers` option, which creates a fresh volume mounted
+    on the default container store where all the layers are created
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'When the build is complete, we can run a new container using the same volume
+    and inspect or manipulate the built image:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We have successfully built an image whose layers have been stored inside the
+    `storevol` volume. To recursively list the content of the store, we can extract
+    the volume mount point with the `podman volume inspect` command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'From now on, it is possible to launch a new Buildah container to authenticate
+    to the remote registry, and tag and push the image. In the next example, Buildah
+    tags the resulting image, authenticates to the remote registry, and finally pushes
+    the image:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'When the image is successfully pushed, it is finally safe to remove the volume:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: Despite working perfectly, this approach has some limits that are worth discussing.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The first limit we can notice is that the store volume is not isolated, and
+    thus any other container can access its contents. To overcome this issue, we can
+    use SELinux's `:Z` suffix in order to apply categories to the volume and make
+    it accessible exclusively to the running container.
+  prefs: []
+  type: TYPE_NORMAL
+- en: However, since a second container would run by default with different category
+    labels, we should grab the volume categories and run the second tag/push container
+    with the `--security-opt label=level:s0:<CAT1>,<CAT2>` option.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Alternatively, we can just run build, tag, and push commands in one single
+    container, as shown in the following example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: Important Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the preceding examples, we used the Buildah login by directly passing the
+    username and password in the command. Needless to say, this is far from being
+    an acceptable security practice.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Instead of passing sensitive data in the command line, we can mount the authentication
+    file that contains a valid session token as a volume inside the container.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The next example mounts a valid `auth.json` file, stored under the `/run/user/<UID>`
+    tmpfs, inside the build container, and the `--authfile /auth.json` option is then
+    passed to the `buildah push` command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: Finally, we have a working example that avoids exposing clear credentials in
+    the commands passed to the container.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To provide a working authentication file, we need to authenticate from the
+    host that will run the containerized build or copy a valid authentication file.
+    To authenticate with Podman, we''ll use the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'If the authentication process succeeds, the obtained token is stored in the
+    `/run/user/<UID>/containers/auth.json` file, which stores a JSON-encoded object
+    with a structure similar to the following example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: Security Alert!
+  prefs: []
+  type: TYPE_NORMAL
+- en: If the authentication file mounted inside the container has multiple authentication
+    records for different registries, they will be exposed inside the build container.
+    This can lead to potential security issues, since the container will be able to
+    authenticate on those registries using the tokens specified in the file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The volume-based approach we just described has some small impact on the performance
+    when compared to a native host build but provides better isolation of the build
+    process, a reduced attack surface, thanks to the rootless execution and standardization
+    of the build environment across different hosts.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's now inspect how to run containerized builds using bind-mounted stores.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Running Buildah containers with bind-mounted stores
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In the highest isolation scenario, where DevOps teams follow a zero-trust approach,
+    every build container should have its own isolated store populated at the beginning
+    of the build and destroyed upon completion. Isolation can be easily achieved with
+    SELinux MCS security.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To test this approach, let''s start by creating a temporary directory that
+    will host the build layers. We also want to generate a random suffix for a name
+    in order to host multiple builds without conflicts:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: Important Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: The preceding example and the next builds are executed as root.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can now run the build and bind-mount the new directory to the `/var/lib/containers`
+    folder inside the container and add the `:Z` suffix to ensure multi-category security
+    isolation:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: The MCS isolation guarantees isolation from other containers. Every build container
+    will have its own custom store, and this implies the need to re-pull the base
+    image layers on every execution, since they are never cached.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Despite being the most secure in terms of isolation, this approach also offers
+    the slowest performance because of the continuous pulls on the build run.
+  prefs: []
+  type: TYPE_NORMAL
+- en: On the other hand, the less secure approach does not expect any store isolation,
+    and all the build containers mount the default host store under `/var/lib/containers`.
+    This approach provides better performance, since it allows the reuse of cached
+    layers from the host store.
+  prefs: []
+  type: TYPE_NORMAL
+- en: SELinux will not allow a containerized process to access the host store; therefore,
+    we need to relax SELinux security restrictions to run the following example using
+    the `--security-opt label=disable` option.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following example runs another build using the default host store:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: The approach described in this example is the opposite of the previous one –
+    better performances but worse security isolation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A good compromise between the two implies the usage of a secondary, read-only
+    image store to provide access to the cached layers. Buildah supports the usage
+    of multiple image stores, and the `/etc/containers/storage.conf` file *inside
+    the Buildah stable image* already configures the `/var/lib/shared` folder for
+    this purpose.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To prove this, we can inspect the content of the `/etc/containers/storage.conf`
+    file, where the following section is defined:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: This way, we can get good isolation and better performance, since cached images
+    from the host will be already available in the read-only store. The read-only
+    store can be prepopulated with the most used images to speed up builds or can
+    be mounted from a network share.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following example shows this approach, by bind-mounting the read-only store
+    to the container and executing the build with the advantage of reusing pre-pulled
+    images:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: The examples showed in this subsection are also inspired by a great technical
+    article written by *Dan Walsh* (one of the leads of the Buildah and Podman projects)
+    on the *Red Hat Developer* blog; refer to the *Further reading* section for the
+    original article link. Let's close this section with an example of native Buildah
+    commands.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Running native Buildah commands inside containers
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'We have so far illustrated examples using Dockerfiles/Containerfiles, but nothing
+    prevents us from running containerized native Buildah commands. The following
+    example creates a custom Python image built from a Fedora base image:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: From a performance standpoint as well as the build process, nothing changes
+    from the previous examples. As already stated, this approach provides more flexibility
+    in the build operations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If the commands to be passed are too many, a good workaround can be to create
+    a shell script and inject it into the Buildah image using a dedicated volume:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: '`build.sh` is the name of the shell script file containing all the build custom
+    commands.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this section, we have learned how to run Buildah in containers covering both
+    volume mounts and bind mounts. We have learned how to run rootless build containers
+    that can be easily integrated into pipelines or Kubernetes clusters to provide
+    an end-to-end application life cycle workflow. This is due to the flexible nature
+    of Buildah, and for the same reason, it is very easy to embed Buildah inside custom
+    builders, as we will see in the next section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Integrating Buildah in custom builders
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: As we saw in the previous section of this chapter, Buildah is a key component
+    of Podman's container ecosystem. Buildah is a dynamic and flexible tool that can
+    be adapted to different scenarios to build brand-new containers. It has several
+    options and configurations available, but our exploration is not yet finished.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Podman and all the projects developed around it have been built with extensibility
+    in mind, making every programmable interface available to be reused from the outside
+    world.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Podman, for example, inherits Buildah capabilities for building brand-new containers
+    through the `podman build` command; with the same principle, we can embed Buildah
+    interfaces and its engine in our custom builder.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's see how to build a custom builder in the Go language; we will see that
+    the process is pretty straightforward, because Podman, Buildah, and many other
+    projects in this ecosystem are actually written in the Go language.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Including Buildah in our Go build tool
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: As a first step, we need to prepare our development environment, downloading
+    and installing all the required tools and libraries for creating our custom build
+    tool.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In [*Chapter 3*](B17908_03_epub.xhtml#_idTextAnchor068), *Running the First
+    Container*, we saw various Podman installation methods. In the following section,
+    we will use a similar procedure while going through the preliminary steps for
+    building a Buildah project from scratch, downloading its source file to include
+    in our custom builder.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First of all, let''s ensure we have all the needed packages installed on our
+    development host system:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After installing the Go language core libraries and some other development
+    tools, we are ready to create the directory structure for our project and initialize
+    it:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As shown in the previous example, we followed these steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Created the project root directory
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Defined the Go language root path that we are going to use
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: We are now ready to create our Go module that will create our customized container
+    image with a few easy steps.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To speed up the example and avoid any writing errors, we can download the Go
+    language code that we are going to use for this test from the official GitHub
+    repository of this book:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Go to [https://github.com/PacktPublishing/Podman-for-DevOps](https://github.com/PacktPublishing/Podman-for-DevOps)
+    or run the following command:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: After that, copy the files provided in the `Chapter07/*` directory into the
+    newly created `~/custombuilder/` directory.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'You should have the following files in your directory at this point:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'At this point, we can run the following command to let the Go tools acquire
+    all the needed dependencies to ready the module for execution:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: The tool analyzed the provided `custombuilder.go` file, and it found all the
+    required libraries, populating the `go.mod` file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: Please be aware that the previous command will verify whether a module is available,
+    and if it is not, the tool will start downloading it from the internet. So, be
+    patient during this step!
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can check that the previous commands downloaded all the required packages
+    by inspecting the directory structure we created earlier:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: We are now ready to run our custom builder module, but before going forward,
+    let's take a look at the key elements contained in the Go source file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If we start looking at the `custombuilder.go` file, just after defining the
+    package and the libraries to use, we defined the main function of our module.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the main function, at the beginning of the definition, we inserted a fundamental
+    code block:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: This piece of code enables the usage of `unshare` package, available through
+    `github.com/containers/storage/pkg/unshare`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To leverage the build features of Buildah, we have to instantiate `buildah.Builder`.
+    This object has all the methods to define the build steps, configure the build,
+    and finally run it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To create `Builder`, we need an object called `storage.Store` from the `github.com/containers/storage`
+    package. This element is responsible for storing the intermediate and resultant
+    container images. Let''s see the code block we are discussing:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see from the previous example, we are getting the default options
+    and passing them to the `storage` module to request a `Store` object.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Another element we need for creating `Builder` is the `BuilderOptions` object.
+    This element contains all the default and custom options we might assign to Buildah''s
+    `Builder`. Let''s see how to define it:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In the previous code block, we defined a `BuilderOptions` object that contains
+    the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'An initial image that we are going to use to build our target container image:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In this case, we chose the Node.js image based on Alpine Linux distribution.
+    This is because, in our example, we are simulating the build process of a Node.js
+    application.
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Isolation mode to adopt once the build starts. In this case, we are going to
+    use chroot isolation that fits a lot of build scenarios well – less isolation
+    but fewer requirements.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Some default options for the build, network, and system contexts:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`SystemContext` objects define the information contained in configuration files
+    as parameters.'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Now that we have all the necessary data for instantiating `Builder`, let''s
+    do it:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see, we are calling the `NewBuilder` function, with all the required
+    options that we created in code earlier in this section, to get `Builder` ready
+    to create our custom container image.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now that we are ready to instruct `Builder` with the required options to create
+    the custom image, let''s first add into the container image the **JavaScript**
+    file containing our application, for which we are creating this container image:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: We are assuming that the JavaScript main file is stored next to the Go module
+    that we are writing and using in this example, and we are copying this file into
+    the `/home/node` directory, which is the default path where the base container
+    image expects to find this kind of data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The JavaScript program that we are going to copy into the container image and
+    use for this test is really simple – let''s inspect it:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Without going deep into the JavaScript language syntax and its concepts, we
+    can note looking at the JavaScript file that we are using the HTTP library for
+    listening on port `8080` for incoming requests, responding to these requests with
+    a default welcome message: `Hello Podman and Buildah friends. This page is provided
+    to you through a container running Node.js`. We also append the Node.js version
+    to the response string.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: Please consider that JavaScript, also known as **JS**, is a high-level programming
+    language that is compiled just in time. As we stated earlier, we are neither going
+    deep into the definition of the JavaScript language nor its most famous runtime
+    environment, Node.js.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'After that, we configure the default command to run for our custom container
+    image:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE35]'
+  prefs: []
+  type: TYPE_PRE
+- en: We just set the command to execute the Node.js execution runtime, referring
+    to the JavaScript program that we just added to the container image.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For committing the changes we made, we need to get the image reference that
+    we are working on. At the same time, we will also define the container image name
+    that `Builder` will create:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE36]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now, we are ready to commit the changes and call the `commit` function of `Builder`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE37]'
+  prefs: []
+  type: TYPE_PRE
+- en: As we can see, we just requested `Builder` to commit the changes, passing the
+    image reference we obtained earlier, and then we finally print it as a reference.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We are now ready to run our program! Let''s execute it:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE38]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We can now test the custom container image we just built:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE39]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As we can see in the previous code block, we are running the container image
+    we just created with the following options:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`-d`: Detached mode, which runs the container in the background'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`-t`: Allocates a new pseudo-TTY'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`-p`: Publishes the container port to the host system'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`podmanbook/nodejs-welcome:latest`: The name of our custom container image'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Finally, we use the `curl` command-line tool for requesting and printing the
+    HTTP response provided by our JavaScript program, which is containerized in the
+    custom container image that we created!
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: The example described in this section is just a simple overview of all the great
+    features that the Buildah Go module can enable for our custom image builders.
+    To learn more about the various functions, variables, and code documentation,
+    you can refer to the docs at [https://pkg.go.dev/github.com/containers/buildah](https://pkg.go.dev/github.com/containers/buildah).
+  prefs: []
+  type: TYPE_NORMAL
+- en: As we saw in this section, Buildah is a really flexible tool, and with its libraries,
+    it can support custom builders in many different scenarios.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If we try to search on the internet, we can find many examples of Buildah supporting
+    the creation of custom container images. Let's see some of them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Quarkus-native executables in containers
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '**Quarkus** is defined as the Kubernetes-native Java stack leveraging OpenJDK
+    (the open Java development kit) project and the GraalVM project. GraalVM is a
+    Java virtual machine that has many special features, such as the compilation of
+    Java applications for fast startup and low memory footprint.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important note
+  prefs: []
+  type: TYPE_NORMAL
+- en: We will not go into the details of Quarkus, GraalVM, and any other companion
+    projects. The example that we will deep-dive into is only for your reference.
+    We encourage you to learn more about these projects by going through their web
+    pages and reading the related documentation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If we take a look at the Quarkus documentation web page, we can easily find
+    that, after a long tutorial in which we can learn how to build a Quarkus-native
+    executable, we can then pack and execute this executable in a container image.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The steps provided in the Quarkus documentation leverage a Maven wrapper with
+    a special option. Maven was born as a Java build automation tool, but then it
+    was also extended to other programming languages. If we take a quick look at this
+    command, we will note the name of Podman inside:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE40]'
+  prefs: []
+  type: TYPE_PRE
+- en: This means that the Maven wrapper program will invoke a Podman build to create
+    a container image with the preconfigured environment shipped by the Quarkus project
+    and the binary application that we are developing.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We saw the name of Podman inside the option. This is because, as we saw in [*Chapter
+    6*](B17908_06_epub.xhtml#_idTextAnchor116), *Meet Buildah – Building Containers
+    from Scratch*, Podman borrows Buildah's build logic by vendoring its libraries.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To explore this example further, we can take a look at [https://quarkus.io/guides/building-native-image](https://quarkus.io/guides/building-native-image).
+  prefs: []
+  type: TYPE_NORMAL
+- en: A Buildah wrapper for the Rust language
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Another cool example of build tools made through the Buildah library or CLI
+    is the Buildah wrapper for the **Rust** programming language. Rust is a programming
+    language similar to C++, designed for performance and safe concurrency. The main
+    project page is available at this URL: [https://github.com/Dennis-Krasnov/Buildah-Rust](https://github.com/Dennis-Krasnov/Buildah-Rust).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This Buildah wrapper leverages the Rust package manager names **Cargo** for
+    downloading the needed dependencies, compiles it in a package, and makes it distributable.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: We will not go into the details of Rust, Cargo, and any other companion projects.
+    The example that we will deep-dive into is only for your reference. We encourage
+    you to learn more about these projects by going through their web pages and reading
+    the related documentation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The example in the project homepage is really simple, as you can see in the
+    following code block:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE41]'
+  prefs: []
+  type: TYPE_PRE
+- en: The first command, after selecting the directory named `examples`, executes
+    a simple block of code that is needed to create a container, while the second
+    tests the container image that the Buildah wrapper has just made through Buildah
+    itself.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can take a look at the Rust code used in the first command of the previous
+    code block. The first command executes the small piece of code in the `nginx.rs`
+    file:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE42]'
+  prefs: []
+  type: TYPE_PRE
+- en: As stated before, we will not dive deep into the code syntax or into the library
+    itself; anyway, the code is pretty simple, and it just imports the Buildah wrapper
+    library, creates a container image starting from `nginx:1.21`, and finally, copies
+    the local `html` directory to the container image's destination path.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To explore this example further, take a look at [https://github.com/Dennis-Krasnov/Buildah-Rust](https://github.com/Dennis-Krasnov/Buildah-Rust).
+  prefs: []
+  type: TYPE_NORMAL
+- en: This concludes this section. We have learned, through a lot of useful examples,
+    about how to integrate Buildah in different scenarios to support custom builders
+    of the container images of our projects.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we have learned how to leverage Podman's companion, Buildah,
+    in some advanced scenarios to support our development projects.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We saw how to use Buildah for multistage container image creation, which allows
+    us to create builds with multiple stages using different `FROM` instructions and,
+    subsequently, to have images that grab contents from the previous ones.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Then, we discovered that there are many use cases that imply the need for containerized
+    builds. Nowadays, one of the most common adoption scenarios is the application
+    build workflow running on top of a Kubernetes cluster. For this reason, we went
+    into the details of containerizing Buildah.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, we learned through a lot of interesting examples how to integrate Buildah
+    to create custom builders for container images. As we saw in this chapter, there
+    are several options and methods to actually build a container image with the Podman
+    ecosystem tools, and most of the time, we usually start from a base image for
+    customizing and extending a previous OS layer to fit our use cases.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next chapter, we will learn more about container base images, how to
+    choose them, and what to look out for when we are making our choice.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Further readings
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'A list of CNCF projects: [https://landscape.cncf.io/](https://landscape.cncf.io/)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Best practices for running Buildah in a container*: [https://developers.redhat.com/blog/2019/08/14/best-practices-for-running-buildah-in-a-container](https://developers.redhat.com/blog/2019/08/14/best-practices-for-running-buildah-in-a-container)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The Buildah Go module documentation: [https://pkg.go.dev/github.com/containers/buildah](https://pkg.go.dev/github.com/containers/buildah)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Quarkus-native executables: [https://quarkus.io/guides/building-native-image](https://quarkus.io/guides/building-native-image)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The Buildah wrapper for the Rust language: [https://github.com/Dennis-Krasnov/Buildah-Rust](https://github.com/Dennis-Krasnov/Buildah-Rust)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

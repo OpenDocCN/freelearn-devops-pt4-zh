@@ -1,0 +1,1655 @@
+- en: Understanding and Extending Alertmanager
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Alerting is a critical component in any monitoring stack. In the Prometheus
+    ecosystem, alerts and their subsequent notifications are decoupled. Alertmanager
+    is the component that handles these alerts. In this chapter, we'll be focusing
+    on converting alerts into useful notifications using Alertmanager. From reliability
+    to customization, we'll delve into the inner workings of the Alertmanager service,
+    providing the required knowledge to configure, troubleshoot, and customize all
+    the options available. We'll make sure that concepts such as alert routing, silencing,
+    and inhibition are clear so that you can decide how to implement them in your
+    own stack.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Since Alertmanager is a critical component, high availability will also be explored,
+    and we will also explain the relationship between Prometheus and Alertmanager.
+    We will customize notifications and learn how to build and use reusable templates
+    so that notifications are appropriate and carry accurate information when they
+    reach their destination. We will finish this chapter by learning how to monitor
+    the monitoring system and, more importantly, learning how to be alerted when the
+    system is partially or completely down.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We will explore the following topics in this chapter:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Test environment for this chapter.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Alertmanager fundamentals.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Alertmanager configuration.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Common Alertmanager notification integrations.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Customizing your alert notifications.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Who watches the Watchmen?
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Setting up the test environment
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: To work with Alertmanager, we'll be three new instances to simulate a highly
+    available setup. This approach will allow us to not only expose the required configurations,
+    but also validate how everything works together.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The setup we''ll be using resembles the following diagram:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/d40bc98a-eaf8-4512-b628-306b0872f0f0.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 11.1: Test environment'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Deployment
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Let''s begin by deploying the Alertmanager test environment:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To launch a new test environment, move into this chapter''s path, relative
+    to the repository root:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Ensure that no other test environments are running and spin up this chapter''s
+    environment:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You can validate the successful deployment of the test environment using the
+    following command:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You will receive the following output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'When the deployment tasks end, you''ll be able to validate the following endpoints
+    on your host machine using your favorite JavaScript-enabled web browser:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| **Service** | **Endpoint** |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Prometheus | `http://192.168.42.10:9090` |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Alertmanager01 | `http://192.168.42.11:9093` |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Alertmanager02 | `http://192.168.42.12:9093` |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Alertmanager03 | `http://192.168.42.13:9093` |'
+  prefs: []
+  type: TYPE_TB
+- en: 'You should be able to access the desired instance by using one of the following
+    commands:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| **Instance** | **Command** |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Prometheus | `vagrant ssh prometheus` |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Alertmanager01 | `vagrant ssh alertmanager01` |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Alertmanager02 | `vagrant ssh alertmanager02` |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Alertmanager03 | `vagrant ssh alertmanager03` |'
+  prefs: []
+  type: TYPE_TB
+- en: Cleanup
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'When you''ve finished testing, just make sure you''re inside `./chapter11/`
+    and execute the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: Don't worry too much – you can easily spin up the environment again if you need
+    to.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Alertmanager fundamentals
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: We covered how alerting rules work in Prometheus in [Chapter 9](9aa1e3da-13cf-4051-845d-1d1c924ef47b.xhtml),
+    *Defining Alerting and Recording Rules*, but those, by themselves, aren't all
+    that useful. As we mentioned previously, Prometheus delegates notification handling
+    and routing to external systems through a Webhook-style HTTP interface. This is
+    where Alertmanager comes in.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Alertmanager is responsible for accepting the alerts generated from Prometheus
+    alerting rules and converting them into notifications. The latter can take any
+    form, such as email messages, chat messages, pages, or even Webhooks that will
+    then trigger custom actions, such as logging alerts to a data store or creating/updating
+    tickets. Alertmanager is also the only component in the official stack that distributes
+    its state across instances so that it can keep track of things such as which alerts
+    were already sent and which ones are silenced.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The notification pipeline
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The following diagram, inspired by the architecture diagram of Alertmanager,
+    provides an overview of the steps an alert goes through until it''s successfully
+    sent as a notification:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/18b36137-36bb-4725-9259-1abbdfc5528b.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 11.2: Notification pipeline overview'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The preceding diagram has a lot to unpack, so we're going to go through each
+    of these steps in the next few sections. Knowing how the alert pipeline works
+    will help you understand the various configuration options, how to troubleshoot
+    missing alerts, and generally take full advantage of everything Alertmanager has
+    to offer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Dispatching alert groups to the notification pipeline
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Whenever an alerting rule is triggered, Prometheus will send an alert in the
+    form of a JSON payload to the Alertmanager API, and it will keep sending updates
+    at each evaluation interval of that rule or every minute (configurable through
+    the `--rules.alert.resend-delay` flag), whichever is longer. When alerts are received
+    by Alertmanager, they go through the dispatching step, where they will be grouped
+    using one or more of the alert labels, such as `alertname`. We''re going to discuss
+    more about this in the *Alertmanager configuration* section, later in this chapter.
+    This allows you to sort alerts into categories, which can reduce the number of
+    notifications that are sent as multiple alerts in the same category and are grouped
+    together in a single notification, which will then trigger the notification pipeline:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/f2fb4c43-294d-41ac-85cf-6457f1cef663.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 11.3: Alertmanager interface grouping alerts by alertname'
+  prefs: []
+  type: TYPE_NORMAL
+- en: When running multiple Prometheus instances with the same configuration (a common
+    setup when pursuing high availability/redundancy), alerting rules for the same
+    condition won't necessarily trigger at the exact same time. Alertmanager accounts
+    for this situation by having a configurable time interval. It will wait before
+    doing anything else so that similar alerts can be grouped together and thus avoid
+    sending multiple notifications for a single type of problem.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This grouping is done in parallel across all the user-specified criteria. Each
+    group will then trigger the notification pipeline, which we'll cover next.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Inhibition
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: A good example to help us understand what alert inhibition is is imagining a
+    server rack and what happens if the top-of-rack switch fails. In this scenario,
+    all the servers and services in that rack will start triggering alerts because
+    they suddenly became unreachable. To avoid this problem, we can use the alert
+    for the top-of-rack switch which, if triggered, will prevent the notifications
+    for all the other alerts in that rack from going out. This helps the operator
+    become more focused on the real problem and avoid a flood of unactionable alerts.
+  prefs: []
+  type: TYPE_NORMAL
+- en: So, in a nutshell, inhibition allows you to map dependencies between alerts,
+    and therefore prevents notifications for dependent alerts from going any further
+    in the notification pipeline. This is set up in the Alertmanager configuration
+    file, which means inhibitions require a service reload if changed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If the alert is not matched in the inhibition phase, it will then step into
+    the silencer step.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Silencing
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Silencing is a common concept in monitoring/alerting systems; it is how you
+    can avoid alert notifications from going out in a time-capped way. It is often
+    used to disable notifications during maintenance windows, or to temporarily suppress
+    alerts of lower importance during incidents. Alertmanager takes this concept and
+    supercharges it by taking advantage of the fact that alerts coming in usually
+    have one or more differentiating labels: ones from the originating alerting rule
+    expression, the alertname, the alert''s label fields, from `alert_relabel_configs`,
+    as well as the ones from the Prometheus `external_labels`. This means that any
+    one of these labels (or a combination of them) can be used to temporarily disable
+    notifications through either direct matching or through regular expression matching:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/34d02fda-3fe3-4365-a54a-c946cecab22e.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 11.4: Creating a silence matching alertname=NodeExporterDown'
+  prefs: []
+  type: TYPE_NORMAL
+- en: You should be careful with regex matching as you can accidentally silence more
+    than you expect. The Alertmanager web UI can help prevent this as it shows a preview
+    of which firing alerts will be suppressed when creating new silences.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Silences are defined at runtime. They can be set using the Alertmanager web
+    interface, `amtool` (the Alertmanager command-line interface, which is going to
+    be presented shortly), or directly through the API. They can be set while an alert
+    is firing, such as during an incident, or in advance so that planned maintenance
+    doesn't spam the people doing on-call. It is not supposed to be a permanent solution
+    for a firing alert, only a temporary measure; this is why creating a silence requires
+    that you set an expiration date for it, and why the web UI only recognizes durations
+    up to days.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Since the silencing step comes after inhibition, if you silence an alert that
+    is triggering inhibition rules, it will continue to inhibit other alerts.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If the alert didn't match any of the silences, it will go through to the next
+    step in the notification pipeline, which is the routing phase.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Routing
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: When an alert batch reaches this phase, Alertmanager needs to decide where to
+    send it. Since the most common use cases are to have different people interested
+    in different alerts, different notification methods for different alert severities,
+    or even a combination of both, this step enables just that by way of a routing
+    tree. It is composed of routes (if any), each of which specifies a match criteria
+    for one or more labels and a receiver, and a root node, which defines a catch-all
+    receiver in case none of the sub-routes have a match for the alert groups passing
+    through. Sub-routes can have their own routes, making it a multi-level tree. Matching
+    is done in the order the routes are declared in, going into defined sub-routes
+    first when a route matches, and the highest depth match will define which receiver
+    will be used. This will become clearer when we put it in action using the Alertmanager
+    configuration.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Receivers and notifiers work similar in concept to address book contacts. Receivers
+    are named contacts that can have one or more notifiers, which are like contact
+    information. Alertmanager supports a lot of different notifiers that generally
+    fall into one of the following categories: email, chat (Slack, WeChat, HipChat),
+    and page (PagerDuty, Opsgenie, VictorOps, Pushover). Additionally, it also supports
+    the Webhook notifier, which is a generic integration point that can be used to
+    support every other notification system that is not built into Alertmanager.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: After this routing stage connects an alert batch with a receiver, Alertmanager
+    will then run a notification job for each notifier specified in that receiver.
+    This job takes care of deduplicating, sending, and retrying notifications. For
+    deduplication, it first checks the notification log (which will be discussed later
+    in this chapter) to make sure that this particular notification hasn't been sent
+    yet; if is already there, no further action is taken. Next, it will try to send
+    the notification and, if it succeeds, that will be recorded in the notification
+    log. If a notification fails to go through (for example, API error, connection
+    timeout, and so on), the job will try again.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we know the basics of the notification pipeline, let's have a look
+    at what happens when there are several Alertmanager instances and how the alert
+    state is shared among them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Alertmanager clustering
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The overview of the notification pipeline does not touch on the high availability
+    component of Alertmanager. The way high availability is achieved is by relying
+    on gossip (based on the HashiCorp memberlist, [https://github.com/hashicorp/memberlist](https://github.com/hashicorp/memberlist)),
+    instead of using a consensus-based protocol; this means there's no real reason
+    for choosing an odd number of instances in a cluster. Using gossip, the cluster
+    shares the **notification log** (**nflog**) between all Alertmanager instances,
+    which in turn will be aware of the collective state of the cluster regarding notifications.
+    In the case of a network partition, there will be notifications being sent from
+    each side of the partition, since logically it's better to receive more notifications
+    than failing to notify altogether.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As we now know, inhibition is set at the configuration file level, so it should
+    be the same across all Alertmanager instances. However, silences also need to
+    be gossiped across the cluster as they are set at runtime on a single Alertmanager
+    instance. This is a good way to validate if the clustering is working as expected
+    – confirming whether the configured silences show up in all instances.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The Alertmanager `/#/status` page shows the status of the gossip cluster, along
+    with the known peers. You can check out this endpoint in our test environment
+    by opening up, for example, `http://192.168.42.11:9093/#/status`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/fc9b2956-1d3e-4687-ae5a-a39c2d29aaa8.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 11.5: Alertmanager cluster status'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The way clustering works in Alertmanager is like so: every Prometheus instance
+    sends alerts to all the Alertmanager instances they know about. Those instances,
+    assuming they are all in the same HA cluster, order themselves, and the one that
+    becomes the first will handle alert notifications. That instance will distribute
+    the notification log through gossip, which will list the notifications that were
+    successfully sent. Each of the remaining Alertmanager instances will have an increasing
+    amount of delay, according to their respective position in the ordering, to wait
+    for the notification log updates. Alerts in the notification log will not be sent
+    again by these instances – if the notification log does not state that a given
+    notification was taken care of by the time the gossip delay is done, then the
+    second Alertmanager will take care of it, and so on:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/484c081e-4d9e-488e-9a22-7a584ff688b8.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 11.6: Alertmanager clustering overview'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Prometheus instances talk directly to all Alertmanager instances, since the
+    cluster members will take care of deduplication between themselves. This means
+    that no load balancers should be placed between Prometheus and Alertmanager.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Alertmanager clustering assumes that every instance is running with the same
+    configuration file. However, failing to do so should only impact its ability to
+    deduplicate notifications.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Alertmanager configuration
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In [Chapter 9](9aa1e3da-13cf-4051-845d-1d1c924ef47b.xhtml),* Defining Alerting
+    and Recording Rules*, we discussed how Prometheus generates and pushes out alerts.
+    Having also made clear the distinction between an alert and a notification, it's
+    now time to use Alertmanager to handle the alerts that are sent by Prometheus
+    and turn them into notifications.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, we'll go through the configuration required on Prometheus, along with
+    the configuration options available in Alertmanager, so that we have notifications
+    going out from our monitoring stack.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Prometheus configuration
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: There are a couple of configurations that need to be done in Prometheus so that
+    we can start using Alertmanager. The first thing to do is configure the external
+    labels, which are labels that are added to time series data (if it doesn't already
+    have them) when communicating with external systems, including but not limited
+    to Alertmanager. These are labels that uniquely identify the origin of the metrics,
+    such as `region`, `datacenter`, or `environment`. As a rule of thumb, if you feel
+    tempted to add the same label name/value to every single scrape and recording
+    rule, that label would probably make more sense as an external label as it introduces
+    no dimension to metrics locally in your Prometheus instance, but would most likely
+    be useful in higher-level systems (such as with federation or long-term metric
+    storage), as we will also see in the next few chapters. As we'll see in the following
+    example, external labels are configured inside the top-level `global` key in the
+    Prometheus main configuration file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The second thing to do is configure Prometheus so that it can send alerts to
+    Alertmanager. As we discussed previously, in the *Alertmanager clustering* section,
+    Prometheus instances are required so that you can find out about and send alerts
+    to all the Alertmanager cluster members individually. This configuration is set
+    on the Prometheus configuration file in a top-level section called `alerting`.
+    An example of this configuration can be found in our test environment, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In this `alerting` section, we can also use `alert_relabel_configs`, which
+    has the same configuration syntax as `relabel_configs` and `metric_relabel_configs`,
+    as explained in [Chapter 5](12e775c2-bee9-4ebe-ad73-2f9313eeeeee.xhtml), *Running
+    a Prometheus Server*, but in this case, it applies only to alerts going out. Using
+    relabeling here can be useful to prevent certain alerts from reaching Alertmanager
+    altogether, altering or dropping labels to ease grouping, or even adding alert-specific
+    labels that for, some reason, don''t make sense in `external_labels`. Since `alert_relabel_configs`
+    is run right before we send out alerts, external labels are present in those alerts
+    and as such are available for manipulation. Here''s an example of preventing alerts
+    with a label called `environment` and matching value of `development` from being
+    pushed to Alertmanager:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: While the preceding example illustrates how to drop alerts, it should not be
+    used as a permanent solution as the better solution would probably be to not create
+    these alerts at all.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, we're going to go through the Alertmanager configuration file, and its
+    main areas, and point out some useful information that will help you get started
+    with it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Configuration file overview
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Alertmanager is configured through a single configuration file, and can reload
+    it at runtime without restarting the same way Prometheus does: either sending
+    a `SIGHUP` to the process or sending an HTTP POST request to the `/-/reload` endpoint.
+    Such as Prometheus, a malformed configuration will not be applied – an error message
+    will be logged and the `alertmanager_config_last_reload_successful` metric that''s
+    found in its `/metrics` endpoint will be set to `0`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The configuration file is divided into five top-level sections: `global`, `route`,
+    `inhibit_rules`, `receivers`, and `templates`. In the following sections, we''ll
+    be exploring each one of them.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: global
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The global section gathers all the configuration options that are valid in other
+    sections of the file, and act as default settings for those options. Since those
+    parameters may be overridden in other sections, using them is a good way to keep
+    the configuration file as clean as possible, avoiding repetition. Among all the
+    available parameters in this section, most of them are related to credentials
+    and tokens as notifiers. There's a noteworthy one called `resolve_timeout`. Prometheus
+    will send alerts that are produced by triggering alerting rules on every evaluation
+    interval, updating the `EndTime` field in JSON payload. When those get resolved,
+    it notify Alertmanager of those resolutions by updating the `EndTime`. If, for
+    some reason, an alert stops getting updated periodically (for example, the Prometheus
+    instance sending that alert crashed and is still in the recovery process), Alertmanager
+    will use the last received `EndTime` to resolve the alert. The `resolve_timeout` configuration
+    is used to resolve alerts created by non-Prometheus systems, that don't use `EndTime`.
+    To be clear, this is not a setting you should be changing as it pertains to the
+    Prometheus-Alertmanager alert protocol; it is being explained here for completeness.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As an example, the global section of the Alertmanager configuration in our
+    test environment looks as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: This example configuration sets the default email `smarthost` and the `from`
+    address for every receiver that uses the email (SMTP) notifier.
+  prefs: []
+  type: TYPE_NORMAL
+- en: route
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This is ostensibly the most important configuration section of Alertmanager.
+    In this section, we will define how to group alerts based on their labels (`group_by`),
+    how long to wait for new alerts before sending additional notifications (`group_interval`),
+    and how long to repeat them (`repeat_interval`), but most importantly, which receivers
+    should be triggered for each alert batch (`receiver`). Since each route can have
+    its own child routes, this forms a routing tree. The top-level route can't have
+    any matching rules as it works like a catch-all for any alert that doesn't match
+    any of its sub-routes. Each setting, except `continue`, made on a route is carried
+    over to its child routes in a cascading fashion. Although the default behavior
+    is to stop searching for a receiver when the most specific match possible is found,
+    it is possible to set `continue` to `true`, making the matching process keep going,
+    thereby allowing you to trigger multiple receivers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You can find the following example route configuration in our test environment:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The main route in the preceding example does the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Defines the `operations` receiver as the default route when no other sub-routes
+    match
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Groups incoming alerts by `alertname` and `job`
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Waits 30 seconds for more alerts to arrive before sending the first notification
+    to reduce the number of notifications for the same problem
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Waits five minutes before sending additional notifications when new alerts are
+    added to a batch
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Resends a notification every four hours for each alert batch with the currently
+    firing alerts
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Additionally, it sets a sub-route for alerts whose `job` label matches either
+    `checkoutService` or `paymentService` with its own receiver, `yellow-squad-email`.
+    That sub-route, in turn, define its own child route that, if the severity label
+    matches `pager`, should use the `yellow-squad-pager receiver` instead.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The official Prometheus website offers a routing tree editor and visualizer
+    at [https://prometheus.io/webtools/alerting/routing-tree-editor/](https://prometheus.io/webtools/alerting/routing-tree-editor/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `group_by` clause can also take the sole value of `...`, which will signal
+    Alertmanager to not do any grouping for incoming alerts. This is very rarely used,
+    as the purpose of grouping is to tune down the number of notifications so that
+    the signal-to-noise ratio is high. One possible usage of this feature is to send
+    every alert as-is to another system where alerts get processed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: inhibit_rules
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In this section, we will add rules to inhibit alerts. The way this works is
+    by matching source alerts and muting target ones by using matchers on both. The
+    only requirement is that the labels on the target and source match in terms of
+    both label name and value, for example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In this example, we can read the following: if there''s an alert with the `job`
+    label set to `icmp`, mute all other alerts with an `alertname` that matches `AlertmanagerDown`
+    or `NodeExporterDown` when `base_instance` is the same across all matched alerts.
+    In other words, if the instance that is running Alertmanager and Node Exporter
+    is down, skip sending alerts about those services and just send the one about
+    the instance itself, allowing the operator to focus on the real problem.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: If any label in the equal clause does not exist in both source and target alerts,
+    it will be considered matched and thus inhibition will be enabled.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If an alert matches both source and target in the inhibit rule definition, that
+    alert will not be inhibited – this is to prevent an alert from inhibiting itself.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can see the interface of Alertmanager when this occurs in the following
+    screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/2e9ca144-f7bb-42bd-9887-47f351d211e7.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 11.7: Alertmanager interface showing only firing notifications'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the following screenshot, we can see all the inhibited alerts that weren''t
+    present in the preceding screenshot by selecting the **Inhibited** option in the
+    top-right corner:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/f3ac8d8a-c728-403e-a0e7-d75cd3448551.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 11.8: Alertmanager interface showing notifications, including the inhibited
+    ones'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Alertmanager interface allows you to have a bird's-eye view of all alerts,
+    not only the ones that are active but also the ones that are inhibited. The default
+    is to not show inhibited alerts in order to reduce visual clutter; however, as
+    we can see in the preceding screenshot, you can easily enable showing them by
+    selecting the **Inhibited** checkmark in the top-right corner of the **Filter**/**Group**
+    box.
+  prefs: []
+  type: TYPE_NORMAL
+- en: receiver
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: When a route is matched, it will invoke a receiver. A receiver contains notifiers,
+    which we'll be exploring more deeply in the following sections. Basically, the
+    receiver is a named configuration for the available integrations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In our test environment, we can find an example of a receiver by using the
+    Webhook notifier, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: The top-level route, also known as the catch-all or fallback route, will trigger
+    the receiver named `operations` when incoming alerts aren't matched in other sub-routes.
+    The `operations` receiver is configured using a single notifier, which is the
+    Webhook notifier. This means that alerts that go to this receiver are sent to
+    the URL specified in the `url` configuration key. The Webhook notifier will be
+    further dissected later in this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: templates
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'This section is where a list of paths that point to custom notification templates
+    for the several notifiers that are available can be defined. Similar to other
+    file path configurations in Prometheus, each path definition allows globing on
+    the last component and can be defined as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: We'll be using this section to define our custom templates in the *Customizing
+    your alert notifications* section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The amtool command-line tool
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Similar to `promtool`, `amtool` is an easy-to-use command-line tool backed by
+    the Alertmanager HTTP API. Besides being useful for validating the correctness
+    of the Alertmanager configuration file, it also allows you to query the server
+    for currently triggering alerts, and to execute actions such as silencing alerts
+    or creating new ones. The `amtool` sub-commands are split into four groups – `alert`,
+    `silence`, `check-config`, and `config` – and we'll provide an overview of each
+    one using the test environment.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To follow the examples in this section, make sure that you connect to one of
+    the Alertmanager instances. Since they are clustered, any one of them will do,
+    for example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: After logging in, you can run `amtool` as the default user, as no administrative
+    permissions are required to interact with the Alertmanager API. Additionally,
+    you can even use `amtool` to connect to any of the Alertmanager instances, not
+    just the local instance, as most commands that interact with the HTTP API require
+    that you specify the instance URL.
+  prefs: []
+  type: TYPE_NORMAL
+- en: alert
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'This sub-command allows you to query the Alertmanager cluster for currently
+    firing alerts, which can be achieved as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `alert` sub-command default action is `query`. The equivalent command to
+    the previous example would be `amtool alert query --alertmanager.url http://alertmanager02:9093`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Another feature this sub-command has is the ability to create alerts on demand.
+    This can come in useful for testing purposes. For example, let''s create a new
+    alert named `ExampleAlert` with the label `example="amtool"`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `add` action expects one label name/value pair per command argument, as
+    we can see in the preceding code. This action will also consider the first argument
+    since the alertname has no label name. An alert can be created without a name
+    if we omit the `alertname` label, which can cause some weirdness in both `amtool`
+    and the Alertmanager web UI, so some caution regarding this is advised.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can check that it was added correctly by waiting a bit (the defined `group_wait`
+    in the test environment is 30 seconds) and then querying the current alerts again:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This action also allows you to specify other alert fields, such as end time,
+    generator URL, and annotations. You can consult the `add` action command-line
+    interface (arguments and options) by using the `help` flag:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: Keep in mind that this newly created alert will be considered resolved after
+    five minutes of inactivity (the default value for `resolve_timeout`), so be sure
+    to add new instances of this alert (by running the `add` action) to keep it going
+    if you need more time to test.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We'll be using this new alert next as a target for silencing.
+  prefs: []
+  type: TYPE_NORMAL
+- en: silence
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'With this sub-command, we can manage silences. First, we can try to query the
+    available silences in the cluster by using the following instruction:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `silence` sub-command default action is `query`. The equivalent command
+    to the previous example would be `amtool silence query --alertmanager.url http://alertmanager02:9093`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As we can see, no silence is currently being enforced. Let''s create a new
+    one for the previous generated alert by matching its label, `example="amtool"`,
+    and checking the silences again:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We can now see that the new silence has been added. To verify that it''s already
+    in effect, we can use the `alert` sub-command and check that the `ExampleAlert`
+    has disappeared from the list of current alerts:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Let''s remove the silence we just created by using the `expire` action. For
+    this, we need the silence identifier, which can be seen in the `ID` column when
+    we listed the current silences:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: If we query the list of current alerts again, we will see our `ExampleAlert`
+    there again.
+  prefs: []
+  type: TYPE_NORMAL
+- en: These are the most common use cases for the silence feature. There are also
+    other actions available, such as batch importing of silences (useful when migrating
+    to a new cluster) or even updating an existing one if you ever so desire. As usual,
+    the `--help` flag will provide you with guidance on how to use these actions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: check-config
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'This is probably the most useful feature of `amtool`: the ability to validate
+    the syntax and schema of our Alertmanager configuration file and referenced template
+    files. You can test the `check-config` sub-command by following this example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: This type of validation is quite easy to automate and should be done after any
+    configuration change, but before reloading the Alertmanager instance, thereby
+    preventing most types of configuration issues.
+  prefs: []
+  type: TYPE_NORMAL
+- en: config
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'With the `config` sub-command, we can consult the internal configuration of
+    a running Alertmanager instance, which includes all configurable fields, even
+    ones not explicitly listed in the configuration file. You can check this by issuing
+    the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: Configuration fields that were not specified in the configuration file will
+    show with their default values, and fields that deal with secrets (such as passwords
+    and tokens) will be automatically redacted.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `config` sub-command default action is shown. The equivalent command to
+    the previous example would be `amtool config show --alertmanager.url http://alertmanager02:9093`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The next sub-command action, `routes`, generates a text visualization of the
+    configured routing tree. This command can be run against a running Alertmanager
+    instance or a local configuration file. The syntax and output is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You can even validate the routing tree by providing labels to the `routes test`
+    action and checking which route would be triggered. We can see this in action
+    in the following example, where we''re validating whether the triggered receiver
+    is in fact `yellow-squad-email` when an alert comes in with the `job="checkoutService"`
+    label:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: Having this command-line tool around can help you streamline the development
+    of complex routing rules and validate produced configurations without even needing
+    an Alertmanager instance running locally.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Kubernetes Prometheus Operator and Alertmanager
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In [Chapter 5](12e775c2-bee9-4ebe-ad73-2f9313eeeeee.xhtml), *Running a Prometheus
+    Server*, we had the opportunity to experiment with the Prometheus Operator. Since
+    Alertmanager is a fundamental component of the Prometheus stack, the Operator
+    is also able to manage its instances. Besides taking care of an Alertmanager cluster,
+    the Operator is also responsible for managing the configuration of recording and
+    alerting rules.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To provide some insight into how to use the Operator to manage an Alertmanager
+    cluster, we will provide, as an example, a full setup for you to try out. The
+    Kubernetes manifests for getting Alertmanager and Prometheus up and running in
+    our Kubernetes test environment can be found, relative to the repository root
+    path, at the following path:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The following steps will ensure that a new Kubernetes environment with all
+    the required software has been provisioned so that we can then focus on the Alertmanager
+    component:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Validate that no other Kubernetes environment is running:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Start an empty Kubernetes environment:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Add the Prometheus Operator components and follow its deployment:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Add the new Prometheus cluster, ensuring that it''s successful:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Add all the targets to Prometheus and list them:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: After the Kubernetes test environment is running, we can proceed with Alertmanager-specific
+    configurations. Similar to the virtual machine-based test environment, we'll require
+    the provisioning of not only Alertmanager itself, but also the alerting rules
+    for Prometheus.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For the Alertmanager configuration, since we might want to add sensitive information
+    such as email credentials or a pager token, we are going to use a Kubernetes secret.
+    This also implies that there should be a ServiceAccount for accessing that secret.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can create the ServiceAccount by applying the following manifest:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Since we''re using a secret, the Alertmanager configuration needs to be encoded
+    into base64\. A minimal configuration is provided and can be deployed by issuing
+    the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'For reference, the minimal configuration that is encoded in the secret is the
+    following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now, we can proceed with the deployment and get the Operator to do the heavy
+    lifting for us. It will abstract the creation of a StatefulSet and get the cluster
+    up and running. For this, we''re required to apply the following manifest:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The important bit of the previous manifest can be seen in the following snippet:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE35]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We can follow the state of the deployment by issuing the following instruction:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE36]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'To ensure that the Prometheus instances can collect metrics from the newly
+    created Alertmanagers, we''ll add a new Service and ServiceMonitor. For this,
+    we need to apply the following manifests:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE37]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'It''s now time to add the alerting rules. To do this, you''re just required
+    to apply the following manifest:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE38]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'If you open the previous manifest, you will see several rules. The following
+    snippet illustrates the first one:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE39]'
+  prefs: []
+  type: TYPE_PRE
+- en: These rules will be added to the Prometheus instances, and the Operator will
+    take care of reloading their configuration without causing any downtime of the
+    service.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Finally, you can access the web interface of Prometheus and Alertmanager and
+    validate all the configurations you''ve made so far by issuing the following instructions,
+    which will open a couple of browser tabs:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE40]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'When you''re finished testing, you can delete this Kubernetes-based environment
+    by issuing the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE41]'
+  prefs: []
+  type: TYPE_PRE
+- en: This setup gives you a quick overview of how to integrate Alertmanager with
+    Prometheus on Kubernetes. Once again, the Prometheus Operator abstracts most of
+    the complexity and allows you to focus on what matters most.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Common Alertmanager notification integrations
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Users and/or organizations have different requirements regarding notification
+    methods; some might be using HipChat as a means of communication, while others
+    rely on email, on-call usually demands a pager system such as PagerDuty or VictorOps,
+    and so on. Thankfully, Alertmanager provides several integration options out of
+    the box and covers most of the notification needs you might have. If not, there's
+    always the Webhook notifier, which allows integration with custom notification
+    methods. Next, we'll be exploring the most common integrations and how to configure
+    them, as well as providing basic examples to get you started.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Something to keep in mind when considering integrating with chat systems is
+    that they're designed for humans, and the use of a ticketing system is advised
+    when thinking about low-priority alerting. When the process of creating alerts
+    is easy and self-service, managing them can quickly get out of control. Tickets
+    ensure accountability: Some of the major advantages of using tickets over alerting
+    on chat channels is that they allow tracking, prioritization, and proper follow-up
+    to ensure that the alerted problem does not happen again. This method also implicitly
+    ensures ownership of notifications and stops the usual *who's the owner of this
+    alert?* question from arising. Ownership empowers service maintainers to curate
+    the alerts they receive and, as a side effect, also helps reduce alert fatigue.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you happen to be using JIRA for task tracking, there's a custom integration
+    that relies on the Webhook notifier called JIRAlert, available at [https://github.com/free/jiralert](https://github.com/free/jiralert).
+  prefs: []
+  type: TYPE_NORMAL
+- en: There is a configuration key that is common to all notifiers, and is called `send_resolved`.
+    It takes a Boolean (true or false) and declares whether a notification should
+    be sent when an alert is resolved. This is enabled by default for PagerDuty, Opsgenie,
+    VictorOps, Pushover, and the Webhook integration, but disabled for the remaining
+    notifiers, and is the main reason why you should prevent unnecessary spam.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Email
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Email is the standard communication method in most organizations, so it should
+    be no surprise that it''s supported by Alertmanager. Configuration-wise, it''s
+    quite straightforward to set up; however, since Alertmanager doesn''t send emails
+    directly, it needs to use an actual email relay. Let''s use a real-world example
+    that should be helpful for quick tests and low-budget setups, which is using the
+    SMTP of an email provider (in this case, Google''s Gmail):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE42]'
+  prefs: []
+  type: TYPE_PRE
+- en: In this particular example, since it's a bad idea in terms of online security
+    to use your main Gmail password directly, you'll need an account with two-factor
+    authentication enabled, and then generate an app password to use in the `smtp_auth_password`
+    field.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can find out how to generate app passwords for a Gmail account on the *Sign
+    in using App Passwords* support page, located at [https://support.google.com/accounts/answer/185833](https://support.google.com/accounts/answer/185833).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Chat
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'At the time of writing, there are integrations for three chat services: Slack,
+    WeChat, and HipChat. The following example represents the configuration for the
+    Slack integration; later in this chapter, we''ll provide a more in-depth customization
+    overview for this kind of integration:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE43]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `slack_api_url` should point to a *Slack Incoming Webhooks* URL. You can
+    find out more by going to their documentation about this subject at [https://api.slack.com/incoming-webhooks](https://api.slack.com/incoming-webhooks).
+    Since `slack_configs` is a list, you can specify multiple channels on a single
+    receiver.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Pager
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Being on-call is generally synonymous with carrying a pager, physical or otherwise.
+    Alertmanager, at the time of writing, supports four pager-style service integrations:
+    PagerDuty, Opsgenie, VictorOps, and Pushover. The configuration for each of these
+    services is fairly simple to get started, as they mostly revolve around API URLs
+    and authentication tokens. However, they also support deeper levels of customization,
+    such as adding images, and links, and configuring service-specific fields, such
+    as severity. These advanced configuration options are described in Alertmanager''s
+    official documentation, so they won''t be replicated here. The following example
+    demonstrates a basic configuration for PagerDuty:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE44]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Just like in the previous notifier, since the `pagerduty_configs` configuration
+    is a list, you can trigger multiple service routes in a single receiver. You can
+    find out more about PagerDuty''s integration with Alertmanager here: [https://www.pagerduty.com/docs/guides/prometheus-integration-guide/](https://www.pagerduty.com/docs/guides/prometheus-integration-guide/).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Webhook
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The Webhook integration opens up a world of possibilities for custom integrations.
+    This feature allows Alertmanager to issue an HTTP POST request with the JSON payload
+    of the notification to an endpoint of your choosing. Keep in mind that the URL
+    is not templateable and the destination endpoint must be designed to handle the
+    JSON payload. It can be used, for example, to push all notifications into a logging
+    system such as Elasticsearch so that you can perform reporting and statistical
+    analysis of the alert being generated. If your team uses IRC, this could also
+    be a solution to integrate with it. One last example is the alertdump tool we've
+    created for this book. It was previously used in [Chapter 9](9aa1e3da-13cf-4051-845d-1d1c924ef47b.xhtml),
+    *Defining Alerting and Recording Rules*, to show what Prometheus sends out when
+    alerting rules trigger, but it can also be used to demonstrate the notification
+    payloads being sent by Alertmanager.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'A simple configuration can be seen in the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE45]'
+  prefs: []
+  type: TYPE_PRE
+- en: This configuration will send every alert that's received by Alertmanager as-is
+    to alertdump, which in turn will then append the payload to a log file named after
+    the host that alertdump is running on. This log file is located in a path that's
+    accessible both inside each virtual machine from our test environment (`/vagrant/cache/alertmanager*.log`),
+    and outside it (`./cache/alertmanager*.log`, relative to the repository root).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'null'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'This is not a notifier per se, but a pattern commonly used to drop notifications.
+    The way it''s configured is by specifying a receiver without a notifier, which
+    causes the notification to be dropped. The following example ensures that no notification
+    will ever be sent:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE46]'
+  prefs: []
+  type: TYPE_PRE
+- en: This is sometimes useful for demonstrative purposes, but not much else; alerts
+    that aren't supposed to trigger notifications should be dropped at their source
+    and not in Alertmanager, with the exception of alerts being used as source for
+    inhibitions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Something to always keep an eye on is the `alertmanager_notifications_failed_total`
+    Alertmanager metric, as it tracks all the failed attempts to deliver notifications
+    per integration.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we know the basics of Alertmanager notifiers, we can proceed to learn
+    how to customize alert notifications so that the most important information is
+    properly surfaced.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Customizing your alert notifications
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: For each of the available integrations, Alertmanager already includes built-in
+    templates for their notifications. However, these can be tailored to the specific
+    needs of the user and/or organization. Similar to the alerting rule annotations
+    we explored in [Chapter 9](9aa1e3da-13cf-4051-845d-1d1c924ef47b.xhtml), *Defining
+    Alerting and Recording Rules*, alert notifications are templated using the Go
+    templating language. Let's use the Slack integration as an example and understand
+    how the messages are constructed so that they are tailored to your needs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Default message format
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'To have an idea of what a notification without any customization looks like,
+    we''re going to use a very simple example. Take the following alerting rule, which
+    we defined in our Prometheus instance:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE47]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As soon as this alert starts firing, an alert payload will be sent to Alertmanager.
+    The following snippet demonstrates the payload being sent. Note the labels that
+    are present, which include the `alertname` and the `external_labels` from the
+    Prometheus instance:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE48]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'On the Alertmanager side, we will have this minimal configuration, just so
+    that we can send a Slack notification (substituting `TOKEN` with an actual Slack
+    token):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE49]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The end result would be a Slack message like the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/6e072e2e-499d-4e06-a92c-52073b206923.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 11.9: Slack default notification format'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As we can see, the default notification format has a lot of information in
+    it. But the question remains, *how was this generated*? To answer this question,
+    we can have a look into the runtime configuration of the `default` receiver that
+    was generated from our basic Alertmanager configuration, which the following snippet
+    illustrates:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE50]'
+  prefs: []
+  type: TYPE_PRE
+- en: The Alertmanager runtime configuration can be inspected by using `amtool config`
+    or by accessing the `/#/status` endpoint of an Alertmanager web interface.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As we can see, each of the customizable fields is configured using Go templating.
+    We will take the `username` field to exemplify how the username in the Slack message
+    gets generated, as it's a fairly straightforward template. All other templates
+    being used follow the same logic, with varying levels of complexity.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The default templates used by Alertmanager can''t be consulted locally on the
+    test environment instances, as they are compiled and shipped within the Alertmanager
+    binary. However, we can consult all the default templates for all the notification
+    integrations provided by Alertmanager by looking at the `templates/default.tmpl`
+    file in the Alertmanager code base. At the time of writing, the current version
+    is 0.16.2 so, for convenience, we''re linking to the referenced file here: [https://github.com/prometheus/alertmanager/blob/v0.16.2/template/default.tmpl](https://github.com/prometheus/alertmanager/blob/v0.16.2/template/default.tmpl).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If we have a look at the `default.tmpl` file, we will find the definition of
+    the `slack.default.username` template:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE51]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As we can see, the template uses another template as its definition. So, if
+    we look for the definition of the `__alertmanager` template, we''ll find the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE52]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now, you understand how the name `AlertManager` appears in the Slack notification.
+    The tracing of each of the other templates is left as an exercise for you. In
+    the next section, we're going to learn how to create our own templates, and then
+    use them to customize our alert notifications.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating a new template
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Before we dive into creating a template, we must first realize what kind of
+    data structures are sent to the notification templates. The following table depicts
+    the available variables that can be used:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| **Variable** | **Description** |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `Alerts` | A list of Alert structures, each one with its own Status, Labels,
+    Annotations, StartsAt, EndsAt, and GeneratorURL |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `CommonAnnotations` | The annotations that are common to all alerts |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `CommonLabels` | The labels that are common to all alerts |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `ExternalURL` | The URL for the Alertmanager that sent the alert |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `GroupLabels` | The labels that are used in the grouping of alerts |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `receiver` | The receiver that will handle the notification |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `status` | This will be firing as long as there''s an alert in that state,
+    or it will become resolved |'
+  prefs: []
+  type: TYPE_TB
+- en: A comprehensive reference of all available data structures and functions is
+    available at [https://prometheus.io/docs/alerting/notifications/](https://prometheus.io/docs/alerting/notifications/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The best way to demonstrate how we can build a template is to provide an example.
+    We've built the following template, which is available in the test environment,
+    exactly with that intent. We will explain each part in detail while stripping
+    the Alertmanager configurations down to only the important bits.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The end result we aim to create can be seen in the following screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/23660965-21b3-44b9-a32c-eddadb0dd050.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 11.10: Example Slack notification template'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, we''re going to dissect the example configuration, which will generate
+    notifications that look like the ones shown in the preceding screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE53]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'For the sake of this example, we''re grouping alerts by `alertname` and `job`.
+    This is important, because it will influence the `CommonAnnotations` and `CommonLabels`,
+    as we''ll see soon:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE54]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As we saw in the previous table, `.Alerts` is a list of all the alerts, so
+    we want the length (`len`) of that list to create a title for the message, starting
+    with the number of firing alerts. Note the `if` clause, which ensures the use
+    of plurals if there is more than one alert. Finally, since we''re grouping the
+    alerts by `alertname`, we print the `alertname` after the square brackets:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE55]'
+  prefs: []
+  type: TYPE_PRE
+- en: For the message body, we want to generate a link to the troubleshooting guide
+    for this particular kind of alert. Our alerts are sending an annotation called
+    `troubleshooting` with a base URL. If we rely on convention so that the guide
+    name matches the alertname, we can easily generate the link using both fields.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To provide more context about the firing alerts, we''ll add all the available
+    alert labels to the message. To achieve this goal, we must go through every alert
+    in the list:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE56]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'For every alert, we''ll print the description that''s available as an annotation
+    of that alert:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE57]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We''ll print each alert label/value pair as well. To do that, we''ll be ranging
+    over the result of `SortedPairs`, which returns a sorted list of label/value pairs:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE58]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `{{-` code trims all trailing whitespace from the preceding text. More information
+    on this is available at [https://tip.golang.org/pkg/text/template/#hdr-Text_and_spaces](https://tip.golang.org/pkg/text/template/#hdr-Text_and_spaces).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We''re using the severity label as a routing key in order to choose the notifier
+    (pager, email, or slack), so we don''t want to expose it in the alert message.
+    We can do that by adding an `if` clause so that we don''t print that particular
+    label/value:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE59]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'And that''s it. You can even make this more manageable by getting this template
+    out of the Alertmanager configuration and into its own template file. We''ve done
+    this in the test environment, where the receiver configuration is just the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE60]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'All the template definitions are available in the Alertmanager instances at
+    the following path:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE61]'
+  prefs: []
+  type: TYPE_PRE
+- en: Notification templating is quite hard to understand and build at first. Luckily,
+    a tool was created by Julius Volz, one of Prometheus' co-founders and core maintainer,
+    that allows you to quickly iterate on Slack notification templates. It's by far
+    the best way to understand how they work and how to generate them. You can find
+    it at [https://juliusv.com/promslack/](https://juliusv.com/promslack/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Who watches the Watchmen?
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The monitoring system is a critical component of any infrastructure. We rely
+    on it to keep watch over everything – from servers and network devices to services
+    and applications – and expect to be notified whenever there's a problem. However,
+    when the problem is on the monitoring stack itself, or even on a notification
+    provider so that alerts are generated but don't reach us, how will we, as operators,
+    know?
+  prefs: []
+  type: TYPE_NORMAL
+- en: Guaranteeing that the monitoring stack is up and running, and that notifications
+    are able to reach recipients, is a commonly overlooked task. In this section,
+    we will go into what can be done to mitigate risk factors and improve overall
+    confidence in the monitoring system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Meta-monitoring and cross-monitoring
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In broad terms, you can''t have your monitoring system monitor itself; if the
+    system suffers a serious failure, it won''t be able to send a notification about
+    it. Although it is common practice to have Prometheus scrape itself (you may see
+    this in most tutorials), you obviously can''t rely on it to alert on itself. This
+    is where meta-monitoring comes in: it is the process by which the monitoring system
+    is monitored.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The first option you should consider to mitigate this issue is to have a set
+    of Prometheus instances that monitor every other Prometheus instance in their
+    datacenter/zone. Since Prometheus generates relatively few metrics of its own,
+    this would translate to a fairly light scrape job for the ones doing the meta-monitoring;
+    they wouldn''t even need to be solely dedicated to this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/7181b1e2-83d3-45f8-a939-c1c4c3096af1.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 11.11: Meta-monitoring – Prometheus group monitoring every other group'
+  prefs: []
+  type: TYPE_NORMAL
+- en: However, you may be wondering how this set of instances would be monitored.
+    We could keep adding progressively higher-level instances to do meta-monitoring
+    in a hierarchical fashion – at the datacenter level, then at the regional level,
+    then at the global level – but we would still be left with a set of servers that
+    aren't being monitored.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'A complementary technique to mitigate this shortcoming is known as cross-monitoring.
+    This method involves having Prometheus instances on the same responsibility level
+    monitor as their peers. This way, every instance will have at least one other
+    Prometheus watching over it and generating alerts if it fails:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/8341ddba-98dc-4dff-832f-231728abb27a.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 11.12: Prometheus groups monitoring themselves'
+  prefs: []
+  type: TYPE_NORMAL
+- en: But what happens if the problem is in the Alertmanager cluster? Or if external
+    connectivity prevents notifications from reaching the notification provider? Or
+    even if the notification provider itself is suffering an outage? In the next section,
+    we'll provide possible solutions to these questions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Dead man's switch alerts
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Imagine that you have a set of Prometheus instances using an Alertmanager cluster
+    for alerting. For some reason, a network partition happens between these two services.
+    Even though each Prometheus instance detects that it can no longer reach any of
+    the Alertmanager instances, they will have no means to send notifications.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this situation, no alerts about the issue will ever be sent:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/998721d6-ecb3-4f19-b8ba-4186455fba9e.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 11.13: Network partition between Prometheus and Alertmanager'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The original concept of a dead man's switch refers to a mechanism that activates
+    if it stops being triggered/pressed. This concept has been adopted in the software
+    world in several ways; for our purpose, we can achieve this by creating an alert
+    that should always be firing – thereby constantly sending out notifications – and
+    then checking if it ever stops. This way, we can exercise the full alerting path
+    from Prometheus, through Alertmanager, to the notification provider, and ultimately
+    to the recipient of the notifications so that we can ensure end-to-end connectivity
+    and service availability. This, of course, goes against all we know about alert
+    fatigue and we wouldn't want to be constantly receiving pages or emails about
+    an always-firing alert. You can implement your own custom service implementing
+    watchdog timers, but then you'll be in a situation where you need to monitor that
+    as well. Ideally, you should leverage a third party so that you mitigate the risk
+    of this service suffering from the same outage that is preventing notifications
+    from going out.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For this, there's a service built around the dead man's switch type of alert,
+    and it's curiously named *Dead Man's Snitch* ([deadmanssnitch.com](https://deadmanssnitch.com)).
+    This is a third-party provider, outside of your infrastructure, that's responsible
+    for receiving your always-firing notification via email or Webhook and will, in
+    turn, issue a page, Slack message, or Webhook if that notification stops being
+    received for more than a configurable amount of time. This setup mitigates the
+    problems we presented previously – even if the entire datacenter goes up in flames,
+    you'll still be paged!
+  prefs: []
+  type: TYPE_NORMAL
+- en: The full configuration guide for integrating Dead Man's Snitch with VictorOps
+    and PagerDuty can be found at [https://help.victorops.com/knowledge-base/victorops-dead-mans-snitch-integration/](https://help.victorops.com/knowledge-base/victorops-dead-mans-snitch-integration/)
+    and [https://www.pagerduty.com/docs/guides/dead-mans-snitch-integration-guide/](https://www.pagerduty.com/docs/guides/dead-mans-snitch-integration-guide/),
+    respectively.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we dived into the alerting component of the Prometheus stack,
+    Alertmanager. This service was designed with availability in mind, and we had
+    the opportunity to understand how it works, from generating better notifications
+    to avoiding being flooded by useless ones. The notification pipeline is a very
+    good starting point to grok the inner workings of Alertmanager, but we also went
+    through its configuration, while providing examples to better solidify that knowledge.
+    We were introduced to `amtool` and all the features it provides, such as adding,
+    removing, and updating silences directly from the command line.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Alertmanager has several notification integrations available and we went through
+    all of them, so you can pick and choose the ones you're interested in. Since we
+    all want better notifications, we delved into how to customize the default notifications,
+    using Slack as our example. A hard problem to solve is how to monitor the monitoring
+    system; in this chapter, we learned how to make sure we are alerted when notifications
+    aren't getting out.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In an always-changing infrastructure, it's not trivial to keep track of what's
+    running and where it's running. In the next chapter, we'll be providing more insight
+    into how Prometheus tackles service discovery and automates these tasks for you.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Questions
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: What happens to the notifications if there's a network partition between Alertmanager
+    instances in the same cluster?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Can an alert trigger multiple receivers? What is required for that to happen?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What's the difference between `group_interval` and `repeat_interval`?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What happens if an alert does not match any of the configured routes?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: If the notification provider you require is not supported natively by Alertmanager,
+    how can you use it?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: When writing custom notifications, how are `CommonLabels` and `CommonAnnotations`
+    populated?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What can you do to ensure that the full alerting path is working from end to
+    end?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Further reading
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '**Official Alertmanager page**: [https://prometheus.io/docs/alerting/alertmanager/](https://prometheus.io/docs/alerting/alertmanager/)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Alertmanager notification guide**: [https://prometheus.io/docs/alerting/notifications/](https://prometheus.io/docs/alerting/notifications/)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Alertmanager configuration specifics**: [https://prometheus.io/docs/alerting/configuration/](https://prometheus.io/docs/alerting/configuration/)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

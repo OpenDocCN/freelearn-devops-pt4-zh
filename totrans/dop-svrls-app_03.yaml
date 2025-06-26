@@ -1,0 +1,1445 @@
+- en: Applying DevOps to AWS Lambda Applications
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Let's briefly look at what we learned about AWS Lambda functions. Amazon Web
+    Services was the first web service platform to launch the serverless computing
+    module Lambda, written in **Lambda functions**.Lambda functions are stateless
+    and have no affinity with the underlying infrastructure. Lambda functions are
+    executed in response to the events. These events could be an HTTP request, a change
+    of the data in the S3 bucket, a change in a DynamoDB table, or a change in Kinesis
+    or SNS. Lambda functions replicate faster in response to events, and descale as
+    the number of events goes down.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this chapter, we will be covering various methods of deploying Lambda functions,
+    looking at how we can painlessly deploy to multiple environments, unit test, system
+    test, and integration test the Lambda function. We will also learn various deployment
+    best practices and go through a few example recipes using these best practices.
+    We will see how we can manage the AWS Lambda logs and move them to the ELK stack.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We will explore the following topics in this chapter:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Manual deployment of a Lambda function
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: AWS Lambda with DevOps
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Serverless with CodeStar
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Blue and green deployment with AWS Lambda
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The GitHub and Jenkins pipeline using Serverless Framework
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Setting up Jenkins for a serverless application
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Unit testing a deployed application
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Integrating CloudWatch with ELK
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: I will be creating a simple application that is used in our day-to-day work.
+    The application is a thumbnail creator, and is a Node.js application that uses
+    two S3 buckets. One bucket is for uploading the actual images and the other is
+    for the thumbnails. The moment an image is uploaded into the images bucket, an
+    event is triggered that calls a function to resize the image and upload it to
+    the thumbnails bucket. We will first look at how we can manually execute this
+    sequence of events, and then we will learn how we can streamline the process by
+    automating the deployment process. In the section dealing with DevOps, we will
+    talk about setting up an assembly line with the development environment, automated
+    testing and deployment, applying a CI/CD pipeline, logging, and monitoring.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Manual deployment of a Lambda function
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The Node.js Lambda application that we will be using here is already part of
+    AWS tutorials. We will learn how to create, deploy, and execute a Lambda application
+    via the AWS portal. The prerequisite for this tutorial is for you to have an AWS
+    account; we will be using a free AWS subscription throughout this chapter. The
+    next step is to set up AWS CLI.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You can create an AWS free account and an AWS CLI through the following links:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[https://portal.aws.amazon.com/billing/signup#/start](https://portal.aws.amazon.com/billing/signup#/start)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-welcome.html](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-welcome.html)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Go through the following steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Once the AWS account and CLIs are in place, sign in to AWS Console ([https://aws.amazon.com/console/](https://aws.amazon.com/console/)),
+    and then we will create an IAM user with the name `adminuser` by logging into
+    your AWS account then either clicking on the IAM link or searching for the link
+    through the services:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/cf57886f-e0d2-4131-bccd-ceb032dfecc7.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Then we click on the Users link on the left-hand side, where a new page will
+    open. Then we click on Add User. Add a user with the name adminuser and select
+    both the access type Programmatic access and AWS Management Console access. In
+    the console''s Password field, add your custom password, uncheck the Require password
+    reset checkbox, and then click Next:Permissions. Let''s create a group by clicking
+    on the Create Group button. We will give the group the name of `administrators`.
+    Next, let''s select the AdminstrativeAccess checkbox to provide full access to
+    the group and then click on Create Group. Now that we have a group created, let''s click
+    on Next:Review. Then, we will review the user, which the user have created and
+    has been added to the administrator group. Now click on the Create User button. Once
+    the user is created, we should be able to see the user in the list, as shown in
+    the following screenshot:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/8671fd9f-547b-4b42-9545-86d29be225d3.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: We have created a user with administrative rights just for our tutorials, but
+    in the real world the role and policies will be more restricted for the sake of
+    security.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We need to create two buckets in AWS S3\. The buckets need to be created through
+    the `adminuser` login, so let''s log in to AWS Console using the new user that
+    we have created. Click on the adminuser and select the Security credentials tab.
+    Next, let''s copy the Console URL for logging in, then open it on the new browser
+    tab. Feed in the username and password for the new user that we have created and
+    click on Sign In. Once you are logged in, search for S3 in the AWS Services. Then
+    go to S3 Console Management and click on the Create bucket button, as shown in
+    the following screenshot:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/f9900192-269b-421a-9b38-b3f4336f9dfb.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Let''s add a unique bucket and region name of US East by default. The two buckets
+    should be named `Source` and `SourceResized`. Source is the placeholder name that
+    should be replaced with the actual bucket name—for example, `my-image-bucket76` and
+    `my-image-bucket76resized`**. **So, `my-image-bucket76` will be the source bucket
+    and `my-image-bucket76resized` will be the target bucket, as shown in the following
+    screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/0a635283-5f83-40ce-938e-e15cc9d8e3d0.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: The bucket name must be unique, as AWS allows only universally unique bucket
+    names.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Once both the buckets are successfully created, we can upload an image for the
+    Lambda function to resize and push to the resized bucket. Let's upload a JPG image
+    into the `my-source-bucket76`source. Click on the bucket name, then upload an
+    image to this bucket. This will redirect you to the bucket page. Click on the
+    Upload button and a popup will pop up. Then, select Add files to browse for an
+    image file from the local directory and then upload the image to the S3 bucket.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'The next step is to create a Lambda function and run it manually. Here, we
+    have to first follow three steps to create the deployment package, and then create
+    the execution role (IAM role) and a Lambda function and test them. The deployment
+    package is a ZIP file containing the Lambda function and its dependencies:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Let's create a deployment package. I will be using Node.js as the language for
+    this practice application, but we can use Java and Python as well (it depends
+    on the developer's preference).
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A prerequisite for creating this deployment package is to have Node.js version
+    6.0 ([https://nodejs.org/en/download/](https://nodejs.org/en/download/)) or later
+    installed on you local environment. You should also make sure that npm is installed.
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Then go through the following steps. We are downloading the npm libraries for
+    the image resizing of the Node.js Lambda function, using the first of the two
+    following commands. The second command will download the required libraries:'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Open your favorite editor and copy the following script into the file named
+    `CreateThumbnails.js`:'
+  prefs:
+  - PREF_UL
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: You can find the gist for `CreateThumbnails.js` at [https://gist.github.com/shzshi/6e1cf435a4c1aa979e3a9a243c13c44a](https://gist.github.com/shzshi/6e1cf435a4c1aa979e3a9a243c13c44a).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As a sanity check, validate that the source and destination are different buckets:'
+  prefs:
+  - PREF_UL
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Infer the image type:'
+  prefs:
+  - PREF_UL
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Download the image from S3, transform it, and upload it to a different S3 bucket:'
+  prefs:
+  - PREF_UL
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Infer the scaling factor to avoid stretching the image unnaturally:'
+  prefs:
+  - PREF_UL
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Transform the image buffer in memory:'
+  prefs:
+  - PREF_UL
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Stream the transformed image to a different S3 bucket:'
+  prefs:
+  - PREF_UL
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now we should see two  items in our `tutorials1` folder, namely the `CreateThumbnail.js` and `node_modules`folders.
+    Let''s zip all these into a file named `tutorialsimg.zip`. This will be our Lambda
+    function deployment package:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Next, we will create the execution role for the Lambda function in IAM. Log
+    into AWS Console, search for IAM services, and then go into IAM and click on the Roles
+    button. Click on Create Role, select the AWS service, and then choose Lambda as
+    the service. Then click on the Next: Permissionbutton. Then search for AWSLambda
+    in the Policy Type box and check the AWSLambdaExecute checkbox. Then search for
+    AmazonS3FullAccess and select it. Then click on the Next:Review button. Next,
+    on the Create Role page, add the role name myLambdaRole, add a description, and
+    then click on Create Role. Now we have the role that contains the policies that
+    we can use to execute the Lambda function in order to make changes to the content
+    of the S3 bucket.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'The next step is to deploy the Lambda functions and node modules on the AWS
+    Lambda portal. Let''s go to the AWS Console''s home page, and under Services,
+    let''s search for Lambda. We will be redirected to the Lambda home page. Click
+    on Create Function, then choose Author from scratch in the Functions Information
+    section. Let''s add the function name of `myfirstLambdafunction`, Runtime as **Node.js
+    6.10**.Choose the existing role name of myLambdaRole and click on Create Function.
+    Now we will be redirected to the Lambda function designer page. We will upload
+    our Lambda function to the portal. Scroll down a bit and go to the Function Code section, then
+    select Code entry typeas **U**pload a .ZIP file, R**untime**as Node.js 6.10, and
+    type into the Handler field the text CreateThumbnail.handler. Now let''s click
+    on the Upload button, select the file named tutorialsimg.zipand upload it. Once
+    the package is uploaded successfully, we should be able to see the CreateThumbnail.js
+    file in the function editor with the node_modules folder, as shown in the following
+    screenshot:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/9fa6af60-bc13-49c1-82a2-0644a678f8d0.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Now that the function and node modules are uploaded, we will create an event
+    to trigger the function. If we scroll to the top right-hand side of the screen,
+    we will see a drop-down menu appear that we can use to add the event. Select Configure
+    Test Events**.** A pop-up box will appear. Give the event the name of `myThumbnailEvent` and
+    in the text field, add the following listed JSON file. Make sure that you replace `my-source-bucket76`
+    with your source bucket''s name and `Baby.jpg` with your image name. Then go ahead
+    and click Save:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: You can find the event JSON file at [https://gist.github.com/shzshi/7a498513ae43b6572c219843bbba277d](https://gist.github.com/shzshi/7a498513ae43b6572c219843bbba277d).
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now we have deployed the function, and have created S3 buckets and an event.
+    Now let's invoke the function and see if our image in the source bucket is resized
+    and pushed to the resized S3 bucket. To do this, click on Test. We should see
+    that the function has successfully executed in the logs (as shown in the following
+    log text). If you refresh the resized named S3 bucket, you should be able to see
+    resized image file. You can just download the resized file and see whether the
+    resizing worked. We can also add the S3 put trigger to automatically trigger this
+    `CreateThumbnail` function when any image file is uploaded to the source S3 bucket.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'eTag: ''d41d8cd98f00b204e9800998ecf8427e'', versionId: ''096fKKXTRTtl3on89fVO.nfljtsv6qko''
+    } } } ] } 2018-06-14T21:07:25.469Z ea822830-7016-11e8-b407-9514918aacd8'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Successfully resized my-source-bucket76/Baby.jpg and uploaded to my-source-bucket76resized/resized-Baby.jpg
+    END RequestId: ea822830-7016-11e8-b407-9514918aacd8'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this exercise, we learned how to create, build, deploy, and invoke the Lambda
+    function manually, and we had to go through number of steps to get this working.
+    Now let's say that we need to deploy hundreds or thousands of such Lambda functions
+    for a banking application to the portal. To do this task manually, we would require
+    lots of resources and time. This is where DevOps comes in really handy to make
+    our life faster and more easy. Let's look closer at how we can use DevOps to automate
+    all of the steps involved and make it much simpler to build, test, and deploy
+    our Lambda functions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: AWS Lambda with DevOps
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: To start implementing DevOps for AWS Lambda, we first create an assembly line.
+    An assembly line outlines the stages involved when a developer creates code, tests
+    the code, and then commits the code into a repository. The source code is pulled
+    from the repository, and is then built and tested. After this, the static code
+    analysis takes place. Once it is deployed into a production-like environment,
+    acceptance tests are run against it. This is how the application is monitored,
+    and how logging is managed. We will look at these stages using the recipes in
+    this section. We will also look at two perspectives of DevOps—one through AWS's
+    own set of tools, and the other through serverless frameworks, such as GitHub,
+    Jenkins, Mocha (for testing), and JSHint (for source code analysis).
+  prefs: []
+  type: TYPE_NORMAL
+- en: So the first step is to set up a local development environment where we can
+    create a folder structure, add and change the source code, add images, and so
+    on. We can run the source code locally, execute tests, and debug them for errors
+    and failures. We will do this using a Node.js tutorial. We will set up a Node.js
+    project from scratch with unit testing, source code analysis, and acceptance testing.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Node.js application that I have created is a simple task manager. The underlying
+    architecture is AWS Lambda functions with an API gateway to add, update, delete,
+    and list the DynamoDB table. In short, we will be doing the `create`, `read`,
+    `update`, and `delete` functions through AWS Lambda functions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Serverless frameworks with AWS CodePipeline
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: As I have mentioned, our first approach will be through AWS's own DevOps tools.
+    We will start with CodePipeline, which is an indigenous cloud-based tool of AWS
+    that can help you to build, develop, and deploy applications quickly on AWS. We
+    can set up continuous delivery very quickly with CodePipeline. It has its own
+    dashboard, and it integrates easily with tools such as JIRA, Jenkins, GitHub,
+    and other project-management tools. Let's look how we can use this for Lambda
+    functions. We will be using the thumbnail application that was created earlier
+    in the chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The prerequisites for these recipes are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**AWS account and login credentials for AWS Console:** Most of the setup for
+    the first part of the tutorials will be done through AWS Console. We will using
+    the same adminuser account that we created earlier in the chapter.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**GitHub repository:** You need to create a repository and copy all the files
+    and folders from the following repository into your repository:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`https://github.com/shzshi/aws-lambda-thumbnail.git`'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '**CloudFormation service role:** Go to the home page of AWS Console and search
+    for IAM. On the IAM page, select **Roles** and then click on Create role. On the
+    Create role page, select AWS Service and choose CloudFormation as the service.
+    Then click on Next:Permission, and on the permission policy page, select the AWSLambdaExecute policy
+    and click on Next:Review. Once the review page is open, name the role as `myCloudFormationRole`
+    and then click on Create role. Now, for this service role, we need to add additional
+    policies to execute the pipeline, so let''s go to the roles. We will see our role
+    in the list; let''s click on it. In the Role Summary page, click on Add inline
+    policy, and in the Create Policy page, click on the JSON tab and then replace
+    the existing JSON script with the script within `cloudformationpolicy.json`, which
+    is in the `aws-lambda-thumbnail` repository. Click on Review policy. Now let''s
+    name the policy `myThumbnailPipelinePolicy`, so that we have a service role for
+    CloudFormation.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Bucket for the CloudFormation package:** We need to create a bucket for the
+    CloudFormation package, so let''s go to the home page of AWS Console and search
+    for S3 in services. Next, let''s create a bucket with the name of my-cloud-formation-bucket. This
+    bucket is used for packaging our artifacts when we run the pipeline.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Let''s go through the following steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: To add and retrieve CodeStar permission for the adminuser, go to AWS Console
+    ([https://console.aws.amazon.com/console/home](https://console.aws.amazon.com/console/home))
+    and log in with your root account credentials. This means that we need to log
+    in as a free account user (we created this free account at the start of the chapter).
+    If you go to the adminuser login page, you will see a link at the bottom named Sign-in
+    using root account credentials. Once you are logged in, go to IAM services and
+    click on Users. You should be able to see the adminuser in the list. Now click
+    on the adminuser link to the Security credentials tab. Scroll down to find the
+    HTTPS Git credentials for AWS CodeCommit section andclick on the Generate button. The
+    credentials to authenticate AWS CodeCommit will then be generated. Copy or download
+    the credentials. If you have not copied the access key ID and the secret access
+    key, please generate new ones using the Create access key button. Save the details
+    for both of these somewhere for later use.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Let's now log into the console as adminuser. Search for CodePipeline from the
+    home page. A page will open. On this page, click on Create pipeline. You will
+    then be redirected to the Create Pipeline page. Let's name the pipeline myServerlessThumbnailPipeline and
+    click on Next Step.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: In Source Provider, let's select GitHub. We will then be asked to connect to
+    GitHub; go ahead and connect using your credentials. The Repository should be
+    the one that we created as a prerequisite, and the Branch should be the branch
+    where our files are residing (for example, master). Once the details are added,
+    click on Next step. While setting up CodeBuild, a role was created, so we need
+    to add an extra policy for this.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'In the Build provider, select AWS CodeBuild, and then in the Configure your
+    Project section, select Create a new build project. Let''s add the project details:
+    The project name should be `myThumbnailCodeBuild`, the environment image should
+    be Use an image managed by AWS CodeBuild, the operating system should be Ubuntu,
+    the runtime should be Node.js, and the version should be Node.js 6.3.1\. Keep
+    the rest of the details as their default values and click on Save build project.
+    We have successfully created a AWS CodeBuild project. However, it has also created
+    a service role, and we need to add an additional policy for the CodeBuild project
+    role. So let''s open a new tab on the browser and log into AWS Console as adminuser.
+    Then, in services, search for IAM, and on the IAM page, go to Roles and select
+    the service role with the name code-build-myThumbnailCodeBuild-service-role or
+    something similar.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Now click on Add inline policy and then click on the Create Policy page. Choose
+    the S3 service and the PubObject action from the Write access level, and select
+    the Resources as All resources. Finally, click Review Policy. Name the policy `myThumbnailCodeBuildPolicy`.
+    In the Summary section, we should be able to see S3\. Click on Create Policy.
+    Now we have a new policy for S3 that has been added to the CodeBuild role. Let's
+    go back to the create CodePipeline page. Click Next step.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the Deploy template, let''s set Deployment provider as AWS CloudFormation.
+    Now that we''re in the CloudFormation section, let''s add all the details as shown
+    in the following screenshot. The template file is basically an export file that
+    will be used by CloudFormation:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**  ![](img/2395b0dc-31a5-4a28-b4d7-c112c5d8286a.png)**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, we will create a role to give permission to the AWS CodePipeline to use
+    the resources. Click on Create roleand go through the steps as it prompts you.
+    Once the role is created, click on Next. Then review the pipeline, and click on
+    Create pipeline. Our pipeline will trigger automatically. Our first stages of
+    the pipeline worked fine. If we go to CloudFormation (Services | CloudFormation),
+    we should be able to see the stack for the thumbnail that was created. If you
+    tick the checkbox and select the events, you should be able to see the events
+    that ran, as well as some other details. Let's go ahead and add more stages to
+    the pipeline that we can approve, and then deploy the function.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Now, we will edit the pipeline and add some stages to deploy the thumbnail Lambda
+    function. Let's click on Edit and scroll to the bottom. Click on + Stage. Let's
+    add a stage called Approval, so that we can review and approve our work before
+    deployment. Click on Action and select approval from the Action category of the
+    drop-down list. Let's name it as `Approval`. We can also add an SNS topic to get
+    approval emails. To do this, let's go ahead and use the default values for the
+    rest and click on Add action.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The next stage to add is the deployment of the function from the Git repository
+    to the Lambda function. Click on + Stage. Let's add a stage named Deploy, click
+    on Action, and select Deploy from the Action category drop-down list. Next, let's
+    name the action myDeploy and select AWS CloudFormation as the Deployment Provider.
+    In the CloudFormation section, let's add an action mode called execute a change
+    set and select the stack name mythumbnailstack and the change set name mythumbnailchangeset.
+    Let's leave the rest of the details as their defaults and click on Add action.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Now we have added two stages, let''s save the pipeline by clicking Save Pipelineline
+    changes. We will be asked to continue; let''s go ahead and click Save and Continue.
+    This time, the pipeline won''t trigger automatically, so let''s click on Release
+    changeto start the pipeline. Once the pipeline has successfully completed, we
+    should see all the stages in green, as shown in the following screenshot:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/5fa9b772-911d-404c-8256-10978d51732a.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Let''s check whether the function has been created, and try executing it. Let''s
+    go to the AWS Console home page and search for Lambda. We should be able to see
+    that a thumbnail function has been created. Let''s open the Lambda function. On
+    the Function page, let''s scroll to the top right-hand side of the page, where
+    we will see a drop-down menu that we can use to add the event. Select Configure
+    Test Events. A pop-up box will appear containing the name of the myThumbnailEvent event
+    and a text field. In the text field, add the following JSON file. Make sure that
+    you replace the `my-source-bucket76` with your source bucket name and `Baby.jpg` with
+    your image name. Then go ahead and click on Save:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The event JSON file can be found at [https://gist.github.com/shzshi/7a498513ae43b6572c219843bbba277d](https://gist.github.com/shzshi/7a498513ae43b6572c219843bbba277d).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now we have deployed our function, and created our S3 buckets and an event.
+    Let's invoke the function. Click on Test. Now you should see that the function
+    has successfully executed. You will see the details in the logs, and if you refresh
+    the S3 bucket named resized, we should be able to see a resized image file. You
+    can just download the resized file and see whether the resizing worked. We can
+    also add an S3 put trigger in order to automatically trigger this CreateThumbnail
+    function when any image file is uploaded to the source S3 bucket.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: In this tutorial, we learned how to use CodePipeline, which is a CD platform
+    of AWS, to deploy Lambda functions. It was pretty quick in deploying a function
+    from GitHub into Lambda using different combinations of tools by AWS. But the
+    cons of these tools are that you are charged for their use, and we have to really
+    get our heads around CloudFormation and the roles. Now let's look at how to set
+    up a pipeline using open source tools.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Continuous integration and continuous deployment with Lambda
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this section, we will be using Jenkins, a serverless framework, and other
+    open source software to set up Continuous Integration and Continuous Deployment.
+    I have the whole project set up in a Git repository ([https://github.com/shzshi/aws-lambda-dynamodb-mytasks.git](https://github.com/shzshi/aws-lambda-dynamodb-mytasks.git)),
+    or we can go through the following steps listed in this section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The application that we are using for this tutorial will create a Lambda function
+    and an AWS API gateway for the task where we can test our Lambda function, which
+    will manage tasks using CRUD operations to DynamoDB.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, let''s create a folder structure using a serverless framework to create
+    a template function, as shown in the following code. I am assuming that you are
+    using Linux Terminal, and that all the instructions are Linux-Terminal-based:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We will see three files created within the `AWSLambdaMyTask` folder. This is
+    a sample template for Node.js using a serverless framework. We will be modifying
+    these files as per our example''s need, as shown in the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/6e0bcfc9-8230-47e3-aaa8-55e1623674be.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Let''s create two more folders within the `AWSLambdaMyTask` folder, namely `src`
+    and `test`. The `src` phrase is our source code folder and `test` is the folder
+    for our test cases, as shown in the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Then we will create a file called `package.json` using the editor. This file
+    will hold the metadata that is relevant to the project. Copy the following content
+    into the file. Please make whatever changes you need:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Let''s edit the `serverless.yml` file, as per our needs, as shown in the following
+    snippet. You can find the file in the mentioned GitHub repo: [https://github.com/shzshi/aws-lambda-dynamodb-mytasks/blob/master/serverless.yml](https://github.com/shzshi/aws-lambda-dynamodb-mytasks/blob/master/serverless.yml):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Let''s move the `src` directory, and create a file named `package.json` and
+    a folder named `mytasks`, as shown in the following code. The `mytasks` folder
+    will have Node.js files to create, delete, get, list, and update the DynamoDB
+    table on the AWS:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Copy the following content to `package.json`:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: Go to the  `mytasks` folder and create a `create.js` file to create, update,
+    list, get, and delete the DynamoDB tables. The `create.js` files are handlers
+    for functions in Lambda.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Add the following content to `src\mytasks\create.js`:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Add the following content to `src\mytasks\delete.js`:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Add the following content to `src\mytasks\get.js`:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Add the following content to `src\mytasks\list.js`:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Add the following content to `src\mytasks\update.js`:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now we will create test cases to unit test the code that we created. We will
+    be using Mocha for unit testing and run the APIs again. Let''s create a file called `data`
+    in the `test` folder, as shown in the following screenshot. This will have the
+    JSON data that the unit test will run on:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Next, let''s add the `test/createDelete.js` file, which will create DynamoDB
+    data and delete it, once the test is complete, as shown in the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now add the `test/createListDelete.js` file, which will create the DynamoDB
+    data, list it, and then delete it once the test is complete, as shown in the following
+    code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Let''s add the `test/createReadDelete.js` file, which will create the DynamoDB
+    data, read it, and then delete it once the test is complete, as shown in the following
+    code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now we will create two test data files—`newTask1.json` and `newTask2.json`—that
+    can be used for unit testing.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s create `data/newTask1.json` using the aforementioned data, as follows:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Add the following JSON data to `data/newTask2`:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The project folder should now look like the following screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/cf7304ea-a05f-4992-9159-6b49a986f525.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'We need to create a repository on Git to push all the code that we created
+    previously so that we can set up CI to the serverless project. I am assuming that
+    Git has already been installed on the local server and that the Git repository
+    is already in place. In my case, I have the following Git repository set up. I
+    will `git clone`, add files and folders, and then push everything to the Git repository:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'There will be a folder with the name `AWS-lambda-dynamodb-mytasks`. Go into
+    that directory, copy all the files that we created earlier, and then push it to
+    the repository, as shown in the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: Setting up Jenkins for a serverless application
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Assuming that we already have Jenkins up and running, we need to install Node.js,
+    and then we need to install Mocha on the Jenkins server for unit testing. After
+    this, we need to install a serverless framework. You can use the Dockerfile ([https://github.com/shzshi/aws-lambda-dynamodb-mytasks/blob/master/Dockerfile](https://github.com/shzshi/aws-lambda-dynamodb-mytasks/blob/master/Dockerfile))
+    from the aforementioned GitHub repository for Jenkins and serverless frameworks.
+    If you are using Docker, you don't need to follow the steps for installing Node.js
+    on Jenkins.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Go through the following steps to install Node.js on the Jenkins node:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Then go to the browser and open the Jenkins home page. Click on the New item link. This
+    will open a new page, that will allow you to create a job with a name of your
+    choosing. Select Freestyle project, which is the default selection, and click
+    OK to go ahead, as shown in the following screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/0a92ecb3-6084-4dac-8eda-2c8e0cd8ad0b.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Now, we need to integrate Git source code with Jenkins and then build, deploy,
+    and test our serverless application. First, let''s add the Git repository to the
+    Jenkins job, as shown in the following screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/278ae203-16ec-4421-8b38-90bf8e85c3c7.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'We need to parameterize the build to add `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`,
+    as shown in the following screenshot. We will get `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY `after
+    we create an IAM user for the Serverless Framework to work:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/4c4009df-eccb-4473-8e31-47ba94379e46.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Now go to Build  |Add build step | Execute shell | Execute build step | Add
+    build step from the drop-down menu, which will open Command Prompt, where we will
+    add the command that we need to run, as shown in the following screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/5beca5c5-748c-4f41-9cdb-32a674694cfc.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Once the build is successful, we will have successfully deployed the application
+    to the AWS S3 bucket that was created by Serverless Framework. We will also have
+    exposed the API and the functions, allowing them to be used by the application
+    to perform CRUD functions, as shown in the following screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/068f685e-1a3b-4527-969b-914006932438.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Automated testing for Lambda functions
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In the previous recipes, we looked at how we can automate builds and deploy
+    Lambda functions through Jenkins and Serverless Frameworks. But we can also unit
+    test the deployed Lambda functions through Jenkins. In the following recipes,
+    we will see how to unit test the Lambda function to check whether the function
+    is deployed perfectly and works fine.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Unit testing a deployed application
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Once the application is deployed, we can run the unit test on it. In order
+    to try out some unit tests, I have created three unit tests in the `test` folder,
+    and we will be testing them using Mocha. Let''s create another job in Jenkins
+    for setting up unit testing. Again, it would be a freestyle job in Jenkins, as
+    shown in the following screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/4642c508-69e5-4d89-8215-3e1a47778795.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'We add the Git repository path to Jenkins where our test cases are residing,
+    as shown in the following screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/7643b548-96cb-4766-9a45-bcf48a9b399c.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Then we add an execute shell to run the unit test using Mocha, as shown in
+    the following screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/0f958db1-3fca-4036-8585-4f961f5489fc.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'As you can see in the following screenshot, our test cases are passing, which
+    proves that our functions are running perfectly fine:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/7101231a-051f-454c-b273-3f4c75ba6dba.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: AWS Lambda pipeline
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In this section of the chapter, we will move to the continuous delivery pipeline
+    and do what we have been doing again: creating different environments, deploying
+    to multiple environments, unit testing, system testing, and adding an approval
+    process. In this pipeline, we will be using Jenkins, Groovy, Serverless Framework,
+    and Docker to set up a Serverless Framework environment. Make sure that you have
+    Docker installed on your machine.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Prerequisites
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'We need to create a user for each stage or environment so that we can isolate
+    environments and stage the deployment for each environment. To do this, go through
+    the following steps for each user:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Log in to an AWS account as the root user, and go to the IAM (Identity and Access
+    Management) page.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Click on Users on the left-hand-side bar, then click on the Add User button and
+    add the username dev-serverless. Enable programmatic accessby checking thecheckbox.
+    Then click on the Next:Permissions button.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: On the Permissions page, select Attach existing policies directly, and search
+    for and select the AdministratorAccess checkbox. Then click on Next:Review.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Now check that everything is good and then click on Create User. This will create
+    a user and show us the access key id and secret access key. Copy these these keys
+    somewhere temporarily.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Now that we have the keys, we export them as environment variables so that they
+    will be accessed by the framework to perform the required functions.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Repeat the preceding five steps for the sit-serverless and prod-serverless users.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: CloudBees AWS Credentials Jenkins Plugin.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Now, go through the following steps to create the pipeline:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Git clone the following repository into a directory:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Go into this directory and build the Docker image with the Dockerfile provided.
+    With `docker images`, we should be able to see the Docker image with the `name docker
+    build --rm -f Dockerfile -t aws-lambda-dynamodb-mytasks:latest`, as shown in the
+    following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Next, we will run the container and open Jenkins on the browser. The initial
+    installation password can be found in the container run logs as shown in the following
+    code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: Go to the browser and open `http://localhost:8080`. Copy the password from the
+    container run; it should be something like the following output. Once you are
+    logged in, install the suggested plugin and create a Jenkins user for future logins.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '*Jenkins initial setup will be required. An admin user will have been created
+    and a password generated. Use the following password to proceed to installation:*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*6050bfe89a9b463c8e2784060e2225b6*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*This may also be found at /var/jenkins_home/secrets/initialAdminPassword.*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Once Jenkins is up and running, we can go ahead and create a pipeline job,
+    so click on New Item, enter the item name as `my-serverless-pipeline`, and select
+    the pipeline project. In Job Configure, select the This project is parameterized checkbox,
+    and then in Add Parameter,select Credentials Parameterand then go to the Default
+    Value section of the Credentials Parameter and click on Add. Then select Jenkins.This
+    will open the Jenkins Credentials Provider page. On this page in the Kind drop-down
+    menu, select AWS Credentials and add the users `dev-serverless`, `sit-serverless`,
+    and `prod-serverless`, as shown in the following screenshot. Then, click Add:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/37b9cac0-a83f-46cf-815b-b4f69eabe7d2.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Once all the AWS credentials are added, pull them into the Credentials parameter
+    for AWS, as shown in the following screenshot. Make sure that all three types
+    of credential parameter are added, namely `dev`, `sit`, and `prod`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/4ec305eb-f033-49a6-97f9-0ec28aca345a.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'You need to create your own Git repository and push the files from the repository
+    named [https://github.com/shzshi/aws-lambda-dynamodb-mytasks.git](https://github.com/shzshi/aws-lambda-dynamodb-mytasks.git).
+    Then, open the Jenkins file in your favorite editor and comment in all the system
+    test code for the entire environment, as shown in the following code. The reason
+    we are doing this is because we will be exporting the API gateway endpoint to
+    execute the system test for the entire environment:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now click on the Pipeline tab and select Pipeline script the SCM in the definition.
+    Set the SCM as Git and in the Repository URL field, add the Git repository path
+    created by you. This repository has a Jenkins file, a Lambda function, and a test
+    folder. Leave the rest as default and click on Save.Now our pipeline is saved.
+    It is time to run the pipeline. Jenkinsfile is a great script that will orchestrate
+    the pipeline for us.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Click Build with Parameters. You will then see the environment-based build parameter
+    that will be required for our pipeline to build, test, and deploy our code.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The first run should be without any testing in place, and should only deploy
+    functions and the API gateway for the tasks on the AWS Cloud. The console output
+    will provide us with the endpoints for the tasks, as shown in the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Replace the task endpoint in the Jenkinsfile for the entire environment with
+    the API gateway path listed on the console, as shown in the following code. Then
+    save the Jenkinsfile and push it to the Git repository created by you. The reason
+    we are adding the endpoints late in the build is because API gateway endpoints
+    are created dynamically. But we can also have a static endpoint URL with custom
+    domain names featured in the API gateway:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE35]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Build the job by clicking on Build with Parameters. Here, we should be able
+    to see that the system test is running along the deployment steps, and the pipeline
+    should be green, as shown in the following screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/23e7d668-800e-4cd9-847f-041ce1177650.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: In the preceding recipe, we learned how Lambda functions and the API gateway
+    call tasks. We also learned how they are deployed to AWS through Serverless Framework
+    and Jenkins via different environments, such as dev, sit, and prod. We also created
+    and tested a system test. The deployment and execution will deploy the Lambda
+    function and API gateway to the AWS cloud, and every system test will execute
+    the Lambda function to perform CRUD operations on DynamoDB. So if you go into
+    DynamoDB, you should see three tables that are created for each environment. You
+    should also be able to see different functions and the API gateway for each environment.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Deployment methods
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Deployment into production has its pains. We take a lot of precautions while
+    deploying into production. We introduce lots of testing on lower environments
+    so that most of the bugs and performance problems are taken care of early on.
+    But we are still nervous when deploying into production, as we are never 100 percent
+    sure whether the deployed version will work perfectly fine. If we are using deployment
+    techniques, then we minimize the deployment failure substantially. There are varieties
+    of deployment technique, but canary and blue-green are the most popular ones.
+    We will look at examples of both deployment techniques for AWS Lambda.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Canary deployment
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Canary deployment is a deployment technique involving a gradual shift in production
+    traffic from version A to version B, where version B is the latest version and
+    version A is the previous version. AWS has recently introduced traffic shifting
+    for Lambda functions aliases. An alias is a pointer to a specific version of the
+    Lambda functions, which basically means that we can split the traffic of the functions
+    between two different versions by specifying the percentage of incoming traffic
+    that we want to direct to the new release. Lambda will automatically load balance
+    requests between versions when aliases are invoked. So instead of replacing one
+    function with another version, both versions can coexist and can be monitored
+    as to how they perform.
+  prefs: []
+  type: TYPE_NORMAL
+- en: All of this sounds awesome, but doing all this it not that easy. Fortunately,
+    AWS already has a service that will help us with this problem—CodeDeploy. To use
+    canary deployment with the AWS CodeDeploy service, we need to create a variety
+    of resources. We need to create a CodeDeploy application, a deployment group,
+    and aliases for the functions. We also need to create new permissions and replace
+    all the event sources to trigger the aliases instead of the latest functions.
+    But this can be much easier if we use the canary deployment plugin with Serverless
+    Framework. Let's learn how we can achieve this using an example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The code that we will be working on in the following recipe is available at :[https://github.com/shzshi/my-canary-deployment.git](https://github.com/shzshi/my-canary-deployment.git).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Setting up a simple environment
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Perform the following steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s create a simple serverless service with the following command. Two files
+    will be created named `handler.js` and `serverless.yml`:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE36]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now replace the content of `serverless.yml` with the following code. Make sure
+    that it is indented properly. We are creating a service with a function and an
+    API gateway:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE37]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Let''s replace the content of `handler.js` with the following content:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE38]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Create a `package.json` file, as shown in the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE39]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Let''s deploy this function to the AWS, as shown in the following code. Make
+    sure that you have configured your AWS access and secret key before deploying:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE40]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Once successfully deployed, let''s invoke the function and let it verify the
+    execution. We will be provided with the service endpoint, so let''s invoke the
+    function with the endpoint, as shown in the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE41]'
+  prefs: []
+  type: TYPE_PRE
+- en: Setting up canary deployment
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Once the initial setup is complete, we will tell the serverless canary deployment
+    plugin to split the traffic between the last two versions and gradually shift
+    more traffic to the new version until it receives all the load.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following are the three types of gradual deployment that we can implement
+    using AWS''s CodeDeploy:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Canary:** The traffic is shifted to a new version during a certain period
+    of time, and when the time elapses, all the traffic will have moved to the newer
+    version'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Linear:** The traffic is shifted to the new version incrementally at intervals
+    until it gets all of the traffic'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**All at once:** All the traffic is shifted to the new version at once'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'We need to be specific as to which parameter and type of deployment we will
+    use by choosing any of the aforementioned options for using CodeDeploy:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`Canary10Percent30Minutes`, `Canary10Percent5Minutes`, `Canary10Percent10Minutes`,
+    `Canary10Percent15Minutes`, `Linear10PercentEvery10Minutes`, `Linear10PercentEvery1Minute`,
+    `Linear10PercentEvery2Minutes`, `Linear10PercentEvery3Minutes` or `AllAtOnce`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For our tutorial, we will use `Linear10PercentEvery1Minute`, which means that
+    the traffic that the new version of the function will receive will be increased
+    by 10 percent increments every minute, until it reaches 100%. To do this, we need
+    to set the type and alias (the name of the alias that we want to create) under
+    `deploymentSettings` in the function. Let''s update the files, and redeploy and
+    invoke the function to see how the traffic moves:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Add the deployment settings within the `serverless.yml`, as shown in the following
+    code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE42]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Update the `handler.js` with the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE43]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Let''s deploy the function. You will see from the following code that the deployment
+    will trigger `CodeDeploy` with linear deployment, and requests will be load balanced
+    between the two functions:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE44]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Let''s invoke the function and see whether it is load balanced, as shown in
+    the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE45]'
+  prefs: []
+  type: TYPE_PRE
+- en: Making sure the deployment works fine
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Our function deployed without any hassle, but how do we ensure that whole system
+    is behaving correctly? To ensure everything is working fine, we can provide CodeDeploy
+    with a list of variables to track during the deployment process, then cancel it,
+    and shift all the traffic to the old version if the `ALARM` is triggered. With
+    serverless, we can set the alarm using another plugin. Let''s have a look at how
+    to do this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Update the `serverless.yml` to set the alarm, as shown in the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE46]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Let''s deploy the function and see how it works, as shown in the following
+    code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE47]'
+  prefs: []
+  type: TYPE_PRE
+- en: The deploy step will create an alarm in CodeDeploy and the CloudWatch dashboard,
+    where we can see different graphs representing invocations and errors. You can
+    log into AWS Console and go to CodeDeploy and CloudWatch to see how the alarm
+    is created, and to see what the dashboard looks like.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Deploying CodeDeploy hooks
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: So now we have all the tools to minimize the impact of possible bugs or failures.
+    However, we can also avoid invoking a function version that contained errors by
+    running the CodeDeploy hooks first. Hooks are Lambda functions triggered by CodeDeploy
+    before and after traffic shifting takes place. It expects to get notified about
+    the success or failure of the hooks, only continuing to the next step if they
+    succeed. They are good for running integration tests and checking that everything
+    fits together in the cloud, since it will automatically rollback at a failure.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s have look at how to create hooks by going through the following steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s update the `serverless.yml` to add hook details. We need to grant our
+    functions access to CodeDeploy so that we can use CodeDeploy''s SDK in the hooks,
+    as shown in the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE48]'
+  prefs: []
+  type: TYPE_PRE
+- en: '[PRE49]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Next, we will create the hooks. Let''s create a new file named `hooks.js` within
+    the service directory and add the following hook content:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE50]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now that we have created the hooks, let''s deploy them and see how they function
+    using the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE51]'
+  prefs: []
+  type: TYPE_PRE
+- en: While the deployment is continuing on the CLI, we should log into the AWS Cloud
+    console and go to Services | CloudFormation. Select the stack named my-canary-deployment-dev and
+    scroll down and select the CodeDeploy link in the Status Reason column. We should
+    be able to see the gradual shifting of traffic with prehook, traffic shifting,
+    and posthook execution, finally completing the whole stack and, lastly, the deployment.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Here, we learned how we can set up canary deployments using Serverless Framework,
+    various plugins, and AWS CodeDeploy.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Blue-green deployment
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Like canary deployment, blue–green deployment is another type of methodology
+    for safe deployment for production. In canary deployment, we shifted the traffic
+    from one version to the next version gradually until we completely moved it to
+    the latest version. But in the case of blue–green deployment, we create two different
+    environments. One environment is used for going live and the other for staging
+    the new version. So a blue–green deployment setup would create a separate region
+    for staging and production and then route the traffic from one region to another
+    with deploying the latest version.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's say that I have a **blue** region (`us-east-1`), which is the production
+    region, and that it is live and has the current version of the Lambda functions
+    deployed. Now let's say that I also have a new version out, so I will deploy the
+    Lambda function (the new version) into a **green **region (`us-east-2`), and that
+    this will act as my staging environment. I will perform all the testing, and once
+    satisfied, I will redirect all the traffic to the **green** region (`us-east-2`).
+    Now that my staging is live, I will go ahead and deploy the latest version to
+    the blue region (`us-east-1`), and my functions will be tested for bugs and problems.
+    But let's say that, unfortunately, some serious bugs are discovered in the **blue** region (`us-east-1`).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Then the code is rolled back, all the traffic is once again pointed to the **blue** region (`us-east-1`),
+    and the **green** region (`us-east-2`) becomes the staging environment again:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Blue: **`$ serverless deploy --stage prod --region us-east-1`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Green:** `$ serverless deploy --stage prod --region us-east-2`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Integration of CloudWatch with ELK
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: I have been using ELK for quite a long time. It was daily work for me, as AWS
+    Lambda logs are shipped to CloudWatch, but as my company uses ELK for centralized
+    log management, I now like to push all the logs from CloudWatch to ELK.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'So I decided to ship the CloudWatch logs to ELK. Lambda logs can be shipped
+    directly to Elasticsearch or to Redis for Logstash to pick it up. There is a plugin
+    available that will help us to ship the Lambda CloudWatch logs to ELK. We will
+    now look at how to configure this. We will be using a Docker ELK image to set
+    up ELK locally and then connect to AWS CloudWatch through the Logstash plugin.
+    Then we will push the logs to Elasticsearch. Let''s go through the following steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Get the Docker image for ELK, as shown in the following code. If you already
+    have an ELK account set up, then you don''t need to follow this step:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE52]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now, if you go to your browser and open the link `http://localhost:5601/`, then
+    you should be able to see the Kibana dashboard.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Install the `logstash-input-cloudwatch_logs` plugin. Ssh into your Docker container
+    that was created in the previous step and install the plugin, as shown in the
+    following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE53]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Once the plugin is successfully installed, we need to create a Logstash config
+    file that will help us in shipping the CloudWatch logs. Let''s open the editor
+    and add the following config file and name it `cloud-watch-lambda.conf`. We need
+    to replace `access_key_id` and `secret_access_key` as per the AWS IAM user and
+    also update the log group. I have added three `grok` filters:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The first filter matches the generic log message, where we strip the timestamp
+    and pull out the `[lambda][request_id]` field for indexing
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The second `grok` filter handles the `START` and `END` log messages
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The third filter handles the `REPORT` messages and gives us the most important
+    fields
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[PRE54]'
+  prefs: []
+  type: TYPE_PRE
+- en: Let's name this` cloud-watch-lambda.conf `and place it in the `/etc/logstash/conf.d` file
+    of the Docker container.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now let''s restart the Logstash service, as shown in the following code. Once
+    this is done, you should be able to see that the logs have been pulled into our
+    ELK container:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE55]'
+  prefs: []
+  type: TYPE_PRE
+- en: Open the browser and go to the page `http://localhost:5601` and we should be
+    able to see the logs streaming into ELK from cloudwatch and this can be refined
+    further with ELK filter and regular expression.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/917f3c3b-6a6d-4add-9b2c-2142581673cb.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we learned how to integrate DevOps with various out-of-the-box
+    tools within AWS Lambda and with open source tools. In the next chapter, we will
+    learn how to set up CI and CD with Azure functions with the help of Serverless
+    Framework, as well as how to monitor and log with Azure functions.
+  prefs: []
+  type: TYPE_NORMAL

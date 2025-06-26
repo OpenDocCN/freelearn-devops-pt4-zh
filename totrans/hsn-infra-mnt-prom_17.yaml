@@ -1,0 +1,810 @@
+- en: Scaling and Federating Prometheus
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Prometheus was designed to be run as a single server. This approach will allow
+    you to handle thousands of targets and millions of time series but, as you scale,
+    you might find yourself in a situation where this just is not enough. This chapter
+    tackles this necessity and clarifies how to scale Prometheus through sharding.
+    However, sharding makes having a global view of the infrastructure harder. To
+    address this, we will also go through the advantages and disadvantages of sharding,
+    how federation comes into the picture, and, lastly, introduce Thanos, a component
+    that was created by the Prometheus community to address some of the issues presented.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In brief, the following topics will be covered in this chapter:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Test environment for this chapter
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Scaling with the help of sharding
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Having a global view using federation
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using Thanos to mitigate Prometheus shortcomings at scale
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Test environment for this chapter
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we'll be focusing on scaling and federating Prometheus. For
+    this, we'll be deploying three instances to simulate a scenario where a global
+    Prometheus instance gathers metrics from two others. This approach will allow
+    us not only to explore the required configurations, but also to understand how
+    everything works together.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The setup we''ll be using is illustrated in the following diagram:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/57bf01ed-f3df-4e4b-b9bf-3977295a3656.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 13.1: Test environment for this chapter'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next section, we will explain how to get the test environment up and
+    running.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Deployment
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'To launch a new test environment, move into the following chapter path, relative
+    to the code repository root:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Ensure that no other test environments are running and spin up this chapter''s
+    environment, by using this command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You can validate the successful deployment of the test environment using the
+    following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This will output the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'When the deployment tasks end, you''ll be able to validate the following endpoints
+    on your host machine using your favorite JavaScript-enabled web browser:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| **Service** | **Endpoint** |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Shard01 Prometheus | `http://192.168.42.10:9090` |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Shard02 Prometheus | `http://192.168.42.11:9090` |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Global Prometheus | `http://192.168.42.12:9090` |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Global Thanos querier | `http://192.168.42.12:10902` |'
+  prefs: []
+  type: TYPE_TB
+- en: 'You should be able to access each of these instances by using the respective
+    command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| **Instance** | **Command** |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Shard01 | `vagrant ssh shard01` |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Shard02 | `vagrant ssh shard02` |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Global | `vagrant ssh global` |'
+  prefs: []
+  type: TYPE_TB
+- en: Cleanup
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'When you''ve finished testing, just make sure that you''re inside `./chapter13/`
+    and execute the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: Don't worry too much: you can easily spin up the environment again if you need
+    to.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Scaling with the help of sharding
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'With growth come more teams, more infrastructure, more applications. With time,
+    running a single Prometheus server can start to become infeasible: changes in
+    recording/alerting rules and scrape jobs become more frequent (thus requiring
+    reloads which, depending on the configured scrape intervals, can take up to a
+    couple of minutes), missed scrapes can start to happen as Prometheus becomes overwhelmed,
+    or the person or team responsible for that instance may simply become a bottleneck
+    in terms of organizational process. When this happens, we need to rethink the
+    architecture of our solution so that is scales accordingly. Thankfully, this is
+    something the community has tackled time and time again, and so there are some
+    recommendations on how to approach this problem. These recommendations revolve
+    around sharding.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this context, sharding means splitting the list of scrape targets among
+    two or more Prometheus instances. This can be accomplished in two ways: via vertical
+    or horizontal sharding. Sharding vertically is by far the most common method,
+    and it''s done by grouping scrape jobs logically (for example, by scope, technology,
+    organizational boundary) into different Prometheus instances, where the sharding
+    limit is the scrape job. On the flip side, horizontal sharding is done at the
+    level of the scrape job; it means having multiple instances of Prometheus, each
+    scraping a subset of targets for a given job. Horizontal sharding is seldom used,
+    as it is uncommon for a scrape job to be larger than a single Prometheus instance
+    can handle.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Additionally, we're not considering having a Prometheus for each datacenter/environment
+    as sharding; Prometheus is supposed to be run alongside the systems/services it
+    monitors for reasons of bandwidth and latency, as well as resiliency (less prone
+    to suffer from network failures).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Logical grouping of jobs
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'A good starting point for scaling when a single Prometheus instance isn''t
+    enough is to split scrape jobs into logical groups and then assign these groups
+    to different Prometheus instances. This is called vertical sharding. The groups
+    can be made around anything that makes sense to you: by architecture/scope (frontend,
+    backend, databases), by layers (OS-level metrics, infrastructure services, applications),
+    by internal organization vertical, by team, by network security boundary (so that
+    scrapes don''t need to cross firewalls), or even by application cluster.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following diagram exemplifies what this type of vertical sharding looks
+    like:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/dd2d2b9e-ac12-4bbe-bb59-667bb81f010c.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 13.2: Diagram illustrating vertical sharding'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This type of sharding also enables isolation between Prometheus instances, which
+    means that a heavily used subset of metrics from a given set of targets can be
+    split into multiple instances, possibly with more resources. This way, any negative
+    side-effects from their heavy usage will be circumscribed, and won't affect the
+    overall monitoring platform stability.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Additionally, doing vertical sharding for each team can have a couple of organizational
+    benefits:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: It makes cardinality considerations more visible to the service owners.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Teams feel both empowered and accountable for the monitoring of their services.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: It can enable more experimentation for rules and dashboards without the fear
+    of impacting others.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The single job scale problem
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'We went through a couple of strategies for vertically sharding Prometheus,
+    but there''s a problem we still haven''t addressed: scaling requirements tied
+    to a single job. Imagine that you have a job with tens of thousands of scrape
+    targets inside one datacenter, and there isn''t a logical way to split it any
+    further. In this type of scenario, your best bet is to shard horizontally, spreading
+    the same job across multiple Prometheus servers. The following diagram provides
+    an example of this type of sharding:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/a429d809-62ee-4c83-9cf8-968da4472c31.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 13.3: Diagram illustrating horizontal sharding'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To accomplish this, we must rely on the `hashmod` relabeling action. The way
+    `hashmod` works is by setting `target_label` to the `modulus` of a hash of the
+    concatenated `source_labels`, which we then place in a Prometheus server. We can
+    see this configuration in action in our test environment in both `shard01` and
+    `shard02`, effectively sharding the node job. Let''s go through the following
+    configuration, which can be found at `/etc/prometheus/prometheus.yml`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: When using temporary labels, like in the previous example, always use the `__tmp`
+    prefix, as that prefix is guaranteed to never be used internally by Prometheus.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the following screenshot, we can see the `/service-discovery` endpoint from
+    the `shard01` and `shard02` Prometheus instances side by side. The result of the
+    `hashmod` action allowed us to split the node exporter job across both instances,
+    as shown:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/0ec079f8-859e-407e-9f1d-dba2f2eee0bd.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 13.4: shard01 and shard02 */service-discovery* endpoints showing the
+    *hashmod* result'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Few reach the scale where this type of sharding is needed, but it's great to
+    know that Prometheus supports it out of the box.
+  prefs: []
+  type: TYPE_NORMAL
+- en: What to consider when sharding
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: A sharding strategy, whether vertical or horizontal, while necessary in certain
+    situations, shouldn't be taken lightly. The complexity in managing multiple configurations
+    for multiple Prometheus instances quickly adds up, making your life more difficult
+    if you didn't plan the required automation accordingly. Things such as external
+    labels, external URLs, user consoles, and scrape jobs can be programmatically
+    set to reduce the operational toil for the team maintaining the shards.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Having a global view also becomes a problem as each Prometheus instance will
+    have its own subset of the data. This can make dashboarding harder as the location
+    of the data may not be immediately clear (for example, when using multiple data
+    sources in Grafana), and can also prevent some queries from aggregating services
+    that are spread over many shards globally. This issue can be mitigated through
+    a couple of techniques, which we'll explore later in this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Lastly, some recording and alerting rules might become impractical if the required
+    time series aren't located in the same shard. As an example, let's imagine we
+    have a shard with OS-level metrics and another with an application metrics. Alerts
+    that need to correlate metrics from both shards are going to be a problem. This
+    issue can be mitigated by carefully planning what goes into each shard, by using
+    federation to make the required metrics available where they are needed, or by
+    using a remote write to external systems that can do this outside Prometheus (as
+    we'll see in [Chapter 14](1fb2aaff-5fe3-44ed-9df8-1cd27f383906.xhtml),* Integrating
+    Long-Term Storage with Prometheus*).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Alternatives to sharding
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'As mentioned at the beginning of this chapter, a single Prometheus instance
+    will take you a long way if configured and utilized properly. Striving to avoid
+    high cardinality metrics should be a top concern, mitigate the need to start sharding.
+    Something that helps to protect Prometheus instances from scraping targets that
+    produce unreasonable amounts of metrics involves defining the maximum sample ingestion
+    per scrape job. For this, you just need to add `sample_limit` to the scrape job;
+    if the number of samples after `metric_relabel_configs` goes over the configured
+    limit, the scrape will be dropped entirely. An example configuration is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The following screenshot illustrates what happens when a scrape hits the configured
+    `sample_limit`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/ac48f1e9-23ab-4093-8f91-146727e3826f.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 13.5: Prometheus targets endpoint showing scrape jobs being dropped
+    due to exceeded sample limit'
+  prefs: []
+  type: TYPE_NORMAL
+- en: When using this limiter, you should keep an eye out for scrapes getting dropped
+    using the `prometheus_target_scrapes_exceeded_sample_limit_total`metric in conjunction
+    with the `up` metric. While the latter tells you Prometheus couldn't scrape the
+    target, the former will give you the reason why.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If dropping scrapes is out of the question and you are able to sustain the loss
+    of resolution, an alternative is to increase the scrape interval. Bear in mind
+    that you shouldn't increase it over two minutes, as doing so creates the risk
+    of metric staleness due to a single scrape failing, as we explained in [Chapter
+    5](12e775c2-bee9-4ebe-ad73-2f9313eeeeee.xhtml), *Running a Prometheus Server.*
+  prefs: []
+  type: TYPE_NORMAL
+- en: Having a global view using federation
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: When you have multiple Prometheus servers, it can become quite cumbersome to
+    know which one to query for a certain metric. Another problem that quickly comes
+    up is how to aggregate data from multiple instances, possibly in multiple datacenters.
+    Here's where federation comes into the picture. Federation allows you to have
+    a Prometheus instance scraping selected time series from other instances, effectively
+    serving as a higher-level aggregating instance. This can happen in a hierarchical
+    fashion, with each layer aggregating metrics from lower-level instances into larger-encompassing
+    time series, or in a cross-service pattern, where a few metrics are selected from
+    instances in the same level for federation so that some recording and alerting
+    rules become possible. For example, you could collect data for service throughput
+    or latency in each shard, and then aggregate them across all the shards to have
+    a global value.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's have a look at what is needed to set up federation in Prometheus, and
+    then go into each of the aforementioned federation patterns.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Federation configuration
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'A running Prometheus server exposes a special endpoint served at `/federate`.
+    This endpoint allows for the retrieval of time series that match one or more instant
+    vector selectors (which we covered in [Chapter 7](205ddb34-6ee8-4e22-b80f-39d5b2198c29.xhtml),
+    *Prometheus Query Language – PromQL*). To make these mechanisms clear, we provided
+    a very simple example in our test environment. Each one of the shard instances
+    has a recording rule producing aggregate metrics representing the number of HTTP
+    requests to exporters, illustrated in the following code block:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'To provide a global view, we can use the `global` instance in the test environment
+    to scrape the federation endpoint of both shards, requesting only those aggregate metrics
+    (all that start with `job:`), as can be seen in the following snippet:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'There are a couple of things to note in this snippet. Federation uses the same
+    mechanics as regular scrape jobs, but needs the configuration of a different scrape
+    endpoint, and a HTTP parameter to specify which metrics we want to collect. Additionally,
+    setting `honor_labels: true` will ensure that all the original label values are
+    kept and never overridden; this needs to be configured, as otherwise Prometheus
+    would set labels such as `instance` and `job` to the values from the scrape job
+    otherwise.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You can check on the status of federated targets in the aggregator Prometheus
+    instance in our test environment at the `http://192.168.42.12:9090/targets` endpoint,
+    as shown:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/9f52e211-b803-40c2-9dd3-0e4bb46c051b.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 13.6: Prometheus *targets* endpoint showing the federated servers'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can also test the federation of metrics in the global Prometheus web interface:
+    even though this instance is not scraping any exporter nor does it have the recording
+    rule, we can get every time series from the `job:promhttp_metric_handler_requests:sum_rate1m` metric,
+    which were originally produced in each shard instance. Note that the `job` label
+    that is returned comes from the original job and not the federation scrape job.
+    Additionally, we can see that the `shard` label we configured as an external label
+    in our instances is present here; labels defined in the `external_labels` section
+    are automatically added to metrics that are returned from the `/federate` endpoint,
+    as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/005b3725-ddee-4240-b196-c0e917630bd5.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 13.7: Global Prometheus view on the aggregate metric'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we understand the mechanics of how federation works, we can proceed
+    to look at common patterns and best practices for federation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Federation patterns
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The first thing to be aware of when starting to implement federation in Prometheus
+    is that the set of federated metrics should either be pre-aggregated or hand-picked.
+    Trying to import big chunks of data, or even every metric, from one Prometheus
+    into another using federation is generally a bad idea, for a couple of reasons:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Due to the massive amount of data being collected in each scrape, it will have
+    a negative performance impact on both the instance producing the metrics and the
+    one consuming them.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Since scrape ingestion is atomic but not isolated, the Prometheus instance being
+    targeted can present an incomplete snapshot of its time series due to races: it
+    can be in the middle of processing scrape jobs and will return what is had processed
+    at that moment. This is especially relevant for multi-series metric types such
+    as histograms and summaries.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Bigger scrapes are more likely to suffer from timeouts, which will in turn create gaps
+    in the data on the Prometheus instance doing the federation scrapes.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Trying to get all time series from a Prometheus instance into another defeats
+    the point of federation. If it's a matter of proxying metrics, an actual proxy
+    server would probably be a better choice. Nevertheless, the best practice is still
+    to run Prometheus near what you're trying to monitor.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'There are two main ways a Prometheus time series federation is implemented:
+    hierarchical and cross-service. As we''ll see, both patterns are complementary
+    and can be used together.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Hierarchical
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Having multiple shards, or even just more than one datacenter, means that time
+    series data is now spread out across different Prometheus instances. Hierarchical
+    federation aims to solve this issue by having one or more Prometheus servers collecting
+    high-level aggregate time series from other Prometheus instances. You can have
+    more than two levels of federation, though that would require significant scale.
+    This allows the higher-tiered Prometheus to have a broader view over the infrastructure
+    and its applications. However, as only aggregated metrics should be federated,
+    those with the most context and detail will still reside on the lower tiers. The
+    following diagram illustrates how this works:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/60578769-7278-4629-9950-3ea794676403.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 13.8: Hierarchical federation example diagram'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As an example, you may want to have a view of latency across several datacenters.
+    A three-tiered Prometheus hierarchy to fulfil that requirement could look like
+    the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A couple of vertical shards scraping several jobs
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A datacenter instance scraping those shards for time series aggregated at the
+    job level (`__name__=~"job:.+"`)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A global Prometheus that scrapes the datacenter instances for time series aggregated
+    at the datacenter level (`__name__=~"dc:.+"`)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: When using a monitoring platform with this layout, it is common to start at
+    the highest level and then drill down to the next level. This can be easily done
+    with Grafana, as you can have each tier in the federation hierarchy configured
+    as a data source.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Alerting rules should be run as close to the origin of the time series they
+    use as possible, as every federation layer that needs to be crossed will introduce
+    new points of failure in the alerting critical path. This is especially true when
+    aggregating across datacenters, given that the scrapes might need to go through
+    less reliable networks or even through an internet link.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Cross-service
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'This type of federation is useful when you need a few select time series from
+    another Prometheus instance locally for recording or alerting rules. Going back
+    to the example scenario where you have a Prometheus instance tasked with scraping
+    Node Exporters and another for applications, this pattern would allow you to federate
+    specific OS-level metrics that could then be used in applications alerts, as shown
+    in the following diagram:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/d9c9f938-da34-427e-a2e5-f993ef28d19c.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 13.9: Cross-service federation example diagram'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The configuration of cross-service federation looks mostly the same as the previous
+    pattern, but in this case the scraped Prometheus is in the same logical tier and
+    the selectors that were used should be matching specific metrics instead of aggregates.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next section, we're going to introduce a new component that has been
+    gaining traction in the Prometheus community and tackles the challenge of having
+    a global view in a new and interesting way.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using Thanos to mitigate Prometheus shortcomings at scale
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: When you start to scale Prometheus, you quickly bump into the problem of cross-shard
+    visibility. Indeed, Grafana can help, as you can add multiple datastore sources
+    in the same dashboard panel, but this becomes harder to maintain, especially if
+    multiple teams have different needs. Keeping track of which shard has which metric
+    might not be trivial when there aren't clearly defined boundaries - while this
+    might not be a problem when you have a shard per team as each team might only
+    care about their own metrics, issues arise when there are several shards maintained
+    by a single team and exposed as a service to the organization.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Additionally, it is common practice to run two identical Prometheus instances
+    to prevent single points of failure (SPOF) in the alerting path - known as HA
+    (or high-availability) pairs. This complicates dashboarding further, as each instance
+    will have slightly different data (especially in gauge metrics), and having a
+    load balancer distributing queries will result in inconsistent results across
+    dashboard data refreshes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Thankfully, a project was initiated to, among other things, tackle this exact
+    issue – this project is called Thanos. It was developed at Improbable I/O with
+    the collaboration of Fabian Reinartz (the author of the new storage engine/time
+    series database in Prometheus 2.x).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Prometheus has a well-defined scope of action; for example, it was not built
+    for clustering, and all the decisions that have been made so far have always been
+    aimed at reliability and performance above all else. These design choices are
+    some of the cornerstones of Prometheus' success and allowed it to scale from simple
+    deployments handling a handful of targets to huge instances handling a million
+    of ingested samples per second, but choices almost always come with trade-offs.
+    While Prometheus does offer some workarounds to implement features without resorting
+    to shared state (namely through federation, as we've seen previously), it does
+    so with some limitations, such as having to select which metrics to federate.
+    It is in these cases that creative solutions appear to try and overcome some of
+    these limitations. Thanos is an elegant example of this, as we'll see later.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We'll be discussing more of Thanos' features in [Chapter 14](1fb2aaff-5fe3-44ed-9df8-1cd27f383906.xhtml),
+    *Integrating Long-Term Storage with Prometheus*, but for now our focus will be
+    on the global querying aspect of this project.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Thanos' global view components
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: To attain a global view using Thanos, we must first understand some of its components.
+    Thanos, like Prometheus, is written in Go and ships a single binary (for each
+    platform/architecture) that behaves differently depending on the provided sub-command
+    in its execution. In our case, we'll be expanding on sidecar and Query components.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can find all the source code and installation files for Thanos at [https://github.com/improbable-eng/thanos](https://github.com/improbable-eng/thanos).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In short, the sidecar makes data from a Prometheus instance available to other
+    Thanos components, while the Query component is an API-compatible replacement
+    for Prometheus that distributes queries it receives to other Thanos components,
+    such as sidecars or even other Query instances. Conceptually, the global-view
+    approach Thanos takes resembles the following diagram:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/b3048a37-faa6-4f29-ba14-3e4853c86f39.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 13.10: Global view with Thanos example diagram'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Thanos components that can return query results implement what is called a *store
+    API*. When a request hits a Thanos querier, it will fan out to all the store API
+    nodes configured for it, which in our example are the Thanos sidecars that make
+    time series available from their respective Prometheus servers. The querier will
+    collate the responses (being able to aggregate disjointed or deduplicate data)
+    and then perform the required PromQL query over the dataset. The deduplication
+    feature is particularly useful when using pairs of Prometheus servers for high
+    availability.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, let's take a look at each of these components, digging deeper into how
+    they work and how to set them up.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Sidecar
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The sidecar component is meant to be deployed locally alongside Prometheus and
+    connect to it via its remote-read API. Prometheus' remote-read API allows integration
+    with other systems so that they can access samples as if they were locally available
+    for them to query. This obviously introduces the network in the query path, which
+    might cause bandwidth related issues. The sidecar takes advantage of this to make
+    data available in Prometheus to other Thanos components. It exposes the store
+    API as a gRPC endpoint (bound to port `10901` by default), which will then be
+    used by the Thanos query component, effectively turning the sidecar into a datastore
+    from the querier's point of view. Sidecar also exposes an HTTP endpoint on port
+    `10902` with a handler for `/metrics` so that you can collect its internal metrics
+    in Prometheus.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Prometheus instance that the sidecar is attached to must set `external_labels`
+    so that each instance is uniquely identified. This is essential for Thanos to
+    filter out which store APIs to query and for deduplication to work.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Unfortunately, having unique external labels will break Alertmanager deduplication
+    when using pairs of Prometheus instances for high availability. You should use
+    `alert_relabel_configs` in the `alerting` section to drop any label that is unique
+    to each Prometheus instance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In our test environment, we can find a Thanos sidecar running in each of the
+    available shards. To quickly validate the configuration in use, we can run the
+    following instruction in any shard instances:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: The previous snippet indicates that the sidecar is connecting to the local Prometheus
+    instance. Sidecar offers a lot more functionality, as we'll see in the next chapter,
+    but for the purpose of implementing a global view, this configuration will suffice.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Query
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The query component implements the Prometheus HTTP API, which enables PromQL
+    expressions to run against data from all configured Thanos store APIs. It also
+    includes a web interface for querying, which is based on Prometheus' own UI with
+    a couple of minor changes, making users feel right at home. This component is
+    completely stateless and can be scaled horizontally. Due to being compatible with
+    the Prometheus API, it can be used directly in Grafana as a data source of the
+    Prometheus type, enabling drop-in replacement of Prometheus querying for Thanos.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This Thanos component is also running in our test environment, specifically
+    in the *global* instance, and its configuration can be viewed by running the following
+    instruction:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As we can see in the previous snippet, we are required to specify all the components
+    with a store API that we want to make available through the querier. Since we''re
+    using most of the default values for this component, the web interface is available
+    on port `10902`, which we can validate by pointing our browser to `http://192.168.42.12:10902/stores`,
+    as shown in the following screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/812e6400-0a6d-48a5-a309-6d8d2757c29e.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 13.11: Thanos query web interface showing the /stores endpoint'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The querier HTTP port also serves the `/metrics` endpoint for Prometheus metric
+    collection.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The `--query.replica-label` flag allows for the deduplication of metrics using
+    a specific Prometheus external label. For example, we have the exact same `icmp`
+    job on `shard01` and `shard02`, and both have a `shard` external label to uniquely
+    identify them. Without any deduplication, we would see two results for each of
+    the metrics when doing queries with this job, as both sidecars have relevant data.
+    By marking `shard` as the label that identifies a replica, the querier can select
+    one of the results. We can toggle deduplication via Application Programming Interface
+    (sending `dedup=true` in the `GET` parameters) or the web interface (selecting
+    the **deduplication** option), depending on whether we want to include metrics
+    from all the store APIs or just for single results as if only a single Prometheus
+    instance had the data. The following screenshot exemplifies this difference:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/6e7ca518-d237-4ec1-b1b1-0a795993e048.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 13.12: Thanos query deduplication disabled and enabled'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The deduplication feature is enabled by default so that the querier can seamlessly
+    replace Prometheus in serving queries. This way, upstream systems such as Grafana
+    can continue functioning without even knowing that the query layer has changed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we tackled issues concerning running Prometheus at scale. Even
+    though a single Prometheus instance can get you a long way, it's a good idea to
+    have the knowledge to grow if required. We've learned how vertical and horizontal
+    sharding works, when to use sharding, and what benefits and concerns sharding
+    brings. We were introduced to common patterns when federating Prometheus (hierarchical
+    or cross-service), and how to choose between them depending on our  requirements.
+    Since, sometimes, we want more than the out-of-the-box federation, we were introduced
+    to the Thanos project and how it solves the global view problem.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next chapter, we'll be tackling another common requirement and one that
+    isn't a core concern of the Prometheus project, which is the long-term storage
+    of time series.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Questions
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: When should you consider sharding Prometheus?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What's the difference between sharding vertically and horizontally?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Is there anything you can do before opting for a sharding strategy?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What type of metrics are best suited for being federated in a hierarchical pattern?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Why might you require cross-service federation?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What protocol is used between Thanos querier and sidecar?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: If a replica label is not set in a Thanos querier that is configured with sidecars
+    running alongside Prometheus HA pairs, what happens to the results of queries
+    that are executed there?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Further reading
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '**Scaling and Federating Prometheus**: [https://www.robustperception.io/scaling-and-federating-prometheus](https://www.robustperception.io/scaling-and-federating-prometheus)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Thanos components**: [https://github.com/improbable-eng/thanos/tree/master/docs/components](https://github.com/improbable-eng/thanos/tree/master/docs/components)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Thanos - Prometheus at scale**: [https://improbable.io/blog/thanos-prometheus-at-scale](https://improbable.io/blog/thanos-prometheus-at-scale)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

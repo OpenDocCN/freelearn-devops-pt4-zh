@@ -1,0 +1,1829 @@
+- en: '*Chapter 9*: Securing the Cluster Using GKE Security Constructs'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Kubernetes, or K8s, is an open source container orchestration system that runs
+    containerized applications but requires significant effort to set up and maintain.
+    **Google Kubernetes Engine** (**GKE**) is an enhanced version of K8s that is managed
+    in nature, abstracts the master plane components from the user, provides the ability
+    to auto-upgrade, and supports features such as DNS, logging, and monitoring dashboards
+    as built-ins rather than maintaining them as external plugins. Kubernetes has
+    a lot of critical concepts, jargon, and objects. The last two chapters ([*Chapter
+    7*](B15587_07_Final_ASB_ePub.xhtml#_idTextAnchor154), *Understanding Kubernetes
+    Essentials to Deploy Containerized Applications*, and [*Chapter 8*](B15587_08_Final_ASB_TD_ePub.xhtml#_idTextAnchor182),
+    *Understanding GKE Essentials to Deploy Containerized Applications*) focused on
+    native Kubernetes features such as cluster anatomy, elaborated on key Kubernetes
+    objects, and discussed how applications are scheduled on a cluster. In addition,
+    the focus was extended to learning about specific GKE features such as node pools,
+    cluster configurations, options to auto scale workloads, and understand how GKE
+    interacts with other GCP services.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This chapter specifically focuses on understanding the basic security constructs
+    in Kubernetes, their application, and then specific GKE security features that
+    are fundamental to hardening a cluster's security. The key here is to secure the
+    applications running inside the cluster using GKE-specific features.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This chapter will cover the following topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Essential security patterns in Kubernetes**: This section deep dives into
+    fundamental security constructs in native Kubernetes, such as authentication,
+    authorization, securing the control plane, and Pod security. We will also look
+    at each of the security constructs with respect to their GKE implementations.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Hardening cluster security**: This section deep dives into GKE-specific security
+    features that provide options for securing applications running inside the GKE
+    cluster. This includes features such as private cluster, binary authorization,
+    container-optimized OS, and more.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'There are two main technical requirements for this chapter:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'A valid **Google Cloud Platform** (**GCP**) account to go hands-on with GCP
+    services: [https://cloud.google.com/free](https://cloud.google.com/free)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Install Google Cloud SDK: [https://cloud.google.com/sdk/docs/quickstart](https://cloud.google.com/sdk/docs/quickstart)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Essential security patterns in Kubernetes
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: A Kubernetes cluster can run multiple types of workloads. This includes stateful
+    applications, stateless applications, jobs, and DaemonSets. However, it is critical
+    to secure these workloads from potential security attacks. Native Kubernetes provides
+    some essential security constructs that focus on the fundamentals, including a
+    request being sent to the cluster and how the request is authenticated and authorized.
+    Additionally, it is important to understand how the master plane components are
+    secured and how the pods running the applications can also be secured. We will
+    cover these from a native Kubernetes standpoint, but their implementation in GKE
+    will also be discussed. The first such security construct we will deep dive into
+    is authentication.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Authentication
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '**Authentication** is the process of determining the identity of the user.
+    It essentially confirms that the user is who they say they are and eventually
+    provides access to eligible resources once authentication is successful.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Kubernetes supports two categories of authentication or user:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: User accounts
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Kubernetes service accounts
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Let's look at these in more detail.
+  prefs: []
+  type: TYPE_NORMAL
+- en: User accounts
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'By default, Kubernetes does not have any objects that can support normal user
+    accounts. Hence, these can never be created through an API call. Normal or regular
+    users in Kubernetes are created in any of the following ways:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: By an admin distributing private keys
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: With a file that contains a list of usernames and their associated passwords
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Through external identity service providers
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In the case of GKE, normal **user accounts** can be provisioned by Cloud IAM
+    users. These user accounts are referred to as members. Members can also be defined
+    as part of a G Suite domain or a Cloud Identity domain. It is also possible to
+    add members or users to Cloud IAM by linking to an existing active directory through
+    Google Cloud Directory Sync. In addition to Cloud IAM users, GCP service accounts
+    are also considered members, like users. These are different from Kubernetes service
+    accounts.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**GCP service accounts** are managed by Google Cloud IAM and specifically used
+    if GCP resources need to have identities that are tied to an application or a
+    virtual machine, instead of a human being. In contrast, Kubernetes service accounts
+    provide an identity to a process running inside a pod and provides access to the
+    cluster.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Kubernetes service accounts
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '**Kubernetes service accounts** are users that are managed by the Kubernetes
+    API. This means that unlike regular user accounts, the service accounts can be
+    created and managed through API calls. In fact, every namespace in Kubernetes
+    has a default Kubernetes service account. These are automatically created by the
+    API server. The *service account admission controller* associates the created
+    service accounts with the running pods. In fact, service accounts are stored as
+    secrets and are mounted onto pods when they''re created. These secrets are used
+    by processes running inside the pod for in-cluster access to the API server.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In addition, Kubernetes service accounts are used to create identities for
+    long-running jobs where there is a need to talk to the Kubernetes API, such as
+    running a Jenkins server. You can use the following CLI command to create a Kubernetes
+    service account:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The preceding command creates a `serviceaccount` object, generates a token
+    for the service account, and creates a secret object to store the token. The secret
+    bearing the token can be retrieved using the following CLI command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The preceding command will result in the following output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: The secret that's displayed under the secrets section will contain the public
+    **Certificate Authority** (**CA** – an entity that issues digital certificates)
+    of the API server, the specific namespace, and a signed **JSON Web Token** (**JWT**).
+    The signed JWT can be used as the bearer account to authenticate the provided
+    service account. This service account can eventually be used either for in-cluster
+    communication or even to authenticate from outside the cluster, as in the case
+    of a Jenkins server.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Every request to Kubernetes needs to be authenticated before it can serve requests.
+    The incoming request is handled by the `kube-api` server by listening on port
+    `443` using HTTPS. Authentication can be done in various ways. GKE supports the
+    following authentication methods:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: OpenID Connect tokens
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: x509 client certs
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Basic authentication using static passwords
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**OpenID Connect** is a layer on top of the OAuth 2.0 protocol and allows clients
+    to verify the identity of an end user by querying the authorization server. **x509
+    client certificates and static passwords** present a wider surface of attack than
+    OpenID. In GKE, both x509 and static password authentication is disabled by default,
+    specifically in clusters created with Kubernetes 1.12 and later. This helps improve
+    the default security posture as the area of impact in the event of an attack is
+    significantly reduced or lowered.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This completes this topic on authentication in Kubernetes. The next topic will
+    cover authorization in Kubernetes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Authorization
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '**Authorization** is the process of determining whether a user has permission
+    to access a specific resource or perform a specific function. In Kubernetes, a
+    user must be authenticated or logged in and authorized to access or use specific
+    resources. It''s generally recommended to enforce the principle of least privilege
+    as a security best practice, as this ensures that a user only has the required
+    level of access to the resource based on the access requirements.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Specific to GKE, a user authenticating via Cloud Identity can be authorized
+    using two approaches. In fact, GKE recommends using both approaches to authorize
+    access to a specific resource:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Cloud **Identity and Access Management** (**IAM**)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Kubernetes **Role-Based Access Control** (**RBAC**)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Cloud IAM** is the access control system for managing GCP resources. Google
+    Account, service account, and Google Group are entities that have an identity
+    in Cloud IAM. Cloud IAM allows users to perform operations at the project level
+    (such as listing all GKE clusters in the project) or at the cluster level (such
+    as viewing the cluster) but specifically outside the cluster. This includes adding
+    specific GKE security configuration options to an existing cluster or even to
+    a new cluster. However, **Kubernetes RBAC** provides access to inside the cluster,
+    even specifically at the namespace level. RBAC allows you to fine-tune rules to
+    provide granular access to resources within the cluster.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: To summarize, Cloud IAM defines who can view or change the configuration of
+    a GKE cluster, while Kubernetes RBAC defines who can view or change Kubernetes
+    objects inside the specific GKE cluster. GKE integrates Cloud IAM and Kubernetes
+    RBAC to authorize users to perform actions on resources if they have the required
+    permissions. Now, let's look at both authorization methods, starting with GKE
+    authorization via Cloud IAM.
+  prefs: []
+  type: TYPE_NORMAL
+- en: GKE authorization via Cloud IAM
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'There are three main elements that comprise Cloud IAM access controls. They
+    are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Who**: This refers to authentication; specifically, the identity of the member
+    making the request.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**What**: This refers to authorization; specifically, the set of permissions
+    that are required to authorize the request. Permissions cannot be directly assigned
+    to members; instead, a set of permissions comprises a role that is assigned to
+    members.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Which**: This refers to the resources that the request is authenticated and
+    authorized to access. In the case of GKE, this refers to GKE resources such as
+    the clusters or objects inside the cluster.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'GKE provides several predefined Cloud IAM roles that provide granular access
+    to Kubernetes engine resources. The following table summarizes the critical pre-defined
+    IAM roles required to authorize or perform actions on GKE:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/B15587_09_Table_9.1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: You can always use custom roles with the minimum required set of permissions.
+    This is specifically true in situations where the GKE pre-defined roles are too
+    permissive or do not fit the use case at hand to meet the principle of least privilege.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, we will look at Kubernetes RBAC.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Kubernetes RBAC
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '**Kubernetes RBAC** is an authorization mechanism that can limit access to
+    specific resources based on roles that have been assigned to individual users.
+    RBAC is a native Kubernetes security feature that provides options to manage user
+    account permissions. Kubernetes RBAC can be used as an added supplement to Cloud
+    IAM. If Cloud IAM can define roles to operate on clusters and API objects within
+    the cluster, then RBAC can be used to define granular access to specific API objects
+    inside the cluster.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'There are three main elements to Kubernetes RBAC. These are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Subjects**: This refers to a set of users or processes (including Kubernetes
+    service accounts) that can make requests to the Kubernetes API.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Resources**: This refers to a set of Kubernetes API objects, such as Pod,
+    Deployment, Service, and so on.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Verbs**: This refers to a set of operations that can be performed on resources
+    such as get, list, create, watch, describe, and so on.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The preceding elements are connected by two RBAC API objects:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Roles**: Connects API resources and verbs'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**RoleBindings**: Connects Roles to subjects'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Roles and RoleBindings can be applied at either the cluster level or at the
+    namespace level. These will be discussed in the upcoming subsections, starting
+    with *Roles*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Roles
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '**Roles** connect API resources and verbs. There are two types of roles in
+    RBAC. RBAC Roles are defined at the namespace level, while RBAC ClusterRole are
+    defined at the cluster level. We''ll look at these in the following sub-sections,
+    starting with RBAC Roles.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: RBAC Roles
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following is an RBAC Role that''s been defined for a specific namespace:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: The definition represents a role of `viewer` that connects the resource pod
+    with specific verbs, `get` and `list`, in the `production` namespace. Only one
+    namespace can be defined per role. For core groups, the `apiGroups` section is
+    optional. However, `apiGroups` should be specified for groups other than core
+    groups. In addition, it is also possible to define a granular role where a specific
+    resource name is also specified.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Multiple rules can be added to a role. Rules are additive in nature. An RBAC
+    Role doesn''t support deny rules. The following is an extension of the earlier
+    RBAC Role, which now includes multiple rules and specifies a resource name:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: In the preceding specification, the viewer RBAC Role can now perform `get` and
+    `list` actions on *Pods* and `ConfigMap`. However, the operations on `ConfigMap`
+    are strictly restricted to a specific `ConfigMap` named `prodEnvironmentVariables`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This completes this sub-section on RBAC Role, one of the two possible RBAC roles.
+    The other – *RBAC ClusterRole* – will be detailed in the following sub-section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: RBAC ClusterRole
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: RBAC ClusterRole grants permissions at the cluster level, so you don't need
+    to define a specific namespace. The rest of the elements and their usage is the
+    same as RBAC Role.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Namespace Scope versus Cluster Scope
+  prefs: []
+  type: TYPE_NORMAL
+- en: There are specific resources that are scoped at the namespace level and others
+    that are scoped at the cluster level. Pods, Deployments, Services, Secrets, ConfigMaps,
+    PersistentVolumeClaim, Roles, and RoleBindings are namespace scoped. Nodes, PersistentVolume,
+    CertificateSigningRequests, Namespaces, ClusterRoles, and ClusterRoleBindings
+    are cluster scoped.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following is the definition of an RBAC ClusterRole, where the intent is
+    to define a role that can perform `list`, `get`, `create`, and `delete` operations
+    against nodes in the cluster:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: This completes this sub-section on Roles. The following sub-section explains
+    how roles and users are tied through the *RoleBindings* Kubernetes API object.
+  prefs: []
+  type: TYPE_NORMAL
+- en: RoleBindings
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '**RoleBindings** connect the subject to a role through a Kubernetes API object.
+    There are two types of RoleBindings in RBAC. RBAC RoleBindings are defined at
+    the namespace level, while RBAC ClusterRoleBindings are defined at the cluster
+    level. Both will be discussed in the following sub-sections.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: RBAC RoleBindings
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following is the definition of an RBAC RoleBinding that''s been defined
+    for a specific namespace that connects users to RBAC Roles:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: The preceding RBAC RoleBinding has been defined for a production namespace and
+    connects the elements defined under subjects to elements defined under `roleRef`.
+    To be specific, the RBAC RoleBinding connects the user `joe@organization.com`
+    to the `viewer` RBAC Role.
+  prefs: []
+  type: TYPE_NORMAL
+- en: It's important to note that `kind` under the subject section can be of the *User*,
+    *Group*, or *ServiceAccount* type. These values, from a GKE perspective, can either
+    be from a Cloud IAM User, Cloud IAM service account, or a Kubernetes service account.
+  prefs: []
+  type: TYPE_NORMAL
+- en: RBAC ClusterRoleBindings
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: RBAC ClusterRoleBindings bind subjects to RBAC ClusterRoles at the cluster level
+    and are not restricted at the namespace level. You can only bind resources that
+    are cluster scoped, not namespace scoped.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following is the definition of RBAC `ClusterRoleBindings`, where the intent
+    is to bind a specific admin user to the RBAC `ClusterRole`, called `node-administrator`,
+    to perform operations against GKE nodes:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: This completes this sub-section on RoleBindings, where both kinds of RoleBindings
+    were explained. Overall, this also concludes the sub-section on Kubernetes RBAC
+    and authorization in Kubernetes in particular. The upcoming sub-section discusses
+    another key Kubernetes security construct – *control plane security* – which focuses
+    on securing master control plane components.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Control plane security
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: As per GCP's shared responsibility model, GKE's `etcd` database, controller
+    manager, and so on are all managed by Google. So, Google is responsible for securing
+    the control plane, while the end user is responsible for securing nodes, containers,
+    and pods.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Every GKE cluster has its own root CA. This CA represents an entity that issues
+    a trusted certificate. This trusted certificate is used to secure the connection
+    between machines. The root keys for a CA are managed by an internal service from
+    Google. Communication between the master and the nodes in a cluster is secured
+    based on the shared root of trust provided by the certificates issued by the CA.
+    By default, GKE uses a separate per-cluster CA to provide certificates for the
+    `etcd` databases within a cluster. Since separate CAs are used for each separate
+    cluster, a compromised CA in one cluster cannot be used to compromise another
+    cluster.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Kubernetes API server and `kubelet` use secured network communication protocols
+    such as TLS and SSH. They do this by using the certificates issued by the cluster
+    root CA. When a new node is created in the cluster, the node is injected with
+    a shared secret at the time of its creation. This secret is then used by its `kubelet`
+    to submit certificate signing requests to the cluster root CA. This allows `kubelet`
+    to get client certificates when the node is created, and new certificates when
+    they need to be renewed or rotated. `kubelet` uses these client certificates to
+    communicate securely with the API server.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You must periodically rotate the certificates or credentials to limit the impact
+    of a breach. But sometimes, it might be difficult to strike a balance in terms
+    of how often the credentials should be rotated. This is because the cluster API
+    server will remain unavailable for a short period of time. Note that the credentials
+    that are used by the API server and the clients can be rotated except for the
+    `etcd` certificates, since these are managed by Google.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**The following is the step-by-step process you should follow to rotate credentials**:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The rotation process starts by creating a new IP address for the cluster master,
+    along with its existing IP address.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '`kube-apiserver` will not be available during the rotation process, but existing
+    pods will continue to run.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: New credentials are issued to the control plane as the result of a new IP address.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Once GKE has reconfigured the masters, the nodes are automatically updated by
+    GKE to use the new IP and credentials. In addition, the node version is also updated
+    to the closest supported version.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Each API client must be updated with the new address. Rotation must be completed
+    for the cluster master to start serving with the new IP address and new credentials
+    and to remove the old IP address and old credentials.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The master node will stop serving the old IP address.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: If the rotation process is started but not completed within 7 days, then GKE
+    will automatically complete the rotation.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Pods run on nodes and by default, pods can access the metadata of the nodes
+    they are running on. This includes node secrets, which are used for node configuration.
+    So, if a pod is compromised, the node secret also gets compromised, thus negatively
+    impacting the entire cluster. The following steps should be taken to prevent such
+    a compromised event and to protect cluster metadata:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The service account tied to the nodes should not include the `compute.instance.get`
+    permission. This blocks Compute Engine API calls to those nodes.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The legacy Compute Engine API endpoint should be disabled (versions 0.1 and
+    v1-beta-1) as these endpoints support metadata being queried directly.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Use a workload identity to access Google Cloud services from applications running
+    within GKE. This prevents pods from accessing the Compute Engine metadata server.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: This completes this sub-section on how master control plane components are secured
+    in GKE. Next, we'll look at how to secure pods running in a cluster by looking
+    at pod security.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Pod security
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'One or more containers run inside a pod. By default, these containers can be
+    deployed with privileged elevation. These are also known as privileged containers.
+    **Privileged containers** have the root capabilities of a host machine and can
+    access resources that can otherwise not be accessed by ordinary containers. The
+    following are a few use cases for privileged containers:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Running a Docker daemon inside a Docker container
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Requiring direct hardware access to the container
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Automating CI/CD tasks on an open source automation server, such as Jenkins
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Running privileged containers is convenient but undesirable from a security
+    perspective as it allows critical access to host resources. This privilege can
+    be a disadvantage if it's exploited by cybercriminals. The attackers will have
+    root access, which means they can identify and exploit software vulnerabilities
+    and possible misconfigurations, such as containers with no authentication or minimum
+    strength credentials. It is essentially a playground for coin miners to use this
+    privilege for unauthorized needs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'There are two potential ways to define restrictions on what containers in a
+    pod can do. They are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Pod security context
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Pod security policy
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Let's look at these options in more detail.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Pod Security Context
+  prefs: []
+  type: TYPE_NORMAL
+- en: The security settings for a pod can be specified using the `securityContext`
+    field in the pod specification. This applies to all the containers inside the
+    pod and enforces the use of specific security measures. They can define whether
+    privileged containers can run and whether the code in the container can be escalated
+    to root privileges.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'A security context can be defined both at the pod level and the container level.
+    The container-level security context takes precedence over the pod-level security
+    context. The following is an extract from the pod manifest YAML for `securityContext`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The preceding specification represents a pod with two containers: `nginx` and
+    `hello`. The `securityContext` definition on the pod specifies that processes
+    inside containers run with a user ID of `3000`. It is important to specify a non-zero
+    number as 0 in Linux as this represents a privileged user''s user ID. Not specifying
+    0 takes away the root privilege of the code running inside the container. `securityContext`
+    on the pod applies to all the containers inside the pod, unless each individual
+    container has an optional `securityContext` defined. In that case, `securityContext`
+    on the container takes precedence. So, in the preceding example, the `hello` container
+    will run the process inside its container while using `3000` as the user ID, whereas
+    the `nginx` container will run the process while using `1000` as the user ID.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using allowPrivilegeEscalation on a Container
+  prefs: []
+  type: TYPE_NORMAL
+- en: There are various ways we can use this field. One such scenario is that this
+    field can be explicitly used where `securityContext` is not defined at the pod
+    level but privilege escalation needs to be avoided at a specific container level.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Security contexts allow you to exercise control over the use of host namespaces,
+    networking, filesystems, and volume types. A security context can be used to control
+    additional security settings:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`NET_ADMIN` allows you to perform network-related operations, such as modifying
+    routing tables, enabling multicasting, and so on. `SYS_TIME` allows you to set
+    the system clock:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '**Enable seccomp**: Blocks code that''s running in containers from making system
+    calls.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Enable AppArmor**: Restricts individual program actions using security profiles.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The downside of configuring `securityContext` for each pod and, sometimes, at
+    each container level is that it involves a lot of effort, especially when hundreds
+    of pods are involved in a cluster. This can be solved by using *Pod Security Policies*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Pod Security Policies
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: A **Pod Security Policy** is a cluster-level resource that manages access for
+    creating and updating pods, based on defined policies. A policy is a set of conditions
+    that need to be met. A pod security policy makes it easier to define and manage
+    security configurations separately. This allows you to apply security restrictions
+    to multiple pods, without having to specify and manage those details in individual
+    pod definitions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Pod security Policies can enforce the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Disable privileged containers**: This can be disabled and can be optionally
+    applied against a specific namespace and specific service account.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`readOnlyRootFilesystem` can be set to `true`.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`MustRunAsNonRoot` flag to `true`.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`hostpath` for specific directories and not the entire filesystem.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'There are two elements you need in order to define a Pod Security Policy:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`PodSecurityPolicy` object represents a set of restrictions, requirements,
+    and defaults that are defined similar to a security context inside a pod. This
+    object also specifies all the security conditions that need to be met for a pod
+    to be admitted into a cluster. These rules are specifically applied when a pod
+    is created or updated.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`PodSecurityPolicy` controller is an admission controller. The admission controller
+    validates and modifies requests against one or more Pod Security Policies. The
+    controller essentially determines whether a pod can be created or modified.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Creating a PodSecurityPolicy object
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'If you need to create a `PodSecurityPolicy` object where privileged containers
+    cannot be run in a specific namespace and by a specific service account, then
+    you should follow these steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Define a `PodSecurityPolicy` Kubernetes object using the `pod-security-policy.yaml`
+    file. The following is an example specification:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Create pod security policy
+  prefs:
+  - PREF_IND
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: kubectl apply -f pod-security-policy.yaml
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'To authorize the specific `PodSecurityPolicy`, define a ClusterRole with the
+    resource set to `podsecuritypolicies` and against the specific policy''s resource
+    name. An example `ClusterRole` specification for `my-cluster-role.yaml` is as
+    follows:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Create your `ClusterRole` using the following CLI command:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'To authorize the created ClusterRole against a specific subject (which could
+    be a service account) and, optionally, in a specific namespace, define a `RoleBinding`.
+    An example specification for `my-role-binding.yaml` is as follows, where a RoleBinding
+    is being applied to a specific service account:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Create your `RoleBinding` using the following CLI command:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Enable the `PodSecurityPolicy` controller either at the time of cluster creation
+    or while you''re updating an existing cluster. The following are the CLI commands
+    for both options:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'If you ever need to disable the `PodSecurityPolicy` controller, use the following
+    CLI command:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: In GKE, the `PodSecurityPolicy` controller is disabled by default or is not
+    enabled at the time of cluster creation. So, it needs to be explicitly enabled.
+    However, the controller should only be enabled once all the relevant `PodSecurityPolicy`
+    objects have been defined, along with their authorization requirements. If there
+    are multiple pod security policies, then these are evaluated alphabetically.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This concludes this section, which discussed the essential security concepts
+    in the control plane (authentication), worker nodes, and deployments (authorization).
+    This section also drew references to GKE and how these concepts are also implemented
+    in GKE. The upcoming section focuses on specific GKE recommendations around hardening
+    cluster security to ensure the applications running inside the cluster are secure.
+    GKE offers certain features to support these recommendations, all of which will
+    be outlined in detail.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Hardening cluster security in GKE
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Securing the Kubernetes cluster should be your topmost priority when it comes
+    to securing applications running inside your cluster. GKE supports many such features
+    to harden the cluster. For example, the GKE control plane is patched and upgraded
+    automatically as part of the shared responsibility model. In addition, node auto-upgrades
+    are also enabled for a newly created GKE cluster.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following are some key additional GKE features that can be used to secure
+    and harden clusters. Some of these features are enabled by default while you''re
+    creating a GKE cluster:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: GKE supports a cluster type called **Private Cluster**, which provides options
+    to restrict access to control planes and nodes. This needs to be specified at
+    the time of cluster creation.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: GKE supports **container-optimized OS** images. It is a container-optimized
+    OS that has been custom-built, optimized, and hardened specifically for running
+    containers.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: GKE supports **shielded GKE nodes** as they help increase cluster security using
+    verifiable node identities and integrity. This feature can be enabled on cluster
+    creation or can be updated for an existing cluster.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: GKE allows you to enforce the use of **Network Policies** on a new or existing
+    cluster. A network policy can restrict pod-to-pod communication within a cluster,
+    thus reducing your footprint in the event of a security incident.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: GKE recommends using **binary authorization**, a process that ensures supply
+    chain software security. Here, you have the option to exercise control so that
+    only trusted images in the cluster are deployed.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: GKE can authenticate with other Google services and APIs through **Workload
+    Identity**. This is the recommended way of doing things, instead of using the
+    service account keys at the node level.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: GKE provides an additional layer of protection for sensitive data such as secrets
+    by integrating with Google Secret Manager. **Secret Manager** is a GCP service
+    that's used to secure API keys, passwords, certificates, and other sensitive data.
+    GKE also supports the use of third-party secret managers such as HashiCorp Vault.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Each of the preceding GKE features will be covered in their respective sections.
+    We will start with GKE private clusters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: GKE private clusters
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '**GKE private clusters** are one of the possible cluster configurations in
+    GKE, especially when it comes to network isolation. This cluster configuration
+    isolates node connectivity to the public internet. This includes both inbound
+    traffic to the cluster and outbound traffic from the cluster. This is because
+    the nodes inside the cluster will not have a public-facing IP address and will
+    only have an internal IP address.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: If nodes require outbound internet access, then a managed `NodePort` or `LoadBalancer`
+    type. If the service is of the `LoadBalancer` type, GCP's HTTP(S) load balancer
+    can be used and will provide an external IP address to allow inbound traffic into
+    the cluster. The key to GKE private clusters is the functionality of their control
+    planes, since this is the main differentiating factor compared to a non-private
+    cluster. We will look at this next.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Control plane in private clusters
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In GKE, `kube-apiserver` is managed by the control plane. Google runs the control
+    plane on a VM that is in a VPC network in a Google-owned project. In the case
+    of a private cluster, the master control plane sitting on a Google-owned VPC network
+    connects to your cluster's VPC network through VPC network peering. The traffic
+    between the nodes and the control plane is routed through an internal IP address.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You can access the control plane through endpoints. In general, there are two
+    types of endpoints:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`kubectl` tool go through the public endpoint.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Private endpoint**: This represents the internal IP address in the control
+    plane''s VPC network. This is very specific to private clusters. The nodes in
+    the private cluster communicate with the components in the control plane through
+    internal IP addresses.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'To summarize, a public cluster control plane has an internet-facing endpoint,
+    while a private cluster control plane can be accessed both through private and
+    public endpoints. In addition, a private cluster can only be created in a VPC-native
+    mode (refer to [*Chapter 8*](B15587_08_Final_ASB_TD_ePub.xhtml#_idTextAnchor182),
+    *Understanding GKE Essentials for Deploying Containerized Applications*). The
+    level of access to a private cluster via endpoints can be controlled through one
+    of the following three configurations:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Public endpoint access disabled
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Public endpoint access enabled; authorized networks enabled for limited access
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Public endpoint access enabled; authorized networks disabled
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Each of the preceding configurations will be discussed in detail in the upcoming
+    sub-sections, starting with *Public endpoint access disabled*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Public endpoint access disabled
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: This configuration represents a private GKE cluster with no access to a public
+    endpoint. This is very secure as there is no access to the control plane via public
+    internet. The cluster can only be accessed from the subnet and a secondary range
+    used for pods. A VM in the same region can be added by updating the master authorized
+    networks with the private IP of the VM in CIDR format.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If the cluster needs to be accessed from outside, then connect to the GKE private
+    cluster's VPC network through Cloud VPN or Cloud Interconnect. The connection
+    gets established through internal IP addresses. The list of internal IP addresses
+    that can access the control plane can also be limited by using `master-authorized-networks`.
+    This does not include public IP addresses as access to public endpoints is disabled.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Use the following CLI command if you need to create a private GKE cluster where
+    you don''t want client access to the public endpoint:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The key flags in the preceding CLI command are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`--enable-master-authorized-networks`: Access to the cluster control plane
+    is restricted to the list of internal IP addresses. Cannot include external IP
+    addresses.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`--enable-private-nodes`: This indicates that the cluster nodes do not have
+    external IP addresses.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`--enable-private-endpoint`: This indicates that the cluster is only managed
+    by the private IP address of the master API endpoint.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The next sub-section focuses on a configuration where public endpoint access
+    is enabled but access is restricted.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Public endpoint access enabled; authorized networks enabled for limited access
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: This configuration represents a private GKE cluster configuration where there
+    is restricted access to the control plane from both internal and external IP addresses.
+    The specific set of internal and external IP addresses can be specified as part
+    of the authorized networks. So, a machine with an external IP address can only
+    communicate with a GKE Private Cluster if that IP address is included in the authorized
+    networks.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Use the following CLI command if you need to create a private GKE cluster where
+    there is limited access to a public endpoint:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note that most of these flags are the same as they were in the previous sub-section,
+    except for the omission of the `--enable-private-endpoint` flag. Omitting this
+    flag implies that the cluster control plane can be reached both by private and
+    public endpoints, but access is restricted only to the allowed IP address as part
+    of the master authorized networks.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The next sub-section focuses on a configuration where public endpoint access
+    is enabled and access is not restricted.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Public endpoint access enabled; authorized networks disabled
+  prefs: []
+  type: TYPE_NORMAL
+- en: This is the default configuration option while creating a private GKE cluster.
+    Essentially, the cluster will have access to the control plane from any IP address.
+    This is the least restrictive option.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Use the following CLI command if you need to create a private GKE cluster where
+    you wish there to be unrestricted access to the public endpoint:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note that most of these flags are the same as the ones in the configuration
+    where public endpoint access is enabled but master authorized networks are not
+    enabled. As a result, there are no restricts in terms of the IP addresses that
+    can access the control plane of the private GKE cluster either via a private endpoint
+    or a public endpoint.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This completes this sub-section on private clusters, where nodes in the cluster
+    can potentially be isolated or restricted from the public internet. The next topic
+    shifts focus to container-optimized OS, which essentially protects the application
+    by hardening the images that are used in containers with key security features.
+    This feature is available in GKE.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Container-optimized OS
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '`cos_containerd` image) is a Linux-based kernel that is custom-built from Google
+    and is based on Chromium OS. It can continuously scan vulnerabilities at the kernel
+    level or against any package of the OS. It can patch and update any package in
+    case of a vulnerability. It is optimized and hardened specifically for running
+    containers in production. The following are some of its key features:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Minimal OS footprint**: Doesn''t include packages that are not required,
+    thereby reducing the OS attack surface.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Immutable root system and verified boot**: The root filesystem is always
+    mounted as read-only. This prevents attackers from making changes on the filesystem.
+    Checksum is also computed at build time and verified by the kernel on each boot.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`/etc/`. This is useful as you can allow write configuration at runtime, such
+    as adding users to the filesystem. However, these changes are not persisted across
+    reboots.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Security-hardened kernel**: Supports features such as seccomp and AppArmor
+    to enforce fine-grained security policies.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Automatic updates**: Supports automatic updates for new security features
+    or security patches for running GCE VMs.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`22`.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Container-optimized OS ensures that the base image that's used to containerize
+    the applications is secure and has a minimal footprint, but it is also important
+    that these containers run on nodes that are equally secured or shielded. We will
+    cover this in the next topic.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Shielded GKE nodes
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '**Shielded GKE nodes** is a GKE feature that increases cluster security by
+    providing strong, verifiable node identity and integrity. These nodes are based
+    on Compute Engine Shielded VMs.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Shielded VMs
+  prefs: []
+  type: TYPE_NORMAL
+- en: Shielded VMs is a GCP feature where VM instances are ensured they won't be compromised
+    at the boot or kernel level. GCP makes this possible by using secure boot and
+    **virtual Trusted Platform Modules** (**vTPMs**). Shielded VMs enforce and verify
+    the digital signature of all the components at the time of boot process and halt
+    the boot process on failure.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The shielded GKE nodes feature prevents the attacker from impersonating nodes
+    in a cluster in the event of a pod vulnerability being exploited. If the shielded
+    GKE nodes feature is enabled, the GKE control plane will cryptographically verify
+    the following and limit the ability of the attacker to impersonate a node in the
+    cluster:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Every node in the GKE cluster is a GCE VM running in a Google data center.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Every node is part of the cluster-provisioned managed instance group.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`kubelet` authenticates with the node with a cluster-provisioned certificate.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'You can use the following CLI commands to enable shielded GKE nodes in a new/existing
+    cluster, to verify whether shielded GKE nodes are enabled, and to disable shielded
+    GKE nodes:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: There is no extra cost in running shielded GKE nodes. However, they produce
+    more logs than regular nodes, thus leading to an overall increase in costs with
+    respect to Cloud Logging. The next topic explains another GKE security feature
+    where the surface area of the attack is reduced in case of a security threat,
+    by restricting the traffic among pods in a cluster.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Network Policies – restricting traffic among pods
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: All the pods within a Kubernetes cluster can communicate with each other. However,
+    Kubernetes provides an option for when the traffic between pods needs to be controlled
+    at the IP address or port level. This thought process is strongly recommended
+    to ensure that the entire cluster is not compromised, and that the surface area
+    is controlled in case of a security attack. Kubernetes Network Policies helps
+    you restrict traffic among pods within the cluster.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Network Policies** in Kubernetes allow you to specify how a pod can communicate
+    with various network entities based on pods with matching label selectors, namespaces
+    with matching label selectors, or specific IP addresses with port combinations
+    (including the ability to specify exception IP addresses). This can be defined
+    for either ingress or egress traffic flowing in both directions.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'GKE provides options to enforce the use of a network policy when a cluster
+    is created,like so:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Optionally, we can enforce this on an existing cluster by using the following
+    CLI commands:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: A sample network policy can be found at [https://kubernetes.io/docs/concepts/services-networking/network-policies/](https://kubernetes.io/docs/concepts/services-networking/network-policies/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In addition to specifying a pinpointed policy, Kubernetes allows you to define
+    default network policies. The following are some of the supported default policies:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Default deny all ingress traffic
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Default deny all egress traffic
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Default deny all ingress and all egress traffic
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Default allow all ingress traffic
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Default allow all egress traffic
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: If a specific network policy or a default policy is not defined, then the cluster
+    will allow both ingress and egress traffic to and from pods.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The next topic details another key GKE feature known as Binary Authorization,
+    which can exercise control to ensure only trusted images are deployed to the GKE
+    cluster.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Binary Authorization
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Binary Authorization** is a deploy-time security service provided by Google.
+    It ensures that only trusted containers are deployed in the GKE cluster using
+    deployment policies. The goal of the policy is to determine which images to allow
+    and which to exempt. To accomplish this goal, Binary Authorization integrates
+    with Container Analysis – a GCP service that scans container images stored in
+    a Container Registry for vulnerabilities. In addition, **Container Analysis**
+    also stores trusted metadata that''s used in the authorization process.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Binary Authorization policies are security-oriented and comprise one or more
+    rules. Rules are constraints that need to pass before the images can be deployed
+    to the GKE cluster. An attested image is one that has been verified or guaranteed
+    by an *attestor*. The most common rule that is used is the need for a digitally
+    signed attestation to verify whether the image has been attested. When a container
+    image is built through Cloud Build, the image's digest is digitally signed by
+    a signer, which creates an attestation. At the time of deployment, Binary Authorization
+    enforces the use of an attestor to verify the attestation. Binary Authorization
+    only allows *attested* images to be deployed to the cluster. Any unauthorized
+    images that do not match the Binary Authorization policy are rejected. Additionally,
+    a *Denied by Attestor* error can also be returned if no attestations are found
+    that were valid and were signed by a key trusted by the attestor. To overcome
+    the *Denied by Attestor* error, create an attestation and submit it to Binary
+    Authorization.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following are some common use cases that include attestations:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Build verification**: To verify whether the container image was built by
+    a specific build system or from a specific **continuous integration** (**CI**)
+    pipeline.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Vulnerability scanning**: To verify whether the CI-built container image
+    has been scanned for vulnerabilities by Container Analysis and the findings have
+    been defined at an acceptable level.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Configuring Binary Authorization is a multi-step process. The following is
+    a high-level summary of the steps involved:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Enabled the required APIs. This includes APIs for GKE, Container Analysis, and
+    Binary Authorization.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Create a GKE cluster with binary authorization enabled.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Set up a note. This is a piece of metadata in Container Analysis storage that
+    is associated with an attestor.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Set up cryptographic keys using PKIX keys, to securely verify the identity of
+    attestors; only enforce verified parties to authorize a container image. **Public-Key
+    Infrastructure** (**PKIX**) keys refer to public key certificates defined in the
+    X.509 standard.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Create an attestor; that is, a person or process that attests to the authenticity
+    of the image.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Create a Binary Authorization policy. The default policy is to allow all images.
+    The other option includes denying all images or denying images from a specific
+    attestor.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Optionally, images can be configured so that they're exempt from the binary
+    authorization policy.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'As we mentioned previously, Binary Authorization can deny images from being
+    deployed if the policy conditions are violated or not met. However, you can specify
+    the break-glass flag as an annotation in the pod deployment, which allows pod
+    creation even if the images violate the policy. The break-glass annotation flag
+    is also logged and can be identified by incident response teams through audit
+    logs while they''re reviewing or debugging the deployments. The following is a
+    snippet of a pod specification that includes the break-glass flag annotation:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: This concludes this topic on Binary Authorization. The next topic details another
+    key GKE security feature that allows Google Cloud IAM service accounts to be used
+    as Kubernetes service accounts through Workload Identity, thus providing more
+    secure access to GCP services from applications running inside the GKE cluster.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Workload Identity
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: GKE clusters can run applications that might need access to Google-specific
+    APIs, such as compute APIs, storage APIs, database APIs, and more. GKE recommends
+    using *Workload Identity* to access GCP services from applications running within
+    GKE. Workload Identity allows you to use a Kubernetes service account as a Google
+    service account. This allows each application to have distinct identities and
+    fine-grained authorization.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Workload Identity uses the concept of a cluster workload identity pool, which
+    allows Google Cloud IAM to trust and understand Kubernetes service account credentials.
+    The cluster''s workload identity pool will be set to `PROJECT_ID.svc.id.goog`
+    and is automatically created at the project level. In such a scenario, Cloud IAM
+    will authenticate the Kubernetes service account with the following member name:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: The preceding member's name is unique due to the cluster's Workload Identity
+    pool, service account name, and Kubernetes namespace. So, multiple service accounts
+    with the matching three tuples will map to the same member name.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Enabling Workload Identity
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Follow these steps to enable Workload Identity on a GKE cluster:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Navigate to `IAM service account Credentials` API and enable it.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Create a new cluster with Workload Identity enabled via the following CLI command:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Update an existing cluster with Workload Identity enabled via the following
+    CLI command:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: This concludes this section on Workload Identity, as well as this major section
+    on the key GKE security features that are recommended by Google to harden cluster
+    security.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this chapter, we discussed some fundamental security concepts from a native
+    Kubernetes or K8s standpoint. Each of these concepts was extended as we looked
+    at their equivalent usage or implementation in GKE. Later, we did a deep dive
+    into certain GKE-specific security features that are critical to hardening cluster
+    security. This included using node auto upgrades to ensure that the nodes are
+    running the latest version of Kubernetes, or using Google's container-optimized
+    OS instead of a general-purpose Linux distribution system. We also looked at using
+    private clusters, where access to the cluster master can be restricted for enhanced
+    security or can be controlled so that it's only accessed from authorized networks.
+    We also looked at Binary Authorization, which ensures that only trusted images
+    can be deployed to the cluster, and Workload Identity, which allows us to use
+    a Cloud IAM service account as a Kubernetes service account, thus providing more
+    flexibility in terms of which applications in the GKE cluster can easily interact
+    with other GCP services, such as Cloud Storage, Secret Management, and more.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the next chapter, we''ll look at services that are tied to Cloud Operations,
+    along with a specific feature that was introduced in Google Cloud to track the
+    reliability of services: Service Monitoring. This specific feature/option links
+    the SRE technical practices (SLIs, SLOs, and error budget) to the features that
+    are available in Google Cloud Operations so that we can monitor services and alert
+    others about their reliability.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Points to remember
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The following are some important points to remember:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: GCP service accounts are used if GCP resources must have an identity that is
+    tied to an application or a virtual machine.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Kubernetes service accounts are users that are managed by the Kubernetes API.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Cloud IAM defines who can view or change the configuration of a GKE cluster
+    and Kubernetes RBAC defines who can view or change Kubernetes objects inside the
+    specific GKE cluster.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Workload Identity is used to access Google Cloud services from applications
+    running within GKE. This prevents pods from accessing the Compute Engine metadata
+    server.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In RBAC, a Role connects API resources and verbs. An RBAC Role is cluster-wide
+    scoped, while an RBAC ClusterRole is namespace scoped.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In RBAC, RoleBindings connect Roles to subjects. A RoleBinding is cluster-wide
+    scoped, while a ClusterRoleBinding is namespace scoped.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Every GKE cluster has its own root **CA**.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Pod Security Context and Pod Security Policy are two ways we can define restrictions
+    regarding what the containers inside a pod can do.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A GKE Private Cluster allows you to restrict access to control planes and nodes.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The break-glass flag is used in deployments as an annotation; it allows pod
+    creation, even if the images violate a policy.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`enable-private-nodes`: The nodes do not have external IP addresses.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`enable-private-endpoint`: The cluster is managed by the private IP address
+    of the master endpoint.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`enable-master-authorized-networks`: Access to the cluster''s public endpoint
+    is restricted to a specific set of source IP addresses.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Container Analysis is a service that provides vulnerability scanning and metadata
+    storage for software artifacts.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Container Analysis stores trusted metadata that's used in the authorization process.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Binary Authorization allows or blocks images from being deployed to GKE based
+    on a policy you've configured.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A container-optimized OS or `cos_containerd` image is a Linux-based kernel that
+    can continuously scan for vulnerabilities at the kernel level.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Shielded GKE nodes increase cluster security by using verifiable node identity
+    and integrality. This can be enabled using the `--enable-shielded-nodes` option.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: You can restrict traffic among pods with Network Policies.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: You can configure a secret manager that has been integrated with GKE clusters.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: You can use admission controllers to enforce a Pod Security Policy.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In terms of Workload Identity, you can use K8's service account and namespace
+    as a GCP service account to authenticate GCP APIs.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Further reading
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'For more information on GCP''s approach to DevOps, read the following articles:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Kubernetes**: [https://kubernetes.io/docs/home/](https://kubernetes.io/docs/home/)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Google Kubernetes Engine**: [https://cloud.google.com/kubernetes-engine](https://cloud.google.com/kubernetes-engine)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Practice test
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Answer the following questions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Network Policies are used to restrict traffic among which of the following?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: a) Deployments
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: b) Containers
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: c) Pods
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: d) Container images
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Select the RBAC option that connects a user and a role:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: a) UserRoleBinding
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: b) RoleBindings
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: c) Roles
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: d) RoleUserBinding
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: In a private cluster, which Google service can download a Docker image?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: a) Cloud Build
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: b) Cloud Source Repository
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: c) Elastic Container Registry
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: d) Container Registry
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: What will happen if the process of rotating credentials started but never completed?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: a) GKE will not complete the cluster rotation.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: b) GKE will pause the cluster rotation.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: c) GKE will complete the cluster rotation in 7 days.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: d) GKE will instantly complete the cluster rotation.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Which of the following possible policies will disable privileged containers?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: a) Network Policy
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: b) Pod Security Policy
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: c) Network Security Policy
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: d) Pod Policy
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Select the GKE Role that allows you to manage clusters, including creating,
+    deleting, getting, listing, or updating clusters. No access is given to cluster
+    resources or API objects:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: a) GKE Admin
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: b) GKE Cluster Admin
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: c) GKE Developer
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: d) GKE Cluster Developer
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'With regards to a **Pod Security Policy** (**PSP**), select the order of operations:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: a) Enable PSP Controller, Create PSP, Define Authorization Requirements
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: b) Create PSP, Enable PSP Controller, Define Authorization Requirements
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: c) Create PSP, Define Authorization Requirements, Enable PSP Controller
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: d) Enable PSP Controller, Define Authorization Requirements, Create PSP
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: If a specific network policy or a default policy is not defined, then which
+    of the following is true?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: a) Deny all ingress and all egress traffic.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: b) Allow all ingress and all egress traffic.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: c) Deny all ingress and allow all egress traffic.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: d) Allow all ingress and deny all egress traffic.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Select the option that enforces a deploy time policy to GKE:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: a) Cloud IAM Policies
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: b) AppArmor
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: c) Cloud Armor
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: d) Binary Authorization
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: The *service account admission controller* associates the created service accounts
+    with the running pods. How are the service accounts stored and accessed?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: a) Stored as plain text and accessed as environment variables at runtime
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: b) Stored as a Kubernetes secret and accessed through the key management service
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: c) Stored as a Kubernetes secret and accessed as an environment variable at
+    runtime
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: d) Stored as plain text and accessed through the key management service
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Answers
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '(c): Pods'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '(b): RoleBindings'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '(d): Container Registry'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '(c): GKE will complete the cluster rotation in 7 days.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '(b): Pod Security Policy'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '(b): GKE Cluster Admin'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '(c): Create PSP, Define Authorization Requirements, Enable PSP Controller'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '(b): Allow all ingress and all egress traffic.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '(d): Binary Authorization'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '(c): Stored as a Kubernetes secret and accessed as an environment variable
+    at runtime'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL

@@ -1,0 +1,154 @@
+- en: Creating A Continuous Deployment Pipeline With Jenkins
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: This is it. The time has come to put all the knowledge we obtained into good
+    use. We are about to define a “real” continuous deployment pipeline in Jenkins.
+    Our goal is to move every commit through a set of steps until the application
+    is installed (upgraded) and tested in production. We will undoubtedly face some
+    new challenges, but I am confident that we’ll manage to overcome them. We already
+    have all the base ingredients, and the main thing left is to put them all together
+    into a continuous deployment pipeline.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Before we move into a practical section, we might want to spend a few moments
+    discussing our goals.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Exploring The Continuous Deployment Process
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Explaining continuous deployment (CDP) is easy. Implementing it is very hard,
+    and the challenges are often hidden and unexpected. Depending on the maturity
+    of your processes, architecture, and code, you might find out that the real problems
+    do not lie in the code of a continuous deployment pipeline, but everywhere else.
+    As a matter of fact, developing a pipeline is the easiest part. That being said,
+    you might wonder whether you made a mistake by investing your time in reading
+    this book since we are focused mostly on the pipeline that will be executed inside
+    a Kubernetes cluster.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We did not discuss the changes in your other processes. We did not explore what
+    a good architecture that will support CDP pipelines is. We did not dive into how
+    to code your application to be pipeline-friendly. I assumed that you already know
+    all that. I hope that you do understand the basic concepts behind Agile and DevOps
+    movements and that you already started dismantling the silos in your company.
+    I assume that you do know what it means for your software architecture to be cloud-native
+    and that you do implement some if not all of the [12 factors](https://12factor.net/).
+    I guessed that you are already practicing Test-Driven Development, Behavior-Driven
+    Development, Acceptance-Driven Development, or any other technique that help you
+    design your applications.
+  prefs: []
+  type: TYPE_NORMAL
+- en: I might be wrong. To be more precise, I’m sure that I’m wrong. Most of you are
+    not there yet. If you are one of those, please get informed. Read more books,
+    do some courses, and convince your managers to give you time, space, and resources
+    you’ll need to modernize your applications. It needs to be done. All those things
+    and many others are what differentiates top performers (e.g., Google, Amazon,
+    Netflix) and the rest of us. Still, none of them is the same. Every high-performing
+    company is different, and yet, they all share some things in common. They all
+    need to ship features fast. They all need to have a high level of quality. And
+    they all acknowledge that highly-available, fault-tolerant, and distributed systems
+    require a very different approach than what most of the rest of us are used to.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you got depressed by thinking that you are not yet ready and that you are
+    on the verge of quitting, my advice is to continue. Even though you might need
+    to make a lot of changes before you are able to practice continuous deployment,
+    knowing what the end result looks like will put you on the right path. We are
+    about to design a fully operational continuous deployment pipeline. Once we’re
+    done, you’ll know which other changes you’ll need to make. You’ll understand where
+    the finish line is, and you will be able to go back to where you are and start
+    moving in the right direction.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We already discussed what a continuous deployment pipeline looks like. In case
+    you’re forgetful (I know I am), here are a few of the rules that represent the
+    short version.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Rule number one**: Every commit to the master branch is deployed to production
+    if it passes all the steps of a fully automated pipeline. If you need to involve
+    humans after the commit, it’s not continuous deployment, nor it is continuous
+    delivery. At best, you’re doing continuous integration.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Rule number two**: You commit directly to the master branch, or you’re using
+    short-living feature branches. The master branch is the only one that matters.
+    Production releases are made from it. If you do use branches, they are taken from
+    the master branch, since that’s the only one that truly matters. When you do create
+    a feature branch, you are merging back to master soon afterward. You’re not waiting
+    for weeks to do so. If you are, you are not “continuously” validating whether
+    your code integrates with the code of others. If that’s the case, you’re not even
+    doing continuous integration. Unless, you have an elaborate branching strategy,
+    in which case you are only making everyone’s lives more complicated than they
+    should be.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Rule number three**: You trust your automation. When a test fails, there
+    is a bug, and you fix it before anything else. I hope that you do not belong to
+    a big group of companies that have flaky tests that sometimes work, and sometimes
+    fail for random reasons. If you do, fix your tests first or remove those that
+    are flaky. It’s pointless to run tests you do not trust. The same can be said
+    for builds, deployments, and just about any other step of the process. If you
+    see yourself in the group of those that do not trust their code, you’ll have to
+    fix it first. Tests are code, just as builds, deployments, and everything else
+    is. When code produces inconsistent results, we fix it, we do not restart it.
+    Unfortunately, I do see a lot of companies that rather re-run a build that failed
+    because of flaky tests than fix the cause of that flakiness. There’s an alarming
+    number of those that solve half of the production problems by restarting applications.
+    Anyways, if you do not trust your automation, you cannot deploy to production
+    automatically. You cannot even say that it is production ready.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we established a set of straightforward ground rules, we can move on
+    and describe the pipeline we should develop. We are going to build something.
+    Since building without running unit and other types of static tests should be
+    declared officially illegal and punishable with public shame, we’ll include those
+    in our **build stage**. Then we’re going execute the steps of the **functional
+    testing stage** that will run all sorts of tests that require a live application.
+    Therefore, we’ll need to deploy a test release during this stage. Once we’re confident
+    that our application behaves as expected, we’re going to make a **production release**,
+    followed with the **deploy stage** that will not only upgrade the production release
+    but also run another round of tests to validate whether everything works as expected.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7-1: The stages of a continuous deployment pipeline](img/00028.jpeg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 7-1: The stages of a continuous deployment pipeline'
+  prefs: []
+  type: TYPE_NORMAL
+- en: You might not agree with the names of the stages. That’s OK. It does not matter
+    much how you name things, nor how you group steps. What matters is that the pipeline
+    has everything we need to feel confident that a release is safely deployed to
+    production. Steps matter, stages are only labels.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We won’t discuss the exact steps just yet. Instead, we’ll break the stages apart
+    and build one at the time. During the process, we’ll discuss which steps are required.
+  prefs: []
+  type: TYPE_NORMAL
+- en: It is almost certain that you’ll need to add steps that I do not use. That’s
+    OK as well. It’s all about principles and knowledge. Slight modifications should
+    not be a problem.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s create a cluster.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating A Cluster
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: We’ll start the practical section of the chapter by going to the *vfarcic/k8s-specs*
+    repository and by making sure that we have the latest revision.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE

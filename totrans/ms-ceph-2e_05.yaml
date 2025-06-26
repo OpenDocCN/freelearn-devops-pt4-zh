@@ -1,0 +1,1172 @@
+- en: Ceph and Non-Native Protocols
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Years of development have enabled Ceph to build an extensive feature set, bringing
+    high quality and performance storage to Linux. However, clients that don't run
+    Linux (and that are therefore unable to natively talk to Ceph) have a limited
+    scope as to where Ceph can be deployed. Recently, a number of new enhancements
+    have been developed to allow Ceph to start to talk to some of these non-Linux-based
+    clients, such as the **Internet Small Computer Systems Interface **(**iSCSI**)
+    and **Network File System** (**NFS**). This chapter will look in detail at the
+    various methods by which Ceph storage can be exported to clients and the strengths
+    and weaknesses of each. In all methods, a Linux server is used as a proxy to translate
+    the I/O requests from these clients into native Ceph I/Os, and as such, a working
+    knowledge of how to use these protocols in Linux is beneficial. Making these proxy
+    servers highly available will also be covered in this chapter, along with the
+    difficulties of doing so.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The two main storage types that will be looked at in this chapter will be file
+    and block storage, as these are the most popular types of storage in legacy enterprise
+    workloads.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Briefly, we''ll cover the following topics in this chapter:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Block
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: File
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Examples:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Exporting Ceph RBDs via iSCSI
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Exporting CephFS via Samba
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Exporting CephFS via NFS
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: ESXi hypervisor
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Clustering
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Block
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Block-level storage mimics the type of storage that would have originally been
+    provided by hard disks and, later, storage arrays. Typically, block storage is
+    exported via storage arrays via fiber channel or iSCSI onto hosts where a local
+    filesystem is then formatted onto the block device. In some cases, this filesytem
+    may be of the clustered type, and can allow the block device to be presented across
+    many hosts at the same time. It's important to note that even though block-based
+    storage allows you to present it to multiple hosts, this should only be done if
+    the filesystem supports it; otherwise, corruption of the filesystem is highly
+    likely.
+  prefs: []
+  type: TYPE_NORMAL
+- en: One use of block storage that has seen a massive expansion in recent years has
+    been through the use of virtualization. Block storage is quite often presented
+    to a hypervisor that's formatted with a filesystem. One or more virtual machines
+    are then stored as files on this filesystem. This differs greatly from the native
+    Ceph approach when using KVM as the hypervisor; as KVM directly supports Ceph **RADOS
+    Block Devices** (**RBDs**), it stores each VM's disk directly as an RBD, removing
+    the complexity and overheads associated with the hypervisor's filesystem.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Ceph RBDs, which are a type of block storage, can be exported via iSCSI to allow
+    clients that speak iSCSI to consume Ceph storage. Since the release of Mimic,
+    Ceph has had a basic level of support for configuring iSCSI exports of RBD images.
+    The configuration of Ceph's iSCSI support is all managed through Ansible, which
+    both installs the required software and exports the iSCSI devices.
+  prefs: []
+  type: TYPE_NORMAL
+- en: At the time of writing, there are currently still a few limitations that the
+    reader should be aware of, mainly surrounding the **Highly Available** (**HA**)
+    capabilities. The issues largely affect ESXi and clustering solutions where multiple
+    hosts try and access the block device concurrently. At the time of writing, it
+    is not recommended for you to use Ceph's iSCSI support for either of these use
+    cases. For users who are interested in exploring the current compatibility further,
+    it's recommended that they consult the upstream Ceph documentation and mailing
+    lists.
+  prefs: []
+  type: TYPE_NORMAL
+- en: File
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: As the name indicates, file storage is supported by some form of filesystem
+    that stores files and directories. In the traditional storage scenario, file storage
+    is normally provided via servers acting as *file servers* or through the use of
+    **network-attached storage** (**NAS**). File-based storage can be provided over
+    several protocols and can sit on several different types of filesystems.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The two most common file-access protocols are SMB and NFS, which are widely
+    supported by many clients. SMB is traditionally seen as a Microsoft protocol,
+    being the native file-sharing protocol in Windows, whereas NFS is seen as the
+    protocol used on Unix-based infrastructures.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As we shall see later, both Ceph's RBDs and its own CephFS filesystem can be
+    used as a basis to export file-based storage to clients. RBDs can be mounted on
+    a proxy server where a local filesystem is then placed on top. From here, the
+    exportation as NFS or SMB is very similar to any other server with local storage.
+    When using CephFS, which in itself is a filesystem, there are direct interfaces
+    to both NFS and SMB server software to minimize the number of levels in the stack.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There are a number of advantages to exporting CephFS instead of a filesystem
+    sitting on top of an RBD. These mainly center around simplifying the number of
+    layers that I/Os have to pass through and the number of components in an HA setup.
+    As was discussed earlier, most local filesystems can only be mounted on one server
+    at a time, otherwise corruption will occur. Therefore, when designing an HA solution
+    involving RBDs and local filesystems, care needs to be taken to ensure that the
+    clustering solution won't try and mount the RBD and filesystem across multiple
+    nodes. This is covered in more detail later in this chapter in the section on clustering.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'There is, however, one possible reason for wanting to export RBDs formatted with
+    local filesystems: the RBD component of Ceph is much simpler than CephFS in its
+    operation and has been marked as stable for much longer than CephFS. While CephFS
+    has proved to be very stable, thought should be given to the operational side
+    of the solution, and you should ensure that the operator is happy managing CephFS.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: To export CephFS via NFS, there are two possible solutions. One is to use the
+    CephFS kernel client and mount the filesystem into the operating system, and then
+    use the kernel-based NFS kernel server to export it to clients. Although this
+    configuration should work perfectly fine, both the kernel-based NFS server and
+    the CephFS client will typically rely on the operator to run a fairly recent kernel
+    to support the latest features.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A much better idea would be to use `nfs-ganesha`, which has support for directly
+    communicating to CephFS filesystems. As Ganesha runs entirely in user space, there's
+    no requirement for specific kernel versions, and the supported CephFS client functionality
+    can keep up with the current state of the Ceph project. There are also several
+    enhancements in Ganesha that the kernel-based NFS server doesn't support. Additionally,
+    HA NFS should be easier to achieve with Ganesha over the kernel server.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Samba can be used to export CephFS as a Windows-compatible share. Like NFS,
+    Samba also supports the ability to directly communicate with CephFS, and so in
+    most cases, there should be no requirement to have to mount the CephFS filesystem
+    into the OS first. A separate project CTDB can be used to provide HA of the CephFS-backed
+    Samba shares.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, it is worth noting that, although Linux clients can mount CephFS directly,
+    it may still be preferable to export CephFS via NFS or SMB to them. We should
+    do this because, given the way CephFS works, clients are in direct communication
+    with the Ceph cluster, and in some cases, this may not be desirable because of
+    security concerns. By reexporting CephFS via NFS, clients can consume the storage
+    without being directly exposed to the Ceph cluster.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Examples
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The following examples will demonstrate how to export RBDs as iSCSI devices,
+    as well as how to export CephFS via NFS and Samba. All these examples assume you
+    already have a working CephFS filesystem ready to export; if that is not the case,
+    then please refer to [Chapter 5](a01c8234-61a1-4d8e-9393-33a7218cf49d.xhtml),
+    *RADOS Pools and Client Access*, for instructions on how to deploy one.
+  prefs: []
+  type: TYPE_NORMAL
+- en: They also assume you have a VM available to act as the proxy server. This could
+    be a Ceph monitor VM for testing purposes, but this is not recommended for production
+    workloads.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Exporting Ceph RBDs via iSCSI
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: iSCSI is a technology that allows you to export block devices over IP networking.
+    As 10 G networking has been more widely adopted, iSCSI has become extremely popular
+    and is now the dominant technology in the block storage scene.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The device that's exporting the block storage is called the iSCSI target and
+    the client is called the iSCSI initiator, both of which are identified by an IQN
+    name.
+  prefs: []
+  type: TYPE_NORMAL
+- en: At the time of writing, the iSCSI support in Ceph only works with Red Hat-derived
+    distributions. Although the underlying components should all work across any Linux
+    distribution, the glue that holds them together still requires a number of updates
+    to improve compatibility. Therefore, this example will require a VM running CentOS
+    for the iSCSI components to be installed on. If you're testing the functionality
+    in the Vagrant and Ansible lab created in [Chapter 2](dd1d6803-6e40-4bfb-8150-b605bcc08d59.xhtml),
+    *Deploying Ceph with Containers*, then you can modify the Vagrant file to provision
+    an additional VM running CentOS.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The official package repository for the iSCSI components is only available via
+    a full RHEL subscription. To obtain the packages for this example, they need to
+    be downloaded from the Ceph's project build server.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following links will take you to the recent builds of each package:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[https://shaman.ceph.com/repos/ceph-iscsi/master/](https://shaman.ceph.com/repos/ceph-iscsi/master/)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[https://shaman.ceph.com/repos/kernel/](https://shaman.ceph.com/repos/kernel/)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[https://shaman.ceph.com/repos/ceph-iscsi-cli/](https://shaman.ceph.com/repos/ceph-iscsi-cli/)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[https://shaman.ceph.com/repos/ceph-iscsi-config/](https://shaman.ceph.com/repos/ceph-iscsi-config/)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[https://shaman.ceph.com/repos/python-rtslib/](https://shaman.ceph.com/repos/python-rtslib/)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[https://shaman.ceph.com/repos/tcmu-runner/](https://shaman.ceph.com/repos/tcmu-runner/)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'On each page, look at the arch column as shown in the following screenshot.
+    This is the directory that you''ll need to look in for the packages later:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/5c95e85d-28f3-43ca-b2f3-9507858f91be.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Click the latest (or whatever version you require) build number on the left,
+    which will take you to the following page:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/e9d1af92-8489-47b5-a13f-ce450673695b.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Click on the Repo URL link, which will take you to the repository directory
+    tree. Browse to the correct arch type that you saw in the column earlier and you
+    will be presented with the RPM to download, as shown in the following screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/85b3371c-bf31-4315-94d1-261d4a079cf8.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Copy the URL and then use `wget` to download the package, as shown in the following
+    screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/2fd5f67a-48d6-47bf-9781-849741d3f7db.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Repeat this for every URL listed previously. When you have finished, you should
+    have the following packages:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/bb2f0fc2-3417-47f3-a74d-860833ccfabb.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Now, install all of the of RPMs by running the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: '![](img/91846933-79b8-49c9-8fe0-6ad0b7c3c1c4.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Now that the base iSCSI support is installed, we also require the Ceph packages
+    to be installed using the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Create a new repository file and add the Ceph RPM repositories using the following
+    code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: '![](img/8db8762c-3d23-41e3-91a6-9b17d296fd15.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Now add the Fedora EPEL repository, and install and update Ceph using the following
+    code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Create the Ceph configuration directory, if it doesn''t already exist, using
+    the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Copy `ceph.conf` over from a Ceph monitor node using the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Copy the Ceph `keyring` over using the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Edit the Ceph iSCSI gateway configuration file using the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: '![](img/7c69f778-6ec6-49c0-a9da-83fc8c071798.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Make sure it looks like the code shown in the preceding screenshot. Note the
+    addition on the bottom line to allow the testing of `ceph-iscsi` with only a single
+    server. In a production setting, this line wouldn't be required as you would most
+    likely have redundant iSCSI gateways.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now enable and start the `ceph-iscsi` daemons using the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note that the configuration stored in `iscsi-gateway.conf` is only to allow
+    the `ceph-iscsi` services to start and connect to the Ceph cluster. The actual
+    iSCSI configuration is stored centrally in RADOS objects.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that the iSCSI daemons are running, the `gwcli` tool can be used to administer
+    the iSCSI configuration and present the RBDs as iSCSI devices.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Once `gwcli` has started successfully, we can run the `ls` command to see the
+    structure of the `ceph-iscsi` configuration as shown in the following screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/17de2603-d910-4b24-a0fd-91f6ecd0307a.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: The `gwcli` tool has connected to the Ceph cluster and retrieved the list of
+    pools and other configuration. We can now configure the iSCSI.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The first item to be configured is the iSCSI gateway, using the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: '![](img/9aaab51b-e6c6-42a1-8289-12cbad123f04.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Now, by entering the `iqn` that has been created, the IPs of all of the gateways
+    can be added using the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: '![](img/f77b93d6-426e-4ef4-aae4-223a70fdc67b.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Now we can create or add the RBDs. If the RBD already exists when running the
+    `create` command, then `ceph-iscsi` will simply add the existing RBD; if no RBD
+    of the given name exists, then a new RBD will be created. A good example of when
+    using a preexisting RBD maybe required is when the RBD contains data or if we
+    need to place the RBD data on an erasure-coded pool.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For this example, a 100 GB RBD called `iscsi-test` will be created in the RBD
+    pool, as shown in the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: '![](img/bfbed4cc-4959-44e8-95d6-aecae382c339.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Now the initiator `iqn` needs to be added and chap authentication assigned,
+    as shown in the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: '![](img/6b8e90fd-6c03-4c34-a143-96e832f4bb57.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Finally, add the disks to the host as LUNs using the following code. The format
+    of the target is `<rados pool>.<RBD name>`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: '![](img/c46b91f5-4201-4dff-8f17-1cbd1e75f7a4.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: The iSCSI target configuration is now complete and available to be added into
+    any iSCSI initiator's target list. Once added and rescanned, the RBDs will show
+    up as LUNS and can then be treated like normal block devices and formatted with
+    any filesystem, as required.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Exporting CephFS via Samba
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The Samba project was originally designed to allow clients and servers to talk
+    to the Microsoft SMB protocol. It has since evolved to be able to act as a full
+    Windows domain controller. As Samba can act as a file server for clients talking
+    to the SMB protocol, it can be used to export CephFS to Windows clients.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There is a separate project called CTDB that's used in conjunction with Samba
+    to create a failover cluster to provide highly available SMB shares. CTDB uses
+    the concept of a recovery lock to detect and handle split-brain scenarios. Traditionally,
+    CTDB has used an area of a clustered filesystem to store the recovery lock file;
+    however, this approach does not work very well with CephFS because of the fact
+    that the timings of the recovery sequence conflict with the timings of the OSDs
+    and CephFS MDS failovers. Hence, a RADOS-specific recovery lock was developed
+    that allowed CTDB to store recovery lock information directly in a RADOS object,
+    which avoids the aforementioned issues.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this example, a two-proxy node cluster will be used to export a directory
+    on CephFS as an SMB share that can be accessed from Windows clients. CTDB will
+    be used to provide fail over functionality. This share will also make use of CephFS
+    snapshots to enable the previous version's functionality in Windows File Explorer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For this example, you will need two VMs that have functional networking and
+    can reach your Ceph cluster. The VMs can either be manually created, deployed
+    via Ansible in your lab, or installed on the Ceph monitors for testing the Samba
+    software can be.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Install the `ceph`, `ctdb`, and `samba` packages on both VMs using the following
+    code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: '![](img/d6391566-42f7-45e7-97a7-8c9f5cc7ac1e.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Copy `ceph.conf` over from a Ceph monitor node using the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Copy the Ceph keyring over from a monitor node using the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: Your Samba gateways should now be able to act as clients to your Ceph cluster.
+    This can be confirmed by checking that you can query the Ceph clusters status.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As mentioned previously, CTDB has a Ceph plugin to store the recovery lock directly
+    in a RADOS pool. In some Linux distributions, this plugin may not be distributed
+    along with the Samba and CTDB packages; certainly, in Debian-based distributions,
+    it is not currently included. To work around this and save on having to manually compile,
+    we will borrow a precompiled version from another distribution.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Download the `samba-ceph` package from the SUSE repositories using the following
+    code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: '![](img/79dfa3a0-72fb-4ac5-bc05-99f8ca92d192.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Install a utility that will extract the contents of RPM packages using the
+    following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: '![](img/667f4041-7de1-4cbb-a73e-0bff184f8793.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Use the `rpm2cpio` utility to extract the contents of the RPM package that
+    has just been downloaded using the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: '![](img/4db6600f-e1b7-489b-8822-af6c5d118223.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Finally, copy the CTDB RADOS helper into the `bin` folder on the VM using the
+    following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Make sure all of the steps are carried out on both VMs. Now all of the required
+    software is installed, we can proceed with the configuration of Samba and CTDB.
+    Both CTDB and Samba come with example contents in their configuration files. For
+    the purpose of this example, only the bare minimum contents will be shown; it
+    is left as an exercise for the reader if they wish to further explore the range
+    of configuration options available:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: '![](img/8379bd02-099b-4329-8677-5a351ad9a6d0.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: '![](img/9bf59349-c9a5-4c4f-b43e-db971eacd9c7.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'On each line, enter the IP address of each node participating in the CTDB Samba
+    cluster, as shown in the following screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/eae5a8b9-3bf0-4885-ae8d-7239e0a63035.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'The last step is to create a Samba user that can be used to access the share.
+    To do this, use the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: '![](img/993a693b-25ce-4907-8916-72ee4195cebc.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Again, make sure this configuration is repeated across both Samba nodes. Once
+    complete, the CTDB service can be started, which should hopefully form quorum
+    and then launch Samba. You can start the CTDB service using the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After a few seconds, CTDB will start to mark the nodes as healthy; this can
+    be confirmed by running the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This should hopefully display a status similar to the following screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/75f34c45-0269-4b96-9d78-1bace6c6f488.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: It's normal for the status to be unhealthy for a short period after being started,
+    but if the status stays in this state, check the CTDB logs located at `/var/log/ctdb`
+    for a possible explanation as to what has gone wrong.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Once CTDB enters a healthy state, you should be able to access the CephFS share
+    from any Windows client.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To provide true HA, you would need a mechanism to steer clients to the active
+    node's IP addresses using something like a load balancer. This is outside the
+    scope of this example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Exporting CephFS via NFS
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: NFS is a file-sharing protocol that's supported on Linux, Windows, and ESXi
+    operating systems. Being able to export CephFS filesystems as NFS shares therefore
+    opens the door to being able to make use of CephFS across many different types
+    of clients.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Ganesha is a user space NFS server that has a native CephFS plugin, so it is
+    able to directly communicate with CephFS filesystems without having to mount them
+    to the local server first. It also has support for storing its configuration and
+    recovery information directly in RADOS objects, which helps to allow the NFS server
+    to be run in a stateless fashion.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Go through the following steps to install and configure the export of CephFS
+    via Ganesha:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Using the following code, install the Ganesha PPA (Ganesha 2.7 was the newest
+    release at the time of writing):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: '![](img/3025e77e-b6bf-4705-9178-8925e45c0ace.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Install the PPA for `libntirpc-1.7`, which is required by Ganesha, using the
+    following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: '![](img/553a3ca1-2f6a-4e8d-8add-d3489ef143c6.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Install Ganesha using the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: '![](img/1076b3aa-c92c-4086-9ade-09bb10a82754.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Copy `ceph.conf` over from a Ceph monitor node using the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Copy the Ceph keyring over from a monitor node using the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now that Ganesha is installed, it needs to be configured to point at your CephFS
+    filesystem. A sample configuration file is provided with the Ganesha packages;
+    you can use this file as a basis for this. Firstly, copy the sample `Ganesha Ceph
+    config` file to become the main `Ganesha config` file using the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The configuration file is well commented, but the following screenshot shows
+    a condensed version with all of the necessary options configured. It''s recommended
+    that the default configuration file is kept and options adjusted where necessary
+    instead of pasting over the top, as the included comments are very useful in gaining
+    a better understanding of the configuration options:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/8b8d54aa-3a24-4c13-b7b1-2b5cff5bbda3.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: The `path config` variable needs to be set to the root of the CephFS filesystem
+    as CephFS doesn't currently correctly support exporting subdirectories via NFS.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now enable and start the `nfs-ganesha` service using the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: You should now be able to mount the NFS share into any compatible client. The
+    NFS share name will be CephFs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ESXi hypervisor
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: A reasonably frequent requirement is to be able to export Ceph storage and consume
+    it via VMware's ESXi hypervisor. ESXi supports iSCSI block storage that's formatted
+    with its own VMFS clustered filesystem and file-based NFS storage. Both are fully
+    functional and supported, meaning that it is normally a matter of user preference
+    as to which is implemented or what's best supported by their storage array.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When exporting Ceph storage to ESXi, there are a number of additional factors
+    that may need to be taken into consideration when using Ceph as a storage provider
+    and when deciding between iSCSI and NFS. As such, this section of this chapter
+    is dedicated to explaining the additional factors that should be taken into consideration
+    when presenting Ceph storage to ESXi.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The first thing to consider is that ESXi was developed with enterprise storage
+    arrays in mind, and a couple of the design decisions during its development have
+    been made around the operation of these storage arrays. As discussed in the opening
+    chapter, direct attached, fiber channel, and iSCSI arrays will have much lower
+    latency than distributed network storage. With Ceph, an additional hop will be
+    required, acting as the NFS or iSCSI proxy; this often results in a write latency
+    that's several times that of a good block storage array.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To assist with storage vendors' QOS attempts (ignoring VAAI accelerations for
+    now), ESXi will break up any clone or migration operations into smaller 64 KB
+    I/Os, with the reasoning being that a large number of parallel 64 KBs are easier
+    to schedule for disk time than large multi MB I/Os, which would block disk operations
+    for a longer time. Ceph, however, tends to favor larger I/O sizes, and so tends
+    to perform worse when cloning or migrating VMs. Additionally, depending on the
+    exportation method, Ceph may not provide read ahead, and so might harm sequential
+    read performance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Another area in which care needs to be taken is in managing the impact of Ceph's
+    PG locking. When accessing an object stored in Ceph, the PG containing that object
+    is locked to preserve data consistency. All other I/Os to that PG have to queue
+    until the lock is released. For most scenarios, this presents minimal issues;
+    however, when exporting Ceph to ESXi, there are a number of things that ESXi does
+    that can cause contention around this PG locking.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As mentioned previously, ESXi migrates VMs by submitting the I/Os as 64 KB.
+    It also tries to maintain a stream of 32 of these operations in parallel to keep
+    performance acceptable. This causes issues when using Ceph as the underlying storage,
+    as a high percentage of these 64 KB I/Os will all be hitting the same 4 MB object,
+    which means that out of the 32 parallel requests, each one ends up being processed
+    in an almost serial manner. RBD striping may be used to try and ensure that these
+    highly parallel but also highly localized I/Os are distributed across a number
+    of objects, but your mileage may vary. VAAI accelerations may help with some of
+    the migration and cloning operations but, in some cases, these aren't always possible
+    to use, and so ESXi will fall back to the default method.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In relation to VM migration, if you are using a VMFS over iSCSI over RBD configuration,
+    you can also experience PG lock contention upon updating the VMFS metadata, which
+    is stored in only a small area of the disk. The VMFS metadata will often be updated
+    heavily when growing a thinly provisioned VMDK or writing into snapshotted VM
+    files. PG lock contention can limit throughput when a number of VMs on the VMFS
+    filesystem are all trying to update the VMFS metadata at once.
+  prefs: []
+  type: TYPE_NORMAL
+- en: At the time of writing, the official Ceph iSCSI support disables RBD caching.
+    For certain operations, the lack of read-ahead caching has a negative impact on
+    I/O performance. This is especially seen when you have to read sequentially through
+    VMDK files, such as when you are migrating a VM between datastores or removing
+    snapshots.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Regarding HA support, at the time of writing, the official Ceph iSCSI support
+    only uses implicit ALUA to manage the active iSCSI paths. This causes issues if
+    an ESXi host fails over to another path and other hosts in the same vSphere cluster
+    stay on the original path. The long-term solution will be to switch to explicit
+    ALUA, which allows the iSCSI initiator to control the active paths on the target,
+    thereby ensuring that all hosts talk down the same path. The only current workaround
+    to enable a full HA stack is to only run one VM per datastore.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The NFS–XFS–RBD configuration shares a lot of the PG lock contention issues
+    as the iSCSI configuration, and suffers from the contention caused by the XFS
+    journal. The XFS journal is a small circular buffer measured in 10s of MBs, covering
+    only a few underlying RADOS objects. As ESXi is sending sync writes via NFS, parallel
+    writes to XFS queue up, waiting on journal writes to complete. Because XFS is
+    not a distributed filesystem, extra steps need to be implemented when building
+    an HA solution to manage the mounting of the RBDs and XFS filesystems.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, we have the NFS and CephFS method. As CephFS is a filesystem, it can
+    be directly exported, meaning that there is one less layer than there is with
+    the other two methods. Additionally, as CephFS is a distributed filesystem, it
+    can be mounted across multiple proxy nodes at the same time, meaning that there
+    are two fewer cluster objects to track and manage.
+  prefs: []
+  type: TYPE_NORMAL
+- en: It's also likely that a single CephFS filesystem will be exported via NFS, providing
+    a single large ESXi datastore, meaning that there is no need to worry about migrating
+    VMs between datastores, as is the case with RBDs. This greatly simplifies the
+    operation, and works around a lot of the limitations that we've discussed so far.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Although CephFS still requires metadata operations, these are carried out in
+    parallel far better than they are in the way metadata operations in XFS or VMFS
+    are handled, and so there is only minimal impact on performance. The CephFS metadata
+    pool can also be placed on flash storage to further increase performance. The
+    way metadata updates are handled also greatly lowers the occurrence of PG locking,
+    meaning that parallel performance on the datastore is not restricted.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As mentioned previously in the NFS section, CephFS can be exported both directly
+    via the Ganesha FSAL or by being mounted through the Linux kernel and then exported.
+    For performance reasons, mounting CephFS via the kernel and then exporting is
+    the current preferred method.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Before deciding on which method suits your environment the best, it is recommended
+    that you investigate each method further and make sure that you are happy administering
+    the solution.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Clustering
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The aim of clustering is to take a single point of failure and, by letting
+    it run across multiple servers, make the service more reliable. In theory this
+    sounds relatively simple: if server A goes down, start the service on server B.
+    In practice, however, there are several considerations that need to be taken into
+    account; otherwise, there is a risk that availability will likely be worse than
+    a single server, or even worse, that data corruption may occur. High availability
+    is very hard to get right and very easy to get wrong.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Split brain
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The first issue that needs to be dealt with in clustering is the scenario where
+    nodes of the cluster become disconnected and unaware of each other's status. This
+    condition is known as split brain. In a two-node cluster, each node has no way
+    of knowing whether the reason that it has lost communication with the other node
+    is because the other node has gone offline or because there is some form of networking
+    interruption. In the latter case, making the incorrect assumption and starting
+    resources on both nodes would lead to data corruption. The way to work around
+    split brain is to make sure a cluster always has an odd number of nodes; that
+    way, at least two nodes should always be able to form quorum and agree that the
+    third node is the one that has had the failure.
+  prefs: []
+  type: TYPE_NORMAL
+- en: However, even when nodes have formed quorum, it isn't still safe to restart
+    resources on the remaining nodes. Take the case where a node appears offline,
+    possibly because of a networking partition, or maybe the server is under high
+    load and stops responding in time. If the remaining nodes where to restart services
+    on themselves, what would happen if and when this unresponsive node comes back
+    online? In order to deal with this scenario, we need to ensure that the cluster
+    can be 100% sure of the state of all of the nodes and resources at all times.
+    This is accomplished with fencing.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Fencing
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Fencing is a process of restricting the running of resources unless there is
+    a consistent view of the cluster state. It also plays a part in trying to return
+    the cluster to a known state by controlling the power state of cluster nodes or
+    other methods. As mentioned previously, if the cluster can't be sure of the current
+    state of a cluster node, services cannot simply be restarted on other nodes, as
+    there is no way of knowing whether the affected node is actually dead or is still
+    running those resources. Unless configured to risk data consistency, the cluster
+    will simply wait indefinitely until it can be sure of the state, and unless the
+    affected node returns by itself, the cluster resources will remain offline.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The solution is to employ fencing with a method such as **Shoot The Other Node
+    In The Head** (**STONITH**), which is designed to be able to return the cluster
+    to a normal state by manipulating an external control mechanism. The most popular
+    approach is to use a server's bulit-in IPMI functionality to power cycle the node.
+    As the server's IPMI is external to the operating system and usually connected
+    to a different network than the server's LAN, it is highly unlikely that it would
+    be affected by whatever has caused the server to appear offline. By power cycling
+    the server and getting confirmation from IPMI that this has happened, the cluster
+    can now be 100% certain that the the cluster resources are no longer running on
+    that node. The cluster is then OK to restart resources on other nodes, without
+    risk of conflict or corruption.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Pacemaker and corosync
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The most widely used clustering solution on Linux is the combination of pacemaker
+    and corosync. Corosync is responsible for messaging between nodes and ensuring
+    a consistent cluster state, and pacemaker is responsible for managing the resources
+    on top of this cluster state. There are a large number of resource agents available
+    for pacemaker that enable the clustering of a wide range of services, including
+    a number of STONITH agents for common-server IPMIs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: They can both be managed by a number of different client tools, the most common
+    being `pcs` and `crmsh`. The following tutorial will focus on the `crmsh` toolset.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating a highly available NFS share backed by CephFS
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In this example, three VMs will be required to form the cluster nodes. Go through
+    the following steps across all three VMs:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Install the `corosync`, `pacemaker`, and `cmrsh` toolsets using the following
+    code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs: []
+  type: TYPE_PRE
+- en: '![](img/d6e6a39e-8699-4946-a58a-da97e66f9bc1.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Edit the `corosync` configuration file and change the bind address (`bindnetaddr`)
+    to match the IP configured on the VM using the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE35]'
+  prefs: []
+  type: TYPE_PRE
+- en: '![](img/de23c436-a02d-422e-a1ba-fcf079df3b39.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Enable and start the `corosync` service using the code shown in the following
+    screenshot:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/3d0d2041-cfc5-41e2-901c-2e1fb1a080d5.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'After these steps have been completed on all nodes, check the status of the
+    cluster. You should see that all three nodes have joined the cluster, as shown
+    in the following screenshot:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/c9c1f00b-2ed8-48f0-bbe2-53a2419fb7a5.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Note that it says `No resources`. This is because, although the cluster is running
+    and nodes have become members, no resources have yet to be configured. A virtual
+    IP resource will be required, which is what NFS clients will connect to. A resource
+    to control the Ganesha service will also be needed. Resources are managed by resource
+    agents. These are normally scripts that contain a set of standard functions that
+    pacemaker calls to start, stop, and monitor the resource. There are a large number
+    of resource agents that are included with the standard pacemaker installation,
+    but writing custom ones is not too difficult if required.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As discussed at the start of this section, fencing and STONITH are essential
+    parts of an HA cluster; however, when building test environments, it can be hard
+    to implement STONITH. By default, if a STONITH configuration has not been configured,
+    pacemaker will not let you start any resources, so for the purpose of this example, STONITH should
+    be disabled with the following command:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE36]'
+  prefs: []
+  type: TYPE_PRE
+- en: '![](img/7d90e3df-332f-4ddd-b5bc-d1bffd49cf07.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Now that the cluster is ready to have resources created, let''s create the
+    virtual IP resource using the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE37]'
+  prefs: []
+  type: TYPE_PRE
+- en: '![](img/47ee6909-4f9c-45e1-9224-afb01e9f96b9.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: From the preceding screenshot, you can see that the virtual IP has been started
+    and is now running on node `nfs1`. If node `nfs1` becomes unavailable, then the
+    cluster will try and keep the resource running by moving it to another node.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, as we did with the previous NFS section, let''s install the latest version
+    of Ganesha by going through the following steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Install the Ganesha PPA using the following code ( `ganesha 2.7` was the newest
+    release at the time of writing):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE38]'
+  prefs: []
+  type: TYPE_PRE
+- en: '![](img/3bc6be11-e006-481d-968f-e86bbc1b2bea.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Using the following code, install the PPA for `libntirpc-1.7`, which is required
+    by Ganesha:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE39]'
+  prefs: []
+  type: TYPE_PRE
+- en: '![](img/2a2693e1-f32d-4a1f-97bb-6425d65f0c37.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Install Ganesha using the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE40]'
+  prefs: []
+  type: TYPE_PRE
+- en: '![](img/bfd73d88-fee8-4455-8bdd-b6636061326d.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Copy `ceph.conf` over from a Ceph monitor node using the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE41]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Copy the Ceph keyring over from a monitor node using the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE42]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now that Ganesha is installed, the configuration can be applied. The same configuration
+    can be used from the standalone Ganesha section, as shown in the following screenshot:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/ee82a652-8120-4da9-8d8e-fce45cc0d6a4.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Unlike in the standalone example, we must ensure that Ganesha is not set to
+    run by itself, and only pacemaker should launch it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now that all of the configuration work is completed, the pacemaker resource
+    can be added to control the running of Ganesha using the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE43]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Finally, we need to make sure that the Ganesha service is running on the same
+    node as the virtual IP. We can do this by creating a group resource using the
+    following code. A group resource ensures that all resources are run together on
+    the same node, and that they''re started in the order in which they are defined:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE44]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now, if we check the status of the cluster, we can see that the Ganesha service
+    is now being run, and because of the grouping, it is running on the same node
+    as the virtual IP, as shown in the following screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/9680f1f9-d481-44da-b679-762f4e25097f.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: NFS clients should now be able to connect to the virtual IP and map the NFS
+    share. If a cluster node fails, the virtual IP and Ganesha service will migrate
+    to another cluster node, and clients should only see a brief interruption to service.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To check the failover capability, we can put the running cluster node into `standby`
+    mode to force pacemaker to run the resources on another node.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the current example, the resources are running on node `nfs2`, so the command
+    is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE45]'
+  prefs: []
+  type: TYPE_PRE
+- en: '![](img/f91412ca-6a29-4d36-a824-ad336bd5e7c1.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: We can see now that node `nfs2` is now in `standby` mode and the resources have
+    moved across to running on node `nfs3`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, you learned about the different storage protocols that exist
+    and how they match to Ceph's capabilities. You also learned the protocols that
+    are best suited for certain roles, and should be able to make informed decisions
+    when selecting them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Having worked through the examples, you should also have a firm understanding
+    of how to export Ceph storage via iSCSI, NFS, and SMB to enable non-native Ceph
+    clients to consume Ceph storage.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, you should also understand the requirements for being able to design
+    and build a resilient failover cluster that can be used to deliver highly available
+    Ceph storage to non-native clients.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next chapter we will look at the different types of RADOS pool types
+    and the different types of Ceph storage which can be provisioned.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Questions
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Name the three storage protocols discussed in this chapter.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What storage protocol is typically used to provide block storage over an IP
+    network?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Which storage protocol is primarily used by Windows clients?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What's the user space NFS server called?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What two pieces of software are used to build a failover cluster?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Why might you want to export CephFS via NFS to Linux clients?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL

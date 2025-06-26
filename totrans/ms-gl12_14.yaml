@@ -1,0 +1,691 @@
+- en: The Release and Configure Phase
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we will take automation one step further than before. We will
+    start by showing you how to deploy your code to a staging environment after testing
+    and ultimately to production. This is a basic concept in the DevOps transition.
+    We will finish this chapter by explaining about Auto DevOps, a way to fully automate
+    the deployment to a Kubernetes cluster with integrated testing, security scanning,
+    and even performance tests. This is considered the optimal DevOps path by GitLab.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we will cover the following topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Continuous Deployment with deployment to Amazon Web Services
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Auto DevOps with the use of a Kubernetes cluster in Google Cloud
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: To follow along with the instructions in this chapter, please download this
+    book's GitHub repository, along with the examples, at [https://github.com/PacktPublishing/Mastering-GitLab-12/tree/master/Chapter11](https://github.com/PacktPublishing/Mastering-GitLab-12/tree/master/Chapter11).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Here, in the `Chapter11` directory, you will find two applications that are
+    used for the examples in this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To run certain automation scripts, you need an **Amazon Web Services** (**AWS**)
+    account, which can be created here: [https://aws.amazon.com/free/](https://aws.amazon.com/free/).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: For the instructions on how to create a cluster on the **Google Kubernetes Engine**
+    (**GKE**), you also need a Google account that you can use with Google Cloud,
+    which you can create here: [https://cloud.google.com/products/search/apply/](https://cloud.google.com/products/search/apply/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Continuous Deployment
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Continuous Deployment, as explained in [Chapter 9](806c9f1d-24fc-477e-93ef-d0ea1de66530.xhtml), *GitLab
+    Vision – The Whole Toolchain in One Application*, is an extension of Continuous
+    Integration, aiming at minimizing cycle time; that is, the time it takes to produce
+    one new line of code by a development team and it being deployed in the production
+    environment. We will demonstrate this practice by deploying the `eventmanager`
+    Ruby code to Amazon Elastic Beanstalk, a service for deploying and scaling web
+    applications and services that have been developed with a multitude of languages
+    on different platforms.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'There is also the option to create Ruby environments running a Puma web server. Let''s
+    log in to the AWS web console ([https://console.aws.amazon.com/console/](https://console.aws.amazon.com/console/))
+    and click on the Services tab. We can use the search option to find something
+    within the huge range of services that are available within the Amazon Cloud:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/faf4a6f9-e1d3-4e98-904e-dc661368092e.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Type `beanstalk` into the Find Services widget and click the link it finds.
+    Choose to create a new environment:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/5358dd47-4595-4974-b3dc-810a4c63e7a3.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'The environment will deploy. When it''s finished, you can view it in the dashboard:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/1749b501-c546-4b3e-86dd-75cee607b849.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'We are going to use CI/CD for our Continuous Deployment strategy. First, we
+    will create a `.gitlab-ci.yml` file with different stages (staging and production).
+    The first part of this file will define the variables to be used in the different
+    stages. Here, we will define a `S3_BUCKET_NAME`, which will be used to copy a
+    deployment package to, a `REGION` to specify where the service will be hosted,
+    and finally an `APPNAME`, which corresponds to the app name in Amazon Beanstalk:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We need to run our tests before we can advance to the next stage. In the following
+    code, on the second line, we specify a Docker image with Ruby installed to run
+    our tests. In the script section, run the default `rspec` tests:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This step will use the dpl tool ([https://github.com/travis-ci/dpl](https://github.com/travis-ci/dpl))
+    to interface with Amazon Beanstalk and deploy to the staging environment:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As you can see, we also need to get AWS credentials from somewhere (`$AWS_ACCESS`
+    variables). We can define these variables in the CI/CD environment variables section
+    of the settings of the `eventmanager` project. Now, we will use a feature called
+    *multiproject pipelines*, which has been available since GitLab 11.8\. We are
+    going to define a *bridge job*, which will run the default pipeline in the `eventmanager-documentation`
+    project:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We also want to deploy to production. We created a separate Beanstalk instance
+    for that with an environment named `production`. But what if we want the last
+    step to remain a manual one? Then we need to define a control structure with `when:manual`,
+    which means that the step has to be manually initiated:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'If you save this `.gitlab-ci.yml` file (and commit and push it), it will start
+    a deployment. If you click on the pipeline, you will get an overview of the jobs:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/c100a590-fab5-4919-9049-62a4bdbc93e9.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'In the preceding screenshot, you can see the stages. First, there''s the test
+    stages, which run the `rspec` tests. The `deploy_documentation` job triggers a
+    downstream pipeline (`eventmanager-documentation`). Simultaneously, the deployment
+    to the staging area starts. Let''s click on the job that starts:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/cb94d538-4415-44ba-a1d2-01f8eb66974d.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'By looking at the log file of the deployment to the staging area, you will
+    find the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The container installs the dpl dependency:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'It then runs the deployment:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The dpl tool only runs if the Git repository is clean:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: There is no feedback about the upload except for the message stating that the
+    application has been deployed. You can verify this deployment by visiting the
+    URL that is mentioned in the Beanstalk environment that was created with the AWS
+    console.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can manually trigger the deploy job to production from the diagram, which
+    is where we saw the play button.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In GitLab, you can go to Operations | Environments | Production to view the
+    deployments. You can also roll back to an earlier release:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/7fa416e6-7849-4011-9515-4afcaf847cc7.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: In this section, we have showed you how to implement a deployment pipeline using
+    Gitlab CI and GitLab runners. You can create them just by using shell scripts
+    and make them as elaborate as you want by using multiproject pipelines and advanced
+    syntax.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Auto DevOps
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: By default, Auto DevOps is turned on for every project. It is essentially a
+    very elaborate `.gitlab-ci.yml` file, which outlines the entire DevOps pipeline
+    from the creating phase onward.
+  prefs: []
+  type: TYPE_NORMAL
+- en: It fits in the GitLab vision of providing one application to collaborate on
+    the entire DevOps life cycle of an application.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Configuring Auto DevOps
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'As we mentioned earlier, Auto DevOps is enabled by default for every project,
+    but if you want to disable it or configure it differently, you need to go into
+    the settings, which you can find by going to Settings | CI/CD | Auto DevOps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/f9560e05-8d55-41e1-9ae1-db3570741f5f.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: As you can see, you need to configure a Kubernetes cluster to make this all
+    work.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Another setting you can manage here is the deployment strategy. The default
+    setting is that the pipeline deploys up to production. This might not be the strategy
+    you want for your enterprise. You can use an incremental rollout as well.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You should also note that a deployment pipelines is fully automated until the
+    last step, which is production. You can choose to leave that as a manual step.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To control the individual steps in the pipeline, you can view the Operations menu
+    on the left-hand side. The following is a screenshot of the available operations:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/d5eed0fb-a4ac-4acb-9adb-c9872bdecba0.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'When the first piece of code is pushed to the repository, an Auto DevOps pipeline
+    is created. For the `eventmanager` project, this looks as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/5e387bb4-4a8d-47e7-92b1-9440757ac14f.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Let's evaluate each step of the Auto DevOps pipeline from the preceding screenshot.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Build step
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The main idea is that, in the build phase, you prepare your code to run in a
+    packaged way – in a Docker container that you built using a Dockerfile – via Heroku
+    build packs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For the `eventmanager` app, `user1` created the following Dockerfile:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see from the first line of the preceding code, it pulls a basic Ruby-enabled
+    Debian Linux image. It copies all the source code to a directory and goes there.
+    Then, a bundle install is run, which installs all the Ruby dependencies that are
+    needed. Finally, it starts the `eventmanager` app using the CMD command and exposes
+    port `5000` to the outside world. It has to expose port `5000` because the default
+    Helm chart that is used to deploy to Kubernetes assumes this port to run the application.
+    It will be wired to port `80` or `443` after deployment.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following code is for the log when the build phase is started:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: It runs the Kubernetes executor and waits for a pod to be available.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'When that happens, the build script is run. First, a login to the GitLab registry
+    for this project is attempted (we need to push the build there afterwards):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Then, the build of the Docker image will start:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The built container image is pushed to the Docker registry for the `eventmanager`
+    project:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: When the Docker container image is stored in the registry, the subsequent phases
+    will use the image and pull it. This concludes the build step. The next step is
+    to run the code quality scan.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Code quality scan
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this phase of the pipeline, a GitLab runner is used to scan your code for
+    quality. You can find more information and an example of this in [Chapter 10](1eceee2e-41d6-41cc-95eb-3d225f25f3fa.xhtml),
+    *Create Your Product, Verifying It, and Packaging It*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Container scanning
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The next phase is still a part of the test stage. In this stage, a container
+    instance is instantiated from your image and is scanned for vulnerabilities using
+    clair ([https://github.com/coreos/clair](https://github.com/coreos/clair)).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'It will log in to the `eventmanager` Docker registry:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Then, it will try to get a container with the scan tool in it:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'When the container is running, it will start the scan:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: The default Ruby images uses a Debian image, which apparently has a lot of open
+    vulnerabilities.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If you switch the basic image your Dockerfile uses to `ruby:2-alpine`, you
+    will have a more basic Linux container, which should not give all of these errors.
+    You will have to restart the pipeline (click retry in the list):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'When no vulnerabilities are found, the report is uploaded as an artifact and
+    the job will succeed:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: The created Docker image is now scanned for known vulnerabilities. When you
+    want to whitelist anything that's found, you can add them to a file called `clair-whitelist.yml` and
+    add it to your repository.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Dependency scanning
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This part of the pipeline scans your code for known security vulnerabilities
+    in dependencies of your software. An example would be if you rely on third-party
+    libraries that have known security issues. This will be explained in detail in
+    the next chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When this scan is complete, you will know whether the dependencies you use in
+    your code are safe or not. It is also useful to know which licenses are used by
+    dependencies because this can have a lot of consequences. We will explain this
+    in the next section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: License management
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: An issue that's often overlooked by organizations is how to manage your **intellectual
+    property rights** (**IP**). There are different open source licenses around; for
+    example, there ones that are classified as *permissive* such as X11, Apache, and
+    the BSD licenses. You also have the *copyleft* kind, such as the GPL, which are
+    more restrictive and could make you share your derivative works. By using the
+    license scanner, you ensure that you're not using dependencies that have a negative
+    impact on your intellectual property rights.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You will see the following output when the jobs runs:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This scan is run from a container, but that runs code and parses your project:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This will analyze and upload a report artifact:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: The result is also viewable from the merge request widget.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As you can see, the inclusion of a license check in the pipeline can be very
+    useful. Is it better to know as early as possible whether you are using dependencies
+    that affect the way you can distribute your software. In the same parallel step
+    of the pipeline, static security tests are conducted.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Static application security testing (sast)
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This part of the pipeline scans your code for known security issues, and is
+    known as a static application security test. This will be explained in more detail
+    in the next chapter. The final parallel step in the test stage is running the
+    actual tests that are defined by your code.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The final test step
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In this pipeline, a specific container is started that clones the source code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'It will try to detect the language that''s used. In our case, it finds a Ruby
+    application, which is correct:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After installing the necessary dependencies, it will run the rake test task:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: In our case, no errors were detected. You can check which tests are run in your
+    `tests` folder.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Of course, the tests that are run are written by yourself, so you determine
+    how much value they have. When they are finished, the next stage is to deploy
+    to production, which is covered in the next section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Production
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The default Auto DevOps pipeline will deploy your code to production after
+    it finishes the test stage. Various environment variables are available that you
+    can set that will control the autoscaling of your replica pods. The heavy lifting
+    in this phase is performed by the auto-deploy-app Helm chart. You can also provide
+    your own chart by adding it to a `.chart` directory in your project or by setting
+    `AUTO_DEVOPS_CHART` combined with the `AUTO_DEVOPS_CHART_REPOSITORY` environment
+    variable with the URL to your custom chart. It will create several things:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A deploy token
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A Prometheus monitoring instance that's wired for your application
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Let''s run the following code through the log file:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This checks the artifacts of the previous jobs and performs a check on the
+    Kubernetes domain. It will install dependencies for minimal Helm execution:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The next step is to download the required chart (auto-deploy-app chart or custom):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Next, we need to ensure that a namespace is defined (which is usually the Kubernetes
+    cluster name you used):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now, it''s time to initialize tiller (the Helm server):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here, a secret to access the registry is created:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Finally, the deployment can start:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After the deployment, you will see feedback about the URL where the application
+    is running. The name is created by appending the namespace to the project name
+    and the domain wildcard where the cluster is running:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'If you have configured `kubectl` to use the context of your GKE cluster, on
+    the command line, you can verify whether your deployments took place:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The list of pods should show you the pods that were started:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'By default, a `postgres` instance is started as well, and you can fine-tune
+    your installation to use it if you need it. You can find more information about
+    that here: [https://docs.gitlab.com/ee/topics/autodevops/#postgresql-database-support](https://docs.gitlab.com/ee/topics/autodevops/#postgresql-database-support).
+    There are also other pods in the list, and they are all part of the deployment:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE35]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The `eventmanager` application can be viewed by going to `http://it-eventmanager.kubernetes.joustie.nl`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/79bf9d2c-f4fb-4833-b84c-bb9677233993.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Now, we have a running application that is being tested and monitored. The next
+    and final step is to run a performance check on the production environment. Again,
+    we can use our Kubernetes cluster to spawn a test container for it and run performance
+    tests on it, which is the subject of the next section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Performance
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In the log file for the performance job, you can see that Kubernetes is again
+    used to spawn an instance to use:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE36]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The job connects to [GitLab.com](https://about.gitlab.com/) and verifies the
+    version of the image it should pull. It uses the `sitespeed.io` container to do
+    this ([https://hub.docker.com/r/sitespeedio/sitespeed.io/](https://hub.docker.com/r/sitespeedio/sitespeed.io/)):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE37]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Inside the container, it tries to measure browser performance with Chrome and
+    Firefox:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE38]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'It will do a subsequent number of runs:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE39]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The results will be saved as a HTML report artifact, as well as a JSON file:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE40]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The following code is a part of the JSON file:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE41]'
+  prefs: []
+  type: TYPE_PRE
+- en: A nice HTML report is available too, which is part of the artifacts.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Auto DevOps is a very handy concept. It can give you a complete pipeline if
+    your application stays close to standards and is not very complex. If you need
+    more customization, you can use the template and fine-tune it to your needs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This chapter demonstrated the potential of GitLab and the role it plays in the
+    operations phase of a software product. You can develop your solution, test it,
+    and eventually run it in an environment. Along the way, you can automate as much
+    as possible. If you use the Auto DevOps feature, you will reach the full potential
+    of the DevOps concept, which is currently a sought-after skill.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next chapter, we will look at the monitor and secure phases, which are
+    the final phases in the DevOps pipeline.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Questions
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In which file do you define your deployments?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What is the dpl tool?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What is the GitLab vision for Auto DevOps?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Where are the build artifacts stored at the end of the build phase (using Dockerfile)?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What is the name of the container scanner that's used in Auto DevOps?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What is the name of the deployment Helm chart that's used in Auto DevOps?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: How many pods are deployed for a production deploy?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What is the name of the performance container?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Further reading
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '*Advanced Infrastructure Penetration Testing* by Chiheb Chebbi: [https://www.packtpub.com/networking-and-servers/advanced-infrastructure-penetration-testing](https://www.packtpub.com/networking-and-servers/advanced-infrastructure-penetration-testing)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Learn Docker - Fundamentals of Docker 18.x* by Gabriel N. Schenker: [https://www.packtpub.com/in/networking-and-servers/learn-docker-fundamentals-docker-18x](https://www.packtpub.com/in/networking-and-servers/learn-docker-fundamentals-docker-18x)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*AWS Automation Cookbook *by Nikit Swaraj: [https://www.packtpub.com/virtualization-and-cloud/aws-automation-cookbook](https://www.packtpub.com/virtualization-and-cloud/aws-automation-cookbook)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Hands-On Kubernetes on Azure* by Gunther Lenz and Shivakumar Gopalakrishnan: [https://www.packtpub.com/virtualization-and-cloud/hands-kubernetes-azure](https://www.packtpub.com/virtualization-and-cloud/hands-kubernetes-azure)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

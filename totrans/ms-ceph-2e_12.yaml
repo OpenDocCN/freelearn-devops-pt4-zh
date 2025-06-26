@@ -1,0 +1,789 @@
+- en: Tiering with Ceph
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The tiering functionality in Ceph allows you to overlay one RADOS pool over
+    another and let Ceph intelligently promote and evict objects between them. In
+    most configurations, the top-level pool will be comprised of fast storage devices
+    such as **Solid State Drives** (**SSDs**) and the base pool will be comprised
+    of slower storage devices such as **Serial ATA** (**SATA**) or **Serial Attached
+    SCSI** (**SAS**) disks. If the working set of your data is of a comparatively
+    small percentage, then this allows you to use Ceph to provide high capacity storage
+    but still maintain a good level of performance of frequently accessed data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we will cover the following topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: How Ceph's tiering functionality works
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: What good use cases for tiering are
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: How to configure two pools into a tier
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Various tuning options available for tiering
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: It's recommended that you should be running at least the Jewel release of Ceph
+    if you wish to use the tiering functionality. Previous releases were lacking a
+    lot of features that made tiering usable.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Tiering versus caching
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Although often described as **cache tiering**, it's better to think of the functionality
+    in Ceph as a tiering technology rather than a cache. It's important that you take
+    this into consideration before reading any further, as it's vital to understand
+    the difference between the two.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A cache is typically designed to accelerate access to a set of data unless it's
+    a writeback cache; it will not hold the only copy of the data, and normally there
+    is little overhead to promoting data to cache. The cache tends to operate over
+    a shorter time frame and quite often everything that is accessed is promoted into
+    the cache.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A tiering solution is also designed to accelerate access to a set of data; however,
+    its promotion strategy normally works over a longer period of time and is more
+    selective about what data is promoted, mainly due to the promotion action having
+    a small impact on overall storage performance. Also, it is quite common with tiering
+    technologies that only a single tier may hold the valid state of the data, and
+    so all tiers in the system need equal protection against data loss.
+  prefs: []
+  type: TYPE_NORMAL
+- en: How Ceph's tiering functionality works
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Once you have configured a RADOS pool to be an overlay of another RADOS pool,
+    Ceph's tiering functionality works on the basic principal that if an object does
+    not exist in the top-level tier, then it must exist in the base tier. All object
+    requests from clients are sent to the top tier; if the OSD does not have the requested
+    object, then, depending on the tiering mode, it may either proxy the read or write
+    request down to the base tier or force a promotion. The base tier then proxies
+    the request back through the top tier to the client. It's important to note that
+    the tiering functionality is transparent to clients, and there is no specific
+    client configuration needed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There are three main actions in tiering that move objects between tiers. **Promotions**
+    copy objects from the base tier up to the top tier. If tiering is configured in
+    writeback mode, the **flushing** action is used to update the contents of the
+    base tier object from the top tier. Finally, when the top-tier pool reaches capacity,
+    objects are evicted by the **eviction** action.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In order to be able to make decisions on what objects to move between the two
+    tiers, Ceph uses HitSets to track access to objects. A **HitSet** is a collection
+    of all object access requests and is consulted to determine if an object has had
+    either a read or write request since that HitSet was created. The HitSets use
+    a **bloom filter** to statistically track object access rather than storing every
+    access to every object, which would generate large overheads. The bloom filter
+    only stores binary states, an object can only be marked as accessed or not, and
+    there is no concept of storing the number of accesses to an object in a single
+    HitSet. If an object appears in a number of the most recent HitSets and is in
+    the base pool, then it will be promoted.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Likewise, objects that no longer appear in recent HitSets will become candidates
+    for flushing or eviction if the top tier comes under pressure. The number of HitSets
+    and how often a new one gets created can be configured, along with the required
+    number of recent HitSets a write or read I/O must appear in, in order for a promotion
+    to take place. The size of the top-level tier can also be configured and is disconnected
+    from the available capacity of the RADOS pool it sits on.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There are a number of configuration and tuning options that define how Ceph
+    reacts to the generated HitSets and the thresholds at which promotions, flushes,
+    and evictions occur. These will be covered in more detail later in the chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: What is a bloom filter?
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: A bloom filter is used in Ceph to provide an efficient way of tracking whether
+    an object is a member of a HitSet without having to individually store the access
+    status of each object. It is probabilistic in nature, and although it can return
+    **false positives**, it will never return a **false negative**. This means that
+    when querying a bloom filter, it may report that an item is present when it is
+    not, but it will never report that an item is not present when it is.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Ceph's use of bloom filters allows it to efficiently track the access to millions
+    of objects without the overhead of storing every single access. In the event of
+    a false positive, it could mean that an object is incorrectly promoted; however,
+    the probability of this happening combined with the minimal impact is of little
+    concern.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Tiering modes
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: There are a number of tiering modes that determine the precise actions of how
+    Ceph reacts to the contents of the HitSets. However, in most cases, the writeback
+    mode will be used. The available modes for use in tiering are **writeback**, **forward**,
+    **read-forward**, **proxy**, and **read-proxy**. The following sections provide
+    brief descriptions of the available modes and how they act.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Writeback
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In writeback mode, data is promoted to the top-level tier by both reads and
+    writes depending on how frequently accessed the object is. Objects in the top-level
+    tier can be modified, and dirty objects will be flushed to the pool at a later
+    date. If an object needs to be read or written to in the bottom tier and the bottom
+    pool supports it, then Ceph will try and directly proxy the operation that has
+    a minimal impact on latency.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Forward
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The forward mode simply forwards all requests from the top tier to the base
+    tier without doing any promotions. It should be noted that a forward causes the
+    OSD to tell the client to resend the request to the correct OSD and so has a greater
+    impact on latency than just simply proxying it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Read-forward
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Read-forward mode forces a promotion on every write and, like the forward mode
+    earlier, redirects the client for all reads to the base pool. This can be useful
+    if you wish to only use the top-tier pool for write acceleration. Using write-intensive
+    SSDs overlayed over read-intensive SSDs is one such example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Proxy
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This is similar to forward mode, except it proxies all reads and writes without
+    promoting anything. By proxying the request, OSD itself retrieves data from the
+    base-tier OSD and then passes it back to the client. This reduces the overhead
+    compared with using forwarding.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Read-proxy
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Similar to read-forward mode, except that it proxies reads and always promotes write requests.
+    It should be noted that the writeback and read-proxy modes are the only modes
+    that receive rigorous testing, and so care should be taken when using the other
+    modes. Also, there is probably little gain from using the other modes, and they
+    will likely be phased out in future releases.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Uses cases
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: As mentioned at the start of the chapter, the tiering functionality should be
+    thought of as tiering and not a cache. The reason behind this statement is that
+    the act of promotions has a detrimental effect to cluster performance when compared
+    with most caching solutions, which do not normally degrade performance if enabled
+    on non-cacheable workloads. The performance impact of promotions are caused for
+    two main reasons. First, the promotion happens in the I/O path; the entire object
+    to be promoted needs to be read from the base tier and then written into the top
+    tier before the I/O is returned to the client.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Second, this promotion action will likely also cause a flush and an eviction,
+    which causes even more reads and writes to both tiers. If both tiers are using
+    3x replication, this starts to cause a large amount of write amplification for
+    even just a single promotion. In the worse-case scenario, a single 4 KB access
+    that causes a promotion could cause 8 MB of read I/O and 24 MB of write I/O across
+    the two tiers. This increased I/O will cause an increase in latency; for this
+    reason, promotions should be considered expensive, and tuning should be done to
+    minimize them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With that in mind, Ceph tiering should only be used where the hot or active
+    part of the data will fit into the top tier. Workloads that are uniformly random
+    will likely see no benefit and in many cases may actually cause performance degradation,
+    either due to no suitable objects being available to promote, or too many promotions
+    occurring.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Most workloads that involve providing storage for generic virtual machines tend
+    to be good candidates as normally only a small percentage of a VM tends to be
+    accessed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Online transaction processing** (**OLTP**) databases will normally show improvements
+    when used with either caching or tiering as their hot set of data is relatively
+    small and data patterns are reasonably consistent. However, reporting or batch
+    processing databases are generally not a good fit as they can quite often require
+    a large range of the data to be accessed without any prior warm-up period.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**RADOS Block Devices** (**RBD**) workloads that involve random access with
+    no specific pattern or workloads that involve large read or write streaming should
+    be avoided and will likely suffer from the addition of a cache tier.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating tiers in Ceph
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: To test Ceph's tiering functionality, two RADOS pools are required. If you are
+    running these examples on a laptop or desktop hardware, although spinning disk-based
+    OSDs can be used to create the pools, SSDs are highly recommended if there is
+    any intention to read and write data. If you have multiple disk types available
+    in your testing hardware, then the base tier can exist on spinning disks and the
+    top tier can be placed on SSDs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s create tiers using the following commands, all of which make use of
+    the Ceph `tier` command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Create two RADOS pools:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The preceding commands give the following output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/a28e7a8a-2573-4569-bfed-8ea064b27822.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Create a tier consisting of the two pools:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The preceding command gives the following output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/6dd83d8d-71c8-4f5c-9c98-cbc4219d81bf.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Configure the cache mode:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The preceding command gives the following output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/ed30c5e0-ed65-4f1c-965e-6368589bdc7b.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Make the top tier and overlay of the base tier:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The preceding command gives the following output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/1c62b889-c89a-4558-bb40-6228844e8421.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Now that the tiering is configured, we need to set some simple values to make
+    sure that the tiering agent can function. Without these, the tiering mechanism
+    will not work properly. Note that these commands are just setting variables on
+    the pool:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The preceding commands give the following output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/7b88c542-59b5-4dde-9d03-b37d8f916c42.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: The previously mentioned commands are simply telling Ceph that the HitSets should
+    be created using the bloom filter. It should create a new HitSet every 60 seconds
+    and that it should keep ten of them before discarding the oldest one. Finally,
+    the top tier pool should hold no more than 100 MB; if it reaches this limit, I/O
+    operations will block. More detailed explanations of these settings will follow
+    in the next section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Next, we need to configure the various options that control how Ceph flushes
+    and evicts objects from the top to the base tier:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The preceding commands give the following output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/0210c367-4aa2-4eaa-afef-871d43f5c9f9.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: The earlier example tells Ceph that it should start flushing dirty objects in
+    the top tier down to the base tier when the top tier is 40% full. And that objects
+    should be evicted from the top tier when the top tier is 80% full.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'And, finally, the last two commands instruct Ceph that any object should have
+    been in the top tier for at least 60 seconds before it can be considered for flushing
+    or eviction:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The preceding commands give the following output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/96271ea1-1525-487b-907e-ace642790104.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Tuning tiering
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Unlike the majority of Ceph's features, which by default perform well for a
+    large number of workloads, Ceph's tiering functionality requires careful configuration
+    of its various parameters to ensure good performance. You should also have a basic
+    understanding of your workload's I/O profile; tiering will only work well if your
+    data has a small percentage of hot data. Workloads that are uniformly random or
+    involve lots of sequential access patterns will either show no improvement or
+    in some cases may actually be slower.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Flushing and eviction
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The main tuning options that should be looked at first are the ones that define
+    the size limit to the top tier, when it should flush and when it should evict.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following two configuration options configure the maximum size of the data
+    to be stored in the top-tier pool:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: The size is either specified in bytes or the number of objects and does not
+    have to be the same size as the actual pool – but it cannot be larger. The size
+    is also based on the available capacity after replication of the RADOS pool, so
+    for a 3x replica pool, this will be one-third of your raw capacity. If the number
+    of bytes or objects in this pool goes above this limit, I/O will block; therefore,
+    it's important that thought is given to the other config options later so that
+    this limit is not reached. It's also important that this value is set, as without
+    it, no flushing or evictions will occur and the pool will simply fill up OSDs
+    to their full limit and then block I/O.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The reason that this setting exists instead of Ceph just using the size of the
+    underlying capacity of the disks in the RADOS pool is that by specifying the size,
+    you could have multiple top-level tier pools on the same set of disks if you desire.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As you have learned earlier, `target_max_bytes` sets the maximum size of the
+    tiered data on the pool and if this limit is reached, I/O will block. In order
+    to make sure that the RADOS pool does not reach this limit, `cache_target_full_ratio`
+    instructs Ceph to try and keep the pool at a percentage of `target_max_bytes`
+    by evicting objects when this target is breached. Unlike promotions and flushes,
+    evictions are fairly low-cost operations:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The value is specified as a value between `0` and `1` and works like a percentage.
+    It should be noted that although `target_max_bytes` and `cache_target_full_ratio`
+    are set against the pool, internally Ceph uses these values to calculate per PG
+    limits instead. This can mean that in certain circumstances, some PGs may reach
+    the calculated maximum limit before others and can sometimes lead to unexpected
+    results. For this reason, it is recommended not to set `cache_target_full_ratio`
+    to high and leave some headroom; a value of 0.8 normally works well. We have the
+    following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: These two configuration options control when Ceph flushes dirty objects from
+    the top tier to the base tier if the tiering has been configured in writeback
+    mode. An object is considered dirty if it has been modified while being in the
+    top tier; objects modified in the base tier do not get marked as dirty. Flushing
+    involves copying the object out of the top tier and into the base tier; as this
+    is a full object write, the base tier can be an erasure-coded pool. The behavior
+    is asynchronous, and aside from increasing I/O on the RADOS pools, is not directly
+    linked to any impact on client I/O. Objects are typically flushed at a lower speed
+    than what they can be evicted at. As flushing is an expensive operation compared
+    with eviction, this means that if required, large amounts of objects can be evicted
+    quickly if needed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The two ratios control what speed of flushing OSD allows, by restricting the
+    number of parallel flushing threads that are allowed to run at once. These can
+    be controlled by the `osd_agent_max_ops` and `osd_agent_max_high_ops` OSD configuration
+    options, respectively. By default, these are set to `2` and `4` parallel threads.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In theory, the percentage of dirty objects should hover around the low dirty
+    ratio during normal cluster usage. This will mean that objects are flushed with
+    a low parallelism of flushing to minimize the impact on cluster latency. As normal
+    bursts of writes hit the cluster, the number of dirty objects may rise, but over
+    time, these writes are flushed down to the base tier.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'However, if there are periods of sustained writes that outstrip the low speed
+    flushing''s capability, then the number of dirty objects will start to rise. Hopefully,
+    this period of high write I/O will not go on for long enough to fill the tier
+    with dirty objects and thus will gradually reduce back down to the low threshold.
+    However, if the number of dirty objects continues to increase and reaches the
+    high ratio, then the flushing parallelism gets increased and will hopefully be
+    able to stop the number of dirty objects from increasing any further. Once the
+    write traffic reduces, the number of dirty objects will be brought back down the
+    low ratio again. This sequence of events is illustrated in the following graph:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/a1a64af5-f178-4d24-849c-3cce5d111b00.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: The two dirty ratios should have sufficient difference between them that normal
+    bursts of writes can be absorbed, without the high ratio kicking in. The high
+    ratio should be thought of as an emergency limit. A good value to start with is
+    0.4 for the low ratio and 0.6 for the high ratio.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `osd_agent_max_ops` configuration settings should be adjusted so that in
+    normal operating conditions, the number of dirty objects hovers around or just
+    over the low dirty ratio. It's not easy to recommend a value for these settings
+    as they will largely depend on the ratio of the size and performance of the top
+    tier to the base tier. However, start with setting `osd_agent_max_ops` to `1`
+    and increase as necessary, and set `osd_agent_max_high_ops` to at least double.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you see status messages in the Ceph status screen indicating that high-speed
+    flushing is occurring, then you will want to increase `osd_agent_max_ops`. If
+    you ever see the top tier getting full and blocking I/O, then you either need
+    to consider lowering the `cache_target_dirty_high_ratio` variable or increasing
+    the `osd_agent_max_high_ops` setting to stop the tier filling up with dirty objects.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Promotions
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The next tuning options that should be looked at are the ones that define the
+    HitSets and the required recency to trigger a promotion:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `hitset_count` setting controls how many HitSets can exist before the oldest
+    one starts getting trimmed. The `hitset_period` setting controls how often a HitSet
+    should be created. If you are testing tiering in a laboratory environment, it
+    should be noted that I/O to the PG needs to be occurring in order for a HitSet
+    to be created; on an idle cluster, no HitSets will be created or trimmed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Having the correct number and controlling how often HitSets are created is key
+    to being able to reliably control when objects get promoted. Remember that HitSets
+    only contain data about whether an object has been accessed or not; they don't
+    contain a count of the number of times an object was accessed. If `hitset_period`
+    is too large, then even relatively low-accessed objects will appear in the majority
+    of the HitSets. For example, if `hitset_period` is two minutes, an RBD object
+    containing the disk block where a log file is updated once a minute would be in
+    all the same HitSets as an object getting access 100 times a second.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Conversely, if the period is too low, then even hot objects may fail to appear
+    in enough HitSets to make them candidates for promotion and your top tier will
+    likely not be fully used. By finding the correct HitSet period, you should be
+    able to capture the right view of your I/O that a suitable sized proportion of
+    hot objects are candidates for promotion:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: These two settings define how many of the last recent HitSets an object must
+    appear in to be promoted. Due to the effect of probability, the relationship between
+    semi-hot objects and recency setting is not linear. Once the recency settings
+    are set past about 3 or 4, the number of eligible objects for promotion drops
+    off in a logarithmic fashion. It should be noted that while promotion decisions
+    can be made on reads or writes separately, they both reference the same HitSet
+    data, which has no way of determining an access from being either a read or a
+    write. As a handy feature, if you set the recency higher than the `hitset_count`
+    setting, then it will never promote. This can be used for example to make sure
+    that a write I/O will never cause an object to be promoted, by setting the write
+    recency higher than the `hitset_count` setting.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Promotion throttling
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'As has been covered earlier, promotions are very expensive operations in tiering
+    and care should be taken to make sure that they only happen when necessary. A
+    large part of this is done by carefully tuning the HitSet and recency settings.
+    However, in order to limit the impact of promotions, there is an additional throttle
+    that restricts the number of promotions to a certain speed. This limit can either
+    be specified as number of bytes or objects per second via two OSD configuration
+    options:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: The default limits are 4 MBps or five objects a second. While these figures
+    may sound low, especially when compared with the performance of the latest SSDs,
+    their primary goal is to minimize the impact of promotions on latency. Careful
+    tuning should be done to find a good balance on your cluster. It should be noted
+    that this value is configured per OSD, and so the total promotion speed will be
+    a sum across all OSDs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Finally, the following configuration options allow tuning of the selection
+    process for flushing objects:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This controls how may HitSets are queried in order to determine object temperature,
+    where the the temperature of an object reflects how often it is accessed. A cold
+    object is rarely accessed, while hot objects being accessed far more frequently
+    are candidates for eviction. Setting this to a similar figure as the recency settings
+    is recommended. We have the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This works in combination with the `hit_set_grade_search_last_n` setting and
+    decays the HitSet results the older they become. Objects that have been accessed
+    more frequently than others have a hotter rating and will make sure that objects
+    that are more frequently accessed are not incorrectly flushed. It should be noted
+    that the `min_flush` and `evict_age` settings may override the temperature of
+    an object when it comes to being flushed or evicted:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `cache_min_evict_age` and `cache_min_flush_age` settings simply define how
+    long an object must have not been modified for before it is allowed to be flushed
+    or evicted. These can be used to stop objects that are only just below the threshold
+    to be promoted from continually being stuck in a cycle of moving between tiers.
+    Setting them between 10 and 30 minutes is probably a good approach, although care
+    needs to be taken that the top tier does not fill up in the case where there are
+    no eligible objects to be flushed or evicted.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Monitoring parameters
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In order to monitor the performance and characteristics of a cache tier in a
+    Ceph cluster, there are a number of performance counters you can monitor. We will
+    assume for the moment that you are already collecting the Ceph performance counters
+    from the admin socket as discussed in the next chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The most important thing to remember when looking at the performance counters
+    is that once you configure a tier in Ceph, all client requests go through the
+    top-level tier. Therefore, only read and write operation counters on OSDs that
+    make up your top-level tier will show any requests, assuming that the base-tier
+    OSDs are not used for any other pools. To understand the number of requests handled
+    by the base tier, there are proxy operation counters, which will show this number.
+    These proxy operation counters are also calculated on the top-level OSDs, and
+    so to monitor the throughput of a Ceph cluster with tiering, only the top-level
+    OSDs need to be included in the calculations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following counters can be used to monitor tiering in Ceph; all are to be
+    monitored on the top-level OSDs:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| **Counter** | **Description** |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `op_r` | Read operations handled by the OSD |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `op_w` | Write operations handled by the OSD |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `tier_proxy_read` | Read operations that were proxied to the base tier |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `tier_proxy_write` | Write operations that were proxied to the base tier
+    |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `tier_promote` | The number of promotions from base to the top-level tier
+    |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `tier_try_flush` | The number of flushes from the top level to the base tier
+    |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `tier_evict` | The number of evictions from the top level to the base tier
+    |'
+  prefs: []
+  type: TYPE_TB
+- en: Alternative caching mechanisms
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The native RADOS tiering functionality provides numerous benefits around flexibility
+    and allows management by the same Ceph toolset. However, it cannot be denied that
+    for pure performance, RADOS tiering lags behind other caching technologies that
+    typically function at the block-device level.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Bcache is a block device cache in the Linux kernel that can use a SSD to cache
+    a slower block device such as a spinning disk.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Bcache** is one example of a popular way of increasing the performance of
+    Ceph with SSDs. Unlike RADOS tiering, where you can choose which pool you wish
+    to cache, with bcache the entire OSD is cached. This method of caching brings
+    a number of advantages around performance. The first is that the OSD itself has
+    a much more consistent latency response due to the SSD caching. The filestore
+    adds an increased amount of random I/O to every Ceph request regardless of whether
+    the Ceph request is random of sequential in nature. Bcache can absorb these random
+    I/Os and allow the spinning disk to perform a larger amount of sequential I/O.
+    This can be very helpful during high periods of utilization where normal spinning
+    disk OSDs would start to exhibit high latency. Second, RADOS tiering operates
+    at the size of the object stored in the pool, which is 4 MB by default for RBD
+    workloads. Bcache caches data in much smaller blocks; this allows it to make better
+    use of available SSD space and also suffer less from promotion overheads.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The SSD capacity assigned to bcache will also be used as a read cache for hot
+    data; this will improve read performance as well as writes. Since bcache will
+    only be using this capacity for read caching, it will only store one copy of the
+    data and so will have three times more read cache capacity than compared with
+    using the same SSD in a RADOS-tiered pool.
+  prefs: []
+  type: TYPE_NORMAL
+- en: However, there are a number of disadvantages to using bcache that make using
+    RADOS cache pools still look attractive. As mentioned earlier, bcache will cache
+    the entire OSD. In some cases where multiple pools may reside on the same OSDs,
+    this behavior may be undesirable. Also, once bcache has been configured with SSD
+    and HDD, it is harder to expand the amount of cache if needed in the future. This
+    also applies if your cluster does not currently have any form of caching; in this
+    scenario, introducing bcache would be very disruptive. With RADOS tiering, you
+    can simply add additional SSDs or specifically designed SSD nodes to add or expand
+    the top tier as and when needed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: dm-cache is another Linux block caching solution that is built into Linux's
+    **Logical Volume Manager** (**LVM**). Although its caching algorithms are not
+    quite as advanced as bcache's, the fact that it is very easy to enable in LVM,
+    even post volume creation, means that it is ideally suited to working with BlueStore
+    OSD's. BlueStore OSD's are now created using ceph-volume, which creates logical
+    volumes on top of block devices, thus only requiring a few steps to enable caching
+    of an existing OSD.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Another approach is to place the spinning disk OSDs behind a RAID controller
+    with a battery-backed writeback cache. The RAID controller performs a similar
+    role to bcache and absorbs a lot of the random write I/O relating to the OSD's
+    extra metadata. Both latency and sequential write performance will increase as
+    a result. Read performance is unlikely to increase, however, due to the relatively
+    small size of the RAID controllers cache.
+  prefs: []
+  type: TYPE_NORMAL
+- en: By using a RAID controller with filestore OSDs, the OSDs journal can also be
+    placed directly on the disk instead of using a separate SSD. By doing this, journal
+    writes are absorbed by the RAID controllers cache and will improve the random
+    performance of the journal, as likely most of the time, the journals contents
+    will just be sitting in the controllers cache. Care does need to be taken though,
+    as if the incoming write traffic exceeds the capacity of the controllers cache,
+    journal contents will start being flushed to disk, and performance will degrade.
+    For best performance, a separate SSD or NVMe should be used for the filestore
+    journal, although attention should be paid to the cost of using both a RAID controller
+    with sufficient performance and cache, in addition to the cost of the SSDs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With BlueStore OSDs, a writeback cache on a RAID controller greatly benefits
+    write latency; however, BlueStore's metadata is still required to be stored on
+    flash media for good performance. Thus, separate SSDs are still highly recommended
+    when using writeback RAID controllers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Both methods have their merits and should be considered before implementing
+    caching in your cluster.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we have covered the theory behind Ceph's RADOS tiering functionality
+    and looked at the configuration and tuning operations available to make it work
+    best for your workload. It should not be forgotten that the most important aspect
+    is to understand your workload and be confident that its I/O pattern and distribution
+    is cache-friendly. By following the examples in this chapter, you should also
+    now understand the required steps to implement tiered pools and how to apply the
+    configuration options.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next chapter, we will see what problems occur in maintaining a healthy Ceph
+    cluster and how can we handle them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Questions
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Name two reasons you might want to use tiering technologies.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Name a tiering technology that exists outside of Ceph.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What method does RADOS tiering use to track hit requests?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What pool variable controls the amount of recent hits before a read request
+    promotes an object?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What is a good use case for RADOS tiering?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL

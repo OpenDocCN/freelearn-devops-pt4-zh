@@ -1,0 +1,1311 @@
+- en: Tuning Ceph
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: While the default configuration of Linux and Ceph will likely provide reasonable
+    performance due to many years of research and tweaking by developers, it is likely
+    that a Ceph administrator may want to try to squeeze more performance out of the
+    hardware. By tuning both the operating system and Ceph, performance gains may
+    be realized. In [Chapter 1](0f4119df-b421-4349-86c8-b68444743f8a.xhtml), *Planning
+    for Ceph*, you learned about how to choose hardware for a Ceph cluster; now, let's
+    learn how to make the most of it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, you will learn about the following topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Latency and why it matters
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The importance of being able to observe the results of your tuning
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Key tuning options that you should look at
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Latency
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: When running benchmarks to test the performance of a Ceph cluster, you are ultimately
+    measuring the result of latency. All other forms of benchmarking metrics, including
+    IOPS, MBps, or even higher-level application metrics, are derived from the latency
+    of that request.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'IOPS are the number of I/O requests done in a second; the latency of each request
+    directly effects the possible IOPS and can be calculated using this formula:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/f5fd78a4-b1c7-40f5-b8d5-12584e9ad356.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'An average latency of 2 milliseconds per request will result in roughly 500
+    IOPS, assuming each request is submitted in a synchronous fashion:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*1/0.002 = 500*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'MBps is simply the number of IOPS multiplied by the I/O size:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*500 IOPS * 64 KB = 32,000 KBps*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: When you are carrying out benchmarks, you are actually measuring the end result
+    of a latency. Therefore, any tuning that you are carrying out should be done to
+    reduce end-to-end latency for each I/O request.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Before moving on to learning how to benchmark various components of your Ceph
+    cluster and the various tuning options available, we first need to understand
+    the various sources of latency from a typical I/O request. Once we can break down
+    each source of latency into its own category, it will be possible to perform benchmarking
+    on each one so that we can reliably track both negative and positive tuning outcomes
+    at each stage.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following diagram shows an example Ceph write request with the main sources
+    of latency:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/19cd3ca9-1804-4e22-be90-1e22d540bfd2.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Client to Primary OSD
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Starting with the client, we can see that, on average, there is probably around
+    100 microseconds of latency for it to talk to the primary OSD. With 1 G networking,
+    this latency figure could be nearer to 1 millisecond. We can confirm this figure
+    by either using `ping` or `iperf` to measure the round-trip delay between two
+    nodes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: From the previous formula, we can see that with 1 G networking, even if there
+    were no other sources of latency, the maximum synchronous write IOPS would be
+    around 1,000.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Although the client introduces some latency of its own, it is minimal compared
+    to the other sources, and so it is not included in the diagram.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Primary OSD to Replica OSD(s)
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Next, the OSD that runs the Ceph code introduces latency as it processes the
+    request. It is hard to put an exact figure on this, but it is affected by the
+    speed of the CPU. A faster CPU with a higher frequency will run through the code
+    path faster, reducing latency. Early on in this book, the primary OSD would send
+    the request to the other two OSDs in the replica set. These are both processed
+    in parallel so that there is minimal increase in latency going from 2x to 3x replicas,
+    assuming the backend disks can cope with the load.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There is also an extra network hop between the primary and the replicated OSDs,
+    which introduces latency into each request.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Primary OSD to Client
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Once the primary OSD has committed the request to its journal and has had an
+    acknowledgement back from all the replica OSDs that they have also done so, it
+    can then send an acknowledgment back to the client and submit the next I/O request.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Regarding the journal, depending on the type of media being used, the commit
+    latency can vary. NVMe SSDs will tend to service requests in the 10-20 microseconds
+    range, whereas SATA/SAS-based SSDs will typical service requests in the 50-100
+    microseconds range. NVMe devices also tend to have a more consistent latency profile
+    with an increase in the queue depth, making them ideal for cases where multiple
+    disks might use a single SSD as the same journal. Way ahead are the hard drives
+    that are measured in tens of milliseconds, although they are fairly consistent
+    in terms of latency as the I/O size increases.
+  prefs: []
+  type: TYPE_NORMAL
+- en: It should be obvious that for small, high-performance workloads, hard drive
+    latency would dominate the total latency figures, and so, SSDs, preferably NVMe,
+    should be used for it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Overall, in a well-designed and well-tuned Ceph cluster, all of these parts
+    combined should allow an average write 4 KB request to be serviced in around 500-750
+    microseconds.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Benchmarking
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '**Benchmarking** is an important tool to quickly be able to see the effects
+    of your tuning efforts and to determine the limits of what your cluster is capable
+    of. However, it''s important that your benchmarks reflect the type of workload
+    that you would be running normally on your Ceph cluster. It is pointless to tune
+    your Ceph cluster to excel in large-block sequential reads and writes if your
+    final intention is to run highly-latency sensitive **Online Transaction Processing**
+    (**OLTP**) databases on it. If possible, you should try to include some benchmarks
+    that actually use the same software as your real-life workload. Again, in the
+    example of the OLTP database, look to see whether there are benchmarks for your
+    database software, which will give the most accurate results.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Benchmarking tools
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The following list of tools is the recommended set of tools to get you started
+    with benchmarking:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Fio**: Fio, the flexible I/O testing tool, allows you to simulate a variety
+    of complex I/O patterns through its extensive configuration options. It has plugins
+    for both local block devices and RBD, meaning that you can test RBDs from your
+    Ceph cluster either directly or by mounting them via the Linux RBD kernel driver.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Sysbench**: Sysbench has a MySQL OLTP test suite that simulates an OLTP application.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Ping**: Don''t underestimate the humble ping tool; along with being able
+    to diagnose many network problems, its round-trip time is helpful in determining
+    the latency of a network link.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**iPerf**: iPerf allows you to conduct a series of network tests to determine
+    the bandwidth between two servers.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Network benchmarking
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: There are a number of areas that we need to benchmark on the network to be able
+    to understand any limitation and make sure there are no misconfigurations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A standard Ethernet frame is 1,500 bytes, while a **jumbo frame** is typically
+    9,000 bytes. This increased frame size reduces the overheads for sending data.
+    If you have configured your network with a jumbo frame, the first thing to check
+    is that they are configured correctly across all your servers and networking devices.
+    If jumbo frames are configured incorrectly, Ceph will exhibit strange, random
+    behavior that is very hard to trace; therefore, it is essential that jumbo frames
+    are configured correctly and confirmed to be working before deploying Ceph over
+    the top of your network.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To confirm whether jumbo frames are working correctly, you can use `ping` to
+    send large packets with the **don''t fragment** flag set:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: This command should be run across all your nodes to make sure they can ping
+    each other using jumbo frames. If it fails, investigate the issue and resolve
+    it before deploying Ceph.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The next test to undertake is to measure the round-trip time, also with the
+    ping tool. Using the packet size parameter again but with the don't fragment flag,
+    it is possible to test the round-trip time of certain packet sizes up to 64 KB,
+    which is the maximum IP packet size.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here are some example readings between two hosts on a **10GBase-T** network:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 32 B = 85 microseconds
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 4 KB = 112 microseconds
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 16 KB = 158 microseconds
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 64 KB = 248 microseconds
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: As you can see, larger packet sizes impact the round-trip time; this is one
+    reason why larger I/O sizes will see a decrease in IOPS in Ceph.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, let's test the bandwidth between two hosts to determine whether we
+    get the expected performance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Run `iperf -s` on the server that will run the iPerf server role:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/4d070ce1-8ae2-4abd-8372-106808543485.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Then, run the `iperf -c <address of iperf server>` command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/daaba4d2-f02a-49d7-89c2-5f65a17c2187.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: In this example, the two hosts are connected via a 10 G network and obtain near
+    the maximum theoretical throughput. If you do not see the correct throughput,
+    an investigation into the network, including host configuration, needs to be done.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Disk benchmarking
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: It is a good idea to understand the underlying performance of the hard disks
+    and SSDs in your Ceph cluster, as this will enable you to predict the overall
+    performance of your Ceph cluster. To benchmark the disks in your cluster, the
+    fio tool will be used.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Use fio carefully if you're operating in write mode. If you specify a block
+    device, fio will happily write over any data that exists on that disk.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Fio is a complex tool with many configuration options. For the purpose of this
+    chapter, we will concentrate on using it to perform basic read and write benchmarks:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Install the fio tool on a Ceph OSD node:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The preceding command gives the following output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/6bc4ebec-f7eb-4ac6-857c-0075659ca86f.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Create a new file and place the following fio configuration into it:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: The previous fio configuration will run a single-threaded 4 KB random write
+    test for 30 seconds. It will create a 1G `test.fio` file in the root of the filesystem.
+    If you wish to target a block device directly, simply set the filename to the
+    block device. However note that with the preceding warning, fio will overwrite
+    any data on that block device.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Notice that the job is set to use direction, so the page cache will not accelerate
+    any I/O operations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To run the fio job, simply call `fio` with the name of the file to which you
+    saved the previous configuration:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The preceding command gives the following output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/89a59553-d4de-4a05-9d45-e95acf0c2bff.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Once the job is done, fio will produce an output similar to what's shown in
+    the previous screenshot. You can see that the fio job runs 39 IOPS and 162 MBps
+    on an average, and that the average latency was 25 milliseconds.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There is also a breakdown of latency percentiles, which can be useful for understanding
+    the spread of the request latency.
+  prefs: []
+  type: TYPE_NORMAL
+- en: RADOS benchmarking
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The next step is to benchmark the RADOS layer. This will give you a combined
+    figure, including the performance of the disks, networking—along with the overheads
+    of the Ceph code—and extra replicated copies of data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The RADOS command-line tool has a built-in benchmarking command, which by default
+    initiates 16 threads, all writing 4 MB objects. To run the RADOS benchmark, run
+    the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This will run the write benchmark for 10 seconds:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/672192f0-a7a5-452c-975e-36c69e8ba536.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: In the previous example, it can be seen that the cluster was able to sustain
+    a write bandwidth of around 480 MBps. The output also gives you latency and other
+    useful figures. Notice that at the end of the test, it deletes the objects that
+    were created as part of the benchmark automatically. If you wish to use the RADOS
+    tool to carry out read benchmarks, you need to specify the `--no-cleanup` option
+    to leave the objects in place, and then run the benchmark again with the benchmark
+    type specified as `seq` instead of `write`. You will manually need to clear the
+    bench objects afterward.
+  prefs: []
+  type: TYPE_NORMAL
+- en: RBD benchmarking
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Finally, we will test the performance of RBDs using our favorite tool, fio.
+    This will test the entire software and hardware stack, and the results will be
+    very close to what clients would expect to observe. By configuring fio to emulate
+    certain client applications, we can also get a feel for the expected performance
+    of these applications.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To test the performance of an RBD, we will use the fio RBD engine, which allows
+    fio to talk directly to the RBD image. Create a new fio configuration and place
+    the following into it:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: You can see that, unlike the disk benchmarking configuration, instead of using
+    the `libaio` engine, this configuration file now uses the `rbd` engine. When using
+    the `rbd` engine, you also need to specify the RADOS pool and the `cephx` user.
+    Finally, instead of specifying a filename or block device, you simply need to
+    specify an RBD image that exists in the RADOS pool that you configured.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Then, run the fio job to test the performance of your RBD:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/44af914a-1fba-4077-a0ac-ebfc30b6b656.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: As can be seen in the preceding output, the fio tool is using the RBD engine
+    directly, bypassing the requirement for an RBD to be mounted to the Linux operating
+    system before it can be tested.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Recommended tunings
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Tuning your Ceph cluster will enable you to get the best performance and the
+    most benefits from your hardware. In this section, we will look at recommended
+    Ceph tuning options.
+  prefs: []
+  type: TYPE_NORMAL
+- en: It's important to understand that by tuning, all you are doing is reducing bottlenecks.
+    If you manage to reduce enough bottlenecks in one area, the bottleneck will simply
+    shift to another area. You will always have a bottleneck somewhere, and eventually,
+    you will reach a point where you are simply over the limit of what a particular
+    hardware can provide. Therefore, the goal should be to reduce bottlenecks in the
+    software and operating system to unlock the entire potential of your hardware.
+  prefs: []
+  type: TYPE_NORMAL
+- en: CPU
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: As Ceph is software-defined for storage, its performance is heavily affected
+    by the speed of the CPUs in the OSD nodes. Faster CPUs mean that the Ceph code
+    can run faster and will spend less time processing each I/O request. The result
+    is a lower latency per I/O, which, if the underlying storage can cope, will reduce
+    the CPU as a bottleneck and give a higher overall performance. [Chapter 1](0f4119df-b421-4349-86c8-b68444743f8a.xhtml),
+    *Planning for Ceph*, stated a preference for high Ghz processors rather than high
+    core count, for performance reasons; however, there are additional concerns with
+    high-core-count CPUs when they are over-specified for the job.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To understand these concerns, we will need to cover a brief history on CPU
+    design. During the early 2000s, CPUs were all single-core designs, which ran constantly
+    at the same frequency and didn''t support many low-power modes. As they moved
+    to higher frequencies and core counts started, it became apparent that not every
+    core would be able to run at its maximum frequency all the time. The amount of
+    heat generated from the CPU package was simply too great. Fast forward to today,
+    and this still holds true: there is no such thing as a 4 GHz 20-core CPU; it would
+    simply generate too much heat to be feasible.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: However, the clever people who designed CPUs came up with a solution, which
+    allowed each core to run at a different frequency and also allowed them to power
+    themselves down into deep sleep states. Both approaches lowered the power and
+    cooling requirements of the CPU down to single-digit watts.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The CPUs have much lower clock speeds, but with the ability for a certain total
+    number of cores to engage turbo mode, higher GHz are possible. There is normally
+    a gradual decrease in the top turbo frequency as the number of active cores increases
+    to keep the heat output below a certain threshold. If a low-threaded process is
+    started, the CPU wakes up a couple of cores and speeds them up to a much higher
+    frequency to get better single-threaded performance. In Intel CPUs, the different
+    frequency levels are called **P-states** and sleep levels are called **C-states**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This all sounds like the perfect package: a CPU that, when idle, consumes hardly
+    any power, and yet when needed, it can turbo boost a handful of cores to achieve
+    high clock speed. Unfortunately, there is no such thing as a free lunch. There
+    are some overheads with this approach that have a detrimental effect on the latency
+    of sensitive applications, with Ceph being one of them.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'There are two main problems with this approach that impact the latency of sensitive
+    applications, the first being that it takes time for a core to wake up from a
+    sleep state. The deeper the sleep, the longer it takes to wake up. The core has
+    to reinitialize certain internal components before it is ready to be used. Here
+    is a list from an Intel E3-1200v5 CPU; older CPUs may fare slightly worse:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: POLL = 0 microsecond
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: C1-SKL = 2 microseconds
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: C1E-SKL = 10 microseconds
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: C3-SKL = 70 microseconds
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: C6-SKL = 85 microseconds
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: C7s-SKL = 124 microseconds
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: C8-SKL = 200 microseconds
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We can see that in the worst case, it may take a core up to 200 microseconds
+    to wake up from its deepest sleep. When you consider that a single Ceph I/O may
+    require several threads across several nodes to wake up a CPU core, these exit
+    latencies can start to really add up. While P-states that effect the core frequency
+    don't impact performance quite as much as the C-state exit latencies, the core's
+    frequency doesn't immediately increase in a speed to maximum as soon as its in
+    use. This means that under low utilization, the CPU cores may only be operating
+    at a low GHz. This leads us to the second problem, which lies with the Linux scheduler.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Linux is aware of what core is active and which C-state and P-state each core
+    is running at. It can fully control each core's behavior. Unfortunately, Linux's
+    scheduler doesn't take any of this information into account; instead, it prefers
+    to try to balance threads across cores evenly. This means that at low utilization,
+    all the CPU cores will spend the bulk on their time in their lowest C-state and
+    will operate at a low frequency. During a low utilization, this can impact the
+    latency for small I/Os by 4-5x, which is a significant impact.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Until Linux has a power-aware scheduler that will take into account which cores
+    are already active and schedules threads on them to reduce latency, the best approach
+    is to force the CPU to only sleep down to a certain C-state and force it to run
+    at the highest frequency all the time. This does increase the power draw, but
+    in the newest models of CPU, this has somewhat been reduced. For this reason,
+    it should be clear why it is recommended to size your CPU to your workload. Running
+    a 40-core server at a high C-state and high frequency will consume a lot of power.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To force Linux to only drop-down to the C1 C-state, add this to your GRUB configuration:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Some Linux distributions have a performance mode where this runs the CPUs at
+    a maximum frequency. However, the manual way to achieve this is to echo values
+    via `sysfs`. Sticking the following in `/etc/rc.local` will set all your cores
+    to run at their maximum frequency on the boot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After you restart your OSD node, these changes should be in effect. Confirm
+    this by running these commands:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: As mentioned earlier in this chapter, before making these changes, run a reference
+    benchmark, and then do it again afterward so that you can understand the gains
+    made by this change.
+  prefs: []
+  type: TYPE_NORMAL
+- en: BlueStore
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The latest versions of Ceph contain an auto-tuning functionality for BlueStore
+    OSDs. The auto-tuning works by analyzing the cache utilization of the OSDs and
+    adjusting the caching thresholds for the OSD, RocksDB, and data caches, depending
+    on the current hit rate. It also limits the sum of these caches to try to limit
+    the total OSD memory usage to the limit set by the `osd_memory_target` variable,
+    which is set to 4 GB by default.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Obviously, if you have less RAM in the Ceph node and therefore it unable to
+    provide 4 GB for each OSD, this figure would need to be reduced to avoid the node
+    running out of memory. However, if the Ceph node has sufficient memory, it would
+    be recommended to increase the `osd_memory_target` variable to allow Ceph to make
+    as much use of the installed memory as possible. Once enough RAM has been assigned
+    to the OSD and RocksDB, any additional RAM will be used as a data cache and will
+    help to service the top-percentile read IOs much more effectively. The current
+    auto-tuning algorithm is fairly slow and takes a while to ramp up, so at least
+    24-48 hours should be given to see the full effect of a change to the `osd_memory_target`
+    variable.
+  prefs: []
+  type: TYPE_NORMAL
+- en: WAL deferred writes
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: BlueStore can journal writes in the RocksDB WAL and flush them at a later date,
+    allowing for write coalescing and ordering. This can bring large performance improvements
+    for clusters that use spinning disks with flash-based devices for RocksDB.
+  prefs: []
+  type: TYPE_NORMAL
+- en: By default, if the OSD is identified as a spinning HDD, writes less or equal
+    to 32 KB are written into the WAL of the OSD and are then acknowledged and sent
+    back to the client. This is controlled by the `bluestore_prefer_deferred_size_hdd` variable;
+    this value can be adjusted if it is determined that your workload would benefit
+    from also deferring larger writes via the WAL to achieve lower latency and higher
+    IOPS. Thought should also be given to the write load of the flash device holding
+    the WAL, both for bandwidth and endurance reasons.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The BlueStore configuration also limits how many writes can be queued up before
+    the OSD is forced to flush them down to the disk; this can be controlled via the
+    `bluestore_deferred_batch_ops` variable and is set by default to `64`. Increasing
+    this value may increase total throughput, but also runs the risk of the HDD spending
+    large amounts of time being saturated and raising the average latency.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Filestore
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In nearly all cases, BlueStore outperforms filestore and solves several limitations,
+    and therefore it is recommended that your cluster be upgraded to BlueStore. However,
+    for completeness, the following are the items you can tune to improve the performance
+    of filestore, should your cluster still be running it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: VFS cache pressure
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: As the name suggests, the filestore object store works by storing RADOS objects
+    as files on a standard Linux filesystem. In most cases, this will be XFS. As each
+    object is stored as a file, there will likely be hundreds of thousands, if not
+    millions, of files per disk. A Ceph cluster is composed of 8 TB disks and is used
+    for an RBD workload. Assuming that the RBD is made up of the standard 4 MB objects,
+    there would be nearly 2,000,000 objects per disk.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When an application asks Linux to read or write to a file on a filesystem, it
+    needs to know where that file actually exists on the disk. To find this location,
+    it needs to follow the structure of directory entries and inodes. Each one of
+    these lookups will require disk access if it's not already cached in memory. This
+    can lead to poor performance in some cases if the Ceph objects, which are required
+    to be read or written to, haven't been accessed in a while and are hence not cached.
+    This penalty is a lot higher in spinning disk clusters as opposed to SSD-based
+    clusters, due to the impact of the random reads.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'By default, Linux favors the caching of data in the page cache versus the caching
+    of inodes and directory entries. In many cases in Ceph, this is the opposite of
+    what you want to happen. Luckily, there is a tuneable kernel that allows you to
+    tell Linux to prefer directory entries and inodes over page caches; this can be
+    controlled with the following `sysctl` setting:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: Where a lower number sets a preference to cache inodes and directory entries,
+    do not set this to zero. A zero setting tells the kernel not to flush old entries,
+    even in the event of a low-memory condition, and can have adverse effects. A value
+    of `1` is recommended.
+  prefs: []
+  type: TYPE_NORMAL
+- en: WBThrottle and/or nr_requests
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Filestore uses buffered I/O to write; this brings a number of advantages if
+    the filestore journal is on a faster media. Client requests are acknowledged as
+    soon as they are written to the journal, and are then flushed to the data disk
+    at a later date by the standard writeback functionality in Linux. This allows
+    the spinning-disk OSDs to provide write latency similar to SSDs when writing in
+    small bursts. The delayed writeback also allows the kernel to rearrange I/O requests
+    to the disk to hopefully either coalesce them, or allow the disk heads to take
+    a more optimal path across the platters. The end effect is that you can squeeze
+    some more I/O out of each disk than what would be possible with a direct or sync
+    I/O.
+  prefs: []
+  type: TYPE_NORMAL
+- en: However, the problem occurs when the amount of incoming writes to the Ceph cluster
+    outstrips the capabilities of the underlying disks. In this scenario, the number
+    of pending I/Os waiting to be written on disk can increase uncontrollably, and
+    the resulting queue of I/Os can saturate the disk and Ceph queues. Read requests
+    are particularly poorly effected, as they get stuck behind potentially thousands
+    of write requests, which may take several seconds to flush to the disk.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To combat this problem, Ceph has a writeback throttle mechanism built into filestore
+    called **WBThrottle**. It is designed to limit the amount of writeback I/Os that
+    can queue up and start the flushing process earlier than what would be naturally
+    triggered by the kernel. Unfortunately, testing has shown that the defaults may
+    still not curtail the behavior that can reduce the impact on the read latency.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Tuning can alter this behavior to reduce the write queue lengths and allow reads
+    not to get too impacted. However, there is a trade-off; by reducing the maximum
+    number of writes allowed to be queued up, you can reduce the kernel's opportunity
+    to maximize the efficiency of reordering the requests. Some thought needs to be
+    given to what is important for your given use case, workloads, and tune to match
+    it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To control the writeback queue depth, you can either reduce the maximum amount
+    of outstanding I/Os using Ceph's WBThrottle settings, or lower the maximum outstanding
+    requests at the block layer in the kernel. Both can effectively control the same
+    behavior, and it's really a preference of how you want to implement the configuration.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'It should also be noted that the operation priorities in Ceph are more effective
+    with a shorter queue at the disk level. By shortening the queue at the disk, the
+    main queuing location moves up into Ceph, where it has more control over what
+    I/O has priority. Consider the following example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: With the release of the Linux 4.10 kernel, a new feature was introduced, which
+    deprioritizes writeback I/O; this greatly reduces the impact of write-starvation
+    with Ceph and is worth investigating if running the 4.10 kernel is feasible.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Throttling filestore queues
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In the default configuration, when a disk becomes saturated, its disk queue
+    will gradually fill up. Then, the filestore queue will start to fill up. Until
+    this point, I/O would have been accepted as fast as the journal could accept it.
+    As soon as the filestore queue fills up and/or the WBThrottle kicks in, I/O will
+    suddenly be stopped until the queues fall back below the thresholds. This behavior
+    will lead to large spikes and, most likely, periods of low performance, where
+    other client requests will experience high latency.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To reduce the spikiness of filestore when the disks become saturated, there
+    are some additional configuration options that can be set to gradually throttle
+    back operations as the filestore queue fills up, instead of bouncing around the
+    hard limit.
+  prefs: []
+  type: TYPE_NORMAL
+- en: filestore_queue_low_threshhold
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This is expressed as a percentage between 0.0 and 1.0\. Below this threshold,
+    no throttling is performed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: filestore_queue_high_threshhold
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This is expressed as a percentage between 0.0 and 1.0\. Between the low and
+    high threshold, throttling is carried out by introducing a per-I/O delay, which
+    is linearly increased from 0 to `filestore_queue_high_delay_multiple/filestore_expected_throughput_ops`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: From the high threshold to the maximum, it will throttle at the rate determined
+    by `filestore_queue_max_delay_multiple/filestore_expected_throughput_ops`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Both of these throttle rates use the configured one, which is the expected throughput
+    of the disk to calculate the correct delay to introduce. The `delay_multiple`
+    variables are there to allow an increase of this delay if the queue goes over
+    the high threshold.
+  prefs: []
+  type: TYPE_NORMAL
+- en: filestore_expected_throughput_ops
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This should be set to the expected IOPS's performance of the underlying disk
+    where the OSD is running.
+  prefs: []
+  type: TYPE_NORMAL
+- en: filestore_queue_high_delay_multiple
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Between the low and high thresholds, this multiple is used to calculate the
+    correct amount of delay to introduce.
+  prefs: []
+  type: TYPE_NORMAL
+- en: filestore_queue_max_delay_multiple
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Above the maximum queue size, this multiplier is used to calculate an even greater
+    delay to hopefully stop the queue from ever filling up.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Splitting PGs
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'A filesystem has a limit on the number of files that can be stored in a directory
+    before performance starts to degrade when asked to list the contents:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: As Ceph is storing millions of objects per disk—which are just files. It splits
+    the files across a nested directory structure to limit the number of files placed
+    in each directory.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: As the number of objects in the cluster increases, so does the number of files
+    per directory.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: When the number of files in these directories exceeds these limits, Ceph splits
+    the directory into further subdirectories and migrates the objects to them.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: This operation can have a significant performance penalty when it occurs. Furthermore,
+    XFS tries to place its files in the same directory close together on the disk.
+    When PG splitting occurs, fragmentation of the XFS filesystem can occur, leading
+    to further performance degradation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: By default, Ceph will split a PG when it contains 320 objects. An 8 TB disk
+    in a Ceph cluster configured with the recommended number of PGs per OSD will likely
+    have over 5,000 objects per PG. This PG would have gone through several PG split
+    operations in its lifetime, resulting in a deeper and more complex directory structure.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As mentioned in the *VFS cache pressure* section, to avoid costly dentry lookups,
+    the kernel tries to cache them. The result of PG splitting means that there is
+    a higher number of directories to cache, and there may not be enough memory to
+    cache them all, leading to poorer performance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'A common approach to this problem is to increase the allowed number of files
+    in each directory by setting the OSD configuration options, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Also, use the following setting:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'With the following formula, you can set at what threshold Ceph will split a
+    PG:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/3f606921-6845-425b-80be-548fee6c4353.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Care should be taken, however. Although increasing the threshold will reduce
+    the occurrences of PG splitting and also reduce the complexity of the directory
+    structure, when a PG split does occur, it will have to split far more objects.
+    The greater the number of objects that need to be split, the greater the impact
+    on performance, which may even lead to OSDs timing out. There is a trade-off of
+    split frequency to split time; the defaults may be slightly on the conservative
+    side, especially with larger disks.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Doubling or tripling the split threshold can probably be done safely without
+    too much concern; greater values should be tested with the cluster under I/O load
+    before putting it into production.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Scrubbing
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Scrubbing is Ceph's way of verifying that the objects stored in RADOS are consistent,
+    and to protect against bit rot or other corruptions. Scrubbing can either be normal
+    or deep, depending on the set schedule. During a normal scrub operation, Ceph
+    reads all objects for a certain PG and compares the copies to make sure that their
+    size and attributes match.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A deep scrub operation goes one step further and compares the actual data contents
+    of the objects. This generates a lot more I/O than the simpler standard scrubbing
+    routine. Normal scrubbing is carried out daily, whereas deep scrubbing should
+    be carried out weekly due to the extra I/O load.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Despite being deprioritized, scrubbing does have an impact on client IO, and
+    so, there are a number of OSD settings that can be tweaked to guide Ceph as to
+    when it should carry out the scrubbing.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `osd _scrub_begin_hour` and `osd _scrub_end_hour` OSD configuration options
+    determine the window Ceph will try to schedule scrubs in. By default, these are
+    set to allow scrubbing to occur throughout a 24-hour period. If your workload
+    only runs during the day, you might want to adjust the scrub start and end times
+    to tell Ceph that you want it to scrub during off-peak times only. The `osd_scrub_sleep`
+    configuration option controls the amount of time in seconds that a scrub operation
+    waits between each chunk—this can help to allow the client IO to be serviced in-between
+    the reading of each object. The chunk size is determined by the two variables `osd_scrub_chunk_min`
+    and `osd_scrub_chunk_max`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: It should be noted that this time, a window is only honored if the PG has not
+    fallen outside its maximum scrub interval. If it has, it will be scrubbed, regardless
+    of the time window settings. The default maximum intervals for both normal and
+    deep scrubs are set to one week.
+  prefs: []
+  type: TYPE_NORMAL
+- en: OP priorities
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Ceph has the ability to prioritize certain operations over others, with the
+    idea that the client I/Os should have precedence over the recovery, scrubbing,
+    and snapshot trimming IO. These priorities are controlled by the following configuration
+    options:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, the higher the value, the higher priority. The default values work fairly
+    well, and there shouldn't be much requirement to change them. But there can be
+    some benefit in lowering the priority of scrub and recovery operations to limit
+    their impact on the client I/O. It's important to understand that Ceph can only
+    prioritize the I/O in the sections of the I/O path that it controls. Therefore,
+    tuning the disk queue lengths in the previous section may be needed to get the
+    maximum benefits.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The network
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The network is a core component of a Ceph cluster, and its performance will
+    greatly affect the overall performance of the cluster. 10 GB should be treated
+    as a minimum; 1 GB networking will not provide the required latency for a high
+    performance Ceph cluster. There are a number of tunings that can help to improve
+    network performance which is done by decreasing latency and increasing throughput.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The first thing to consider if you wish to use jumbo frames is using an MTU
+    of 9,000 instead of 1,500; each I/O request can be sent using fewer Ethernet frames.
+    As each Ethernet frame has a small overhead, increasing the maximum Ethernet frame
+    to 9,000 can help. In practice, gains are normally less than 5% and should be
+    weighed against the disadvantages of having to make sure every device is configured
+    correctly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following network options set in your `sysctl.conf` file are recommended
+    to maximize network performance:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: If you are using IPv6 for your Ceph cluster, make sure you use the appropriate
+    IPv6 `sysctl` options.
+  prefs: []
+  type: TYPE_NORMAL
+- en: General system tuning
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: There are a number of general system parameters that are recommended to be tuned
+    to best suit Ceph's performance requirements. The following settings can be added
+    to your `/etc/sysctl.conf` file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Make sure that the system has sufficient memory free at all times:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Increase the maximum number of allowed processes:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Use the following to set the maximum number of file handles:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: Kernel RBD
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The Linux kernel RBD driver allows you to directly map Ceph RBDs as standard
+    Linux block devices and use them in the same way as any other device. Generally,
+    kernel-mapped RBDs need minimum configuration, but in some special cases, some
+    tuning may be necessary.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Firstly, it is recommended to use a kernel that is as new as possible because
+    newer kernels will have better RBD support, and in some cases, improved performance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Queue depth
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Since kernel 4.0, the RBD driver uses `blk-mq`, which is designed to offer higher
+    performance than the older queuing system. By default, the maximum outstanding
+    requests possible with RBD when using `blk-mq` are 128\. For most use cases, this
+    is more than enough; however, if your workload needs to utilize the full power
+    of a large Ceph cluster, you may find that only having 128 outstanding requests
+    is not enough. There is an option that can be specified when mapping the RBD to
+    increase this value, which can be set next.
+  prefs: []
+  type: TYPE_NORMAL
+- en: readahead
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: By default, RBD will be configured with a 128 KB `readahead`. If your workload
+    mainly involves large sequential reading, you can get a significant boost in performance
+    by increasing the `readahead` value. In kernels before 4.4, there was a limitation
+    where `readahead` values larger than 2 MB were ignored. In most storage systems,
+    this was not an issue, as the stripe sizes would have been smaller than 2 MB.
+    As long as `readahead` is bigger than the stripe size, all the disks will be involved
+    and performance will increase.
+  prefs: []
+  type: TYPE_NORMAL
+- en: By default, a Ceph RBD is striped across 4 MB objects, and so an RBD has a chunk
+    size of 4 MB and *a* *stripe size of 4 MB * number of OSDS in the cluster*. Therefore,
+    with a `readahead` size smaller than 4 MB, most of the time, `readahead` will
+    be doing very little to improve performance, and you will likely see that read's
+    performance is struggling to exceed that of a single OSD.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In kernel 4.4 and above, you can set the `readahead` value much higher and experience
+    read performance in the range of hundreds of MBs in a second.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Tuning CephFS
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: There are two main performance characteristics that determine CephFS performance—the
+    speed of metadata access and the speed of data access, although in the majority
+    of cases, both of these contribute to access requests.
+  prefs: []
+  type: TYPE_NORMAL
+- en: It is important to understand that in CephFS, once the metadata has been retrieved
+    for a file, reads to the actual file data do not require any further metadata
+    operations until the file is closed by the client. Similarly, when writing files,
+    only when dirty data is flushed by the client is the metadata updated. Thus, for
+    a large, sequential buffered IO, metadata operations will likely only make up
+    a small proportion of the total cluster IO.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Similarly, for CephFS filesystems that are dealing with a large number of clients
+    constantly opening and closing lots of smaller files, metadata operations will
+    have a much bigger role to play in determining overall performance. Additionally,
+    metadata is used to supply client information surrounding the filesystem, such
+    as providing directory listings.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Dealing with CephFS's data pool performance should be handled like any other
+    Ceph performance requirements that were covered in this chapter, so for the purpose
+    of this section, metadata performance will be the focus.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Metadata performance is determined by two factors: the speed of reading/writing
+    metadata via the RADOS metadata pool, and the speed at which the MDS can handle
+    client requests. First, make sure that the metadata pool is residing on flash
+    storage, as this will reduce the latency of metadata requests by at least and
+    order of magnitude, if not more. However, as was discussed earlier in the *Latency*
+    section of this chapter, the latency introduced by a distributed network-storage
+    platform can also have an impact on metadata performance.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: To work around some of this latency, the MDS has the concept of a local cache
+    to serve hot metadata requests from. By default, an MDS reserves 1 GB of RAM to
+    use as a cache and, generally speaking, the more ram you can allocate, the better.
+    The reservation is controlled by the `mds_cache_memory_limit` variable. By increasing
+    the amount of memory the MDS can use as a cache, the number of requests having
+    to go to the RADOS pool are reduced, and the locality of the RAM will reduce metadata
+    access latency.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There will come a point when adding additional RAM brings very little benefit.
+    This may either be due to the cache being sufficiently sized that the majority
+    of requests are being served from cache, or that the number of requests the actual
+    MDS can handle has been reached.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Regarding the later point, the MDS process is single-threaded and so there will
+    come a point where the number of metadata requests is causing an MDS to consume
+    100% of a single CPU core and no additional caching or SSDs will help. The current
+    recommendations are to try and run the MDS on a high clocked CPU as possible.
+    The quad core Xeon E3s are ideal for this use and can often be obtained with frequencies
+    nearing 4 GHz for a reasonable price. Compared to some of the lower-clocked Xeon
+    CPUs, often with high core counts, the performance gain could almost be double
+    by ensuring a fast CPU is used.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you have purchased the fastest CPU possible and are finding that a single
+    MDS process is still the bottleneck, the last option should be to start deploying
+    multiple active MDSes, so that the metadata requests are sharded across multiple
+    MDSes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: RBDs and erasure-coded pools
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: When using RBDs stored in erasure-coded pools, to maintain the best performance,
+    you should try to generate full stripe writes wherever possible. When an erasure-coded
+    pool performs a full stripe write, the operation can be done via a single IO and
+    not have the penalties associated with the read-modify-write cycle with partial
+    writes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The RBD clients have some intelligence where they will issue RADOS, thus writing
+    full commands if they detect that the higher-level client IO is overwriting an
+    entire object. Making sure that the filesystem on top of the RBD is formatted
+    with the correct stripe alignment is important to ensure that as many write fulls
+    are generated as possible.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'An example of formatting an XFS filesystem on an RBD on a 4 + 2 EC pool is
+    as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: This would instruct XFS to align allocations that are best suited for the 4x1
+    MB shards that make up a 4 MB object stored on a 4 + 2 erasure pool.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Additionally, if the use case requires the direct mounting of RBDs to a Linux
+    server rather than through a QEMU/KVM virtual machine, it is also worth considering
+    using `rbd-nbd`. The userspace RBD client makes use of librbd, whereas the kernel
+    RBD client relies fully on the Ceph code present in the running kernel.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Not only does librbd mean that you can use the latest features, which may not
+    be present in the running kernel, but it also has the additional feature of a
+    writeback cache. The writeback cache performs a much better job of coalescing
+    writes into full-sized object writes than the kernel client is capable of and
+    so less performance overhead is incurred. Keep in mind that the writeback cache
+    in librbd is not persistent, so any synchronous writes will not benefit.
+  prefs: []
+  type: TYPE_NORMAL
+- en: PG distributions
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: While not strictly a performance-tuning option, ensuring even PG distribution
+    across your Ceph cluster is an essential task that should be undertaken during
+    the early stages of the deployment of your cluster. As Ceph uses CRUSH to pseudo-randomly
+    determine where to place data, it will not always balance PG equally across every
+    OSD. A Ceph cluster that is not balanced will be unable to take full advantage
+    of the raw capacity, as the most oversubscribed OSD will effectively become the
+    limit to the capacity.
+  prefs: []
+  type: TYPE_NORMAL
+- en: An unevenly balanced cluster will mean that a higher number of requests will
+    be targeted at the OSDs holding the most PGs. These OSDs will then place an artificial
+    performance ceiling on the cluster, especially if the cluster is composed of spinning-disk
+    OSDs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To rebalance PGs across a Ceph cluster, you simply have to reweight the OSD
+    so that CRUSH adjusts how many PGs will be stored on it. It's important to note
+    that, by default, the weight of every OSD is 1, and you cannot weight an underutilized
+    OSD above 1 to increase its utilization. The only option is to decrease the reweight
+    value of over-utilized OSDs, which should move PGs to the less-utilized OSDs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: It is also important to understand that there is a difference between the CRUSH
+    weight of an OSD and the reweight value. The reweight value is used as an override
+    to correct the misplacement from the CRUSH algorithm. The reweight command only
+    affects the OSD and will not affect the weight of the bucket (for example, host)
+    that it is a member of. It is also reset to 1.0 on restart of the OSD. While this
+    can be frustrating, it's important to understand that any future modification
+    to the cluster, be it increasing the number of PGs or adding additional OSDs,
+    would have likely made any reweight value incorrect. Therefore, reweighting OSDs
+    should not be looked at as a one-time operation, but something that is being continuously
+    done and will adjust to the changes in the cluster.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To reweight an OSD, use this simple command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: Once executed, Ceph will start backfilling to move PGs to their newly-assigned
+    OSDs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Of course, searching through all your OSDs and trying to find the OSD that
+    needs weighting and then running this command for every one would be a very lengthy
+    process. Luckily, there is another Ceph tool that can automate a large part of
+    this process:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This command will compare all the OSDs in your cluster and change the override
+    weighting of the top *N* OSDs, where *N* is controlled by the last parameter,
+    which is over the threshold value. You can also limit the maximum change applied
+    to each OSD by specifying the second parameter: 0.05 or 5% is normally a recommended
+    figure.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: There is also a `test-reweight-by-utilization` command, which will allow you
+    to see what the command will do before running it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'While this command is safe to use, there are a number of things that should
+    be taken into consideration before running it:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: It has no concept of different pools on different OSDs. If, for example, you
+    have an SSD tier and an HDD tier, the `reweight-by-utilization` command will still
+    try to balance data across all OSDs. If your SSD tier is not as full as the HDD
+    tier, the command will not work as expected. If you wish to balance OSDs confined
+    to a single bucket, look into the script version of this command that was created
+    by CERN.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: It is possible to reweight the cluster to the point that CRUSH is unable to
+    determine placement for some PGs. If recovery halts and one or more PGs are left
+    in a remapped state, this is likely what happened. Simply increase or reset the
+    reweight values to fix it.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Once you are confident with the operation of the command, it is possible to
+    schedule it via `cron` so that your cluster is kept in a more balanced state automatically.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Since the Luminous release, a new manager module has been included, called **Ceph
+    balancer**. This new module works continuously in the background to optimize PG
+    distribution and ensure that the maximum amount of capacity is available on your
+    Ceph cluster.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Ceph balancer module can use one of two methods to balance data distribution.
+    The first is crush-compat; this method uses an additional weight field to adjust
+    the weights of each OSD. The main benefit of crush-compat is that it's backward-compatible
+    with older clients. The other method is called upmap; upmap can achieve much more
+    fine-grained PG mapping than is possible with crush-compat as it uses new capabilities
+    in the OSD map to influence PG mapping. The downside is that due to these new
+    capabilities, Ceph clients need to be running Luminous or a newer release.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To enable ceph balancer, simply run these two commands:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: You will see Ceph start to backfill as PGs are remapped to new OSDs to balance
+    out the space utilization; this will continue to occur until the Ceph balancer
+    has reduced deviation of OSD utilization.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: You should now have extensive knowledge on how to tune a Ceph cluster to maximize
+    performance and achieve lower latency. Through the use of benchmarks, you should
+    now be able to perform before and after tests to confirm whether your tunings
+    have had the desired effect. It is worth reviewing the official Ceph documentation
+    to get a better understanding of some of the other configuration options that
+    may be beneficial to your cluster.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You have also learned about some of the key factors that effect Ceph performance
+    and how to tune them, such as CPU clock speed and sleep states. Ensuring that
+    the infrastructure your Ceph cluster is running on is running at peak performance
+    will ensure that Ceph can perform at its very best.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next chapter we will discuss tiering and how it can be used to increase
+    performance by combining different disk technologies together.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Questions
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Is PG distribution uniform by default?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Why is a full stripe write on an EC pool preferred?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: For low latency, what type of CPU should be preferred?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What three factors largely impact latency?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What automated tool can be used to balance space utilization in your cluster?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL

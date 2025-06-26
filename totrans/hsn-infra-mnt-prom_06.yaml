@@ -1,0 +1,716 @@
+- en: Prometheus Metrics Fundamentals
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Metrics are the core resources that the Prometheus stack ingests to provide
+    you with useful information. Understanding them correctly is essential to fully
+    utilize, manage, or even extend the realm of possibilities this stack has to offer.
+    From data to information, and finally to knowledge, metrics are here to help you.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In brief, the following topics will be covered in this chapter:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding the Prometheus data model
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A tour of the four core metric types
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Longitudinal and cross-sectional aggregations
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Understanding the Prometheus data model
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: To understand the Prometheus data model, we need to go through what makes a
+    time series and the storage of such data. These concepts will be invaluable throughout
+    this book.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Time series data
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Time series data can usually be defined as a sequence of numerical data points
+    that are indexed chronologically from the same source. In the scope of Prometheus,
+    these data points are collected at a fixed time interval. As such, this kind of
+    data, when represented in graphical form, will most commonly plot the evolution
+    of the data through time, with the *x* axis being time and the *y* axis being
+    the data value.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Time series databases
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: It all starts with the need to collect, store, and query measurements over time.
+    When dealing with massive amounts of data from collectors and sensors (such as
+    those that make up the Internet of Things), querying the resulting datasets is
+    extremely slow if the database isn't designed with that use case in mind. Nothing
+    prevents you from using standard relational or NoSQL databases to store time series
+    data, but the performance penalty and scalability concerns should make you ponder
+    on that decision. Prometheus chose to implement a time series database that was
+    tailored to its unique problem space.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Besides the write-heavy aspect of these types of databases, which in turn implies
+    the storage of a massive volume of measurements, it is also important to understand
+    that a simple query can span over several hours, days, or even months, returning
+    a tremendous amount of data points, but is still expected to return data reasonably
+    fast.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As such, modern time series databases store the following components:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A timestamp
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A value
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Some context about the value, encoded in a metric name or in associated key/value
+    pairs
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'An abstract example of data that fits this time series database specification
+    is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As you can see, this kind of data can be easily stored into a single table
+    in a database:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| `timestamp` | `company` | `location` | `beverage` | `value` |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `1544978108` | `ACME` | `headquarters` | `coffee` | `40172` |'
+  prefs: []
+  type: TYPE_TB
+- en: In this simple example, we can check the cups of coffee being served by a vending
+    machine located at the headquarters of the ACME company. This example has all
+    the required components of a time series if it's continually measured through
+    time.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This example does not map directly to the Prometheus data model, as it also
+    requires a metric name, but illustrates the logic we're aiming to address.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Prometheus local storage
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Local storage is the standard approach for storing data in Prometheus and, as
+    such, we must understand its basics. At a very high level, Prometheus storage
+    design is a combination of an index implementation using posting lists for all
+    currently stored labels with their values, and its own time series data format.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Data flow
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The way Prometheus stores collected data locally can be seen as a three-part
+    process. The following topics depict the stages that data goes through until it's
+    successfully persisted.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Memory
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The freshest batch of data is kept in memory for up to two hours. This includes
+    one or more chunks of data that are gathered during the two-hour time window.
+    This approach dramatically reduces disk I/O two fold; the most recent data is
+    available in memory, making it blazingly fast to query; and the chunks of data
+    are created in memory, avoiding constant disk writes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Write ahead log
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: While in memory, data is not persisted and could be lost if the process terminates
+    abnormally. To prevent this scenario, a **write-ahead log** (**WAL**) in disk
+    keeps the state of the in-memory data so that it can be replayed if Prometheus,
+    for any reason, crashes or restarts.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Disk
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: After the two-hour time window, the chunks get written to disk. These chunks
+    are immutable and, even though data can be deleted, it's not an atomic operation.
+    Instead, tombstone files are created with the information of the data that's no
+    longer required.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Layout
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The way data gets stored in Prometheus, as we can see in the following example,
+    is organized into a series of directories (blocks) containing the data chunks,
+    the LevelDB index for that data, a `meta.json` file with human-readable information
+    about the block, and tombstones for data that's no longer required. Each one of
+    these blocks represents a database.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'At the top level, you can also see the WAL for the data that''s not been flushed
+    into its own chunk yet:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: Prometheus data model
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: As we have seen so far, Prometheus stores data as time series, which includes
+    key/value pairs known as labels, a timestamp, and finally a value. The following
+    topics will expand on these components and provide the basics for each one, which
+    we will be utilizing in depth in [Chapter 7](205ddb34-6ee8-4e22-b80f-39d5b2198c29.xhtml),
+    *Prometheus Query Language - PromQL*, dedicated to PromQL.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Notation
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'A time series in Prometheus is represented as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see, it's represented as a metric name, optionally followed by one
+    or more set of label names/values inside curly brackets, and then the value of
+    the metric. Additionally, a sample will also have a timestamp with millisecond
+    precision.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Metric names
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Even though this is an implementation detail, a metric name is nothing more
+    than the value of a special label called `"__name__"`. So, if you have a metric
+    named `"beverages_total"`, internally, it's represented as `"__name__=beverages_total"`.
+    Keep in mind that labels surrounded by `"__"` are internal to Prometheus, and
+    any label prefixed with `"__"` is only available in some phases of the metrics
+    collection cycle.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The combination of labels (key/values) and the metric name defines the identity
+    of a time series.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Every metric name in Prometheus must match the following regular expression:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: This, in layman's terms, means that metric names only allow lowercase and uppercase
+    letters of the English alphabet (`a-z`), underscores (`_`), colons (`:`), and
+    Arabic numerals (`0-9`), except on the first character, where numbers are not
+    allowed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Colons are reserved for a special kind of metric-designated recording rule.
+    We will expand on this subject in another chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Metric labels
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Labels, or the key/value pairs associated with a certain metric, add dimensionality
+    to the metrics. This is an essential part of what makes Prometheus so good at
+    slicing and dicing time series, as we'll see in [Chapter 7](205ddb34-6ee8-4e22-b80f-39d5b2198c29.xhtml),* Prometheus
+    Query Language – PromQL.*
+  prefs: []
+  type: TYPE_NORMAL
+- en: While label values can be full UTF-8, label names have to match a regular expression
+    to be considered valid; for example, `"[a-zA-Z0-9_]*"`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Their main difference in regard to metric names is that label names don't allow
+    the colon (`:`).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Samples
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Samples are the collected data points, and they represent the numerical value
+    of time series data. The components that are required to define a sample are a
+    float64 value, and a timestamp with millisecond precision. Something to keep in
+    mind is that samples collected out of order will be discarded by Prometheus. The
+    same happens to samples with the same metric identity and different sample values.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Cardinality
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Depending on the computing resources being assigned to a Prometheus instance
+    (that is, CPU, memory, disk space, and IOPS), it will gracefully handle a number
+    of time series. This number can be thought of as the primary indicator of capacity
+    for that instance, and it will inform your scraping decisions: will you have thousands
+    of targets with relatively few metrics, fewer targets with a thousand metrics
+    each, or something in between? In the end, Prometheus will only be able to handle
+    that amount of time series without performance degradation.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: It is in this context that the concept of cardinality appears. This term is
+    often used to mean the number of unique time series that are produced by a combination
+    of metric names and their associated label names/values. As an example, a single
+    metric with no additional dimensions (such as labels) from an application that
+    has one hundred instances will naturally mean that Prometheus will store 100 time
+    series, one for each instance (the instance, here, is a dimension that's added
+    outside of the application); another metric from that application that had a label
+    with ten possible values will translate into 1,000 time series (10 time series
+    per instance, times 100 instances). This shows that cardinality is multiplicative—each
+    additional dimension will increase the number of produced time series by repeating
+    the existing dimensions for each value of the new one. Having multiple dimensions
+    with a large number of possible values in a metric will cause what is called a
+    cardinality explosion in Prometheus, which is the creation of a very large number
+    of time series.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When you have label values that don't have a clear limit, which can increase
+    indefinitely or above hundreds of possible values, you will also have a cardinality
+    problem. These metrics might be better suited to be handled in logs-based systems.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following are some examples of data with high or unbound cardinality that
+    should not be used as label values (or in metric names, for that matter):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Email addresses
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Usernames
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Request/process/order/transaction ID
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A tour of the four core metric types
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Prometheus metrics are divided into four main types: counters, gauges, histograms,
+    and summaries. It is essential to understand them in depth, as most functions
+    provided by Prometheus only work correctly with a given data type. So, to that
+    end, here is an overview of each.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Counter
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This is a strictly cumulative metric whose value can only increase. The only
+    exception for this rule is when the metric is reset, which brings it back to zero.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This is one of the most useful metric types because even if a scrape fails,
+    you won't lose the cumulative increase in the data, which will be available on
+    the next scrape. To be clear, in the case of a failed scrape, granularity would
+    be lost as fewer points will be saved.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To help visualize this type of metric, here are some examples of counters and
+    their graphical representation based on the test environment we created in the
+    previous chapter:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The total number of packets received by the Prometheus instance:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![](img/b19429b8-0dd4-4af4-85f4-d204334d9258.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'The total number of bytes written to disk by the Grafana instance – notice
+    the middle gap caused by an instance restart, forcing the counter to reset:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![](img/e68511cd-17b3-4aa4-a35f-e4699f038e06.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Gauge
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: A gauge is a metric that snapshots a given measurement at the time of collection,
+    which can increase or decrease (such as temperature, disk space, and memory usage).
+  prefs: []
+  type: TYPE_NORMAL
+- en: If a scrape fails, you will lose that sample, as the next scrape might encounter
+    the metric on a different value (higher/lower).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To help visualize this type of metric, here are some examples of gauges and
+    their graphical representation based on the test environment we created in the
+    previous chapter:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The number of established TCP connections on the Alertmanager instance:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![](img/8fd23da9-b580-4619-84a2-e553d41e6f04.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'The amount of free memory on the Grafana instance – notice the middle gap caused
+    by an instance restart, preventing any assumption about the possible value during
+    that period:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![](img/2bc8cac1-9a40-4ae6-9662-0f7793b061b5.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Histogram
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Recording numerical data that's inherent to each event in a system can be expensive,
+    so some sort of pre-aggregation is usually needed to conserve at least partial
+    information about what happened. However, by pre-calculating aggregations on each
+    instance (such as average since process start, rolling window, exponentially weighted,
+    and so on), a lot of granularity is lost and some calculations can be computationally
+    costly. Adding to this, a lot of pre-aggregations can't generally be re-aggregated
+    without losing meaning—the average of a thousand pre-calculated 95th percentiles
+    has no statistical meaning. Similarly, having the 99th percentile of request latency
+    collected from each instance of a given cluster (for example) gives you no indication
+    of the overall cluster's 99th percentile and no way to accurately calculate it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Histograms allow you to retain some granularity by counting events into buckets
+    that are configurable on the client side, and also by providing a sum of all observed
+    values. Prometheus histograms produce one time series per configured bucket, plus
+    an additional two that track the sum and the count of observed events. Furthermore,
+    histograms in Prometheus are cumulative, which means each bucket will have the
+    value of the previous bucket, plus the number of its own events. This is done
+    so that some buckets can be dropped for performance or storage reasons without
+    losing the overall ability to use the histogram.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The downside of using histograms is that the selected buckets need to fit the
+    range and distribution of values that are expected to be collected. The error
+    margin for quantile calculation will be directly related with this fit: too few
+    or poorly selected buckets will increase the error margins for quantile calculations.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This type of metric is especially useful to track bucketed latencies and sizes
+    (for example, request durations or response sizes) as it can be freely aggregated
+    across different dimensions. Another great use is to generate heatmaps (the evolution
+    of histograms over time).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To help visualize this type of metric, here is an example of a histogram and
+    its graphical representation based on the test environment we created in the previous
+    chapter:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'A Prometheus HTTP request duration in seconds, divided into buckets. This is
+    shown in a Grafana heatmap to better illustrate the concept of buckets:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![](img/f943c349-a36f-4a3c-8320-3518950d6dd4.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Summaries
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Summaries are similar to histograms in some ways, but present different trade-offs
+    and are generally less useful. They are also used to track sizes and latencies,
+    and also provide both a sum and a count of observed events. Additionally (and
+    if the client library used supports it), summaries can also provide pre-calculated
+    quantiles over a predetermined sliding time window. The main reason to use summary
+    quantiles is when accurate quantile estimation is needed, irrespective of the
+    distribution and range of the observed events.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Quantiles in Prometheus are referred to as φ-quantiles, where 0 ≤ φ ≤ 1.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Both quantiles and sliding window size are defined in the instrumentation code,
+    so it's not possible to calculate other quantiles or window sizes on an ad hoc
+    basis. Doing these calculations on the client side also means that the instrumentation
+    and computational cost is a lot higher. The last downside to mention is that the
+    resulting quantiles are not aggregable and thus of limited usefulness.
+  prefs: []
+  type: TYPE_NORMAL
+- en: One benefit that summaries have is that, without quantiles, they are quite cheap
+    to generate, collect, and store.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To help visualize this type of metric, here is an example of a summary and
+    its graphical representation, based on the test environment we created in the
+    previous chapter:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The maximum duration of the Prometheus rule group in seconds by quantile:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![](img/c663adc3-ae79-48e7-8d52-5511b1ba35f1.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Longitudinal and cross-sectional aggregations
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The last concept to grasp when thinking about time series is how aggregations
+    work on an abstract level. One of Prometheus'' core strengths is that it makes
+    the manipulation of time series data easy, and this slicing and dicing of data
+    usually boils down to two kinds of aggregations, which are often used together:
+    longitudinal and cross-sectional aggregations.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the context of time series, an aggregation is a process that reduces or summarizes
+    the raw data, which is to say that it receives a set of data points as input and
+    produces a smaller set (often a single element) as output. Some of the most common
+    aggregation functions in time series databases are minimum, maximum, average,
+    count, and sum.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To better understand how these aggregations work, let's look at some data using
+    the example time series we presented earlier in this chapter. To be clear, the
+    next few sections will explain how these aggregations work on an abstract level
+    and will hint at what their Prometheus counterparts are, but are not supposed
+    to be a one-to-one match with PromQL (which we will explore thoroughly in [Chapter
+    7](205ddb34-6ee8-4e22-b80f-39d5b2198c29.xhtml), *Prometheus Query Language – PromQL*).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s pretend we''ve selected `{company=ACME, beverage=coffee}` and we''re
+    now looking at the raw counters over time per location. The data would look something
+    like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| **Location/Time** | **t=0** | **t=1** | **t=2** | **t=3** | **t=4** | **t=5**
+    | **t=6** |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- | --- | --- | --- | --- | --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| **Factory** | 1,045 | 1 | 2 | 3 | 4 | 5 | 6 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| **Warehouse** | 223 | 223 | 223 | 223 | 224 | 224 | 224 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| **Headquarters** | 40,160 | 40,162 | 40,164 | 40,166 | 40,168 | 40,170 |
+    40,172 |'
+  prefs: []
+  type: TYPE_TB
+- en: Actual data wouldn't look exactly like this, as each time series is collected
+    at slightly different times. The data points would have their own timestamps associated,
+    which means they would be out of alignment. This, in turn, impacts on the results
+    of aggregations, as some method of interpolation would be applied to align data
+    points.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For argument's sake, let's say that the samples were collected every minute.
+    The metric type is probably a counter, as it's monotonically increasing, with
+    the exception of the counter that's reset at `t=1` for `location=factory`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Cross-sectional aggregation
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Cross-sectional aggregations are the easiest to understand. As we can see in
+    the following data representation, we take a column of data and apply an aggregation
+    function to it:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| **Location/Time** | **t=0** | **t=1** | **t=2** | **t=3** | **t=4** | **t=5**
+    | **t=6** |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- | --- | --- | --- | --- | --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| **Factory** | 1,045 | 1 | 2 | 3 | 4 | 5 | **6** |'
+  prefs: []
+  type: TYPE_TB
+- en: '| **Warehouse** | 223 | 223 | 223 | 223 | 224 | 224 | **224** |'
+  prefs: []
+  type: TYPE_TB
+- en: '| **Headquarters** | 40160 | 40,162 | 40,164 | 40,166 | 40,168 | 40,170 | **40,172**
+    |'
+  prefs: []
+  type: TYPE_TB
+- en: 'If we apply the `max()` aggregation, we can find out which location reported
+    more coffees were dispensed—in this case, the result would be 40,172\. Applying
+    `count()` would give us the number of offices reporting data for the dimensions
+    that were selected (`{company=ACME, beverage=coffee}`): 3.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: It's not generally sane to apply `max()` to a counter, as we'll see in [Chapter
+    7](205ddb34-6ee8-4e22-b80f-39d5b2198c29.xhtml), *Prometheus Query Language – PromQL*.
+    This is a simple and abstract example to help you understand the basics of time
+    series.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This type of aggregation usually applies to the last data points in the requested
+    set. The most common case where this is not true is when graphing the aggregation
+    over time, as it needs to be calculated for each point in the graph.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You will notice that the selected data resembles a traditional column vector
+    from linear algebra. As we'll see in [Chapter 7](205ddb34-6ee8-4e22-b80f-39d5b2198c29.xhtml),
+    *Prometheus Query Language – PromQL*, dedicated to PromQL, these will be referred
+    to as instant vectors.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Longitudinal aggregation
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Longitudinal aggregations are trickier to use because you need to select a
+    time window over which to apply the aggregation. This means they work over rows,
+    as we can see in the following representation:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| **Location/Time** | **t=0** | **t=1** | **t=2** | **t=3** | **t=4** | **t=5**
+    | **t=6** |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- | --- | --- | --- | --- | --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| **Factory** | 1,045 | 1 | 2 | 3 | **4** | **5** | **6** |'
+  prefs: []
+  type: TYPE_TB
+- en: '| **Warehouse** | 223 | 223 | 223 | 223 | **224** | **224** | **224** |'
+  prefs: []
+  type: TYPE_TB
+- en: '| **Headquarters** | 40,160 | 40,162 | 40,164 | 40,166 | **40,168** | **40,170**
+    | **40,172** |'
+  prefs: []
+  type: TYPE_TB
+- en: 'Since the current selectors we''re using return three rows of data, this means
+    we''ll have three results when applying longitudinal aggregations. In this example,
+    we''ve selected the last three minutes of data for aggregation (as we mentioned
+    previously, we''re considering a 1-minute sample interval). If we apply the `max()`
+    aggregation over time, since these are counters and there wasn''t a reset in the
+    selected window, we will get the latest values in the selected set: 6 for `location=factory`,
+    **224** for `location=warehouse`, and **40,172** for `location=headquarters`.
+    `count()` will return the number of points that were selected in the specified
+    time range—in this case, since the collection occurs every minute and we requested
+    it for three minutes, it will return **3** for each location.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A more interesting aggregation of this kind that wasn't mentioned before is
+    `rate()`. It is a particularly useful aggregation to use with counters, as you
+    can calculate the rate of change per unit of time—we will explore this in detail
+    later in this book. In this example, `rate()` would return 1, 0, and 2 for each
+    location, respectively.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Once again, we would like to point out the resemblance of the selected data
+    to a traditional matrix from mathematics. These type of selections will be referred
+    to as range vectors in PromQL.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we came to understand what time series data is, and looked
+    at an overview of how a modern time series database such as Prometheus works,
+    not only logically, but physically as well. We went through the Prometheus metrics
+    notation and how metric names and labels relate to each other, and also covered
+    what defines a sample. Prometheus metrics have four types, and we had the chance
+    to go through every one of them and provide some useful examples. Finally, we
+    dived into how longitudinal and cross-sectional aggregations work, which is essential
+    to fully take advantage of Prometheus' query language.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next chapter, we'll return to a more hands-on approach and go into Prometheus
+    server configuration, and how to manage it on both virtual machines and Kubernetes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Questions
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: What is the mandatory requirement of any graphical time series representation?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What are the components for a data point to be considered as time series data?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: When a Prometheus server crashes, what prevents it from losing data?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What is the Prometheus in-memory database time window for storing data?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What are the components of a Prometheus sample?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What are the common use cases for both histograms and summaries?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What is the difference between a cross-sectional and a longitudinal aggregation?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Further reading
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '**Prometheus storage layout**: [https://prometheus.io/docs/prometheus/latest/storage/](https://prometheus.io/docs/prometheus/latest/storage/)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Prometheus storage format**: [https://github.com/prometheus/tsdb/blob/master/docs/format/README.md](https://github.com/prometheus/tsdb/blob/master/docs/format/README.md)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Fabian Reinartz – Writing a Time Series Database from Scratch**: [https://fabxc.org/tsdb/](https://fabxc.org/tsdb/)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Prometheus data model**: [https://prometheus.io/docs/concepts/data_model/](https://prometheus.io/docs/concepts/data_model/)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Histograms and Summaries**: [https://prometheus.io/docs/practices/histograms/](https://prometheus.io/docs/practices/histograms/)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

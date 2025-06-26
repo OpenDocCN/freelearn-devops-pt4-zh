@@ -1,0 +1,1076 @@
+- en: '*Chapter 8*: Choosing the Container Base Image'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The fastest and easiest way to learn about and get some experience with containers
+    is to start working with pre-built container images, as we saw in the previous
+    chapters. After a deep dive into container management, we discovered that sometimes,
+    the available service, its configuration, or even the application version is not
+    the one that our project requires. Then, we introduced Buildah and its feature
+    for building custom container images. In this chapter, we are going to address
+    another important topic that is often questioned in community and enterprise projects:
+    the choice of a **container base image**.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Choosing the right container base image is an important task of the container
+    journey: a container base image is the underlying operating system layer that
+    our system''s service, application, or code will rely on. Due to this, we should
+    choose one that fits our best practices concerning security and updates.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we''re going to cover the following main topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Open Container Initiative image format
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Where do container images come from?
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Trusted container image sources
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Introducing Universal Base Image
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: To complete this chapter, you will need a machine with a working Podman installation.
+    As stated in [*Chapter 3*](B17908_03_epub.xhtml#_idTextAnchor068), *Running the
+    First Container*, all the examples in this book have been executed on a Fedora
+    34 system or later but can be reproduced on an operating system of your choice.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Having a good understanding of the topics that we covered in [*Chapter 4*](B17908_04_epub.xhtml#_idTextAnchor083),
+    *Managing Running Containers*, will help you easily grasp concepts regarding container
+    images.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Open Container Initiative image format
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: As we described in [*Chapter 1*](B17908_01_epub.xhtml#_idTextAnchor015), *Introduction
+    to Container Technology*, back in 2013, Docker was introduced in the container
+    landscape and became very popular rapidly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: At a high level, the Docker team introduced the concept of container images
+    and container registries, which was a game-changer. Another important step was
+    being able to *extract* containerd projects from Docker and donate them to the
+    **Cloud Native Computing Foundation** (**CNCF**). This motivated the open source
+    community to start working seriously on container engines that could be injected
+    into an orchestration layer, such as Kubernetes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Similarly, in 2015, Docker, with the help of many other companies (Red Hat,
+    AWS, Google, Microsoft, IBM, and others), started the **Open Container Initiative**
+    (**OCI**) under the Linux Foundation umbrella.
+  prefs: []
+  type: TYPE_NORMAL
+- en: These contributors developed the Runtime Specification (runtime-spec) and the
+    Image Specification (image-spec) to describe how the API and the architecture
+    for new container engines should be created in the future.
+  prefs: []
+  type: TYPE_NORMAL
+- en: After a few months of work, the OCI team released its first implementation of
+    a container engine that adhered to the OCI's specifications; the project was named
+    `runc`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: It's worth looking at the container image specification in detail and going
+    over some theory behind the practice, which we introduced in [*Chapter 2*](B17908_02_epub.xhtml#_idTextAnchor044),
+    *Comparing Podman and Docker*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The specification defines an OCI container image that consists of the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Manifest**: This contains the metadata of the contents and dependencies of
+    the image. This also includes the ability to identify one or more filesystem archives
+    that will be unpacked to get the final runnable filesystem.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Image Index (optional)**: This represents a list of manifests and descriptors
+    that can provide different implementations of the image, depending on the target
+    platform.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Set of Filesystem Layers**: The actual set of layers that should be merged
+    to build the final container filesystem.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Configuration**: This contains all the information that''s required by the
+    container runtime engine to effectively run the application, such as arguments,
+    environment variables, and so on.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We will not deep dive into every element of the OCI Image Specification, but
+    the Image Manifest deserves a closer look.
+  prefs: []
+  type: TYPE_NORMAL
+- en: OCI Image Manifest
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The Image Manifest defines a set of layers and the configuration for a single
+    container image that is built for a specific architecture and an operating system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s explore the details of the OCI Image Manifest by looking at the following
+    example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here, we are using the following keywords:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`schemaVersion`: A property that must be set to a value of `2`. This ensures
+    backward compatibility with Docker.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`config`: A property that references a container''s configuration through a
+    digest:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`mediaType`: This property defines the actual configuration format (just one
+    currently).'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`layers`: This property provides an array of descriptor objects:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`MediaType`: In this case, this descriptor should be one of the media types
+    that''s allowed for the layer''s descriptors.'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`annotations`: This property defines additional metadata for the image manifest.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: To summarize, the main goal of the specification is to make interoperable tools
+    for building, transporting, and preparing a container image to be run.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The Image Manifest Specification has three main goals:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: To enable hashing for the image's configuration, thereby generating a unique
+    ID
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: To allow multi-architecture images due to its high-level manifest (image index)
+    that references platform-specific versions of the image manifest
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: To be able to easily translate the container image into the OCI Runtime Specification
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Now, let's learn where these container images come from.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Where do container images come from?
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In the previous chapters, we used pre-built images to run, build, or manage
+    a container, but where do these container images come from?
+  prefs: []
+  type: TYPE_NORMAL
+- en: How can we dig into their source commands or into the Dockerfile/ContainerFile
+    that's used to build it?
+  prefs: []
+  type: TYPE_NORMAL
+- en: Well, as we've mentioned previously, Docker introduced the concept of container
+    image and Container Registry for storing these images – even publicly. The most
+    famous Container Registry is Docker Hub but after Docker's introduction, other
+    cloud container registries were released too.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can choose between the following cloud container registries:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Docker Hub**: This is the hosted registry solution by Docker Inc. This registry
+    also hosts official repositories and security verified images for some popular
+    open source projects.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Quay**: This is the hosted registry solution that was born under the CoreOS
+    company, though it is now part of Red Hat. It offers private and public repositories,
+    automated scanning for security purposes, image builds, and integration with popular
+    Git public repositories.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Linux Distribution Registries**: Popular Linux distributions are typically
+    community-based, such as Fedora Linux, or enterprise-based, such as **Red Hat
+    Enterprise Linux** (**RHEL**). They usually offer public container registries,
+    though these are often only available for projects or packages that have already
+    been provided as system packages. These registries are not available to end users
+    and they are fed by the Linux distributions'' maintainers.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Public Cloud Registries**: Amazon, Google, Microsoft, and other public cloud
+    providers offer private container registries for their customers.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We will explore these registries in more detail in [*Chapter 9*](B17908_09_epub.xhtml#_idTextAnchor167),
+    *Pushing Images to a Container Registry*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Docker Hub, as well as Quay.io, are public container registries where we can
+    find container images that have been created by anyone. These registries are full
+    of useful custom images that we can use as starting points for testing container
+    images quickly and easily.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Just downloading and running a container image is not always the best thing
+    to do – we could hit very old and outdated software that could be vulnerable to
+    some known public vulnerability or, even worse, we could download and execute
+    some malicious code that could compromise our whole infrastructure.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For this reason, Docker Hub and Quay.io usually offer features to underline
+    where such images come from. Let's inspect them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Docker Hub container registry service
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: As we introduced earlier, Docker Hub is the most famous Container Registry available.
+    It hosts multiple container images for community and enterprise products.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'By looking at the detail page of a container image, we can easily discover
+    all the required information about that project and its container images. The
+    following screenshot shows Alpine Linux''s Docker Hub page:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 8.1 – Alpine Linux container image on Docker Hub'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B17908_08_01.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 8.1 – Alpine Linux container image on Docker Hub
+  prefs: []
+  type: TYPE_NORMAL
+- en: As you can see, at the top of the page, we can find helpful information, the
+    latest tags, the supported architectures, and useful links to the project's documentation
+    and the issue-reporting system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: On the Docker Hub page, we can find the *Official Image* tag, just after the
+    image's name, when that image is part of Docker's Official Images program. The
+    images in this program are curated directly by the Docker team in collaboration
+    with the upstream projects' maintainers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important note
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you want to look at this page in more depth, point your web browser to [https://hub.docker.com/_/alpine](https://hub.docker.com/_/alpine).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Another important feature that's offered by Docker Hub (not only for official
+    images) is the ability to look into the Dockerfile that was used to create a certain
+    image.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If we click on one of the available tags on the container image page, we can
+    easily look at the Dockerfile of that container image tag.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Clicking on the tag named `20210804, edge` on that page will redirect us to
+    the GitHub page of the `docker-alpine` project, which is defined as the following
+    Dockerfile: [https://github.com/alpinelinux/docker-alpine/blob/edge/x86_64/Dockerfile](https://github.com/alpinelinux/docker-alpine/blob/edge/x86_64/Dockerfile).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We should always pay attention and prefer official images. If an official image
+    is not available or it does not fit our needs, then we need to inspect the Dockerfile
+    that the content creator published, as well as the container image.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Quay container registry service
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Quay is a container registry service that was acquired by CoreOS in 2014 and
+    is now part of the Red Hat ecosystem.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The registry allows its users to be more cautious once they've chosen a container
+    image by providing security scanning software.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Quay adopts the Clair project, a leading container vulnerability scanner that
+    displays reports on the repository tags web page, as shown in the following screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 8.2 – Quay vulnerability Security Scan page'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B17908_08_02.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 8.2 – Quay vulnerability Security Scan page
+  prefs: []
+  type: TYPE_NORMAL
+- en: On this page, we can click on **Security Scan** to inspect the details of that
+    security scan. If you want to learn more about this feature, please go to [https://quay.io/repository/openshift-release-dev/ocp-release?tab=tags](https://quay.io/repository/openshift-release-dev/ocp-release?tab=tags).
+  prefs: []
+  type: TYPE_NORMAL
+- en: As we've seen, using a public registry that offers every user the security scan
+    feature could help ensure that we choose the right and most secure flavor of the
+    container image we are searching for.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Red Hat Ecosystem Catalog
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The Red Hat Ecosystem Catalog is the default container registry for **Red Hat
+    Enterprise Linux** (**RHEL**) and Red Hat **OpenShift Container Platform** (**OCP**)
+    users. The web interface of this registry is publicly accessible to any users,
+    whether they are authenticated or not, although almost all the images that are
+    provided are reserved for paid users (RHEL or OCP users).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We are talking about this registry because it combines all the features we
+    talked about previously. This registry offers the following to its users:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Official container images by Red Hat
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: ContainerFile/Dockerfile sources to inspect the content of the image
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Security reports (index) about every container image that's distributed
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The following screenshot shows what this information looks like on the **Red
+    Hat Ecosystem Catalog** page:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 8.3 – MariaDB container image description page on the Red Hat Ecosystem
+    Catalog'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B17908_08_03.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 8.3 – MariaDB container image description page on the Red Hat Ecosystem
+    Catalog
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As we can see, the page shows the description of the container image we have
+    selected (MariaDB database), the version, the available architectures, and various
+    tags that can be selected from the respective drop-down menu. Some tabs also mention
+    the keywords we are interested in: *Security* and *Dockerfile*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'By clicking on the **Security** tab, we can see the status of the vulnerability
+    scan that was executed for that image tag, as shown in the following screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 8.4 – MariaDB container image Security page on the Red Hat Ecosystem
+    Catalog'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B17908_08_04.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 8.4 – MariaDB container image Security page on the Red Hat Ecosystem
+    Catalog
+  prefs: []
+  type: TYPE_NORMAL
+- en: As we can see, at the time of writing, for this latest image tag, a security
+    vulnerability has already been identified that's affecting three packages. To
+    the right, we can find the Red Hat Advisory ID, which is linked to the public
+    **Common Vulnerabilities and Exposures** (**CVEs**).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'By clicking on the **Dockerfile** tab, we can look at the source ContainerFile
+    that was used to build that container image:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 8.5 – MariaDB container image Dockerfile page on Red Hat Ecosystem
+    Catalog'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B17908_08_05.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 8.5 – MariaDB container image Dockerfile page on Red Hat Ecosystem Catalog
+  prefs: []
+  type: TYPE_NORMAL
+- en: As we can see, we can look at the source ContainerFile that was used to build
+    the container image we are going to pull and run. This is a great feature that
+    we can access by clicking on the same description page of the container image
+    we are looking for.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If we take a closer look at the preceding screenshot, we can see that the MariaDB
+    container image was built using a very special container base image: UBI8\.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**UBI** stands for **Universal Base Image**. It is an initiative that was launched
+    by Red Hat that lets every user (Red Hat customers or not) open Red Hat container
+    images. This allows the Red Hat ecosystem to expand by leveraging all the previously
+    mentioned services that are offered by the Red Hat Ecosystem Catalog, as well
+    as by leveraging the updated packages that are directly from Red Hat.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We will talk more about UBI and its container images later in this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Trusted container image sources
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In the previous section, we defined the central role of the image registry as
+    a source of truth for valid, usable images. In this section, we want to stress
+    the importance of adopting trusted images that come from trusted sources.
+  prefs: []
+  type: TYPE_NORMAL
+- en: An OCI image is used to package binaries and runtimes in a structured filesystem
+    with the purpose of delivering a specific service. When we pull that image and
+    run it on our systems without any kind of control, we implicitly trust the author
+    to not have tampered with its content by using malicious components. But nowadays,
+    trust is something that cannot be granted so easily.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As we will see in [*Chapter 11*](B17908_11_epub.xhtml#_idTextAnchor206), *Securing
+    Containers*, there are many attack use cases and malicious behaviors that can
+    be conducted from a container: privilege escalation, data exfiltration, and miners
+    are just a few examples. These behaviors can be amplified when containers that
+    are run inside Kubernetes clusters (many thousands of clusters) can spawn malicious
+    pods across the infrastructure easily.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: To help security teams mitigate this, the MITRE Corporation periodically releases
+    **MITRE ATT&CK** matrices to identify all the possible attack strategies and their
+    related techniques, with real-life use cases, and their detection and mitigation
+    best practices. One of these matrixes is dedicated to containers, where many techniques
+    are implemented based on insecure images where malicious behaviors can be conducted
+    successfully.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: You should prefer images that come from a registry that supports vulnerability
+    scans. If the scan results are available, check them carefully and avoid using
+    images that spot critical vulnerabilities.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With this in mind, what is the first step for creating a secure cloud-native
+    infrastructure? The answer is choosing images that only come from trusted sources,
+    and the first step is to configure trusted registries and patterns to block disallowed
+    ones. We will cover this in the following subsection.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Managing trusted registries
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: As shown in [*Chapter 3*](B17908_03_epub.xhtml#_idTextAnchor068), *Running the
+    First Container*, in the *Preparing your environment* section, Podman can manage
+    trusted registries with config files.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `/etc/containers/registries.conf` file (overridden by the user-related `$HOME/.config/containers/registries.conf`
+    file, if present) manages a list of trusted registries that Podman can safely
+    contact to search and pull images.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s look at an example of this file:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: This file helps us define the trusted registries that can be used by Podman,
+    so it deserves a detailed analysis.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Podman accepts both **unqualified** and **fully-qualified** images. The difference
+    is quite simple and can be illustrated as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A fully-qualified image includes a registry server FQDN, namespace, image name,
+    and tag. For example, `docker.io/library/nginx:latest` is a fully-qualified image.
+    It has a full name that cannot be confused with any other Nginx image.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: An unqualified image only includes the image's name. For example, the `nginx`
+    image can have multiple instances in the searched registries. The majority of
+    the images that result from the basic `podman search nginx` command will not be
+    official and should be analyzed in detail to ensure they're trusted. The output
+    can be filtered by the `OFFICIAL` flag and by the number of `STARS` (more is better).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The first global setting of the registries configuration file is the `unqualified-search-registry`
+    array, which defines the search list of registries for unqualified images. When
+    the user runs the `podman search <image_name>` command, Podman will search across
+    the registries defined in this list.
+  prefs: []
+  type: TYPE_NORMAL
+- en: By removing a registry from the list, Podman will stop searching the registry.
+    However, Podman will still be able to pull a fully qualified image from a foreign
+    registry.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To manage single registries and create matching patterns for specific images,
+    we can use the `[[registry]]` **Tom''s Obvious, Minimal Language** (**TOML**)
+    tables. The main settings of these tables are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`prefix`: This is used to define the image names and can support multiple formats.
+    In general, we can define images by following the `host[:port]/namespace[/_namespace_…]/repo(:_tag|@digest)`
+    pattern, though simpler patterns such as `host[:port]`, `host[:port]/namespace`,
+    and even `[*.]host` can be applied. Following this approach, users can define
+    a generic prefix for a registry or a more detailed prefix to match a specific
+    image or tag. Given a fully qualified image, if two `[[registry]]` tables have
+    a prefix with a partial match, the longest matching pattern will be used.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`insecure`: This is a Boolean (`true` or `false`) that allows unencrypted HTTP
+    connections or TLS connections based on untrusted certificates.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`blocked`: This is a Boolean (`true` or `false`) that''s used to define blocked
+    registries. If it''s set to true, the registries or images that match the prefix
+    are blocked.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`location`: This field defines the registry''s location. By default, it is
+    equal to `prefix`, but it can have a different value. In that case, a pattern
+    that matches a custom prefix namespace will resolve to the `location` value.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Along with the main `[[registry]]` table, we can define an array of `[[registry.mirror]]`
+    TOML tables to provide alternate paths to the main registry or registry namespace.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When multiple mirrors are provided, Podman will search across them first and
+    then fall back to the location that's defined in the main `[[registry]]` table.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following example extends the previous one by defining a namespaced registry
+    entry and its mirror:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: According to this example, if a user tries to pull the image tagged as `registry.example.com:5000/foo/app:latest`,
+    Podman will try `mirror1.example.com:5000/bar/app:latest`, then `mirror2.example.com:5000/bar/app:latest`,
+    and fall back to `registry.example.com:5000/foo/app:latest` in case a failure
+    occurs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Using a prefix provides even more flexibility. In the following example, all
+    the images that match `example.com/foo` will be redirected to mirror locations
+    and fall back to the main location at the end:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: In this example, when we pull the `example.com/foo/app:latest` image, Podman
+    will attempt `mirror1.example.com:5000/bar/app:latest`, followed by `mirror2.example.com:5000/bar/app:latest`
+    and `registry.example.com:5000/foo/app:latest`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'It is possible to use mirroring in a more advanced way, such as replacing public
+    registries with private mirrors in disconnected environments. The following example
+    remaps the `docker.io` and `quay.io` registries to a private mirror with different
+    namespaces:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: Important Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: Mirror registries should be kept up-to-date with mirrored repositories. For
+    this reason, administrators or SRE teams should implement an image sync policy
+    to keep the repositories updated.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, we are going to learn how to block a source that is not considered
+    trusted. This behavior could impact a single image, a namespace, or a whole registry.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following example tells Podman to not search for or pull images from a
+    blocked registry:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'It is possible to refine the blocking policy by passing a specific namespace
+    without blocking the whole registry. In the following example, every image search
+    or pull that matches the `quay.io/foo` namespace pattern defined in the `prefix`
+    field is blocked:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: According to this pattern, if the user tries to pull an image called `quay.io/foo/nginx:latest`
+    or `quay.io/foo/httpd:v2.4`, the prefix is matched, and the pull is blocked. No
+    blocking action occurs when the `quay.io/bar/fedora:latest` image is pulled.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Users can also define a very specific blocking rule for a single image or even
+    a single tag by using the same approach that was described for namespaces. The
+    following example blocks a specific image tag:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: It is possible to combine many blocking rules and add mirror tables on top of
+    them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: In a complex infrastructure with many machines running Podman (for example,
+    developer workstations), a clever idea would be to keep the registry's configuration
+    file updated using configuration management tools and declaratively apply the
+    registry's filters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Fully qualified image names can become quite long if we sum up the registry
+    FQDN, namespace(s), repository, and tags. It is possible to create aliases using
+    the `[aliases]` table to allow short image names to be used. This approach can
+    simplify image management and reduce human error. However, aliases do not handle
+    image tags or digests.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following example defines a series of aliases for commonly used images:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: When an alias matches a short name, it is immediately used without the registries
+    defined in the `unqualified-search-registries` list being searched.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: We can create custom files inside the `/etc/containers/registries.conf.d/` folder
+    to define aliases without bloating the main configuration file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With that, we have learned how to manage trusted sources and block unwanted
+    images, registries, or namespaces. This is a security best practice but it does
+    not relieve us from the responsibility of choosing a valid image that fits our
+    needs while being trustworthy and having the lowest attack surface possible. This
+    is also true when we're building a new application, where base images must be
+    lightweight and secure. Red Hat UBI images can be a helpful solution for this
+    problem.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Introducing Universal Base Image
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: When working on enterprise environments, many users and companies adopt RHEL
+    as the operating system of choice to execute workloads reliably and securely.
+    RHEL-based container images are available too, and they take advantage of the
+    same package versioning as the OS release. All the security updates that are released
+    for RHEL are immediately applied to OCI images, making them wealthy, secure images
+    to build production-grade applications with.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Unfortunately, RHEL images are not publicly available without a Red Hat subscription.
+    Users who have activated a valid subscription can use them freely on their RHEL
+    systems and build custom images on top of them, but they are not freely redistributable
+    without breaking the Red Hat enterprise agreement.
+  prefs: []
+  type: TYPE_NORMAL
+- en: So, why worry? There are plenty of commonly used images that can replace them.
+    This is true, but when it comes to reliability and security, many companies choose
+    to stick to an enterprise-grade solution and this is not an exception for containers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For these reasons, and to address the redistribution limitations of RHEL images,
+    Red Hat created the **Universal Base Image**, also known as **UBI**. UBI images
+    are freely redistributable, can be used to build containerized applications, middleware,
+    and utilities, and are constantly maintained and upgraded by Red Hat.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'UBI images are based on the currently supported versions of RHEL: at the time
+    of writing, the **UBI7** and **UBI8** images are currently available (based on
+    RHEL7 and RHEL8, respectively), along with the **UBI9-beta** image, which is based
+    on RHEL9-beta. In general, we can consider UBI images as a subset of the RHEL
+    operating system.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: All UBI images are available on the public Red Hat registry ([registry.access.redhat.com](http://registry.access.redhat.com))
+    and Docker Hub ([docker.io](http://docker.io)).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'There are currently four different flavors of UBI images, each one specialized
+    for a particular use case:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Standard**: This is the standard UBI image. It has the most features and
+    packages availability.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Minimal**: This is a stripped-down version of the standard image with minimalistic
+    package management.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Micro**: This is a UBI version with a smaller footprint, without a package
+    manager.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`systemd` init system so that you can manage the execution of multiple services
+    in a single container.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: All of these are **free to use and redistribute** inside custom images. Let's
+    describe each in detail, starting with the UBI Standard image.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The UBI Standard image
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The UBI Standard image is the most complete UBI image version and the closest
+    one to standard RHEL images. It includes the **YUM** package manager, which is
+    available in RHEL, and can be customized by installing the packages that are available
+    in its dedicated software repositories; that is, *ubi-8-baseos* and *ubi-8-appstream*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following example shows a Dockerfile/ContainerFile that uses a standard
+    UBI8 image to build a minimal `httpd` server:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The UBI Standard image was designed for generic applications and packages that
+    are available on RHEL and already includes a curated list of basic system tools
+    (including `curl`, `tar`, `vi`, `sed`, and `gzip`) and OpenSSL libraries while
+    still retaining a small size (around 230 MiB): fewer packages means more lightweight
+    images and a smaller attack surface.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: If the UBI Standard image is still considered too big, the UBI Minimal image
+    might be a good fit.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The UBI Minimal image
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The UBI Minimal image is a stripped-down version of the UBI Standard image and
+    was designed for self-consistent applications and their runtimes (Python, Ruby,
+    Node.js, and so on). For this reason, it's smaller in size, has a small selection
+    of packages, and doesn't include the YUM package manager; this has been replaced
+    with a minimal tool called `microdnf`. The UBI Minimal image is smaller than the
+    UBI Standard image and is roughly half its size.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following example shows a Dockerfile/ContainerFile using a UBI 8 Minimal
+    image to build a proof-of-concept Python web server:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'By looking at the source code of the Python web server that''s been executed
+    by the container, we can see that the web server handler prints a *Hello World!*
+    string when an HTTP GET request is received. The server also manages signal termination
+    using the Python `signal` module, allowing the container to be stopped gracefully:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Finally, the Python executable is called by a minimal entry point script:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: The script launches the command that's passed by the array in the `CMD` instruction.
+    Also, notice the `-u` option that's passed to the Python executable in the command
+    array. This enables unbuffered output and has the container print access logs
+    in real time.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s try to build and run the container to see what happens:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: With that, our minimal Python `httpd` server is ready to operate and serve a
+    lot of barely useful but warming *Hello World!* responses.
+  prefs: []
+  type: TYPE_NORMAL
+- en: UBI Minimal works best for these kinds of use cases. However, an even smaller
+    image may be necessary. This is the perfect use case for the UBI Micro image.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The UBI Micro image
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The UBI Micro image is the latest arrival to the UBI family. Its basic idea
+    was to provide a distroless image, a stripped-down package manager without all
+    the unnecessary packages, to provide a very small image that could also offer
+    a minimal attack surface. Reducing the attack surface is required to achieve secure,
+    minimal images that are more complex to exploit.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The UBI 8 Micro image is great in multi-stage builds, where the first stage
+    creates the finished artifact(s) and the second stage copies them inside the final
+    image. The following example shows a basic multi-stage Dockerfile/ContainerFile
+    where a minimal Golang application is being built inside a UBI Standard container
+    while the final artifact is copied inside a UBI Micro image:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: The build's output results in an image that's approximately 45 MB in size.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The UBI Micro image has no built-in package manager, but it is still possible
+    to install additional packages using Buildah native commands. This works effectively
+    on an RHEL system, where all the Red Hat GPG certificates are installed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following example shows a build script that can be executed on RHEL 8\.
+    Its purpose is to install additional Python packages using the host''s `yum` package
+    manager, on top of a UBI Micro image:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: Notice that the `yum install` command is executed by passing the `--installroot
+    $mount` option, which tells the installer to use the working container mount point
+    as the temporary root to install the packages.
+  prefs: []
+  type: TYPE_NORMAL
+- en: UBI Minimal and UBI Micro images are great for implementing microservices architectures
+    where we need to orchestrate multiple containers together, with each running a
+    specific microservice.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, let's look at the UBI Init image, which allows us to coordinate the execution
+    of multiple services inside a container.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The UBI Init image
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: A common pattern in container development is to create highly specialized images
+    with a single component running inside them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To implement multi-tier applications, such as those with a frontend, middleware,
+    and a backend, the best practice is to create and orchestrate multiple containers,
+    each one running a specific component. The goal is to have minimal and very specialized
+    containers, each one running its own service/process while following the **Keep
+    It Simple, Stupid** (**KISS**) philosophy, which has been implemented in UNIX
+    systems since their inception.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Despite being great for most use cases, this approach does not always suit certain
+    special scenarios where many processes need to be orchestrated together. An example
+    is when we need to share all the container namespaces across processes, or when
+    we just want a single, *uber* image.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Container images are normally created without an init system and the process
+    that's executed inside the container (invoked by the `CMD` instruction) usually
+    gets **PID 1**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For this reason, Red Hat introduced the UBI Init image, which runs a minimal
+    `1` to be executed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The UBI Init image is slightly smaller than the Standard image but has more
+    packages available than the Minimal image.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The default CMD is set to `/sbin/init`, which corresponds to the Systemd process.
+    Systemd ignores the `SIGTERM` and `SIGKILL` signals, which are used by Podman
+    to stop running containers. For this reason, the image is configured to send `SIGRTMIN+3`
+    signals for termination by passing the `STOPSIGNAL SIGRTMIN+3` instruction inside
+    the image Dockerfile.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following example shows a Dockerfile/ContainerFile that installs the `httpd`
+    package and configures a `systemd` unit to run the `httpd` service:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: Notice the `RUN` instruction, where we create the `/etc/systemd/system/httpd.service.d/`
+    folder and the Systemd unit file. This minimal example could be replaced with
+    a `COPY` of pre-edited unit files, which is particularly useful when multiple
+    services must be created.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can build and run the image and inspect the behavior of the `init` system
+    inside the container using the `ps` command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note that the `/sbin/init` process is executed with a PID of `1` and that it
+    spawns the `httpd` processes. The container also executed `dbus-daemon`, which
+    is used by Systemd to expose its API, along with `systemd-journald` to handle
+    logs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Following this approach, we can add multiple services that are supposed to work
+    together in the same container and have them orchestrated by Systemd.
+  prefs: []
+  type: TYPE_NORMAL
+- en: So far, we have looked at the four currently available UBI images and demonstrated
+    how they can be used to create custom applications. Many public Red Hat images
+    are based on UBI. Let's take a look.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Other UBI-based images
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Red Hat uses UBI images to produce many pre-built specialized images, especially
+    for runtimes. They are usually expected to not have redistribution limitations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This allows runtime images to be created for languages, runtimes, and frameworks
+    such as Python, Quarkus, Golang, Perl, PDP, .NET, Node.js, Ruby, and OpenJDK.
+  prefs: []
+  type: TYPE_NORMAL
+- en: UBI is also used as the base image for the **Source-to-Image** (**s2i**) framework,
+    which is used to build applications natively in OpenShift without the use of Dockerfiles.
+    With s2i, it is possible to assemble images from user-defined custom scripts and,
+    obviously, application source code.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Last but not least, Red Hat's supported releases of Buildah, Podman, and Skopeo
+    are packaged using UBI 8 images.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Moving beyond Red Hat's offering, other vendors use UBI images to release their
+    images too – Intel, IBM, Isovalent, Cisco, Aqua Security, and many others adopt
+    UBI as the base for their official images on Red Hat Marketplace.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we learned about the OCI image specifications and the role
+    of container registries.
+  prefs: []
+  type: TYPE_NORMAL
+- en: After that, we learned how to adopt secure image registries and how to filter
+    out those registries using custom policies that allow us to block specific registries,
+    namespaces, and images.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, we introduced UBI as a solution to create lightweight, reliable, and
+    redistributable images based on RHEL packages.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With the knowledge you've gained in this chapter, you should be able to understand
+    OCI image specifications in more detail and manage image registries securely.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next chapter, we will explore the difference between private and public
+    registries and how to create a private registry locally. Finally, we will learn
+    how to manage container images with the specialized **Skopeo** tool.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Further reading
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'To learn more about the topics that were covered in this chapter, take a look
+    at the following resources:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'MITRE ATT&CK® Matrix: [https://attack.mitre.org/matrices/enterprise/containers/](https://attack.mitre.org/matrices/enterprise/containers/)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Things You Should Know on Kubernetes Threat Matrix: [https://cloud.redhat.com/blog/2021-kubernetes-threat-matrix-updates-things-you-should-know](https://cloud.redhat.com/blog/2021-kubernetes-threat-matrix-updates-things-you-should-know)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'How to manage Linux container registries: [https://www.redhat.com/sysadmin/manage-container-registries](https://www.redhat.com/sysadmin/manage-container-registries)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Introducing the Red Hat Universal Base Image: [https://www.redhat.com/en/blog/introducing-red-hat-universal-base-image](https://www.redhat.com/en/blog/introducing-red-hat-universal-base-image)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Introduction to Red Hat''s UBI Micro: [https://www.redhat.com/en/blog/introduction-ubi-micro](https://www.redhat.com/en/blog/introduction-ubi-micro)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

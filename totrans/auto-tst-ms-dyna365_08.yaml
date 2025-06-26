@@ -1,0 +1,1116 @@
+- en: From Customer Wish to Test Automation - The Basics
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: We are technically fully set to start writing tests at this point. This is because
+    we know how the testability framework functions, we know the test toolkit, we
+    know about the existence of the standard test libraries, and we have been provided
+    with various patterns to allow us to design efficient and effective tests.
+  prefs: []
+  type: TYPE_NORMAL
+- en: But what are we going to test? What's our business case? What are the customer
+    wishes we are going to implement?
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this chapter, we will start applying the principles and techniques discussed
+    in the previous chapters and we will build a number of basic automated tests.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As such, this chapter covers the following topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Test example 1 – A first headless test
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Test example 2 – A first positive-negative test
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Test example 3 – A first UI test
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Headless versus UI
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: From customer wish to test automation
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Our customer wishes to extend standard Dynamics 365 Business Central with an
+    elementary feature: the addition of a lookup field to the `Customer` table to
+    be populated by the user. This field has to be carried over to the whole bunch
+    of sales documents and also needs to be included in the warehouse shipping.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Data model
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Even though the purpose of such a field will be very specific, we will generically
+    name it `Lookup Value Code`. As with any other lookup field in Business Central,
+    this `Lookup Value Code` field will have a table relation (foreign key) with another
+    table, in our case a new table called `Lookup Value`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following relational diagram schematically describes the data model of
+    this new feature, with the new table in the middle and the extended standard tables
+    on the left and right sides:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/0944f2d1-a2c6-48f2-81e9-a322779925cf.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: The `Lookup Value Code` field has to be editable on all tables except for the
+    posted document header tables, that is, `Sales Shipment Header`, `Sales Invoice
+    Header`, `Sales Cr.Memo Header`, `Return Receipts Header`, and `Posted Whse. Shipment
+    Line`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Business logic
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In compliance with standard Business Central behavior, the following business
+    logic applies:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: When creating a customer from a customer template, the `Lookup Value Code` field
+    should be inherited from `Customer Template` to `Customer`
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: When selecting a customer in the `Sell-to Customer` field on a sales document,
+    the `Lookup Value Code` field should be inherited from the `Customer` to `Sales
+    Header`
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: When posting a sales document, it is mandatory that the `Lookup Value Code`
+    field is populated
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: When posting a sales document, the `Lookup Value Code` field should be inherited
+    from `Sales Header` to the header of the posted document. That is,
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`Sales Shipment Header`'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`Sales Invoice Header`'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`Sales Cr.Memo Header`'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`Return Receipt Header`'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: When archiving a sales document, the `Lookup Value Code` field should be inherited
+    from `Sales Header` to `Sales Header Archive`
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: When creating a warehouse shipment from a sales order, the `Lookup Value Code`
+    field should be inherited from `Sales Header` to `Warehouse Shipment Line`
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: When posting a warehouse shipment, the `Lookup Value Code` field should be inherited
+    from `Warehouse Shipment Line` to `Posted Whse. Shipment Line`
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: LookupValue extension
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Based on these requirements, the `LookupValue` extension will be built, including
+    automated tests.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Implementing a defined customer wish
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Now that we have a clearly defined customer wish, we can start to implement
+    it. As already introduced in the previous chapter, we will *kill five birds in
+    one stroke*, that is, break down each wish into a list of tests for the following
+    purposes:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Detailing of **customer wish**
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Implementation of **application code**
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Structured execution of **manual tests**
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Coding of **test automation**
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Up-to-date **documentation** of solution
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Consequently, in the next basic test case examples, and the ones following in
+    [Chapter 6](0f8efb81-438e-48ed-9f7f-bcfa5caa8e92.xhtml), *From Customer Wish to
+    Test Automation - Next Level*, and [Chapter 7](bb9ee41e-4c60-4a27-8fad-5343adfcd86a.xhtml),
+    *From Customer Wish to Test Automation - And Some More*, we will describe the
+    *customer wish* by means of the **Acceptance Test-Driven Development** (**ATDD**)
+    pattern. Using the `FEATURE`, `SCENARIO`, `GIVEN`, `WHEN`, and `THEN` tags, we
+    will discuss the **application code** implementation and elaborate more extensively
+    on the coding of the **test automation**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Manual test** and **documentation** is out of the scope of the book.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The `LookupValue` extension can be found on GitHub: [https://github.com/PacktPublishing/Automated-Testing-in-Microsoft-Dynamics-365-Business-Central](https://github.com/PacktPublishing/Automated-Testing-in-Microsoft-Dynamics-365-Business-Central).
+    [](https://github.com/PacktPublishing/Automated-Testing-in-Microsoft-Dynamics-365-Business-Central)
+    This repository also includes an Excel file containing a listing of all ATDD scenarios
+    that apply to the `LookupValue` extension. Even though we will pick out specific
+    scenarios as examples to elaborate on, note that the whole list of scenarios has
+    been conceived upfront describing in full the extent of the customer wish.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Details on how to use this repository and how to set up VS Code are discussed
+    in [Appendix B](bbbc6672-5043-422a-b54e-a09df933c909.xhtml), *Setting Up VS Code
+    and Using the GitHub Project*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Test example 1 – a first headless test
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Now, with our backpack full of tools handed over in the previous chapters, and
+    the customer wish defined, we're set to start creating our first automated test.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Customer wish
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Let''s pick up the fundamental part of our complete customer wish: the extension
+    of the `Customer` table with a `Lookup Value Code` field.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: FEATURE
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The feature we are building with our extension is called `LookupValue` and
+    the specific part we are now working on is the `Customer` table. This leads to
+    the following `[FEATURE]` tag:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: SCENARIO
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The specific scenario to be implemented and tested is the assignment of a lookup
+    value to a customer, so the `[SCENARIO]` tag would be as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: GIVEN
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The fixtures we need in order to assign a lookup value are a lookup value record
+    and a customer record. Thus, we need the following two `[GIVEN]` tags:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: WHEN
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Given the fixture, we can set the lookup value code on the `Customer` record
+    and therefore define our `[WHEN]` tag as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: THEN
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Now that the action under test has been exercised, it is time to verify the
+    result. Did the lookup value code field indeed get the lookup value from our fixture
+    assigned to the customer record? This leads to the following `[THEN]` tag:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: Complete scenario
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'So, the complete scenario definition would then be to allow us to copy it later
+    when creating our test code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: Application code
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The first part of the customer wish, that is, `[SCENARIO #0001]`, defines the
+    need for a `LookupValue`, which is a new table, from which a value can be assigned
+    to a customer by means of a so-called `Lookup Value Code` field. This has been
+    implemented by means of the following `.al` objects:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: In the application code, the bare minimum has been included to save space. Properties
+    like `Caption`, `ApplicationArea`, `DataClassification`, `UsageCategory`, and
+    `ToolTip` have been left out. Download the `LookupValue` extension from GitHub
+    to get the complete objects.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Test code
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: With the first part of the customer wish clear, we have a neat structure to
+    start writing our first test.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Steps to take
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The following are the steps to take:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Create a test codeunit, with a name based on `[FEATURE]` tag
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Embed the customer wish into a test function with a name based on `[SCENARIO]`
+    tag
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Write your test story, based upon `[GIVEN]`, `[WHEN]`, and `[THEN]` tags
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Construct your real code
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Create a test codeunit
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Using `[FEATURE]` tag name the basic structure of our codeunit will be like
+    this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see, the UT added to the `[FEATURE]` tag stands for Unit Test, marking
+    that the tests are unit tests and not functional tests.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As an easy start: codeunit 81000 already exists in the `LookupValue` extension
+    on GitHub.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Embed the customer wish into a test function
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Now, we create a test function with a name based on the `SCENARIO` description
+    and embed the customer wish, `GIVEN`-`WHEN`-`THEN`, in this function.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'I call this "embedding the *green*", being the out-commented `GIVEN`-`WHEN`-`THEN`
+    sentences, before you start programming the *black*, being the `.al` test code. Look
+    at what the codeunit has now become:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: Write your test story
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: For me, writing the first *black* parts is about writing pseudo-English, defining
+    what I need to achieve with my test. It makes my test readable by any non-technical
+    peer in the project, and, if I need their support, the threshold for them to read
+    the test is substantially lower than when I would have immediately started to
+    write the *real* thing. And, maybe an even stronger argument—I will have my code
+    embedded in reusable helper functions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'So here we go, let''s write the *black* parts:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: With this story, I have been designing four helper functions with no argument(s)
+    and return value yet. These will be defined in the next step.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note how close the names of the helper functions are to the description of the
+    tag it belongs to.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Construct the real code
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: If you're a developer, I might have been challenging you with my pseudo code
+    up until this point, using no real code but only a structure. Now, ready yourself
+    as the real part starts right now, and I hope, for you and your peers, you will
+    do the same with the tests you will be coding yourself in the future.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'While inspecting our first test function, I already concluded that I need the
+    following four helper functions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`CreateLookupValueCode`'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '`CreateCustomer`'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '`SetLookupValueOnCustomer`'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '`VerifyLookupValueOnCustomer`'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Let's construct and discuss these.
+  prefs: []
+  type: TYPE_NORMAL
+- en: CreateLookupValueCode
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '`CreateLookupValueCode` is a manifold reusable helper function to create a
+    pseudo-random `LookupValue` record as follows. In a later stage, we could promote
+    this to a to be created library codeunit:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: To populate the `PK` field, we make use of the `GenerateRandomCode` function
+    from the standard test library `Library - Utility`, codeunit 131000. The `LibraryUtility` variable will
+    be declared globally as Microsoft does in their test codeunits, making it reusable
+    in other helper functions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Pseudo-random means that, whenever our test is executed in the same context,
+    the `GenerateRandomCode` function will yield the same value, contributing to a
+    reproducible test.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `Description` field is populated by the same value as the `Code` field as
+    the specific value of `Description` is of no meaning, and this way it is the most
+    effective.
+  prefs: []
+  type: TYPE_NORMAL
+- en: I'll be using the `with…do` construct very often in my helper functions; this
+    allows easy reusability of helper functions for similar purposes but applied to
+    other tables as we only need to update the record variable (and the table it is
+    referencing).
+  prefs: []
+  type: TYPE_NORMAL
+- en: CreateCustomer
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Using the `CreateCustomer` function in the standard library codeunit `Library
+    - Sales`, codeunit 130509, our `CreateCustomer` creates a useable customer record
+    and makes this helper function a straightforward exercise:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: As with the preceding `LibraryUtility` variable, we will declare the `LibrarySales`
+    variable globally.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You might wonder why we create a helper function that only has one statement
+    line. As mentioned, using helper functions makes the test readable for non-technical
+    peers as well as making it reusable. However, it also makes it more maintainable/extendable.
+    If we need to add an update to the customer record created by the `CreateCustomer`
+    function in the `Library - Sales` codeunit, we only need to add that to our local
+    `CreateCustomer` function.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As a general rule, I never call library functions directly from test functions.
+    This comes with some exceptions, as we will see later.
+  prefs: []
+  type: TYPE_NORMAL
+- en: SetLookupValueOnCustomer
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Have a look at the implementation of `SetLookupValueOnCustomer`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: Calling `Validate` is essential here. `SetLookupValueOnCustomer` is not just
+    about assigning a value to the `Lookup Value Code` field, but also about making
+    sure it is validated against the existing values in the `LookupValue` table. Note
+    from the following that the `OnValidate` trigger of the `Lookup Value Code` field
+    does not contain code.
+  prefs: []
+  type: TYPE_NORMAL
+- en: VerifyLookupValueOnCustomer
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'As mentioned in [Chapter 4](db955f66-11f4-4d9a-90c7-5af04058ebbe.xhtml), *Test
+    Design*, *a test without verification is no test at all*, we need to verify that
+    the lookup value code assigned to the `Lookup Value Code` field of the customer
+    record is indeed the value that was created in the `Lookup Value` table. We, therefore,
+    retrieve the record from the database as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'To verify that the expected value (first argument) and the actual value (second
+    argument) are equal, we make use of the `AreEqual` function in the standard library
+    codeunit `Assert`, 130000\. Of course, we could build our own verification logic
+    using the `Error` system function, and that''s what `AreEqual` is doing. Have
+    a look:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: By using the `AreEqual` function, we ensure that we get a standardized error
+    message in case the expected and actual values are not equal. Over time, by reading
+    the error of any failing test where the verification helper functions are making
+    using of the `Assert` library, you will be able to recognize easily what kind
+    of error occurred.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Our complete test codeunit would look like the following code that is ready
+    for execution. Notice the variables and arguments added to the test codeunit and
+    functions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: Test execution
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Now that we are ready with our first test, we can deploy the `LookupValue`
+    extension to our Dynamics 365 Business Central installation. If we set the test
+    tool page as the start object in the `launch.json`, we can immediately add our
+    test codeunit to the `DEFAULT` suite as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: Running the test by selecting the Run action will show that it executes successfully.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/cd822a48-df32-40e8-ad0a-bf4858f64466.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Congratulations, we have implemented our first successful test as the preceding
+    screenshot shows!
+  prefs: []
+  type: TYPE_NORMAL
+- en: Test the test
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'During my workshop, some skeptical minds would challenge me and cause me to
+    ask: "Indeed the test result is successful, but how do I know success is a real
+    success? How can I test the test?"'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You have the following two options to test it:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Test the data being created
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Adjust the test so the verification errs
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Test the data being created
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Testing the data being created can be done in two ways:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Run the test outside of a test isolation and have a look at the `Customer` table.
+    Find out that a new customer has been created with the `Lookup Value Code` field
+    populated, and, of course, a related record in the `Lookup Value` table
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Debug your test and, using SQL Server Management Studio, run SQL queries on
+    the `Customer` and `Lookup Value` table. Make sure that you read uncommitted data
+    to find the same records before the test is finished.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The latter is my preferred method as it makes it possible to run tests in isolation,
+    thus not changing the database irreversibly. It also allows us to see what data
+    is being created.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note that the second option Debug your test and run SQL queries is only possible
+    in an on-premises or containerized installation of Dynamics 365 Business Central.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Adjust the test so the verification errs
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'This is maybe the easiest and most robust option: make sure the verification
+    fails by providing another value for the expected result. In the case of our test,
+    for example, your own name:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As shown in the next screenshot the test indeed fails on the verification part:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/9710545a-fbdf-42e0-ac63-19961e8fcc84.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'The error thrown tells us that the expected value is `LUC` while the actual
+    value is `GU00000000`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As mentioned before, First Error is a FlowField into which you can drill down.
+    It will open the CAL Test Result window, which displays the whole test run history
+    for a specific test. As the next screenshot displays, in case of the current test,
+    it shows two lines being the results of the two runs we did for `AssignLookupValueToCustomer`
+    so far:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/70e45ea8-33b9-48da-a29b-4c71b4448071.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Note that the Clear Results feature on the Test Tool window, as shown in the
+    following screenshot, does not have an effect on the test run history as it will
+    only clear the results displayed in the Test Tool window:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/feb4bf03-302e-427a-9afb-b7c32af73441.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Test example 2 – a first positive-negative test
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'This test example does not relate to a new customer wish and no new application
+    code, but is complementary to our first test. It is a rainy path version of the
+    same customer wish leading to a new scenario:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: Test code
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Let's reuse the recipe applied for test example 1.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Steps to take
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'You might already recall these are the steps to take:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Create a test codeunit, with a name based on the `[FEATURE]` tag
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Embed the customer wish into a test function with a name based on the `[SCENARIO]`
+    tag
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Write your test story, based on `[GIVEN]`, `[WHEN]`, and `[THEN]` tags
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Construct your real code
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Create a test codeunit
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Sharing the same `[FEATURE]` tag values as test example 1, our new test case
+    will share the same test codeunit, that is, codeunit 81000 `LookupValue UT Customer`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Embed the customer wish into a test function
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '*Embedding the green* results in the following new test function in codeunit
+    81000:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: Write your test story
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Filling in the first *black* "story elements" leads to the following typical
+    choices:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating a non-existing lookup value is achieved by just providing a string
+    constant that has no related record in the `Lookup Value` table.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: To assign this value to the `Lookup Value Code` field on a customer, we do not
+    need a customer record in the database. A local variable suffices to trigger the
+    error we want to happen.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Setting the lookup value on the customer can be achieved by using the `SetLookupValueOnCustomer`
+    from test example 1.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'As a consequence, the *test story* already has some more details than our previous
+    test:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: Construct the real code
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Reusing the `SetLookupValueOnCustomer` function, we only need to create one
+    new helper function.
+  prefs: []
+  type: TYPE_NORMAL
+- en: VerifyNonExistingLookupValueError
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Like in our first verification function, we make use of a function from the
+    standard library codeunit `Assert` (130000) called `ExpectedError`. We only need
+    to provide `ExpectedError` the expected error text. The actual error will be retrieved
+    by `ExpectedError` using the `GetLastErrorText` system function as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note how the expected error text is constructed by using the `StrSubstNo` system
+    method in conjunction with the `ValueCannotBeFoundInTableTxt` label.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Test execution
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Let''s redeploy our extension and add the second test to the test tool by selecting
+    Actions | Functions | Get Test Methods. Get Test Methods will update the selected
+    test codeunit by adding all current test functions residing in the codeunit as
+    lines to the test tool. Note that the Result column will be cleared. Now, run
+    the test codeunit and see that both tests are successful:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/417eba3e-1a53-4ee9-bfec-0f2dddc130a4.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Test the test
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'How to verify that *the success is a real success*? We can do this in a similar
+    way as we did with test example 1: provide a different expected value to the verification
+    function of our test case. So let''s do it.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Adjust the test so the verification errs
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Let’s adjust the verification in a similar way as we did in test example 1:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The output is shown in the following screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/029e3190-2e5a-4756-99dc-13663ecd0b35.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'The error thrown tells us that the expected value is `LUC` while the actual
+    value is `SC #0002` as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: Removing asserterror
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'With rainy path scenarios, we typically use an `asserterror` to wrap the `[WHEN]`
+    part to catch the error, but we have another way to *test the test*: by removing
+    the `asserterror` and running the test again. Now, you will get to see the real
+    error:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: This error message allows us to build a text label in .al to construct the expected
+    error.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `Modify` in `SetLookupValueOnCustomer` strictly is not possible in test
+    example 2 as we do not retrieve a customer record from the database. The error
+    thrown by the `Validate`, however, will prevent the `Modify` from being called.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Test example 2 is built upon the assumption that the `TableRelation` set on
+    the `Lookup Value Code` field on the `Customer` table uses the default setting
+    of the `ValidateTableRelation` property on that field.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Test example 3 – a first UI test
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The field `Lookup Value Code` had been implemented on the `Customer` table and
+    tested. But, of course, to allow users to manage it, it needs to be made accessible
+    in the UI. Consequently, it needs to be placed on the `Customer Card`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Customer wish
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The next stage of the customer wish is very close to the previous part defined
+    by `[SCENARIO #0001]`. The main difference is that we now want to access a customer
+    by means of the UI element `Customer Card`. By mimicking end users, our scenario
+    describes creating a new `Customer Card` (see second `[GIVEN]`). Have a look:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: Application code
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Based on the last addition to the customer wish, the `Customer Card` needs
+    to be extended with the `Lookup Value Code` field as per the following `.al` object:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: Test code
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Consecutively, let's step through our *how-to-implement-test-code* recipe.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Create a test codeunit
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Again, sharing the same `[FEATURE]` tag values as in our previous tests, we
+    can place our new test case in the same test codeunit, that is, codeunit 81000
+    `LookupValue UT Customer`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Embed the customer wish into a test function
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Wrap the *green* into a new test function in codeunit 81000 as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: Write your test story
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'A straightforward version of the new test story, in parallel to test example
+    1, would be:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Adding variables and arguments, the code becomes:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'To access the UI in automated tests, we need to make use of the 5th pillar:
+    the `TestPage`. As you can see in the specific case of our test function `AssignLookupValueToCustomerCard`,
+    the test page object is based on the `Customer Card` page.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Construct the real code
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'We can make use of the already existing helper functions `CreateLookupValueCode`
+    and `VerifyLookupValueOnCustomer`, but we also need to construct the following
+    two new helper functions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`CreateCustomerCard`'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '`SetLookupValueOnCustomerCard`'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: CreateCustomerCard
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'To create a new customer card we just call the `OpenNew` method that any editable
+    `TestPage` has to its availability:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: SetLookupValueOnCustomerCard
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Using the control method `SetValue` we set the value of the `Lookup Value Code`
+    field:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: As `SetValue` mimics the user setting a value, it will trigger the validation
+    of the field. If a non-existing value is entered, it will validate the value against
+    the existing records in the `Lookup Value` table as we tested in test example
+    2\. To retrieve the value of the `No.` field, we use the control method `Value`. We
+    do need to close the page to trigger the system so save the changes to the record
+    to the database.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note that `Value` has a twofold purpose. It can be used to get or set the value
+    of a field (control). The difference between setting the value using `Value` or
+    `SetValue` is that `Value` always takes a string as an argument, while the argument
+    of `SetValue` should be the same data type as the data type of the field (control).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We''re almost ready to run the new test. There is, however, one major thing
+    failing in the `SetLookupValueOnCustomerCard` helper function. It will operate
+    fine, but it does not take account for, in my opinion, a design flaw: `SetLookupValueOnCustomerCard`
+    will run successfully, even when the `Lookup Value Code` field is not editable.
+    Both `SetValue` and `Value` do not check on this. As the whole purpose of our
+    test is to check whether the user can set the `Lookup Value Code` field, we need
+    to add a small verification to determine whether the field is editable. Because
+    of this, the `SetLookupValueOnCustomerCard` function needs to be updated to the
+    following using another function from the `Assert` codeunit `IsTrue`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note that both `Value` and `SetValue` will error when we try to apply them to
+    a non-visible field.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Test execution
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Let''s again redeploy the extension, add the new test function using the Get
+    Test Methods feature, and run the tests.  See the next screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/6ba2373f-620d-406f-b723-5628d195a530.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Shoot, an error has occurred. Error? Let’s read it and try to understand:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'I must confess I always get a bit nervous of those techie CLR exception thrown messages,
+    but I have learned to scan for the things that relate to what I know. Here are
+    two things:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`NavNCLMissingUIHandlerException`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`Unhandled UI: ModalPage 1340`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Apparently there is a `ModalPage` occurrence that is not handled by our test.
+    More specifically it is page 1340 that''s called modally and not handled. Page
+    1340? It''s the `Config Templates` page, the one that pops up when you are going
+    to create a new customer, as shown in the screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/18c83597-8529-4680-b7ac-d9c7c73a09a8.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'So, we need to construct a `ModalPageHandler` and link that to our third test:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE35]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Set the `HandlerFunctions` tag to the test function with reference to the `ModalPageHandler`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE36]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now the test runs successfully.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Test the test
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Let's *test the test* and verify that it is a good test.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Adjust the test so the verification errs
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: A proven method can be achieved in exactly the same way as we have done for
+    test example 1.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Next to that note, we have added another verification to our code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE37]'
+  prefs: []
+  type: TYPE_PRE
+- en: Change `IsTrue` into `IsFalse`. You will see that the test fails as the `Lookup
+    Value Code` field is editable. The `IsTrue` verification ensures that, when the
+    `Lookup Value Code` field is turned to non-editable, the test will fail.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Headless versus UI
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'As mentioned before, headless testing is the preferred mode for automated tests
+    as it is faster than UI testing. With test example 1 and 3, we did implement the
+    same kind of test: check that a lookup value can be assigned to a customer. Test
+    example 1 in headless mode, while test example 3 uses the UI. Running both tests
+    indeed shows that UI tests are slower than headless tests. Have a look at the
+    graph of execution duration (in seconds).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/739c78b8-542d-4e35-ae8a-918cf7229288.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'The average execution duration for the UI tests is 1.35 seconds, while the
+    headless average is almost 7 times faster: 0.20 seconds.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we got to build our first automated tests. We utilized the
+    ATDD test case pattern to design each test and used it as a base structure in
+    our *4-steps recipe* to create a test codeunit, embed the customer wishes into
+    a test, write a test story, and finally construct your real code.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next chapter, we will continue to use ATDD and the 4-steps recipe to
+    create some more advanced tests.
+  prefs: []
+  type: TYPE_NORMAL

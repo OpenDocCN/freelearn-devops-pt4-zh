@@ -1,0 +1,1664 @@
+- en: 'Chapter 6:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Hosting Your Own Azure Pipeline Agent
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In the previous two chapters, we looked at setting up continuous integration
+    through Azure Pipelines while using Microsoft-hosted agents. In this chapter,
+    we'll be building a self-hosted agent and updating the pipeline to use our own
+    agent, rather than using the Microsoft-hosted one.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We will first look at the types of pipeline agents available and then dive into
+    the technical specifications of setting up the agent pools. We will also look
+    at how you can use VM scale sets for large-scale Azure DevOps projects.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We''ll be covering the following topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Azure pipeline agent overview
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Understanding the types of agents in Azure Pipelines
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Planning and setting up your own pipeline agent in Azure
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Updating your Azure pipeline to use your self-hosted agent
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using containers as your self-hosted agents
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Planning for scale – using Azure VM scale sets as self-hosted agents
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: To follow this chapter, you need to have an active Azure DevOps organization
+    and an Azure subscription to create a VM.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Getting the project pre-requisites ready**: This section requires you to
+    have the **PartsUnlimited** project ready in your own DevOps organization. If
+    you are continuing from the previous chapter, [*Chapter 5*](B16392_05_Final_JM_ePub.xhtml#_idTextAnchor123),
+    *Running Quality Tests in a Build Pipeline*, you should have it already.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If you do not have the project ready in your DevOps org, you can import it
+    using Azure DevOps Demo Generator – [https://azuredevopsdemogenerator.azurewebsites.net/](https://azuredevopsdemogenerator.azurewebsites.net/):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Log in to the **Azure DevOps Demo Generator** website.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Enter a project name and select your **DevOps organization**.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Click on **Choose Template** and find **PartsUnlimited**.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Once you're ready, click **Create Project**:![Figure 6.1 – Creating a sample
+    DevOps project
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '](img/Figure_6.01_B16392.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Figure 6.1 – Creating a sample DevOps project
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: It will take a couple of minutes for the project to be imported; you can monitor
+    the progress using the progress bar displayed.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Upon completion, click on **Navigate to project**:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![Figure 6.2 – Project successfully created'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/Figure_6.02_B16392.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 6.2 – Project successfully created
+  prefs: []
+  type: TYPE_NORMAL
+- en: We'll be using this project throughout this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Azure pipeline agent overview
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: An Azure pipeline agent is the component responsible for executing the tasks
+    defined in the pipeline definition. This agent typically runs inside a VM or container
+    and includes the pre-requisites required for the pipeline to run successfully.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In most cases, you'll need to have an agent in order to run the pipeline. As
+    your project size and the number of developers grows, you will need to have more
+    agents to support the scale.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Each execution of a pipeline initiates a job on one of the agents, and one
+    agent can only run one job at a time. Azure pipeline agents can be hosted in the
+    cloud or on-premises in one of the following compute infrastructures:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Server or client host (physical or virtual)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Containers
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Azure VM scale sets (preview)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Azure pipeline agents are grouped into **agent pools**. You can create as many
+    agent pools as you require.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important note
+  prefs: []
+  type: TYPE_NORMAL
+- en: Azure Pipelines supports running basic tasks, such as invoking the REST API
+    or Azure Function without the need to have any agents. Please refer to [https://docs.microsoft.com/en-us/azure/devops/pipelines/process/phases?view=azure-devops&tabs=yaml#server-jobs](https://docs.microsoft.com/en-us/azure/devops/pipelines/process/phases?view=azure-devops&tabs=yaml#server-jobs)
+    for more details about agentless execution of Azure Pipelines.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding the types of agents in Azure Pipelines
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Azure Pipelines offers two types of agents:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Microsoft-hosted agents
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Self-hosted agents
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Let's look at them in detail.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Microsoft-hosted agents
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Microsoft-hosted agents are fully managed VMs, deployed and managed by Microsoft.
+    You can choose to use a Microsoft-hosted agent with no additional pre-requisites
+    or configurations. Microsoft-hosted agents are the simplest and are available
+    at no additional cost.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Every time you execute a pipeline, you get a new VM for running the job, and
+    it's discarded after one use.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Self-hosted agents
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Self-hosted agents are servers owned by you, running in any cloud platform or
+    data center owned by you. Self-hosted agents are preferred due to various reasons,
+    including security, scalability, and performance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can configure your self-hosted agent to have the dependencies pre-installed,
+    which will help you decrease the time for your pipeline execution.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Choosing between a Microsoft-hosted agent and self-hosted agents depends on
+    various factors, such as the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The size of the code base
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The number of developers
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The build and release frequency
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The dependencies and packages required for the build process
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Security and compliance requirements
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Performance
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: If your code base is small and the build pipeline is optimized, it's better
+    to use Microsoft-hosted agents as it won't take much time to download all the
+    dependencies on the fly. However, if you have a large code base with numerous
+    amounts of dependencies, using a self-hosted agent will be a better option as
+    you can eliminate various build pre-creation tasks from the pipeline by configuring
+    them in your self-hosted environment in advance. Self-hosted agents would be the
+    only option in the case of highly secure and customized build pipelines that interact
+    with other services running in your network. If you need more CPU and memory than
+    what is provided with Microsoft-hosted agents, you can use self-hosted agents
+    with your customized sizing.
+  prefs: []
+  type: TYPE_NORMAL
+- en: It is recommended to start with Microsoft-hosted agents and move to self-hosted
+    at a later stage when the Microsoft-hosted agents become a bottleneck in your
+    build and release process.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Planning and setting up your self-hosted Azure pipeline agent
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In order to use a self-hosted agent with Azure Pipelines, you will need to set
+    up a machine and configure it for your pipeline requirements. Typically, you would
+    choose an OS version best suited for your project, considering the framework,
+    libraries, and build tools compatibility.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For the purpose of this demonstration, we'll be setting up a VM in Azure and
+    will configure it to use a self-hosted agent. You can choose to host your agent
+    server in any cloud or on-premises environment.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Choosing the right OS/image for the agent VM
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The first decision you take while setting up the VM is choosing the OS/image
+    for the server depending on your target deployment. If you are deploying in an
+    on-premises environment, you may just select one of the supported OS versions
+    (such as Windows Server 2016) and install the necessary software. In the case
+    of cloud deployments, you have multiple options provided in the form of images,
+    which come in various combinations of OS version and pre-installed tools.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'It is advised that you have the agent VM specifications planned with your developers
+    to have them best suited for your project needs. Here is a recommended approach:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Identify whether your application is built to run on Windows, Linux, or macOS.
+    If it's cross-platform, choose the one that runs it best and has support for the
+    build tools you're using.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: List down the underlying frameworks and external libraries/components used with
+    their versions.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Select the latest version of the OS version from the top-level OS selected in
+    *step 1*.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Identify whether it is compatible and supported by the **original equipment
+    manufacturers** (**OEMs**) for all the dependencies listed in *step 2*.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Keep going one version down at a time and select the one that is compatible
+    for all the required dependencies for your project.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Based on the specifications identified in this process, you can choose to start
+    with a vanilla OS and install your required frameworks and build tools, or choose
+    a pre-created image in the cloud.
+  prefs: []
+  type: TYPE_NORMAL
+- en: OS support and pre-requisites for installing an Azure Pipelines agent
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Azure supports various OS versions to use as a self-hosted agent; based on the
+    OS you choose, there is a set of pre-requisites you'll need to complete before
+    you can install the Azure Pipelines agent on your host.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Supported OSes
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The following list shows the supported OSes:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Windows-based:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: a) Windows 7, 8.1, or 10 (if you're using a client OS)
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: b) Windows Server 2008 R2 SP1 or higher (Windows Server OS)
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Linux-based:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: a) CentOS 7, 6
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: b) Debian 9
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: c) Fedora 30, 29
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: d) Linux Mint 18, 17
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: e) openSUSE 42.3 or later
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: f) Oracle Linux 7
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: g) Red Hat Enterprise Linux 8, 7, 6
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: h) SUSE Enterprise Linux 12 SP2 or later
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: i) Ubuntu 18.04, 16.04
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'ARM32:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: a) Debian 9
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: b) Ubuntu 18.04
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'macOS-based:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: a) macOS Sierra (10.12) or higher
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Pre-requisite software
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Based on the OS you choose, you will have to install the following pre-requisites
+    before you can set up the host as an Azure pipeline agent:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Windows-based:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: a) PowerShell 3.0 or higher
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: b) .NET Framework 4.6.2 or higher
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Linux/ARM/macOS-based:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: a) Git 2.9.0 or higher.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: b) RHEL 6 and CentOS 6 require installing the specialized RHEL.6-x64 version
+    of the agent.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: The agent installer for Linux includes a script to auto-install the required
+    pre-requisite. You can complete the pre-requisite by running `./bin/installdependencies.sh` ,
+    which is available in the downloaded agent directory. The downloading of the agent
+    is covered in the following sections of this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important note
+  prefs: []
+  type: TYPE_NORMAL
+- en: Please note that the preceding pre-requisites are just to install the Azure
+    Pipelines agent on the host; based on your application development requirements,
+    you may need to install additional tools, such as Visual Studio build tools, a
+    Subversion client, and any other frameworks that your application might need.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we have understood the pre-requisites, we will create an agent VM for
+    our sample project, **PartsUnlimited**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating a VM in Azure for your project
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The **PartsUnlimited** project is built using .NET Framework 4.5 and Visual
+    Studio as the primary IDE tool. You can review that by browsing through the repository
+    in the **PartsUnlimited** project in your Azure DevOps.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Looking at that, our best bet would be to use a Visual Studio-based server
+    OS. Let''s look in Azure to explore our options here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Log in to the Azure portal and click **+ Create a resource**.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Search for **Visual Studio** and select the **Visual Studio images for Azure**
+    option:![Figure 6.3 – Visual Studio in the Azure portal
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '](img/Figure_6.03_B16392.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Figure 6.3 – Visual Studio in the Azure portal
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Now, you'll be able to select from the various combinations available. We'll
+    go with **Visual Studio community 2017 on Windows Server 2016(x64)**:![Figure
+    6.4 – Visual Studio images available in Azure
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '](img/Figure_6.04_B16392.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Figure 6.4 – Visual Studio images available in Azure
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Important note
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Visual Studio 2019-based images are available in the Azure portal directly in
+    the search results.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Click **Create** to start creating a VM. Choose the required subscription, resource
+    group, and other settings based on your preference.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: In further pages, you can modify the settings to use a pre-created virtual network,
+    as well as customize the storage settings and other management aspects. Please
+    review the documentation to explore more on VM creation in Azure.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Important note
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Please follow the Microsoft docs to learn more about creating a VM in Azure:
+    [https://docs.microsoft.com/en-us/azure/virtual-machines/windows/quick-create-portal](https://docs.microsoft.com/en-us/azure/virtual-machines/windows/quick-create-portal).'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Log in to the VM upon creation and install the required pre-requisites.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Now that we have the VM ready, we'll set it up as an Azure Pipelines agent for
+    our project.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Setting up the build agent
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In this section, we'll configure the newly created VM to use as a self-hosted
+    pipeline agent.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Setting up the agent pool in Azure DevOps
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: You can organize your agents in Azure DevOps as **agent pools**. **Agent pools**
+    are a collection of your self-hosted agents; they help you organize and manage
+    the agents at the pool level, rather than managing them individually.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Agent pools** are managed at the organization level and can be used by multiple
+    projects at the same time. Let''s create an **agent pool** to get started:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Log in to Azure DevOps and click on **Organization settings**:![Figure 6.5 –
+    Azure DevOps Organization settings
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '](img/Figure_6.05_B16392.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Figure 6.5 – Azure DevOps Organization settings
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Click on **Agent pools** under **Pipelines**:![Figure 6.6 – Azure DevOps Agent
+    pools
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '](img/Figure_6.06_B16392.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Figure 6.6 – Azure DevOps Agent pools
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: You will see that there are two default agent pools created. Click on **Add
+    pool** to create a new pool:![Figure 6.7 – Azure DevOps – adding an agent pool
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '](img/Figure_6.07_B16392.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Figure 6.7 – Azure DevOps – adding an agent pool
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Provide the pool type, name, description, and pipeline permissions. Under the
+    permissions option, you can choose to make this pool available to all pipelines
+    and projects at once. Click **Create** once you''re ready:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'a) --**Pool type**: **Self-hosted**'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'b) --**Name** and **Description**: Give a meaningful name that you can use
+    to refer to later:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '![Figure 6.8 – Azure DevOps – adding agent pool configuration'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '](img/Figure_6.08_B16392.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Figure 6.8 – Azure DevOps – adding agent pool configuration
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Your agent pool should be listed under **Agent pools** now.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: We will now set up an access token for the agent VM to be able to authenticate
+    with Azure DevOps.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Setting up an access token for agent communication
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'In this task, you will create a personal access token that will be used by
+    the Azure Pipelines agent to communicate with your Azure DevOps organization:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Sign in to your Azure DevOps organization with the admin user account.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Go to your user profile and click **Personal access tokens**:![Figure 6.9 –
+    Personal access token
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '](img/Figure_6.09_B16392.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Figure 6.9 – Personal access token
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Click on **New token**.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Provide the token specifications as given here:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '--**Name**: **Self-Hosted Agent Token**.'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '--**Organization**: Your Azure DevOps organization.'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '--**Expiration**: You can choose a date as per your choice. This is only for
+    a one-time setup; you do **not** need to re-configure the agent once this token
+    expires.'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '--**Scope**: **Custom defined**.'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: On **Scope**, it is recommended to only give the permissions required to manage
+    the agents. Click on **Show all scope** and select both the **Read** and **Read
+    & manage** permissions:![Figure 6.10 – Agent pool access
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '](img/Figure_6.10_B16392.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Figure 6.10 – Agent pool access
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Review all the settings and click **Create**:![Figure 6.11 – Creating a personal
+    access token for the agent pool
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '](img/Figure_6.11_B16392.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Figure 6.11 – Creating a personal access token for the agent pool
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Once you click **Create**, Azure DevOps will display the personal access token.
+    Please copy the token and save it in a secure location. If you happen to lose
+    this token, you must create a new token for setting up new agents.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: We will use this token when setting up the Azure Pipelines agent.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Important note
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'You will need to give additional permissions when creating a token if you plan
+    to use deployment groups (more information here: [https://docs.microsoft.com/en-us/azure/devops/pipelines/release/deployment-groups/?view=azure-devops](https://docs.microsoft.com/en-us/azure/devops/pipelines/release/deployment-groups/?view=azure-devops)).'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Now that we have completed the agent pool setup in Azure DevOps, we can start
+    installing the agent in the VM we created earlier.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Installing Azure Pipelines agents
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'You are now ready to install the Azure Pipelines agent on your VMs that you
+    created earlier. Let''s download the Azure Pipelines agent. Before you start,
+    please log in to the VM created earlier using **Remote desktop**:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In your Azure DevOps account, browse to **Organization Settings** > **Agent
+    Pools**.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Select your newly created agent pool and click on **New agent**:![Figure 6.12
+    – Add agent
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '](img/Figure_6.12_B16392.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Figure 6.12 – Add agent
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: On the next page, you can download the agent installer based on the OS and architecture
+    (x64/x32). In our example, we're using a Windows Server 2016-based VM. We'll choose
+    Windows and the x64 architecture. You can also copy the download URL and use it
+    to download the agent directly inside your self-hosted agent machine. You can
+    also choose to follow the installation steps given in the Azure DevOps portal
+    based on the OS for your agent machine:![Figure 6.13 – Agent commands
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '](img/Figure_6.13_B16392.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Figure 6.13 – Agent commands
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Tip
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: If you are unable to download the agent file on your Visual Studio machine,
+    you can use a different browser than Internet Explorer or disable **Enhanced IE
+    Security** configuration from the server manager. You can refer to [https://www.wintips.org/how-to-disable-internet-explorer-enhanced-security-configuration-in-server-2016/](https://www.wintips.org/how-to-disable-internet-explorer-enhanced-security-configuration-in-server-2016/)
+    to learn how to disable enhanced Internet Explorer security configuration.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Launch an elevated PowerShell window and change to the `C:` directory root by
+    running the `cd C:\` command:![Figure 6.14 – Change directory
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '](img/Figure_6.14_B16392.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Figure 6.14 – Change directory
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Run the following PowerShell commands to create an agent directory on the `C`
+    drive and extract the agent files to the new directory. Please note that you may
+    have to change the filename/path depending on the version of the agent you''ve
+    downloaded and the directory where you saved the downloaded file:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: It will take a minute or two to extract the files. Please browse to the new
+    directory once it's completed. You should see files as displayed in the following
+    screenshot:![Figure 6.15 – Agent files
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '](img/Figure_6.15_B16392.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Figure 6.15 – Agent files
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'You can run the Azure pipeline agent in two modes:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: --`run` batch file stored in the agent directory. Your agent will stop responding
+    to pipelines if you stop the interactive authentication.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '--**Run as Service**: In this version, you configure the agent to run as a
+    Windows service that will remain online all the time and auto-start on reboot.
+    This is the recommended setup for production scenarios.'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Let's configure the agent to run as a service. In your PowerShell window, run
+    `.\config.cmd`.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: This will ask a series of questions about your Azure DevOps organization.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Enter your Azure DevOps organization as the server URL. Typically, this would
+    be [https://dev.azure.com/YourOrganizationName](https://dev.azure.com/YourOrganizationName).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Press *Enter* to select **PAT** (**Personal access token**) as the authentication
+    mechanism for Azure DevOps.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Provide your personal access token generated earlier.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Provide the agent pool name you created earlier.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Provide a name for this agent.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Provide a working directory for the agent to choose as default.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Finally, press *Y* and hit *Enter* to configure to run the agent as a Windows
+    service.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: You can accept the default account to run the service.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'This will complete the agent setup; at the end, you should see a message stating
+    that the services are started successfully:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![Figure 6.16 – Installing the agent'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/Figure_6.16_B16392.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 6.16 – Installing the agent
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, if you look under your agent pool in the Azure DevOps portal, you should
+    see this agent listed:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.17 – Azure Pipelines agent listed'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/Figure_6.17_B16392.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 6.17 – Azure Pipelines agent listed
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You now have a ready-to-use, self-hosted agent for your Azure pipelines! This
+    self-hosted agent can be used to run your Azure pipeline jobs, and you can add
+    as many agents as you want in a similar fashion. You may have various types of
+    hosted agents in one pool; the appropriate agent for the job is automatically
+    selected based on the pipeline requirements, or you can select an agent specifically
+    at execution time. Typically, in a large environment, you''d pre-create an image
+    of an agent server so that it is faster to provision additional agents whenever
+    needed. In the next section, we will update our pipeline to leverage this newly
+    set-up self-hosted agent. Please refer to this documentation if you wish to use
+    a Linux-based hosted agent: [https://docs.microsoft.com/en-us/azure/devops/pipelines/agents/v2-linux?view=azure-devops](https://docs.microsoft.com/en-us/azure/devops/pipelines/agents/v2-linux?view=azure-devops).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Refer to the following link for macOS-based agents: [https://docs.microsoft.com/en-us/azure/devops/pipelines/agents/v2-osx?view=azure-devops](https://docs.microsoft.com/en-us/azure/devops/pipelines/agents/v2-osx?view=azure-devops).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important note
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If your self-hosted agent machine is behind a network firewall or proxy, you
+    must define the proxy address while installing the Azure pipeline agent. You can
+    do that by specifying the proxy URL, username, and password with a config command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`./config.cmd --proxyurl http://127.0.0.1:8888 --proxyusername "myuser" --proxypassword
+    "mypass"`'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Updating your Azure pipeline to use self-hosted agents
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this section, we'll take the Azure pipeline scenario covered in the last
+    chapters (**PartsUnlimited**) and modify it to use our newly created self-hosted
+    agent. This will enable us to use our self-hosted agent to run the pipelines,
+    rather than using Microsoft-provided agents.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Preparing your self-hosted agent to build the Parts Unlimited project
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Before we can start using the self-hosted agent, we must prepare it to support
+    building our sample project, **PartsUnlimited**. The **PartsUnlimited** project
+    is built using Visual Studio leveraging .NET Framework, Azure development tools
+    and .NET Core, Node.js, and so on. In order to use our self-hosted agent for building
+    the solution, we must install the required dependencies prior to running the pipeline
+    jobs:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Log in to your self-hosted agent VM.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Download the Visual Studio build tools with this link: [https://visualstudio.microsoft.com/thank-you-downloading-visual-studio/?sku=BuildTools&rel=16](https://visualstudio.microsoft.com/thank-you-downloading-visual-studio/?sku=BuildTools&rel=16).'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: This will launch Visual Studio Installer.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Select **ASP.Net and Web Development** and **Azure Development**.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Click **Modify**. This will start installing the required framework and tools.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Once this is completed, please download and install .NET Core 2.2\. You can
+    download it from this link: [https://dotnet.microsoft.com/download/dotnet-core/thank-you/sdk-2.2.110-windows-x64-installer](https://dotnet.microsoft.com/download/dotnet-core/thank-you/sdk-2.2.110-windows-x64-installer).'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'You can find all the .NET downloads here: [https://dotnet.microsoft.com/download](https://dotnet.microsoft.com/download).'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Install Azure PowerShell by running the following commands in an elevated PowerShell
+    window:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Install Node.js version 6.x from [https://nodejs.org/download/release/v6.12.3](https://nodejs.org/download/release/v6.12.3).
+    You can download the file named `node-v6.12.3-x64.msi` and install it using the
+    interactive installer.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Your host is now ready to build the **PartsUnlimited** solution.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Running the Azure pipeline
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this task, we''ll now run the pipeline job to build the **PartsUnlimited**
+    solution using our own self-hosted agents:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Log in to the **Azure DevOps** portal and browse to the **PartsUnlimited** project.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Browse to **Pipelines**:![Figure 6.18 – Azure Pipelines
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '](img/Figure_6.18_B16392.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Figure 6.18 – Azure Pipelines
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Open the pre-created pipeline named `PartsUnlimitedE2E`.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Click on **Edit Pipeline**.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: In the pipeline, change the **agent pool** to your newly created agent pool:![Figure
+    6.19 – Selecting an agent pool for the pipeline
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '](img/Figure_6.19_B16392.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Figure 6.19 – Selecting an agent pool for the pipeline
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Save the pipeline. You can also choose to run it after saving by selecting **Save
+    & queue**:![Figure 6.20 – Saving the pipeline
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '](img/Figure_6.20_B16392.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Figure 6.20 – Saving the pipeline
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Now, we are ready to execute the pipeline. Click on **Run pipeline**:![Figure
+    6.21 – Running the pipeline
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '](img/Figure_6.21_B16392.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Figure 6.21 – Running the pipeline
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Under **Agent pool**, change the pool name to the agent pool you configured
+    in the previous section and click **Run**:![Figure 6.22 – The Run pipeline wizard
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '](img/Figure_6.22_B16392.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Figure 6.22 – The Run pipeline wizard
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: This will start executing the pipeline job on your self-hosted agent. This may
+    take a few minutes to complete:![Figure 6.23 – The Azure pipeline Jobs logs
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '](img/Figure_6.23_B16392.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Figure 6.23 – The Azure pipeline Jobs logs
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: You can click on the job name to view the logs in real time.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: You've now completed setting up an Azure pipeline, which is using a VM-based
+    self-hosted pipeline agent for running the jobs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using containers as self-hosted agents
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Azure Pipelines supports using Docker containers as the compute target for running
+    pipeline jobs. You can use both Windows containers (Windows Server Core/Nano Server)
+    and Linux containers (Ubuntu) to host your agents.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In order to connect the container to your Azure DevOps organization, you'll
+    need to pass a few environment variables, such as the agent pool name, personal
+    access token, and so on.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Setting up Windows containers as Azure pipeline agents
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In order to use Windows containers as Azure pipeline agents, you need to build
+    the container image first and then run it with your Azure DevOps organization
+    environment variables. Let's look at the process.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Building the container image
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Follow these steps to build the container image:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Launch Command Prompt and run the following commands:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Create a new file named `Dockerfile` (no extension) and update it with the
+    following content. You can use Notepad to open the file:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Create a new PowerShell file with the name `start.ps1` and copy the content
+    from here: [https://github.com/PacktPublishing/Learning-Azure-DevOps---B16392/blob/master/Chapter-6/start.ps1](https://github.com/PacktPublishing/Learning-Azure-DevOps---B16392/blob/master/Chapter-6/start.ps1).'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Run the following command to build the container image:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Your container image is now ready to use. You can use `dockeragent` as the image
+    name to refer to this image. Optionally, you can save this image in your container
+    repository.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Running the Azure Pipelines agent container
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Now that you have a container image ready, you can use it as the pipeline agent
+    by running the container.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Launch a Command Prompt window and run the following command. Be sure to update
+    the Azure DevOps organization URL, token, and agent name:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: Your container-based Azure pipeline agent is now ready to use. If you want to
+    use a container for one job and re-create it every time, you can use the `–-once`
+    flag to use one container for running one job **only** and use a container orchestrator
+    such as Kubernetes to re-create the container as soon as it finishes executing
+    the current job.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important note
+  prefs: []
+  type: TYPE_NORMAL
+- en: Refer to the Microsoft docs – [https://docs.microsoft.com/en-us/virtualization/windowscontainers/about/](https://docs.microsoft.com/en-us/virtualization/windowscontainers/about/)
+    – for additional details about Windows containers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next section, we'll take a look at setting up Linux-based containers
+    as Azure Pipelines agents.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Setting up Linux containers as Azure Pipelines agents
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In order to use Linux containers as Azure pipeline agents, you can either use
+    the Docker image published by Microsoft on Docker Hub or build your own Docker
+    image.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Microsoft''s Azure pipeline agent image is available here: [https://hub.docker.com/_/microsoft-azure-pipelines-vsts-agent](https://hub.docker.com/_/microsoft-azure-pipelines-vsts-agent).
+    You can directly run this image with environment variables, including information
+    about your Azure DevOps organization:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: Alternatively, you can also choose to build your own Docker image to use for
+    your Pipelines agents. The process is similar to building an image for Windows
+    containers. Please refer to the Microsoft docs here – [https://docs.microsoft.com/en-us/azure/devops/pipelines/agents/docker?view=azure-devops](https://docs.microsoft.com/en-us/azure/devops/pipelines/agents/docker?view=azure-devops)
+    – for reference to the entry point script.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using Azure Container Instances as agents
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '**Azure Container Instances** (**ACI**) is a managed service to run Windows
+    and Linux containers in the Azure cloud. If standard Microsoft-hosted agents don''t
+    fit your needs (requirements, performances, and so on) and you do not have sufficient
+    infrastructure to host the container on-premises, you can use ACI to create a
+    self-hosted agent for Azure DevOps.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can create a build agent running on ACI by using a custom image or reusing
+    one of Microsoft's images that are available.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You''ll need the Azure DevOps account name, personal access token, and agent
+    name to run an Azure pipeline agent in ACI. When you have the required details,
+    you can create an agent on ACI by executing the following command from the Azure
+    CLI (after connecting to your Azure subscription):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here, we have the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`RESOURCE_GROUP_NAME` is the name of your resource group in Azure where you
+    want to create this resource.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`CONTAINER_NAME` is the name of the ACI container name.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`AZURE_DEVOPS_ACCOUNT_NAME` is the name of your Azure DevOps account.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`PERSONAL_ACCESS_TOKEN` is the personal access token previously created.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`AGENT_NAME` is the name of the build agent that you want to create and that
+    will be displayed on Azure DevOps.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'In this command, there are also other two important parameters:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The `--image` parameter is used to select the name of the Azure Pipelines image
+    for creating your agent, as described here: [https://hub.docker.com/_/microsoft-azure-pipelines-vsts-agent](https://hub.docker.com/_/microsoft-azure-pipelines-vsts-agent).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The VSTS_POOL parameter is used to select the agent pool for your build agent.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Remember that you can start and stop an ACI instance by using the `az container
+    stop` and `az container start` commands, and this can help you save money.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's take a look at some of the additional environment variables you can use
+    with Azure pipeline agent-based containers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Environment variables
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Azure DevOps pipeline agents running on containers can be customized further
+    by using additional environment variables. The environment variables and their
+    purposes are described as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`AZP_URL`: The URL of the Azure DevOps organization'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`AZP_TOKEN`: Personal access token'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`AZP_AGENT_NAME`: The name of your Azure pipeline agent'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`AZP_POOL`: Agent pool name (default value is `Default`)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`AZP_WORK`: Work directory (default value is `_work`)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In this section, we learned about using containers as your Azure pipeline agents
+    for executing your pipeline jobs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Planning for scale – Azure VM scale sets as Azure pipeline agents
+  prefs: []
+  type: TYPE_NORMAL
+- en: Azure VM scale sets are an Azure service that allow you to create and manage
+    hundreds of identical VMs with the ability to automatically or manually scale
+    the number of VMs. Azure VM scale sets can be used as Azure pipeline agents in
+    a large-scale project where you need elastic capacity based on your Azure pipeline
+    job execution workload.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Azure VM scale sets support up to 1,000 VMs in one scale set.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Planning for scale
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Azure VM scale set-based agents can be auto-scaled based on your Azure Pipelines
+    jobs demand at a given time. There are several reasons why scale set agents can
+    be a better option, rather than using dedicated agents:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: You need more computer power (CPU and memory) at a certain time and this requirement
+    fluctuates based on workload.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Microsoft-hosted agents are not able to meet your pipeline requirements.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Your job runs for a long time or takes time to complete.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: You wish to use the same agent for various jobs consecutively to take advantage
+    of caching and so on.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: You don't want to run dedicated agents all the time as these incur costs.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: You want to regularly update the image of VMs running jobs.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Azure VM scale sets can automatically increase/decrease the number of pipeline
+    agents available based on the current demand of Azure Pipelines. This helps you
+    save money, as well as supports your scaling requirements.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating an Azure VM scale set
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this section, we''ll create an Azure VM scale set to use as an Azure pipeline
+    agent. Please note that Azure Pipelines requires the scale set to be created with
+    certain configurations, so you may not be able to use an existing scale set:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Log in to the Azure portal and click on **+ Create a resource**.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Search for `Virtual machine scale set`:![Figure 6.24 – A VM scale set in the
+    Azure portal
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '](img/Figure_6.24_B16392.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Figure 6.24 – A VM scale set in the Azure portal
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Click **Create**.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Fill in the values as described here:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '--**Subscription**: Choose the subscription on which you wish to deploy this
+    scale set.'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '--**Resource group**: Choose an existing resource group or create a new one.'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '--**Virtual machine scale set name**: Identifier of your choice.'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '--**Region**: The Azure region of your choice; it is recommended to choose
+    the one closest to you.'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '--**Availability zone**: Recommended to choose all three for high availability.'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '--**Image**: Choose a supported Windows or Linux image for the Azure Pipelines
+    agent.'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '--**Azure Spot instance**: Can help in minimizing cost. Refer to [https://azure.microsoft.com/en-us/pricing/spot/](https://azure.microsoft.com/en-us/pricing/spot/)
+    for details.'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '--**Size**: The VM size for your agents.'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '--**Authentication**: Username/password or SSH key:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '![Figure 6.25 – Creating a VM scale set'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '](img/Figure_6.25_B16392.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Figure 6.25 – Creating a VM scale set
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Click **Next: Disks >**.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: You can customize the disk performance tier and encryption settings, and add
+    additional disks if required. If you're unsure, accept the defaults and click
+    **Next**.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: On the networking page, you can choose to connect the scale set to an existing
+    virtual network if your scale set needs to access any of your network resources
+    securely. Please ensure that **Use a load balancer** is set to **No** for the
+    Azure Pipelines scale set. Once configured, click **Next**:![Figure 6.26 – Azure
+    VM scale set load balancing settings
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '](img/Figure_6.26_B16392.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Figure 6.26 – Azure VM scale set load balancing settings
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: On **Scaling**, provide an initial instance count and keep **Scaling policy**
+    to **Manual**. Leave the other settings as the default and click **Next**:![Figure
+    6.27 – Scale set settings
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '](img/Figure_6.27_B16392.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Figure 6.27 – Scale set settings
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: On **Management**, ensure that **Upgrade mode** is set to **Manual**. Leave
+    the other settings as the default and click **Next**:![Figure 6.28 – Scale set
+    upgrade policy
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '](img/Figure_6.28_B16392.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Figure 6.28 – Scale set upgrade policy
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: On the **Health and Advanced Setting** page, optionally change any settings
+    you want to customize for your environment. Click **Review and Create** once you're
+    ready to start creating the scale set.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Once the validation is successful, click **Create** to start the deployment.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: It may take a few minutes for the deployment to complete. Please wait while
+    the deployment finishes. One the VM scale set is ready, we'll set it up to be
+    used as an Azure Pipelines agent.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Setting up Azure pipeline agents with VM scale set
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In the last section, we created a VM scale set. Now, we will set that up as
+    an Azure pipeline agent:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Log in to your Azure DevOps organization and browse to **Project Settings**
+    > **Agent Pools**.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Click on **Add Pool**.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Fill in the values as defined here:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '--**Pool Type**: Virtual machine scale set'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '--**Project for Service Connections**: Choose your Azure DevOps project'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '--**Azure Subscription**: Select the Azure subscription where you created the
+    VM scale set:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '![Figure 6.29 – Adding an agent pool for the scale set'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '](img/Figure_6.29_B16392.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Figure 6.29 – Adding an agent pool for the scale set
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Click **Authorize** to enable access to your Azure subscription. You may be
+    asked to log in to your Azure account in this process.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Once authenticated, select an existing VM scale set and fill in the values
+    as described here:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: --The name and description of your choice for this agent pool.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: --Optionally, configure the scale set to delete the VM after each execution.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: --The maximum number of VMs.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: --The number of agents to keep as standby. While this can help you in completing
+    jobs quickly, it may increase your Azure cost.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Click **Create** once you have filled in all the values:![Figure 6.30 – Creating
+    a scale set-based agent pool
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '](img/Figure_6.30_B16392.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Figure 6.30 – Creating a scale set-based agent pool
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Your agent pool creation will now start. Please note that it may take around
+    15 minutes before your agent pool is ready to take up the jobs. You should see
+    the agents live in your agent pool upon completion:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![Figure 6.31 – Agents'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/Figure_6.31_B16392.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 6.31 – Agents
+  prefs: []
+  type: TYPE_NORMAL
+- en: Once your agent pool is ready, you can update your Azure pipeline to start using
+    this pool for job execution.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we looked at using Microsoft-hosted agents and self-hosted
+    agents to run your Azure pipeline jobs. We dug deep into the process of setting
+    up a self-hosted agent and updated our pipelines to use the self-hosted agent.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We also looked at how you can use Docker containers, Azure container instances,
+    and Azure VM scale sets as your Azure pipeline agents. With this chapter, you
+    should be able to plan and implement the appropriate pipeline agent solution for
+    your projects
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next chapter, we'll learn about Artifacts in Azure DevOps.
+  prefs: []
+  type: TYPE_NORMAL

@@ -1,0 +1,1078 @@
+- en: Choosing the Right Service Discovery
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: When tackling dynamic environments, manually maintaining a file of targets is
+    not an option. Service discovery handles the complexity of an ever-changing infrastructure
+    for you, making sure that no service or host slips through the cracks. This chapter
+    focuses on how to take advantage of Prometheus service discovery to decrease the
+    infrastructure management toil regarding coping with constant change.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In brief, the following topics will be covered in this chapter:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Test environment for this chapter
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Running through the service discovery options
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using a built-in service discovery
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Building a custom service discovery
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Test environment for this chapter
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we'll be focusing on service discovery. For this, we'll be
+    deploying two new instances to simulate a scenario where Prometheus generates
+    targets dynamically using a popular service discovery software. This approach
+    will allow us to not only expose the required configurations, but also validate
+    how everything works together.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The setup we''ll be using resembles the following diagram:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/0046acd0-7265-423c-aab8-96f281292177.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 12.1: Test environment for this chapter'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The usual deployment pattern for Consul is to have an agent running in client
+    mode on every node in the infrastructure, which will then contact Consul instances
+    running in server mode. Furthermore, client instances act as API proxies, so it
+    is common practice for Prometheus Consul service discovery to be configured using
+    the localhost. However, to make their different responsibilities clear, we've
+    opted to just have a Prometheus instance in one VM and a Consul running as a server
+    in another in our test environment.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next section, we will explain how to get the test environment up and
+    running.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Deployment
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'To launch a new test environment, move into this chapter''s path, relative
+    to the repository root:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Ensure that no other test environments are running and spin up this chapter''s
+    environment:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You can validate the successful deployment of the test environment using the
+    following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This will provide you with the following output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'When the deployment tasks end, you''ll be able to validate the following endpoints
+    on your host machine using your favorite JavaScript-enabled web browser:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| **Service** | **Endpoint** |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Prometheus | `http://192.168.42.10:9090` |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Consul | `http://192.168.42.11:8500` |'
+  prefs: []
+  type: TYPE_TB
+- en: 'You should be able to access the desired instance by using one of the following
+    commands:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| **Instance** | **Command** |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Prometheus | `vagrant ssh prometheus` |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Consul | `vagrant ssh consul` |'
+  prefs: []
+  type: TYPE_TB
+- en: Cleanup
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'When you''ve finish testing, just make sure you''re inside `./chapter12/` and
+    execute the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: Don't worry too much – you can easily spin up the environment again if you need
+    to.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Running through the service discovery options
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Prometheus comes with several discovery integrations available out of the box.
+    These cover most of the mainstream data sources for application and machine inventories,
+    such as public and private cloud compute APIs, VM and container orchestration
+    systems, standalone service registration and discovery systems, among others.
+    For those discovery mechanisms that aren't directly supported by Prometheus, integration
+    can be done through a generic discovery system using the filesystem and some glue
+    code, as we'll see later in this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Every integration works in the same way – by setting all the discovered addresses
+    as targets and their associated metadata as temporary labels (not persisted without
+    some relabeling to keep them). For each discovered target, the `__address__` label
+    is usually set to the service address and port. This is relevant, because this label
+    is the one Prometheus uses to connect to the scrape target; the `instance` label
+    defaults to use the `__address__` value when not explicitly defined, but it can
+    be set to anything else that makes it easier to identify the target.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Metadata labels provided by service discovery integrations follow the pattern
+    of `__meta_<service discovery name>_<key>`. There are also some labels added by
+    Prometheus, such as `__scheme__` and `__metrics_path__`, which define whether
+    the scrape should be performed using HTTP or HTTPS and the configured endpoint
+    to scrape, respectively.
+  prefs: []
+  type: TYPE_NORMAL
+- en: URL parameters are not supported in the `metrics_path` scrape configuration.
+    Instead, these need to be set in the `params` configuration.  This is covered
+    in [Chapter 5](12e775c2-bee9-4ebe-ad73-2f9313eeeeee.xhtml), *Running a Prometheus
+    Server*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The following sections provide an overview of the available discovery options,
+    and also present some examples on how to configure them, accompanied by screenshots
+    of their generated data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Cloud providers
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'With the rise of cloud infrastructure, it is increasingly common to have workloads
+    running in these environments. This brings new sets of challenges; for example,
+    ephemeral and highly dynamic infrastructure provisioning. The ease of scalability
+    is also something to keep in mind: in the past, it might have taken months to
+    negotiate, agree on support contracts, buy, deploy, and configure new hardware;
+    nowadays, it''s a matter of seconds to have a new fleet of instances up and running.
+    With technology such as auto-scaling, which deploys new instances without you
+    even knowing, change is hard to keep up with. To ease the burden of keeping tabs
+    on this cloud-native dynamic infrastructure, Prometheus integrates out of the
+    box with some of the big players in the **Infrastructure as a Service** (**IaaS**)
+    market, such as Amazon Web Services, Microsoft Azure Cloud, Google Cloud Platform,
+    OpenStack, and Joyent.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Using Amazon **Elastic Compute **(**EC2**) as an example for virtual machine
+    discovery, the scrape job configuration can be as simple as the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Other cloud providers will have different settings, but the logic is pretty
+    much the same. Basically, we need to set the appropriate level of credentials
+    to query the cloud provider API so that Prometheus discovery integration can consume
+    all the data required to produce our targets, as well as their associated metadata.
+    The following screenshot illustrates how a configuration similar to the one listed
+    previously but with actual credentials translates into a set of targets:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/2fba1ca1-18c8-4268-8237-3f5ab2c62fbd.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 12.2: Prometheus */*service-discovery endpoint depicting ec2_sd data'
+  prefs: []
+  type: TYPE_NORMAL
+- en: As we can see in the preceding screenshot, EC2 discovery attaches a fair amount
+    of metadata labels to each discovered target. These are available during the relabeling
+    phase so that you can use them to only scrape targets that are running, change
+    scraping from the private IP address to the public one, or rename the instance
+    label to a friendlier name.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This information, which is collected from the discovery process, is either periodically
+    refreshed (the refresh interval is configurable at the service discovery level) or,
+    automatically refreshed via watches, allowing Prometheus to become aware of targets
+    being created or deleted.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Container orchestrators
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Container orchestrators are a perfect place to extract what services are running
+    and where, as it's their job to manage exactly that information. As such, the
+    Prometheus discovery mechanism supports some of the most widely used container
+    orchestration platforms, such as Kubernetes and Marathon, the container orchestration
+    platform for Mesos and DC/OS. Since we've been using Kubernetes for most of our
+    examples throughout this book, we're going to focus on this platform to explain
+    how these types of systems work.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Like Prometheus, Kubernetes is a graduated project from the **Cloud Native Computing
+    Foundation** (**CNCF**). While that doesn't mean one was created specifically
+    to work with the other, the connection between the two is undeniable. Borg and
+    Borgmon, Google's container orchestration and monitoring systems, are definitely
+    the inspiration for Kubernetes and Prometheus, respectively. To tackle the monitoring
+    of cloud-native platforms such as Kubernetes, where the rate of change is almost
+    overwhelming, a special set of features is required. Prometheus fits these requirements,
+    such as efficiently handling the ephemeral nature of containers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The Prometheus service discovery integration retrieves all the required data
+    via the Kubernetes API, keeping up to date with the state of the cluster. Due
+    to the number of API objects available to query, the discovery configuration for
+    Prometheus has the concept of role, which can be either `node`, `service`, `pod`,
+    `endpoint`, or `ingress`. While explaining Kubernetes core concepts is out of
+    scope for this book, we can quickly go through what each of these roles is used
+    to discover: `node` is used to collect the actual nodes that form the Kubernetes
+    cluster (for example, the VMs that run the kubelet agent), and thus can be used
+    to monitor the cluster itself, as well as its underlying infrastructure; the service
+    object in Kubernetes acts like a load balancer, and `service` will give you just
+    that – a single endpoint per port of each configured service, whether it is backed
+    by one or several application instances – and is only used for blackbox monitoring;
+    `pod` is used to discover individual pods, independently of whether they belong
+    to a service or not; `endpoint` discovers the main process in a pod that is backing
+    a given service; and finally, `ingress`, similar to `service`, returns the external-facing
+    load balancer for a set of application instances and thus should only be used
+    for end-to-end probing.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following code snippet provides an example of how to query pods, matching
+    the ones that have a label, `app`, that matches the value `hey`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The preceding configuration generates the data depicted in the following screenshot,
+    where we can see all the metadata that was gathered via the Kubernetes API:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/cd652109-78b2-4fea-9769-d636a2398e68.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 12.3: Prometheus /service-discovery endpoint depicting kubernetes_sd
+    data'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This is a very small example of what can be done. Configurations that use the
+    Kubernetes service discovery usually make extensive use of `relabel_configs` to
+    filter targets, rewrite the `job` label to match container names, and to generally
+    do clever auto-configuration based on conventions around Kubernetes annotations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Service discovery systems
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: As the number of services grows, it becomes harder and harder to tie everything
+    together – both in terms of services being correctly configured to contact each
+    other, as well as operators having visibility of how the system is behaving. A
+    common solution to these problems is to implement a service discovery system that
+    acts as registry and that can then be consulted by software clients, as well as
+    the monitoring system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Prometheus integrates seamlessly with a few mainstream service discovery systems
+    and currently supports Consul, Nerve, and ServerSets. Integrating directly with
+    discovery services allows Prometheus to always have an up-to-date view of what
+    is running and where, allowing service instances to be monitored automatically
+    as soon as they are created, up until they are destroyed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Consul is by far the most popular, as it provides a full set of features to
+    implement service discovery and powerful yet simple-to-use command-line tools
+    and APIs, and is easy to scale. Let''s use the following for our example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The preceding example translates into the following screenshot, where we can
+    see not only the generated labels, but also the definitions of the targets:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/1e139a67-bffa-4703-8efa-3715a6c9ad83.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 12.4: Prometheus /service-discovery endpoint depicting consul_sd data'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The preceding example shows a working configuration for gathering data from
+    all the available services registered within a Consul server, using `relabel_configs`
+    to rewrite the target's `job` label to be the service name instead of the `job_name`.
+    This means that every application instance registered in Consul would be automatically
+    picked up as a scrape target and correctly assigned the proper job name. Additionally,
+    the last relabel rule changes the target port to `9107` when the service is named
+    Consul, thus changing the target from Consul itself to an exporter for it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: DNS-based service discovery
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'This type of service discovery relies on DNS to gather data. It works by defining
+    a list of domain names that will be queried regularly to obtain targets. The name
+    servers that are used for resolution are looked up in `/etc/resolv.conf`. This
+    discovery integration, besides supporting A and AAAA DNS records, is also able
+    to query SRV records, which also provide the port for the service:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: We can see that, by querying the SRV record for `hey.service.example.inet` in
+    this example, we get the service location `server01.node.example.inet` and port
+    `8080`. We also get the A record with the service IP address and a TXT record
+    with some metadata.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following snippet illustrates a sample scrape configuration using this
+    DNS service discovery integration. It does this by using the domain `hey.service.example.inet`
+    from before:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The returned SRV records will be converted into new targets. Prometheus doesn''t
+    support the advanced DNS-SD specified in RFC 6763, which allows metadata to be
+    transmitted in associated TXT records (as seen in the `dig` command previously).
+    This means that only the service address and port can be discovered using this
+    method. We can see what discovered labels are available in the following screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/261b8bcc-e022-46fc-95dc-b4b0c45c0ab5.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 12.5: Prometheus */service-discovery* endpoint depicting *dns_sd* data'
+  prefs: []
+  type: TYPE_NORMAL
+- en: From all the discovery integrations, this is the one with the low amount of
+    provided metadata. Adding to that, using DNS for service discovery is hard to
+    get right – planning for slow convergence, considering several different cache
+    layers that may or may not respect record TTLs, among other concerns. This should
+    only be considered for advanced cases.
+  prefs: []
+  type: TYPE_NORMAL
+- en: File-based service discovery
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Similar to the webhook notifier being the solution for integrating with unsupported
+    notification systems (as explained in [Chapter 11](db658650-14d2-4a7e-9ae0-1c003e63109c.xhtml),
+    *Understanding and Extending Alertmanager*), file-based integration provides the
+    same type of solution for service discovery. It works by loading a list of valid
+    JSON or YAML files, which in turn are used to generate the required targets and
+    their labels. Reloading or restarting Prometheus after discovery files change
+    is not necessary as they are watched for changes and automatically reread, depending
+    on the operating system. Additionally, and as a fallback, the discovery files
+    are also read on a schedule (every 5 minutes, by default).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following JSON snippet shows a valid Prometheus discovery file. As we can
+    see, there is a label list and a targets array that the labels apply to:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The following scrape configuration uses the `file_sd` discovery, which loads
+    the `file_sd.json` that has the content we showed previously:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `files` list also allows globing on the last element of the path, at the
+    file level.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The discovered target from this configuration can be seen in the following
+    screenshot, where we can check the metadata provided by our file, as well as the
+    labels that were generated automatically by Prometheus:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/04711801-62dc-4225-8c1d-78288a7c1091.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 12.6: Prometheus /service-discovery endpoint depicting file_sd data'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'It is easy to see how this integration opens up a world of possibilities: these
+    files can be created through a daemon that''s constantly running or a cron job,
+    using shell scripts (even a simple wget) or full-fledged programming languages,
+    or simply put in place by configuration management. We will explore this topic
+    later in this chapter when we discuss how to build a custom service discovery.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using a built-in service discovery
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: To understand how the integration between Prometheus and a service discovery
+    provider works, we're going to rely on our test environment. Going even further,
+    we'll provide a working example of Prometheus running in Kubernetes, relying on
+    its native service discovery for this platform. These hands-on examples will showcase
+    how everything ties together, helping you figure out not only the benefits but,
+    above all, the simplicity of these mechanics.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using Consul service discovery
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: For this chapter, we configured Consul as an example service discovery system
+    in our virtual machine-based test environment – Consul is quite simple to set
+    up, which makes it perfect for our example. The way it works is by having an agent
+    running in client mode in each node and an odd number of agents running in server
+    mode that maintain the service catalog. The services that are available on the
+    client nodes are communicated to the server nodes directly, while cluster membership
+    is propagated using a gossip protocol (random peer-to-peer message passing) between
+    every node in the cluster. Since our main objective is to showcase the Prometheus
+    service discovery using Consul, we configured our test environment with an agent
+    running in development mode, which enables an in-memory server to play around
+    with. This, of course, has complete disregard for security, scalability, data
+    safety, and resilience; documentation regarding how to properly configure Consul
+    can be found at [https://learn.hashicorp.com/consul/](https://learn.hashicorp.com/consul/),
+    and should be taken into account when deploying and maintaining Consul in production
+    environments.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To poke around how this is set up in the test environment, we need to connect
+    to the instance running Consul:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'From here, we can start to explore how Consul is set up. For example, the following
+    snippet shows the systemd unit file being used, where we can see the configuration
+    flags being used – it''s configured to run as an agent in development mode, and
+    has to bind its ports to the instance''s external-facing IP address:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'If we run `ss` and filter its output to only show lines belonging to Consul,
+    we can find all the ports it''s using:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As we can see, Consul listens on a lot of ports, both TCP and UDP. The port
+    we''re interested in is the one serving the HTTP API, which defaults to TCP port
+    `8500`. If we open a web browser to `http://192.168.42.11:8500`, we will see something
+    similar to the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/e34662e2-2048-4bba-b590-7753c24c4dec.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 12.7: Consul web interface displaying its default configuration'
+  prefs: []
+  type: TYPE_NORMAL
+- en: There's a single service configured by default, which is the Consul service
+    itself.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To make this example more interesting, we also have `consul_exporter` (an exporter
+    provided by the Prometheus project) deployed in the `consul` instance. This exporter
+    doesn''t require any additional configuration on Consul''s side, so it should
+    just work. We can find the configuration used to run this service in the systemd
+    unit file, like so:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: The source code and installation files for the `consul_exporter` are available
+    at [https://github.com/prometheus/consul_exporter](https://github.com/prometheus/consul_exporter).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To validate that the exporter is correctly contacting Consul and parsing its
+    metrics, we can run the following instruction:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: The exporter sets the `consul_up` metric to `1` when it can successfully connect
+    and collect metrics from Consul. We can also see the `consul_catalog_services` metric,
+    which is telling us that Consul knows about one service, matching what we've seen
+    in the web interface.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can now disconnect from the `consul` instance and connect to the `prometheus`
+    one using the following commands:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'If we take a look at the Prometheus server configuration, we will find the
+    following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This configuration allows Prometheus to connect to the Consul API address (available
+    at `http://192.168.42.11:8500`) and, by means of `relabel_configs`, rewrite the
+    `job` label so that it matches the service name (as exposed in the `__meta_consul_service`
+    label). If we inspect the Prometheus web interface, we can find the following
+    information:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/2db261a5-76d8-4f3e-ad1f-30889debfefc.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 12.8: Prometheus /service-discovery endpoint showing Consul default
+    service'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, the fun part: let''s add a scrape target for `consul_exporter` automatically
+    by defining it as a service in Consul. A JSON payload with a Consul service configuration
+    is provided in this chapter''s resources, so we can add it via the Consul API.
+    The payload can be found at the following path:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Using the following instruction, we''ll add this new service to Consul''s service
+    catalogs via the HTTP API:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After running this command, we can validate that the new service was added
+    by having a look at the Consul web interface, which will show something like the
+    following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/0250a371-7438-4945-b9b1-b19b321477d4.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 12.9: Consul web interface showing the consul-exporter service'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Finally, we can inspect the Prometheus `/service-discovery` endpoint and check
+    that we have a new target, proving that the Consul service discovery is working
+    as expected:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/6953826d-6c14-489b-9767-5af2237bc548.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 12.10: Prometheus /service-discovery endpoint showing consul-exporter
+    target'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If we consult the `consul_catalog_services` metric once again, we can see that
+    it has changed to 2\. Since we''re now collecting the `consul_exporter` metrics
+    in Prometheus, we can query its current value using `promtool`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Consul tags can be used to do scrape job configuration using `relabel_configs`
+    for services that have different requirements, such as changing the metrics path
+    when a given tag is present, or having a tag to mark whether to scrape using HTTPS.
+    The `__meta_consul_tags` label value has the comma separator at the beginning
+    and end to make matching easier; this way, you don''t need to special-case your
+    regular expression, depending on the position in the string of the tag you''re
+    trying to match. An example of this at work could be:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: This would only keep services registered in Consul with the `exporter` tag,
+    discarding everything else.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using Kubernetes service discovery
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In this example, we''re stepping away from the Prometheus Kubernetes Operator
+    we''ve been using in previous chapters so that we can focus on the Prometheus
+    native service discovery integration for this container orchestration platform.
+    The manifests for getting Prometheus up and running in our Kubernetes test environment
+    can be found, relative to the code repository root path, at the following path:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: The following steps will ensure a new Kubernetes environment with all the required
+    software provisioned so that we can then focus on the service discovery component.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Validate that no other environment is running:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Start an empty Kubernetes environment:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The extra configuration we''re providing to minikube is needed so that Prometheus
+    is able to interact with `kubelets` using service account tokens. When the previous
+    command finishes, a new Kubernetes environment will be ready to be used. We can
+    then proceed to deploy our configurations using the following instructions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The previous command applies several manifests, which, among other things,
+    create a namespace called `monitoring`, a ServiceAccount, and all the required
+    RBAC configurations so that Prometheus can query the Kubernetes API. A `ConfigMap`
+    with the Prometheus server configuration is also included, which can be found
+    at `bootstrap/03_prometheus-configmap.yaml`. It defines several scrape jobs for
+    Kubernetes components that are targeted through the use of service discovery,
+    as we can see in the following snippet:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We can open the Prometheus web interface by issuing the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'By moving into the service discovery section available on the `/service-discovery`
+    endpoint, we can see that, even though several pods were discovered, none of them
+    matched the label value `hey` for the `app` label, and as such are being dropped:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/17bff879-85f8-4b7b-b064-e3584277df90.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 12.11: Prometheus /service-discovery endpoint showing dropped targets
+    for the kubernetes-pods job'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'It''s now time to add some new pods with the correct label/value pair to trigger
+    our service discovery configuration. We can proceed by running the following commands,
+    which will be deploying the `hey` application, and then follow the status of the
+    deployment:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After a successful deployment, we can go, once again, to the Prometheus web
+    interface at the `/service-discovery` endpoint, where we can see that there are
+    now three active targets in the `kubernetes-pods` scrape job. The following screenshot
+    depicts one of those targets and all the labels provided by the Kubernetes API:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/b49d8dc0-ea63-4617-a91c-9020c6e8b6d1.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 12.12: Prometheus /service-discovery endpoint showing the discovered
+    targets for the kubernetes-pods job'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'When you''re finished testing, you can delete this Kubernetes-based environment
+    by issuing the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: This approach to service discovery allows us to keep track of several Kubernetes
+    objects automatically, without forcing us to change the Prometheus configuration
+    manually. This environment allows us to test all sorts of settings and provides
+    the basis for tailoring the Kubernetes service discovery to our specific needs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Building a custom service discovery
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Even with all the available service discovery options, there are numerous other
+    systems/providers that are not supported out of the box. For those cases, we''ve
+    got a couple of options:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Open a feature request for Prometheus to support that particular service discovery,
+    and rely on the community and/or maintainers to implement it.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Implement the service discovery integration yourself in Prometheus and either
+    maintain a fork or contribute it back to the project.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Figure out a way to get the targets you require into your Prometheus instances
+    with minimal maintenance work and time cost, and without relying on the Prometheus
+    roadmap to get the job done.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The first two options aren't great, as they are either outside of our control
+    or are cumbersome to maintain. Furthermore, adding additional service discovery
+    integrations to Prometheus without fairly large interest and backing communities
+    places an undue support burden on the maintainers, who aren't currently accepting
+    any new integrations. Luckily, there is a way to easily integrate with any type
+    of service or instance catalog, without needing to maintain costly forks or creative
+    hacks. In the following section, we'll be tackling how to integrate our own service
+    discovery with Prometheus.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Custom service discovery fundamentals
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The recommended way to integrate a custom service discovery is by relying on
+    the file-based service discovery, `file_sd`. The way this integration should be
+    implemented is to have a process (local or remote, scheduled or permanently running)
+    query a data source (catalogue/API/database/**configuration management database** (**CMDB**))
+    and then write a JSON- or YAML-formatted file with all the targets and their respective
+    labels on a path that's accessible by Prometheus. The file is then read by Prometheus
+    either automatically through disk watches or on a schedule, which in turn allows
+    you to dynamically update the targets that are available for scraping.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following diagram illustrates the aforementioned workflow:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/aedacf33-2fb8-4089-b3c2-81c1062d1ec8.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 12.13: Custom service discovery flow'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This type of approach is generic enough to comply with most, if not all, required
+    use cases, making it possible to build a custom service discovery mechanism in
+    a straightforward manner.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Community-driven `file_sd` integrations can be found at [https://prometheus.io/docs/operating/integrations/#file-service-discovery](https://prometheus.io/docs/operating/integrations/#file-service-discovery).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we know how this type of integration should work, let's dive right
+    in and start building our own.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Recommended approach
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: As we've explained so far, building a custom service discovery seems like a
+    manageable enough endeavor. We're required to query something for data and write
+    that data into a file, following a standard format. To make our lives easier,
+    the Prometheus team made an adapter available that removes a big chunk of the
+    boilerplate for creating a new service discovery integration. This adapter is
+    only provided for the Go programming language, as it reuses some code from Prometheus
+    itself. The adapter was made this way so that some less-maintained service discovery
+    integrations could be migrated out to standalone services without too much effort,
+    as well as easing the migration into the main Prometheus binary of external discovery
+    integrations that are built using the adapter, all of which have proven themselves.
+    Note that nothing prevents you from using the language of your choice to build
+    such integrations, but for the sake of following the recommended approach, we'll
+    be sticking with Go and the discovery adapter. Explaining how to program in Go
+    is outside the scope of this book.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the main Prometheus repository, we can find the code for the adapter, as
+    well as an example using Consul, which, curiously enough, we've already set up
+    in our test environment. As we know by now, Consul integration is supported natively
+    in Prometheus; however, let's pretend it's not and that we need to integrate with
+    it. In the following topics, we'll go over how to put everything together and
+    build a custom service discovery.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The code for the custom service discovery example is available at [https://github.com/prometheus/prometheus/tree/v2.9.1/documentation/examples/custom-sd](https://github.com/prometheus/prometheus/tree/v2.9.1/documentation/examples/custom-sd).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The service discovery adapter
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: As a high-level overview, the adapter takes care of launching and managing our
+    custom service discovery code, consuming the groups of targets it produces, converting
+    them into `file_sd` format, and ensuring that the JSON data is written to a file
+    when required. When writing a service discovery integration using this adapter,
+    no change is needed in its code, and so it can just be imported as a library.
+    To give a bit more context about what the adapter is doing, we're going to explain
+    some of the lower-level details so that its behaviors are clear when we implement
+    our own discovery using it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following snippet illustrates the `Run` function of the adapter that we
+    will need to invoke from our code. This function will take care of starting a
+    `discovery.Manager` in its own goroutine (`a.manager.Run`), instructing it to
+    run our discovery implementation (`a.disc`), and, finally, running the adapter
+    itself in another goroutine (`a.runCustomSD`):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: After starting, the adapter consumes from a channel provided by the `Manager`
+    that updates the target groups that our code will produce. When an update arrives,
+    it will convert the target groups into `file_sd` format and verify whether there
+    were any changes since the last update. If there are changes, it will store the
+    new target groups for future comparisons and write them out as JSON to the output
+    file. This implies that the full list of target groups should be sent in every
+    update; groups that are not sent through the channel will get removed from the
+    produced discovery file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `file_sd` adapter source code can be found at [https://github.com/prometheus/prometheus/blob/v2.9.2/documentation/examples/custom-sd/adapter/adapter.go](https://github.com/prometheus/prometheus/blob/v2.9.2/documentation/examples/custom-sd/adapter/adapter.go).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Custom service discovery example
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Now that we have an idea of how the adapter works, let''s take a look at what
+    we need to implement to have our custom service discovery working. As we saw previously,
+    the adapter uses a `discovery.Manager`, so we need to provide it with an implementation
+    of the `Discoverer` interface so that it can run our discovery. The interface
+    looks like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `Discoverer` interface documentation can be found at [https://godoc.org/github.com/prometheus/prometheus/discovery#Discoverer](https://godoc.org/github.com/prometheus/prometheus/discovery#Discoverer).
+  prefs: []
+  type: TYPE_NORMAL
+- en: This means that we only need to implement the `Run` function, where we will
+    run the logic of our discovery on a loop, generating the appropriate target groups
+    and sending them through the `up` channel to the adapter. The `ctx` context is
+    there so that we know when we need to stop. The code we implement will then be
+    regularly gathering all the available targets/metadata from our data source. In
+    this example, we're using Consul, which requires us to get a list of services
+    first and then, for each one of them, query which instances are backing it and
+    their metadata to generate labels. If something fails, we won't be sending any
+    updates via the channel, because it's better to serve stale data than incomplete
+    or incorrect data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Finally, in our `main` function, we just need to instantiate a new adapter,
+    and feed it a background context, the name of the output file, the name of our
+    discovery implementation, the discovery object that implements the `Discoverer`
+    interface, and a `log.Logger` instance:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: The working example of this adapter implementation can be found at [https://github.com/prometheus/prometheus/blob/v2.9.2/documentation/examples/custom-sd/adapter-usage/main.go](https://github.com/prometheus/prometheus/blob/v2.9.2/documentation/examples/custom-sd/adapter-usage/main.go).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The next step is to deploy and integrate this newly created service discovery
+    provider with Prometheus, so that's what we'll do in the following section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using the custom service discovery
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: To see for ourselves how a custom service discovery behaves, we'll rely on our
+    test environment. The `custom-sd` binary, which recreates the Consul discovery
+    integration as an example of a custom service discovery, is deployed alongside
+    Prometheus and is ready to be used. Together with the Consul deployment, we have
+    all the required components in the test environment to see how everything fits
+    together.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`custom-sd` can be built on a machine with a Go development environment set
+    up by issuing the following command: `go get github.com/prometheus/prometheus/documentation/examples/custom-sd/adapter-usage`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, we need to ensure that we are connected to the `prometheus` instance.
+    We can use the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We can then proceed to change the Prometheus configuration to use `file_sd`
+    as our integration. For this, we must replace the scrape job configured to use
+    `consul_sd` with a new one. To make things easier, we placed a configuration file
+    with this change already made in `/etc/prometheus/`. To use it, you just need
+    to replace the current configuration with the new one:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE35]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The scrape job we are interested in is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE36]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'To make Prometheus aware of these changes, we must reload it:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE37]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We should also make sure that the Consul server has the configuration for `consul-exporter`,
+    which we added previously. If, by any chance, you missed that step, you may add
+    it now by simply running the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE38]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'If we take a look in the Prometheus web interface, we will see something similar
+    to the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/c1006783-1072-469f-9c55-4cea4df74adf.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: '12.14: Prometheus /service-discovery endpoint without any file_sd targets'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We''re now ready to try out the `custom-sd` application. We''ll need to specify
+    the Consul API address and the path to the output file, which the Prometheus server
+    is configured to read from. The following command will take care of that, and
+    also ensure that the right user is creating the file, so that the Prometheus process
+    is able to access it:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE39]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We now have the custom service discovery running. If we go back to the web
+    interface of Prometheus in the `/service-discovery` endpoint, we''ll be able to
+    see the discovered target:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/63410416-ab64-4dd4-8180-69d269bc10dc.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: '12.15: Prometheus /service-discovery endpoint depicting the discovered target'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can also inspect the file that was created by our `custom-sd`, and validate
+    its contents, as follows (the output has been made compact for brevity):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE40]'
+  prefs: []
+  type: TYPE_PRE
+- en: And that's it! You now have a custom service discovery up and running, fully
+    integrated with Prometheus using the file-based service discovery mechanism. A
+    more serious deployment would have the `custom-sd` service running as a daemon.
+    If you're more comfortable with a scripting language, you could choose to write
+    a service discovery script that produces the discovery file and exits, in which
+    case running it as a cron job would be an option. As a last suggestion, you could
+    have your configuration management software produce the discovery file dynamically
+    on a schedule.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we had the opportunity to understand why service discovery
+    is essential for managing ever-growing infrastructure in a sane way. Prometheus
+    leverages several service discovery options out of the box, which can kick-start
+    your adoption in a very quick and friendly manner. We went through the available
+    options Prometheus provides for service discovery, and showed you what to expect
+    from them. We then stepped into a couple of examples using Consul and Kubernetes
+    to materialize the concepts we exposed previously. Finally, we went through how
+    to integrate a custom service discovery with Prometheus by using the recommended
+    approach and relying on `file_sd`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next chapter, we'll go through how to scale and federate Prometheus.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Questions
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Why should you use a service discovery mechanism in Prometheus?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: When you're using a cloud provider service discovery, what is the major requirement
+    for setting the integration?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What are the types of records supported by the DNS-based service discovery integration?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What purpose does the concept of role serve in the Kubernetes service discovery
+    integration?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: When you're building a custom service discovery, what available integration
+    will you be relying upon?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Do you need to reload Prometheus when a target file configured in `file_sd`
+    is updated?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What is the recommended way of building your own custom service discovery?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Further reading
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '**Prometheus service discovery configuration**: [https://prometheus.io/docs/prometheus/latest/configuration/configuration](https://prometheus.io/docs/prometheus/latest/configuration/configuration)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

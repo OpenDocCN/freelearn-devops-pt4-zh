@@ -1,0 +1,1516 @@
+- en: '*Chapter 14*: Interacting with systemd and Kubernetes'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In the previous chapters, we learned how to initialize and manage containers,
+    starting with simple concepts and arriving at advanced ones. Containers represent
+    a key technology for application development in the latest Linux operating system
+    releases. For this reason, containers are only the starting point for advanced
+    developers and system administrators. Once this technology becomes widely adopted
+    in an enterprise company or a technical project, the next step will be to integrate
+    it with the base operating system and with -system orchestration platforms.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we''re going to cover the following main topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Setting up the prerequisites for the host operating system
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Creating the systemd unit files
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Managing container-based systemd services
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Generating Kubernetes YAML resources
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Running Kubernetes resource files in Podman
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Testing the results in Kubernetes
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: To complete this chapter, you will need a machine with a working Podman installation.
+    As we mentioned in [*Chapter 3*](B17908_03_epub.xhtml#_idTextAnchor068), *Running
+    the First Container*, all the examples in this book were executed on a Fedora
+    34 system or later but can be reproduced on your choice of **operating system**
+    (**OS**).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Having a good understanding of the topics that were covered in [*Chapter 4*](B17908_04_epub.xhtml#_idTextAnchor083),
+    *Managing Running Containers*, [*Chapter 5*](B17908_05_epub.xhtml#_idTextAnchor101),
+    *Implementing Storage for the Container's Data*, and [*Chapter 9*](B17908_09_epub.xhtml#_idTextAnchor167),
+    *Pushing Images to a Container Registry*, will help you grasp the topics we'll
+    cover regarding advanced containers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You should also have a good understanding of system administration and Kubernetes
+    container orchestration.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For the examples related to the Kubernetes section, you will require Podman
+    version 4.0.0 because of a bug in version 3.4.z that prevents container environment
+    variables from being created ([https://github.com/containers/podman/issues/12781](https://github.com/containers/podman/issues/12781)).
+    This bug was fixed in v4.0.0 but it hasn't been backported to Podman v3 at the
+    time of writing.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Setting up the prerequisites for the host operating system
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: As we saw in [*Chapter 1*](B17908_01_epub.xhtml#_idTextAnchor015), *Introduction
+    to Container Technology*, containers were born to help simplify and create system
+    services that can be distributed on standalone hosts.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the following sections, we will learn how to run MariaDB and a GIT service
+    in containers while managing those containers like any other service – that is,
+    through Systemd and the `systemctl` command.
+  prefs: []
+  type: TYPE_NORMAL
+- en: First, let's introduce systemd, a system and service manager for Linux that
+    runs as the first process on boot (as PID 1) and acts as an init system that brings
+    up and maintains userspace services. Once a new user logs in to the host system,
+    separate instances are executed to start their services.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The systemd daemon starts services and ensures priority with a dependency system
+    between various entities called *units*. There are 11 different types of units.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Fedora 34 and later has systemd enabled and running by default. We can check
+    if it is running properly by using the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In the following sections, we are going to work with system unit files of the
+    `service` type. We can check the current ones by running the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: Please Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: The systemd service and its internals are more complex, so they cannot be summarized
+    in a few lines. For additional information, please refer to the related Linux
+    manual.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next section, we are going to learn how to create the systemd unit files
+    for any running container service on our operating system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating the systemd unit files
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The unit files on our system define how systemd starts and runs services.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Each unit file represents a single component as a simple text file that describes
+    its behavior, what needs to run before or afterward, and more.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Unit files are stored in a few different places on a system and systemd looks
+    for them in this order:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`/etc/systemd/system`'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '`/run/systemd/system`'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '`/usr/lib/systemd/system`'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Unit files that are in the earlier directories override the later ones. This
+    lets us change what we need in the `/etc` directory, where configuration is expected,
+    leaving the default configuration files in `/usr`, for example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: But what does a unit file look like? Let's find out.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, we can get the location of a default unit file by asking systemd about
+    it:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, we executed the `status` command while passing the `sshd` service name
+    as a filter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the systemd output, the default unit file path can be inspected with the
+    following example command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'But what about Podman? Well, Podman makes systemd integration easier with its
+    dedicated sub-command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `podman generate systemd` command will output a text file representing the
+    unit file that was created. As we can see from the help output, we can set up
+    several options to adjust our settings.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We should always save the generated file and place it on the right path, as
+    described in the previous output. We'll explore this command by providing a full
+    example in the next section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Managing container-based systemd services
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this section, you will learn how to use the `podman generate systemd` command
+    through a practical example. We will create two system services based on containers
+    to create a GIT repository.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For this example, we will leverage two well-known open source projects:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Gitea**: The GIT repository, which also offers a nice web interface for code
+    management'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**MariaDB**: The SQL database for holding the data that''s produced by the
+    Gitea service'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Let''s start with the example. First, we need to generate a password for our
+    database''s user:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here, we exported the environment variable with the secret password we are
+    going to use and then leveraged a useful secrets management command that we did
+    not introduce previously: `podman secret create`. Unfortunately, this command
+    holds the secret in plain text, though this is good enough for our purpose. Since
+    we are running these containers as root, these secrets are stored on the filesystem
+    with root-only permissions.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can inspect the secret with the following commands:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, we have asked Podman to list and inspect the secret we created previously
+    and looked at the underlying filesystem for the file holding the secrets.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The file holding the secrets is a file in JSON format and, as we mentioned previously,
+    is in plain text. The first string of the couple is the secret ID, while the second
+    string is the value Base64 encoded. If we try to decode it with the `BASE64` algorithm,
+    we would see that it represents the password we just added – that is, `my-secret-pw`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Even though the password is stored in plain text, it is good enough for our
+    example because we are using the root user and this filestore has root-only permission,
+    as we can verify with the last command of the previous output.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, we can continue setting up the database container. We will start with the
+    database setup because it is a dependency on our GIT server.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We must create a local folder in the host system where we can store container
+    data:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We can also look at the public documentation of the container image to find
+    out the right volume path and the various environment variables to use to start
+    our container:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: We are going to run and test the container as standalone first to check if there
+    are any errors; then, we will transform it into a system service.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the preceding Podman command, we did the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We ran the container in detached mode.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We assigned it a name – that is, `mariadb-service`.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We exposed the host network for simplicity; of course, we could limit and filter
+    this connectivity.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We mapped the storage volume with the newly created local directory while also
+    specifying the `:Z` option to correctly assign the SELinux labels.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We defined the environment variables to use at runtime by the container's processes,
+    also providing the password's secret with the `--secret` option.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We used the container image name we want to use – that is, `docker.io/mariadb:latest`.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'We can also check if the container is up and running by using the following
+    command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now, we are ready to check the output of the `podman generate systemd` command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see, the output has been published directly in the console. Here,
+    we used the `--name` option to instruct Podman that we want to manage the container
+    with that name through systemd.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Podman generated a unit file with all the required command instructions to integrate
+    our container into the operating system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the `[Unit]` section, we can see that it declared a dependency of this service
+    from the network through the `network-online.target` unit. It also states the
+    need for the storage mount point for `/run/containers/storage` containers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the `[Service]` section, Podman defined all the instructions for describing
+    how to start and stop the containerized service.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, let''s look at the GIT service. First, we will create the storage directory:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After that, we can look at the project documentation for any configuration
+    that''s needed for the Gitea container image to be built correctly and complete
+    the `podman run` command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In the previous Podman command, we did the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We ran the container in detached mode.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We assigned it a name – that is, `gitea-service`.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We exposed the host network for simplicity; of course, we can limit and filter
+    this connectivity.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We mapped the storage volume with the newly created local directory while specifying
+    the `:Z` option to correctly assign the SELinux labels.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Finally, we can check if the service is running properly by inspecting its
+    logs:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As we can see, the Gitea service is listening on port `3000`. Let''s point
+    our web browser to `http://localhost:3000` to install it with the required configuration:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 14.1 – Gitea service installation page'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B17908_14_01.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 14.1 – Gitea service installation page
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the preceding screenshot, we defined the database''s type, address, username,
+    and password to complete the installation. Once done, we should be redirected
+    to the login page, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 14.2 – Gitea service login page'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B17908_14_02.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 14.2 – Gitea service login page
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Once the configuration is complete, we can generate and add the systemd unit
+    files to the right configuration path:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Then, we can manually edit the Gitea service unit file by adding a depending
+    order to the MariaDB service through the special `Requires` instruction:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: Thanks to the `Requires` instruction, systemd will start the MariaDB service
+    first, then the Gitea service.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, we can stop the containers by starting them through the systemd units:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: Don't worry about the data – previously, we mapped both containers to a dedicated
+    storage volume that holds the data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We need to let the systemd daemon know about the new unit files we just added.
+    So, first, we need to run the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After that, we can start the services through systemd and check their statuses:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Finally, we can enable the service to start them when the OS boots:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: With that, we have set up and enabled two containerized system services on our
+    host OS. This process is simple and could be useful for leveraging the containers'
+    features and capabilities, extending them to system services.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, we are ready to move on to the next advanced topic, where we will learn
+    how to generate Kubernetes resources.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Generating Kubernetes YAML resources
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Kubernetes has become the de facto standard for multi-node container orchestration.
+    Kubernetes clusters allow multiple pods to be executed across nodes according
+    to scheduling policies that reflect the node's load, labels, capabilities, or
+    hardware resources (for example, GPUs).
+  prefs: []
+  type: TYPE_NORMAL
+- en: We have already described the concept of a pod – a single execution group of
+    one or more containers that share common namespaces (network, IPC, and, optionally,
+    PID namespaces). In other words, we can think of pods as sandboxes for containers.
+    Containers inside a Pod are executed and thus started, stopped, or paused simultaneously.
+  prefs: []
+  type: TYPE_NORMAL
+- en: One of the most promising features that was introduced by Podman is the capability
+    to generate Kubernetes resources in YAML format. Podman can intercept the configuration
+    of running containers or pods and generate a `Pod` resource that is compliant
+    with Kubernetes API specifications.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Along with pods, we can generate `Service` and `PersistentVolumeClaim` resources
+    as well, which reflect the configurations of the port mappings and volumes that
+    are mounted inside containers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We can use the generated Kubernetes resources inside Podman itself as an alternative
+    to the Docker Compose stacks or apply them inside a Kubernetes cluster to orchestrate
+    the execution of simple pods.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Kubernetes has many ways to orchestrate how workloads are executed: `Deployments`,
+    `StatefulSets`, `DaemonSets`, `Jobs`, and `CronJobs`. In every case, Pods are
+    their workload-minimal execution units and the orchestration logic changes based
+    on that specific behavior. This means that we can take a Pod resource that''s
+    been generated by Podman and easily adapt it to be orchestrated in a more complex
+    object, such as `Deployments`, which manages replicas and version rollouts of
+    our applications, or `DaemonSets`, which guarantees that a singleton pod instance
+    is created for every cluster node.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, let's learn how to generate Kubernetes YAML resources with Podman.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Generating basic Pod resources from running containers
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The basic command to generate Kubernetes resource from Podman is `podman generate
+    kube`, followed by various options and arguments, as shown in the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: We can apply this command to a running container, pod, or existing volume. The
+    command also allows you to use the `-s, --service` option to generate `Service`
+    resources and `-f, --filename` to export contents to a file (the default is to
+    standard output).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s start with a basic example of a `Pod` resource that''s been generated
+    from a running container. First, we will start a rootless Nginx container:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'When the container is created, we can generate our Kubernetes `Pod` resource:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Let''s describe the generated output. Every new Kubernetes resource is always
+    composed of at least four fields:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`apiVersion`: This field describes the API version schema of the resource.
+    The `Pod` object belongs to the `v1` version of the `core` APIs of Kubernetes.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`kind`: This field defines the resource kind, which is `Pod` in our example.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`metadata`: This field is an object that holds a set of resource metadata that
+    usually includes `name`, `namespace`, `labels`, and `annotations`, along with
+    additional dynamic metadata that''s created at runtime, such as `creationTimestamp`,
+    `resourceVersion`, or the resource''s `uid`.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`spec`: This field holds resource specifications and varies among different
+    resources. For example, a `Pod` resource will contain a list of `containers`,
+    along with their startup arguments, volumes, ports, or security contexts.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: All the information that's embedded inside a Pod resource is enough to start
+    the pod inside a Kubernetes cluster. Along with the fields described previously,
+    a fifth `status` field is dynamically created when the pod is running to describe
+    its execution status.
+  prefs: []
+  type: TYPE_NORMAL
+- en: From the generated output, we can notice an `args` list for every container,
+    along with their startup commands, arguments, and options.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'When you''re generating a Pod from a container with mapped ports, the following
+    `ports` list is created inside the Pod resource:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: This means that port `80` must be exposed to the container and port `8080` must
+    be exposed on the host running it. This information will be used by Podman when
+    we create containers and pods with the `podman play kube` command, as we will
+    see in the next section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `securityContext` object defines capabilities that must be dropped for this
+    container. This means that the `CAP_MKNOD`, `CAP_NET_RAW`, and `CAP_AUDIT_WRITE`
+    capabilities won't be enabled on a pod that's created from this configuration.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can apply the output of the `podman generate kube` command directly to a
+    Kubernetes cluster or save it to a file. To save it to a file, we can use the
+    `-f` option:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'To apply the generated output to a running Kubernetes cluster, we can use the
+    Kubernetes CLI tool, `kubectl`. The `kubectl create` command applies a resource
+    object inside the cluster:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: The basic Pod generation command can be enriched by creating the related Kubernetes
+    services, as described in the next subsection.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Generating Pods and services from running containers
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Pods running inside a Kubernetes cluster obtain unique IP addresses on a software-defined
+    network that's managed by the default CNI plugin.
+  prefs: []
+  type: TYPE_NORMAL
+- en: These IPs are not routed externally – we can only reach the Pod's IP address
+    from within the cluster. However, we need a layer to balance multiple replicas
+    of the same pods and provide a DNS resolution for a single abstraction frontend.
+    In other words, our application must be able to query for a given service name
+    and receive a unique IP address that abstracts from the pods' IPs, regardless
+    of the number of replicas.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: Native, cluster-scoped DNS name resolution in Kubernetes is implemented with
+    the **CoreDNS** service, which is started when the cluster's control plane is
+    bootstrapped. CoreDNS is delegated to resolve internal requests and to forward
+    ones for external names to authoritative DNS servers outside the cluster.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The resource that describes the abstraction in one or more pods in Kubernetes
+    is called `Service`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For example, we can have three replicas of the Nginx pod running inside our
+    cluster and expose them with a unique IP. It belongs to a `ClusterIP` type, and
+    its allocation is dynamic when the service is created. `ClusterIP` services are
+    the default in Kubernetes and their assigned IPs are only local to the cluster.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We can also create `NodePort` type services that use **Network Address Translation**
+    (**NAT**) so that the service can be reached from the external world. We can do
+    this by mapping the service VIP and port to a local port on the cluster worker
+    nodes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If we have a cluster running on an infrastructure that allows dynamic load balancing
+    (such as a public cloud provider), we can create `LoadBalancer` type services
+    and have the provider manage ingress traffic load balancing for us.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Podman allows you to create services along with pods by adding the `-s` option
+    to the `podman generate kube` command. This allows them to be potentially reused
+    inside a Kubernetes cluster. The following example is a variation of the previous
+    one and generates the Service resource along with the previously described Pod:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The generated output contains, along with the Pod resource, a Service resource
+    that exposes the Nginx pod using a selector field. The selector matches all the
+    pods with the `app: nginxpod` label.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: When the service is created inside a Kubernetes cluster, an internal, non-routed
+    VIP is allocated for the service. Since this is a `NodePort` type service, a `30582`
+    and forward it to the service IP.
+  prefs: []
+  type: TYPE_NORMAL
+- en: By default, Podman generates `NodePort` type services. Whenever a container
+    or pod is decorated with a port mapping, Podman populates the `ports` object with
+    a list of ports and their related `nodePort` mappings inside the manifest.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In our use case, we created the Nginx container by mapping its port, `80`, to
+    port `8080` on the host. Here, Podman generated a Service that maps the container's
+    port, `80`, to port `30582` on the cluster nodes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `nodePort` mapping is applied to Kubernetes cluster nodes only, not to standalone
+    hosts running Podman.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The value of creating Kubernetes services and pods from Podman is the ability
+    to port to a Kubernetes platform.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In many cases, we work with composite, multi-tier applications that need to
+    be exported and recreated together. Podman allows us to export multiple containers
+    into a single Kubernetes Pod object or to create and export multiple pods to gain
+    more control over our application. In the next two subsections, we will see both
+    cases applied to a WordPress application and try to find out what the best approach
+    is.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Generating a composite application in a single Pod
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In this first scenario, we will implement a multi-tier application in a single
+    pod. The advantage of this approach is that we can leverage the pod as a single
+    unit that will execute multiple containers and that resource sharing across them
+    is simplified.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We will launch two containers – one for MySQL and one for WordPress – and export
+    them as a single Pod resource. We will learn how to work around some minor adjustments
+    to make it work seamlessly later during run tests.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: The following examples have been created in a rootless context but can be seamlessly
+    applied to rootfull containers too.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A set of scripts that will be useful for launching the stacks and the generated
+    Kubernetes YAML files are available in this book's GitHub repository at [https://github.com/PacktPublishing/Podman-for-DevOps/tree/main/Chapter14/kube](https://github.com/PacktPublishing/Podman-for-DevOps/tree/main/Chapter14/kube).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, we must create two volumes that will be used later by the WordPress
+    and MySQL containers:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Then, we must create an empty pod named `wordpress-pod` with the necessary
+    pre-defined port mappings:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now, we can populate our pod by creating the WordPress and MySQL containers.
+    Let''s begin with the MySQL container:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now, we can create the WordPress container:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, we can see that the `WORDPRESS_DB_HOST` variable has been set to `127.0.0.1`
+    (the address of the loopback device) since the two containers are going to run
+    in the same pod and share the same network namespace. For this reason, we let
+    the WordPress container know that the MySQL service is listening on the same loopback
+    device.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Finally, we can start the pod with the `podman pod start` command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We can inspect the running containers with `podman ps`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now, we can point our browser to `http://localhost:8080` and confirm the appearance
+    of the WordPress setup dialog screen:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 14.3 – WordPress setup dialog screen'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B17908_14_03.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 14.3 – WordPress setup dialog screen
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: The pod also started a third `podman-pause` image that initializes the pod's
+    network and the IPC namespaces of our example. The image is built directly in
+    the background on the host the first time a pod is created and executes a `catatonit`
+    process, an `init` micro container written in C that's designed to handle system
+    signals and zombie process reaping.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This behavior of the pod's infra image is directly inherited from Kubernetes's
+    design.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, we are ready to generate our Pod YAML manifest with the `podman generate
+    kube` command and save it to a file for reuse:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The preceding command generates a file with the following content:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs: []
+  type: TYPE_PRE
+- en: Our YAML file holds a single Pod resource with two containers inside. Note that
+    the previously defined environment variables have been created correctly inside
+    our containers (when using Podman v4.0.0 or later).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Also, notice that the two container volumes have been mapped to `PersistentVolumeClaim`
+    objects, often referred to as `PVC` objects.
+  prefs: []
+  type: TYPE_NORMAL
+- en: PVCs are Kubernetes resources that are used to request (in other words, claim)
+    a storage volume resource that satisfies a specific capacity and consumption modes.
+    The attached storage volume resource is called a `PersistentVolume` (`PV`) and
+    can be created manually or automatically by a `StorageClass` resource that leverages
+    a storage driver that's compliant with the **Container Storage Interface** (**CSI**).
+  prefs: []
+  type: TYPE_NORMAL
+- en: When we create a PVC, `StorageClass` provisions a `PersistentVolume` that satisfied
+    our storage requests, and the two resources are bound together. This approach
+    decouples the storage request from storage provisioning and makes storage consumption
+    in Kubernetes more portable.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When Podman generates Kubernetes YAML files, PVC resources are not exported
+    by default. However, we can also export the PVC resources to recreate them in
+    Kubernetes with the `podman generate kube <VOLUME_NAME>` command.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following command exports the WordPress application, along with its volume
+    definitions, as a PVC:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE35]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The following is an example of the `dbvol` volume translated into a `PersistentVolumeClaim`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE36]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This approach has the advantage of providing the necessary PVC definitions
+    to recreate the whole application in a Kubernetes cluster, but it is not necessary
+    to recreate the volume resources in Podman: if they''re not available, an empty
+    volume with the same name will be created automatically.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: To recreate all the resource dependencies in a Kubernetes cluster, we can also
+    export the application's `Service` resource.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following command exports everything in our WordPress example, including
+    pods, services, and volumes:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE37]'
+  prefs: []
+  type: TYPE_PRE
+- en: Before we move on, let's briefly dig into the single pod approach logic that
+    was described in this subsection and look at its advantages and possible limitations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: One great advantage of executing all the containers in a single pod is the simpler
+    networking configuration – one network namespace is shared by all the running
+    containers. This also means we don't have to create a dedicated Podman network
+    to let the containers communicate with each other.
+  prefs: []
+  type: TYPE_NORMAL
+- en: On the other hand, this approach does not reflect the common Kubernetes pattern
+    of executing pods. In Kubernetes, we would prefer to split the WordPress pod and
+    the MySQL pod to manage them independently and have different services associated
+    with them. More separation implies more control and the chance to update independently.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next subsection, you'll learn how to replicate this approach and generate
+    multiple pods for every application tier.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Generating composite applications with multiple Pods
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: One of the features of Docker Compose is that you can create different independent
+    containers that communicate with each other using a service abstraction concept
+    that is decoupled from the container's execution.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Podman community (and many of its users) believe that a standardization
+    toward Kubernetes YAML manifests to describe complex workloads is useful to get
+    closer to the mainstream orchestration solution.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For this reason, the approach we'll describe in this section can become a full
+    replacement for Docker Compose while providing Kubernetes portability at the same
+    time. First, we will learn how to prepare an environment that can be used to generate
+    the YAML manifests. After that, we can get rid of the workloads and only use the
+    Kubernetes YAML to run our workloads.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The following example can be executed with rootless containers and networks.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Before continuing, make sure that the previous example pod and containers have
+    been completely removed, along with their volumes, to prevent any issues with
+    port assignment or WordPress content initialization. Please refer to the commands
+    in this book''s GitHub repository as a reference: [https://github.com/PacktPublishing/Podman-for-DevOps/tree/main/AdditionalMaterial](https://github.com/PacktPublishing/Podman-for-DevOps/tree/main/AdditionalMaterial).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, we need to create a network. We have chosen the name `kubenet` to identify
+    it easily and leave it with the default configuration for the sake of our example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE38]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Once the network has been created, the two `dbvol` and `wpvol` volumes must
+    be created:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE39]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We want to generate two distinct pods – one for each container. First, we must
+    create the MySQL pod and its related container:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE40]'
+  prefs: []
+  type: TYPE_PRE
+- en: Notice the port mapping, which we can use to access the MySQL service from a
+    client and create the correct port mapping later in the Kubernetes service.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, let''s create the WordPress pod and container:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE41]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'There is a very important variable in the preceding command that can be considered
+    the key to this approach: `WORDPRESS_DB_HOST` is populated with the `mysql-pod`
+    string, which is the name that''s been given to the MySQL pod.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In Podman, the pod's name will act as the service name of the application and
+    the DNS daemon associated with the network (`dnsmasq` in Podman 3 or `aardvark-dns`
+    in Podman 4) will directly resolve the pod name to the associated IP address.
+    This is a key feature that makes multi-pod applications a perfect replacement
+    for Compose stacks.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, we can start the two pods and have all the containers up and running:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE42]'
+  prefs: []
+  type: TYPE_PRE
+- en: Once again, pointing our browsers to `http://localhost:8080` should lead us
+    to the WordPress first setup page (if everything was set up correctly).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, we are ready to export our Kubernetes YAML manifest. We can choose to simply
+    export the two Pod resources or create a full export that also includes services
+    and volumes. This is useful if you need to import to a Kubernetes cluster.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s start with the basic version:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE43]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The output of the preceding code will contain nothing but the two Pod resources:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE44]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The resulting file is also available in this book''s GitHub repository:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[https://github.com/PacktPublishing/Podman-for-DevOps/blob/main/Chapter14/kube/wordpress-multi-pod-basic.yaml](https://github.com/PacktPublishing/Podman-for-DevOps/blob/main/Chapter14/kube/wordpress-multi-pod-basic.yaml)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: As we will see in the next section, this YAML file is enough to recreate a fully
+    working WordPress application on Podman from scratch. We can persist and version
+    it on a source control repository such as Git for future reuse.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following code exports the two `Pod` resources, along with the `PersistentVolumeClaim`
+    and `Service` resources:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE45]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The output of this command is also available in this book''s GitHub repository:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[https://github.com/PacktPublishing/Podman-for-DevOps/blob/main/Chapter14/kube/wordpress-multi-pod-full.yaml](https://github.com/PacktPublishing/Podman-for-DevOps/blob/main/Chapter14/kube/wordpress-multi-pod-full.yaml)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This full manifest is useful for importing and testing our application on a
+    Kubernetes cluster, where the `Service` and `PersistentVolumeClaim` resources
+    are necessary.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, we are ready to test our generated resources in Podman and learn how to
+    reproduce full stack deployments with simple operations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Running Kubernetes resource files in Podman
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Now that we've learned how to generate Kubernetes YAML files containing the
+    necessary resources to deploy our applications, we want to test them in a real
+    scenario.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For this book, we will use the WordPress application again, both in its simple
+    form with a single container and in its multi-pod variation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The following examples are also available in this book's GitHub repository –
+    you can choose to use the resources that have been generated from your labs or
+    use the prepared manifests in this book's repository.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: Don't forget to clean up all the previous workloads before testing the creation
+    of Kubernetes resources with Podman.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For all our examples, we will use the `podman play kube` command. It offers
+    us an easy and intuitive interface for managing the execution of complex stacks
+    with a good degree of customization.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The first example will be based on the single-pod manifest:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE46]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The preceding command creates a pod called `wordpress-pod` that''s composed
+    of the two containers, along with the necessary volumes. Let''s inspect the results
+    and see what happened:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE47]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We can also check the running containers. Here, we expect to see the two WordPress
+    and MySQL containers and the third infra-related `podman-pause`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE48]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Finally, we can verify if the `dbvol` and `wpvol` volumes have been created:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE49]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Before we look at the more articulated (and interesting) example with the multi-pod
+    manifest, we must clean up the environment. We can do this manually or by using
+    the `--down` option of the `podman play kube` command, which immediately stops
+    and removes the running pods:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE50]'
+  prefs: []
+  type: TYPE_PRE
+- en: Important Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: Volumes are not removed by default since it can be useful to keep them if containers
+    have already written data on them. To remove unused volumes, use the `podman volume
+    prune` command.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, let''s run the multi-pod example using the basic exported manifest:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE51]'
+  prefs: []
+  type: TYPE_PRE
+- en: Notice the additional `--network` argument, which is used to specify the network
+    that the pods will be attached to. This is necessary information since the Kubernetes
+    YAML file contains no information about Podman networks. Our pods will be executed
+    in rootless mode and attached to the rootless `kubenet` network.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can check that the two pods have been created correctly by using the following
+    command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE52]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now, we can inspect the running containers. The strings that are highlighted
+    in the following code represent the main workload to differentiate from the infra
+    containers:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE53]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The `podman volume ls` command confirms the existence of the two volumes:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE54]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The rootless network configuration can be inspected with the `podman unshare`
+    command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE55]'
+  prefs: []
+  type: TYPE_PRE
+- en: Important Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `--rootless-netns` option is only available on Podman 4, which is the recommended
+    version for this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, let's inspect the DNS behavior. On Podman 4, the name resolution for
+    custom networks is managed by the `aardvark-dns` daemon, while on Podman 3, it
+    is managed by `dnsmasq`. Since we assume you're using Podman 4 for these examples,
+    let's look at its DNS configuration. For rootless networks, we can find the managed
+    records in the `/run/user/<UID>/containers/networks/aardvark-dns/<NETWORK_NAME>`
+    file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In our example, the configuration for the `kubenet` network is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE56]'
+  prefs: []
+  type: TYPE_PRE
+- en: The most amazing thing from this output is the confirmation that the name resolution
+    now works at the pod level, not at the container level. This is fair if we think
+    that the pod initialized the namespaces, including the network namespace. For
+    this reason, we can treat the pod name in Podman as a service name.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Here, we demonstrated how the Kubernetes manifests that are generated with Podman
+    can become a great replacement for the Docker Compose approach while being more
+    portable. Now, let's learn how to import our generated resources into a test Kubernetes
+    cluster.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Testing the results in Kubernetes
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this section, we want to import the multi-pod YAML file, which is enriched
+    with the Services and PVC configurations, on Kubernetes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To provide a repeatable environment, we will use **minikube** (with a lowercase
+    m), a portable solution, to create an all-in-one Kubernetes cluster as the local
+    infrastructure.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The minikube project aims to provide a local Kubernetes cluster on Linux, Windows,
+    and macOS. It uses host virtualization to spin up a VM that runs the all-in-one
+    cluster or containerization to create a control plane that runs inside a container.
+    It also provides a large set of add-ons to extend cluster functionalities, such
+    as ingress controllers, service meshes, registries, logging, and more.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Another widely adopted alternative to spinning up a local Kubernetes cluster
+    is the **Kubernetes in Docker** (**KinD**) project, which is not described in
+    this book. KinD runs a Kubernetes control plane inside a container that's driven
+    by Docker or Podman.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To set up minikube, users need virtualization support (KVM, VirtualBox, Hyper-V,
+    Parallels, or VMware) or a container runtime such as Docker or Podman.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For brevity, we will not cover the technical steps necessary to configure the
+    virtualization support for the different OSs; instead, we will use a GNU/Linux
+    distribution.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you already own a running Kubernetes cluster or want to set up one in an
+    alternative way, you can skip the next minikube configuration quick start and
+    go to the *Running generated resource files in Kubernetes* subsection.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Setting up minikube
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Run the following commands to download and install the latest `minikube` binary:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE57]'
+  prefs: []
+  type: TYPE_PRE
+- en: You can choose to run minikube with a virtualization or containerization driver.
+    To run minikube as a virtual machine on the KVM driver, you must install the **Qemu/KVM**
+    and **libvirt** packages.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'On Fedora, run the following command to install all the mandatory and default
+    packages using the `@virtualization` package group:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE58]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now, start and enable the `libvirtd` service:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE59]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'To grant the user running minikube the proper permissions, append it to the
+    `libvirt` supplementary group (this operation requires a new login to load the
+    new group):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE60]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The following command statically configures the `kvm2` driver as the default:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE61]'
+  prefs: []
+  type: TYPE_PRE
+- en: When the preceding command is executed for the first time, minikube will automatically
+    download the proper `kvm2` driver binary before starting the VM.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Alternatively, you can choose to run minikube as a containerized service with
+    Docker or Podman. Assuming Podman is already installed, we only need to ensure
+    that the user running minikube can run passwordless sudo. This is necessary since
+    the Kubernetes cluster must run in a rootfull container, so privilege escalation
+    is necessary. To allow passwordless privilege escalation for Podman, edit the
+    `/etc/sudoers` file with the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE62]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Once opened, add the following line to the end of the file to grant passwordless
+    escalation for the Podman binary and save it. Remember to replace `<username>`
+    with your user''s name:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE63]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The following command statically configures the `podman` driver as the default:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE64]'
+  prefs: []
+  type: TYPE_PRE
+- en: Important Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: If your host is a virtual machine running on a hypervisor such as KVM and Podman
+    is installed on the host, minikube will detect the environment and set up the
+    default driver as `podman` automatically.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To use minikube, users also need to install the Kubernetes CLI tool, kubectl.
+    The following commands download and install the latest Linux release:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE65]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now, we are ready to run our Kubernetes cluster with minikube.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Starting minikube
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'To start minikube as a VM, use the CRI-O container runtime inside the Kubernetes
+    cluster:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE66]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `--driver` option is not necessary if `kvm2` has already been configured
+    as the default driver with the `minikube config set driver` command.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To start minikube with Podman, use the CRI-O container runtime inside the cluster:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE67]'
+  prefs: []
+  type: TYPE_PRE
+- en: Again, the `--driver` option is not necessary if `podman` has been already configured
+    as the default driver with the `minikube config set driver` command.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To ensure that the cluster has been created correctly, run the following command
+    with the `kubectl` CLI. All the pods should have the `Running` status:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE68]'
+  prefs: []
+  type: TYPE_PRE
+- en: Important Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: If one or more containers still have the `ContainerCreating` status, wait a
+    little longer for the images to be pulled.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Also, notice that the output may differ slightly if you're running minikube
+    with a Podman driver. In that case, an additional pod named `kindnet` will be
+    created to help manage CNI networking inside the cluster.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With that, we have set everything up for a local Kubernetes environment and
+    are ready to test our generated manifests.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Running generated resource files in Kubernetes
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In the *Generating a composite application with multiple Pods* section, we learned
+    how to export a manifest file from Podman that included the `Pod` resources, along
+    with the `Service` and `PersistentVolumeClaim` resources. The need to export this
+    set of resources is related to the way Kubernetes handles workloads, storage,
+    and exposed services.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Kubernetes services are needed to provide a resolution mechanism, as well as
+    internal load balancing. In our example, the `mysql-pod` pod will be mapped to
+    a homonymous `mysql-pod` service.
+  prefs: []
+  type: TYPE_NORMAL
+- en: PVCs are required to define a storage claim that starts provisioning persistent
+    volumes for our pods. In minikube, automated provisioning is implemented by a
+    local `StorageClass` named `minikube-hostpath`; it creates local directories in
+    the VM/container filesystem that are later bind-mounted inside the pods' containers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can roll out our WordPress stack by using the `kubectl create` command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE69]'
+  prefs: []
+  type: TYPE_PRE
+- en: If not specified, all the resources will be created in the `default` Kubernetes
+    namespace. Let's wait for the pods to reach the `Running` status and inspect the
+    results.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, we can inspect the pods and services that have been created:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE70]'
+  prefs: []
+  type: TYPE_PRE
+- en: Notice that the two `mysql-pod` and `wordpress-pod` services have been created
+    with the `NodePort` type and mapped to a port on a `30000` or upper range. We
+    will use the `30408` port to test the WordPress frontend.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The pods are mapped by the services using label matching logic. If the labels
+    that have been defined in the service''s `selector` field exist in the pod, it
+    becomes an `endpoint` to the service itself. Let''s view the current endpoints
+    in our project:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE71]'
+  prefs: []
+  type: TYPE_PRE
+- en: Important Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `kubernetes` service and its related endpoint provide API access to internal
+    workloads. However, it is not part of this book's examples, so it can be ignored
+    in this context.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s also inspect the claims and their related volumes:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE72]'
+  prefs: []
+  type: TYPE_PRE
+- en: The two PVC resources have been created and bound to two dynamically provisioned
+    persistent volumes. So long as the PVC objects exist, the related PV will stay
+    untouched, even if the pods are destroyed and recreated.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, the WordPress application can be tested. By default, minikube does not
+    deploy an ingress controller (even though this can be enabled with the `minikube
+    addons enable ingress` command), so we will use the simple NodePort service to
+    test the functionalities of our application.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The current minikube VM/container IP must be obtained to reach the exposed
+    NodePort service. Port `30408`, which is associated with the `wordpress-pod` service,
+    listens to the IP address that''s produced by the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE73]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now, we can point our browser to `http://10.88.0.6:30408` and see the WordPress
+    first setup screen.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To remove the WordPress application and all its related content, use the `kubectl
+    delete` command in the YAML manifest file:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE74]'
+  prefs: []
+  type: TYPE_PRE
+- en: This command removes all the resources that have been defined in the file, including
+    the generated PVs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: With that, we have reached the end of this book about Podman and its companion
+    tools.
+  prefs: []
+  type: TYPE_NORMAL
+- en: First, we learned how to generate Systemd unit files and control containerized
+    workloads as Systemd services, which allows us to, for example, automate container
+    execution at system startup.
+  prefs: []
+  type: TYPE_NORMAL
+- en: After that, we learned how to generate Kubernetes YAML resources. Starting with
+    basic concepts and examples, we learned how to generate complex application stacks
+    using both single-pod and multiple pods approaches and illustrated how the latter
+    can provide a great alternative (and Kubernetes compliant) to the Docker Compose
+    methodology.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, we tested our results on Podman and a local Kubernetes cluster that
+    had been created with `minikube` to show the great portability of this approach.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This book's journey finishes here, but Podman's amazing evolution continues
+    thanks to its growing adoption in many contexts and its vibrant and helpful community.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Before you move on, don't forget to join the community on IRC, Matrix, or Discord
+    and subscribe to the relevant mailing lists. Feel free to ask for and give feedback
+    and contribute to help with the growth of the project.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Thank you for your interest and dedication.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Further reading
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'To learn more about the topics that were covered in this chapter, take a look
+    at the following resources:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The Catatonit repository on GitHub: [https://github.com/openSUSE/catatonit](https://github.com/openSUSE/catatonit)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Kubernetes persistent volumes definition: [https://kubernetes.io/docs/concepts/storage/persistent-volumes/](https://kubernetes.io/docs/concepts/storage/persistent-volumes/)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The minikube project''s home page: [https://minikube.sigs.k8s.io/](https://minikube.sigs.k8s.io/)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The KinD project''s home page: [https://kind.sigs.k8s.io/](https://kind.sigs.k8s.io/)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Podman community links: [https://podman.io/community/](https://podman.io/community/)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

@@ -1,0 +1,1484 @@
+- en: Disaster Recovery
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In the previous chapter, you learned how to troubleshoot common Ceph problems,
+    which, although they may be affecting the operation of the cluster, weren't likely
+    to cause a total outage or data loss. This chapter will cover more serious scenarios,
+    where the Ceph cluster is down or unresponsive. It will also cover various techniques
+    to recover from data loss. It is to be understood that these techniques are more
+    than capable of causing severe data loss themselves and should only be attempted
+    as a last resort. If you have a support contract with your Ceph vendor or have
+    a relationship with Red Hat, it is highly advisable to consult them first before
+    carrying out any of the recovery techniques listed in this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we will cover the following topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Avoiding data loss
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using RBD mirroring to provide highly available block storage
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Investigating asserts
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Rebuilding monitor databases from OSDs
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Extracting PGs from a dead OSD
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Examining data from an offline Bluestore OSD
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Recovering from lost objects or inactive PGs
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Recovering from a failed CephFS filesystem
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Rebuilding an RBD from dead OSDs
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: What is a disaster?
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: To be able to recover from a disaster, you first have to understand and be able
+    to recognize one. For the purpose of this chapter, we will assume that anything
+    that leads to a sustained period of downtime is classed as a disaster. This will
+    not cover scenarios where a failure happens that Ceph is actively working to recover
+    from, or where it is believed that the cause is likely to be short-lived. The
+    other type of disaster is one that leads to a permanent loss of data unless recovery
+    of the Ceph cluster is possible. Data loss is probably the most serious issue,
+    as the data may be irreplaceable or can cause serious harm to the future of the
+    business.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Avoiding data loss
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Before starting to cover some recovery techniques, it is important to cover
+    some points discussed in [Chapter 1](0f4119df-b421-4349-86c8-b68444743f8a.xhtml),
+    *Planning for Ceph*. Disaster-recovery should be seen as a last resort; the recovery
+    guides in this chapter should not be relied upon as a replacement for adhering
+    to best practices.
+  prefs: []
+  type: TYPE_NORMAL
+- en: First, make sure you have working and tested backups of your data; in the event
+    of an outage, you will feel a million times more relaxed if you know that in the
+    worst cases, you can fall back to backups. While an outage may cause discomfort
+    for your users or customers, informing them that their data, which they had entrusted
+    you with, is now gone is far worse. Also, just because you have a backup system
+    in place, does not mean you should blindly put your trust in it. Regular test
+    restores will mean that you will be able to rely on them when needed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Make sure you follow some design principles also mentioned in [Chapter 1](0f4119df-b421-4349-86c8-b68444743f8a.xhtml),
+    *Planning for Ceph*. Don't use configuration options, such as `nobarrier`, and
+    strongly consider the replication level you use with in Ceph to protect your data.
+    The chances of data loss are strongly linked to the redundancy level configured
+    in Ceph, so careful planning is advised here.
+  prefs: []
+  type: TYPE_NORMAL
+- en: What can cause an outage or data loss?
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The majority of outages and cases of data loss will be directly caused by the
+    loss of a number of OSDs that exceed the replication level in a short period of
+    time. If these OSDs do not come back online, either due to a software or hardware
+    failure, and Ceph was not able to recover objects between OSD failures, these
+    objects are now lost.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If an OSD has failed due to a failed disk, it is unlikely that recovery will
+    be possible unless costly disk-recovery services are utilized, and there is no
+    guarantee that any recovered data will be in a consistent state. This chapter
+    will not cover recovering from physical disk failures and will simply suggest
+    that the default replication level of 3 should be used to protect you against
+    multiple disk failures.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If an OSD has failed due to a software bug, the outcome is possibly a lot more
+    positive, but the process is complex and time-consuming. Usually an OSD, which,
+    although the physical disk is in a good condition is unable to start, is normally
+    linked to either a software bug or some form of corruption. A software bug may
+    be triggered by an uncaught exception that leaves the OSD in a state that it cannot
+    recover from. Corruption may occur after an unexpected loss of power, where the
+    hardware or software was not correctly configured to maintain data consistency.
+    In both cases, the outlook for the OSD itself is probably terminal, and if the
+    cluster has managed to recover from the lost OSDs, it's best just to erase and
+    reintroduce the OSD as an empty disk.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If the number of offline OSDs has meant that all copies of an object are offline,
+    recovery procedures should be attempted to extract the objects from the failed
+    OSDs, and insert them back into the cluster.
+  prefs: []
+  type: TYPE_NORMAL
+- en: RBD mirroring
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: As mentioned, working backups are a key strategy in ensuring that a failure
+    does not result in the loss of data. Starting with the Jewel release, Ceph introduced
+    RBD mirroring, which allows you to asynchronously mirror an RBD from one cluster
+    to another. Note the difference between Ceph's native replication, which is synchronous,
+    and RBD mirroring. With synchronous replication, low latency between peers is
+    essential, and asynchronous replication allows the two Ceph clusters to be geographically
+    remote, as latency is no longer a factor.
+  prefs: []
+  type: TYPE_NORMAL
+- en: By having a replicated copy of your RBD images on a separate cluster, you can
+    dramatically reduce both your **Recovery Time Objective** (**RTO**) and **Recovery
+    Point Objective** (**RPO**). The RTO is a measure of how long it takes from initiating
+    recovery to when the data is usable. It is the worst-case measurement of time
+    between each data point and describes the expected data loss. A daily backup would
+    have an RPO of 24 hours; for example, potentially, any data written up to 24 hours
+    since the last backup would be lost if you had to restore from a backup.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With RBD mirroring, data is asynchronously replicated to the target RBD, and
+    so, in most cases, the RPO should be under a minute. As the target RBD is also
+    a replica and not a backup that would need to be first restored, the RTO is also
+    likely going to be extremely low. Additionally, as the target RBD is stored on
+    a separate Ceph cluster, it offers additional protection for snapshots, which
+    could also be impacted if the Ceph cluster itself experiences issues. At first
+    glance, this makes RBD mirroring seem like the perfect tool to protect against
+    data loss, and in most cases, it is a very useful tool. RBD mirroring is not a
+    replacement for a proper backup routine though. In cases where data loss is caused
+    by actions internal to the RBD, such as filesystem corruption or user error, these
+    changes will be replicated to the target RBD. A separate isolated copy of your
+    data is vital.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With that said, let's take a closer look at how RBD mirroring works.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The journal
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: One of the key components in RBD mirroring is the journal. The RBD mirroring
+    journal stores all writes to the RBD and notifies the client once they have been
+    written. These writes are then written to the primary RBD image. The journal itself
+    is stored as an RADOS object, prefixed similarly to how RBD images are. Separately,
+    the remote `rbd-mirror` daemon polls the configured RBD mirrors and pulls the
+    newly-written journal objects across to the target cluster and replays them in
+    the target RBD.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The rbd-mirror daemon
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The `rbd-mirror` daemon is responsible for replaying the contents of the journal
+    to a target RBD in another Ceph cluster. The `rbd-mirror` daemon only needs to
+    run on the target cluster, unless you wish to replicate both ways, in which case,
+    it will need to run on both clusters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Configuring RBD mirroring
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In order to use the RBD mirroring functionality, we will require two Ceph clusters.
+    We could deploy two identical clusters we have been using previously, but the
+    number of VMs involved may exceed the capabilities of what most people's personal
+    machines can run. Therefore, we will modify our vagrant and ansible configuration
+    files to deploy two separate Ceph clusters, each with a single monitor and an
+    OSD node.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The required `Vagrantfile` is very similar to the one used in [Chapter 2](dd1d6803-6e40-4bfb-8150-b605bcc08d59.xhtml),
+    *Deploying Ceph with Containers*, to deploy your initial test cluster; the hosts
+    part at the top should now look like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'For the Anisble configuration, we will maintain two separate Ansible configuration
+    instances so that each cluster can be deployed separately. We will then maintain
+    separate hosts files per instance, which we will specify when we run the playbook.
+    To do this, we will not copy the `ceph-ansible` files into `/etc/ansible`, but
+    keep them in the home directory by using the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Create the same two files, called `all` and `Ceph`, in the `group_vars` directory
+    as we did in [Chapter 2](dd1d6803-6e40-4bfb-8150-b605bcc08d59.xhtml), *Deploying
+    Ceph with Containers*. This needs to be done in both copies of `ceph-ansible`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Create a hosts file in each `ansible` directory, and place the two hosts in
+    each:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/80a1dcb8-1dde-46a6-bf07-eb98ed5fbb42.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'The preceding screenshot is for the first host and the following screenshot
+    is for the second host:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/574a9c43-bbb0-4d4f-9721-89d5e2359d0d.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Run the `site.yml` playbook under each `ceph-ansible` instance to deploy our
+    two Ceph clusters:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Adjust the replication level of the default pools to `1`, as our clusters only
+    have `1` OSD. Run these commands on both clusters:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/fb3d835f-5841-4341-8234-6f016fb8cb57.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Install the RBD mirroring daemon on both clusters:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The following screenshot is the output for the preceding command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/acb7ca25-6863-4aaf-9834-b873b912180b.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Copy `ceph.conf` and  `keyring` from both clusters to each other.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Copy `ceph.conf` from `site1-mon1` to `site2-mon1` and call it `remote.conf`.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Copy `ceph.client.admin.keyring` from `site1-mon1` to `site2-mon1` and call
+    it `remote.client.admin.keyring`.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Repeat the preceding two steps but this time copy the files from `site2-mon1`
+    to `site1-mon1`.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Make sure the instances of `keyring` are owned by `ceph:ceph`:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Tell Ceph that the pool called `rbd` should have the mirroring function enabled:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Repeat this for the target cluster:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Add the target cluster as a peer of the pool mirroring configuration:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Run the same command locally on the second Ceph cluster:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Back on the first cluster, let''s create a test RBD to use with our mirroring
+    lab:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Enable the journaling feature on the RBD image:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Enable mirroring for the RBD:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: '![](img/16a0f6ec-843a-45b5-be72-ccfdca4d3953.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'It''s important to note that RBD mirroring works via a pull system. The `rbd-mirror`
+    daemon needs to run on the cluster that you wish to mirror the RBDs to; it then
+    connects to the source cluster and pulls the RBDs across. If you were intending
+    to implement a two-way replication where each Ceph cluster replicates with each
+    other, you would run the `rbd-mirror` daemon on both clusters. With this in mind,
+    let''s enable and start the `systemd` service for `rbd-mirror` on your target
+    host:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `rbd-mirror` daemon will now start processing all the RBD images configured
+    for mirroring on your primary cluster.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can confirm that everything is working as expected by running the following
+    command on the target cluster:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The following screenshot is the output for the preceding command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/2f465a33-48f9-4a12-914a-d1b44678e841.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: In the previous screenshot, we can see that our `mirror_test` RBD is in a `up+replaying`
+    state; this means that mirroring is in progress, and we can see via `entries_behind_master`
+    that it is currently up to date.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note the difference in the output of the RBD `info` commands on either of the
+    clusters. On the source cluster, the primary status is `true`, which allows you
+    to determine which cluster the RBD is the master state and can be used by clients.
+    This also confirms that although we only created the RBD on the primary cluster,
+    it has been replicated to the secondary one.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The source cluster is shown here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/fd0c04ac-e659-4e7c-96b4-13eb3a62a0c3.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'The target cluster is shown here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/a9ed69e6-0fcf-475e-b8f0-34262a6be052.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Performing RBD failover
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Before we failover the RBD to the secondary cluster, let''s map it, create
+    a filesystem, and place a file on it, so we can confirm that the mirroring is
+    working correctly. As of Linux kernel 4.11, the kernel RBD driver does not support
+    the RBD journaling feature required for RBD mirroring; this means you cannot map
+    the RBD using the kernel RBD client. As such, we will need to use the `rbd-nbd`
+    utility, which uses the `librbd` driver in combination with Linux `nbd` devices
+    to map RBDs via user space. Although there are many things that may cause Ceph
+    to experience slow performance, here are some of the most likely causes:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: '![](img/d6f22175-2f4f-4d32-84e3-db3a4e85a09a.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: '![](img/9f3d999b-be44-4d27-9a3d-e737eb5c6c0e.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now, map and mount the RBD on the secondary cluster, and you should be able
+    to read the test text file that you created on the primary cluster:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/ac3321f6-14f1-47cc-9196-6c266177d5e5.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: We can clearly see that the RBD has successfully been mirrored to the secondary
+    cluster, and the filesystem content is just as we left it on the primary cluster.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you try to map and mount the RBD on the cluster where the RBD is not in the
+    primary state, the operation will just hang; this is because Ceph will not permit
+    I/O to an RBD image in a non-master state.
+  prefs: []
+  type: TYPE_NORMAL
+- en: RBD recovery
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In the event that a number of OSDs have failed, and you are unable to recover
+    them via the `ceph-object-store` tool, your cluster will most likely be in a state
+    where most, if not all, RBD images are inaccessible. However, there is still a
+    chance that you may be able to recover RBD data from the disks in your Ceph cluster.
+    There are tools that can search through the OSD data structure, find the object
+    files relating to RBDs, and then assemble these objects back into a disk image,
+    resembling the original RBD image.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this section, we will focus on a tool by Lennart Bader to recover a test
+    RBD image from our test Ceph cluster. The tool allows the recovery of RBD images
+    from the contents of Ceph OSDs, without any requirement that the OSD is in a running
+    or usable state. It should be noted that if the OSD has been corrupted due to
+    an underlying filesystem corruption, the contents of the RBD image may still be
+    corrupt. The RBD recovery tool can be found in the following GitHub repository: [https://gitlab.lbader.de/kryptur/ceph-recovery](https://gitlab.lbader.de/kryptur/ceph-recovery).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Before we start, make sure you have a small test RBD with a valid filesystem
+    created on your Ceph cluster. Due to the size of the disks in the test environment
+    that we created in [Chapter 2](dd1d6803-6e40-4bfb-8150-b605bcc08d59.xhtml), *Deploying
+    Ceph with Containers*, it is recommended that the RBD is only a gigabyte in size.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We will perform the recovery on one of the monitor nodes, but in practice, this
+    recovery procedure can be done from any node that can access the Ceph OSD disks.
+    To access the disks, we need to make sure that the recovery server has sufficient
+    space to recover the data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this example, we will mount the remote OSDs contents via `sshfs`, which
+    allows you to mount remote directories over `ssh`. However in real life, there
+    is nothing to stop you from physically inserting disks into another server or
+    whatever method is required. The tool only requires to see the OSDs data directories:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Clone the Ceph recovery tool from the Git repository:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The following screenshot is the output for the preceding command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/af283c1a-0176-44c8-921b-a1e0e7f64888.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Make sure you have `sshfs` installed:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The following screenshot is the output for the preceding command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/e0e5f4f8-8f8d-4ea7-b891-3b73af8dcdba.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Change into the cloned tool directory, and create the empty directories for
+    each of the OSDs:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: Filestore
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'For filestore, we can simply mount each remote OSD to the directories that
+    we have just created. Note that you need to make sure your OSD directories match
+    your actual test cluster:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: BlueStore
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: As Bluestore does not store the objects in a native Linux filesystem, we can't
+    just mount the filesystems. However, the `ceph-object-store` tool allows you to
+    mount the contents of a BlueStore OSD as a `fuse` filesystem.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'On each OSD node, create a directory under the `/mnt` folder to mount each
+    OSD on that node:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now mount the BlueStore OSD to this new directory:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The following screenshot is the output for the preceding command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/6f27079b-d5c0-4eb1-bd2b-559ee2788071.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'The BlueStore OSD is now mounted as a `fuse` filesystem to the `/mnt/osd-0`
+    directory. However, it will only remain mounted while the `ceph-object-store`
+    command is running. So if you wish to mount multiple OSDs or manually browse through
+    the directory tree, open additional SSH sessions to the Ceph node. The following
+    is a screenshot showing the contents of the `/mnt/osd-0` directory from a new
+    SSH session:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/eea946d5-22b9-48bd-ab4e-0304c43d382d.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: When you have finished with the OSD, simply use *Ctrl* + *C* on the SSH session
+    running the `ceph-objectstore-tool` command to unmount.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now we can mount the fuse-mounted OSDs to our management server like we did
+    with filestore:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: RBD assembly – filestore
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Now we can use the tool to scan the OSD directories and compile a list of the
+    RBDs that are available. The only parameter needed for this command is the location
+    where the OSDs are mounted. In this case, it is in a directory called `osds`.
+    The results will be listed in the VM directory:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The following screenshot is the output for the preceding command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/03846663-92d1-421a-b9e8-1d850a466aec.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'If we look inside the VM directory, we can see that the tool has found our
+    test RBD image. Now that we have located the image, the next step is to assemble
+    various objects located on the OSDs. The three parameters for this command are
+    the name of the RBD image found in the previous step, the size of the image, and
+    the destination for the recovered image file. The size of the image is specified
+    in bytes, and it is important that it is at least as big as the original image;
+    it can be bigger, but the RBD will not recover if the size is smaller:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The following screenshot is the output for the preceding command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/fb8634ea-7537-4ca6-8c1e-85ec5ed09712.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: The RBD will now be recovered from the mounted OSD contents to the specified
+    image file. Depending on the size of the image, it may take a while, and a progress
+    bar will show you its progress.
+  prefs: []
+  type: TYPE_NORMAL
+- en: RBD assembly – BlueStore
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The RBD assembly script will not work with BlueStore OSDs as BlueStore stores
+    the RBD objects with a slightly different naming convention. An updated script
+    is provided in the following steps to aid with RBD recovery.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Download the script to assist with the recovery of RBDs from BlueStore OSDs:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: Run the recovery script with three parameters, where first is the RBD image
+    hash name, the second is the RBD size in bytes, and the third is the output filename.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following example is from a 10 GB test RBD:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The following screenshot is the output for the preceding command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/9730a343-be26-4597-96f9-efc388c15e15.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: The RBD image should now be recovered.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Confirmation of recovery
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Once completed, we can run a file system called `fsck` on the image to make
+    sure that it has been recovered correctly. In this case, the RBD was formatted
+    with `ext4`, so we can use the `e2fsck` tool to check the image:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The following screenshot is the output for the preceding command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/7a9343f3-db9d-452e-b4f1-54b2af36e6cf.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Excellent, the image file is clean, which means that there is now a very high
+    chance that all our data has been recovered successfully.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now we can finally mount the image as a loopback device to access our data.
+    If the command returns no output, we have successfully mounted it:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You can see that the image is successfully mounted as a loop device:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/544665dd-0be5-4140-a6ea-bf07f3219bd1.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: RGW Multisite
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Ceph also supports the ability to run two or more RADOS Gateway Zones to provide
+    high availability of the S3 and swift-compatible storage across multiple sites.
+    Each zone is backed by a completely separate Ceph cluster, meaning that it is
+    extremely unlikely that any hardware of software failure can take the service
+    completely offline. When using RGW in a multisite configuration, it's important
+    to note that data is eventually consistent, so that data is not guaranteed to
+    be in the same state in every zone immediately after it has been written.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For more information on RGW multi-site configurations, please consult the official
+    Ceph documentation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: CephFS recovery
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Unlike RBDs, which are simply a concatenation of objects, CephFS requires consistent
+    data in both the data and metadata pools. It also requires a healthy CephFS journal;
+    if any of these data sources have issues, CephFS will go offline and may not recover.
+    This section of the chapter will look at recovering CephFS to an active state
+    and then further recovery steps in the scenario that the metadata pool is corrupt
+    or incomplete.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There are a number of conditions where CephFS may go offline but will not result
+    in any permanent data loss; these are often caused by transient events in the
+    Ceph cluster but shouldn't result in any long-term data loss, and in most cases
+    CephFS should automatically recover.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As CephFS sits on RADOS, barring any software bugs in CephFS, any data loss
+    or corruption should only occur in the instance where there has been a data loss
+    occurrence in the RADOS layer, perhaps due to multiple OSD failures leading to
+    the loss of a PG.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The loss of objects or PGs from the data pool will not take the CephFS filesystem
+    offline, but will result in access requests to the affected files to return zeroes.
+    This will likely cause any applications higher up the stack to fail and, due to
+    the semi-random nature of files or parts of files, which map to PGs, the result
+    would likely mean that the CephFS filesystem is largely usable. The best case
+    in this scenario would be to try to recover the RADOS pool PGs as seen later in
+    this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The loss of objects or PGs from the metadata pool will take the CephFS filesystem
+    offline and it will not recover without manual intervention. It is important to
+    point out that the actual data contents are unaffected by metadata loss, but the
+    objects storing this data would be largely meaningless without the metadata. Ceph
+    has a number of tools that can be used to recover and rebuild metadata, which
+    may enable you to recover from metadata loss. However, as has been mentioned several
+    times throughout this book, prevention is better than cure and as such, these
+    tools should not been seen as a standard recovery mechanism, but only to be used
+    as a last resort when recovery from regular backups have failed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating the disaster
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: To create the scenario where a CephFS filesystem has lost or corrupted its metadata
+    pool, we will simply delete all objects in the metadata pool. This example will
+    use the filesystem deployed in [Chapter 5](a01c8234-61a1-4d8e-9393-33a7218cf49d.xhtml), *RADOS
+    Pools and Client Access*, but the procedure should be identical to any other deployed
+    CephFS filesystem.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, let''s switch to the root account and mount the CephFS filesystem:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Place a few test files on the CephFS filesystem that we will later attempt
+    to recover:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now that we have the test files in place, let''s delete all the objects in
+    the metadata pool to simulate a loss of the metadata pool:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The following screenshot is the output for the preceding command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/43d3be7e-aacc-4c02-ae94-944b07580388.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Let''s restart the `mds` daemon; trigger the failure:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'If we now check the CephFS status with the `ceph -s` command, we can see that `mds`
+    has detected metadata damage and taken the filesystem offline:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/f09752de-1e15-4ebe-8ac7-822be060c44b.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'To get more information on the damage, we can run the following command. Check
+    the CephFS journal:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The following screenshot is the output for the preceding command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/f3f4ab78-93f3-4b3b-8d5f-190cf2cb03f8.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Yep, that's severely damaged, as expected.
+  prefs: []
+  type: TYPE_NORMAL
+- en: CephFS metadata recovery
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Normally it would be suggested to export the journal for safe-keeping to minimize
+    data loss, but in this case as we know we can safely just reset it straight away:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE35]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The following screenshot is the output for the preceding command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/ddb9cda4-559a-46f9-88e3-9723db0aaf32.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'The next command resets the RADOS state of the filesystem to allow the recovery
+    process to rebuild from a consistent state:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE36]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Next, the MDS tables are reset to enable them to be generated from scratch.
+    These tables are stored as objects in the metadata pool. The following commands
+    create new objects:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE37]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The following screenshot is the output for the preceding command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/4cd27b59-123f-4db7-a783-b055cf9eb70b.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Reset the CephFS journal:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE38]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Finally, create the root inodes and prepare for data-object discovery:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE39]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now that the state of CephFS has been fully reset, scans of the data pool can
+    be undertaken to rebuild the metadata from the available data objects. This is
+    a three-stage process using the following three commands. The first command scans
+    through the data pool, finds all the extents that make up each file, and stores
+    this as temporary data. Information, such as creation time and file size is also
+    calculated and stored. The second stage then searches through this temporary data
+    and rebuilds inodes into the metadata pool. Finally the linking of the inodes
+    occurs:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE40]'
+  prefs: []
+  type: TYPE_PRE
+- en: The scan inodes and extents commands can take an extremely long time to run
+    on large filesystems. The operations can be run in parallel to speed the process
+    up; check out the official Ceph documentation for more information.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Once the process is complete, check that the CephFS filesystem is now in a
+    healthy state:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/e9579401-5845-4773-a473-28a62880372b.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'We should also now be able to browse the filesystem from the mount point where
+    we mounted it at the start of this section:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/0042412f-2cd6-4f84-bf19-4d45169a27a7.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Note that although the recovery tools have managed to locate the files and rebuild
+    some of their metadata, information such as their name has been lost and hence
+    placed inside the `lost+found` directory. By examining the contents of the files,
+    we could identify which file is which and rename it to the original filename.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In practice, although we have restored the CephFS filesystem, the fact that
+    we are missing the files' original names and directory location likely means recovery
+    is only partially successful. It should also be noted that the recovered filesystem
+    may not be stable and it is highly recommended that any salvaged files be recovered
+    before the filesystem is trashed and rebuilt. This is a disaster-recovery process
+    that should only be used after ruling out restoring from backups.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Lost objects and inactive PGs
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This section of the chapter will cover the scenario where a number of OSDs have
+    gone offline in a short period of time, leaving some objects with no valid replica
+    copies. It's important to note that there is a difference between an object that
+    has no remaining copies and an object that has a remaining copy, but it is known
+    that another copy has had more recent writes. The latter is normally seen when
+    running the cluster with `min_size` set to `1`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To demonstrate how to recover an object that has an out-of-date copy of data,
+    let''s perform a series of steps to break the cluster:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Set `min_size` to `1`; hopefully by the end of this example, you will see why
+    you don''t ever want to do this in real life:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE41]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The following screenshot is the output for the preceding command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/680a90b5-efe5-4664-acf9-7157cb8cd463.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Create a test object that we will make later make Ceph believe is lost:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE42]'
+  prefs: []
+  type: TYPE_PRE
+- en: These two flags make sure that when the OSDs come back online after making the
+    write to a single OSD, the changes are not recovered. Since we are only testing
+    with a single option, we need these flags to simulate the condition in real life,
+    where it's likely that not all objects can be recovered in sufficient time before
+    the OSD, when the only copy goes offline for whatever reason.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Shut down two of the OSD nodes, so only one OSD is remaining. Since we have
+    set `min_size` to `1`, we will still be able to write data to the cluster. You
+    can see that the Ceph status shows that the two OSDs are now down:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/02b12728-2ab5-435a-846e-f5cfc5ac05f6.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Write to the object again, the write will go to the remaining OSD:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE43]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Shut down the remaining OSDs; once it has gone offline, power back the remaining
+    two OSDs:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/3dc3fc96-c9ea-410d-83c9-0f22e11fdd7b.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: You can see that Ceph knows that it already has an unfound object even before
+    the recovery process has started. This is because during the peering phase, the
+    PG containing the modified object knows that the only valid copy is on `osd.0`,
+    which is now offline.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Remove the `nobackfill` and `norecover` flags, and let the cluster try to perform
+    recovery. You will see that even after the recovery has progressed, there will
+    be one PG in a degraded state, and the unfound object warning will still be present.
+    This is a good thing, as Ceph is protecting your data from corruption. Imagine
+    what would happen if a 4 MB chunk of an RBD that contained a database suddenly
+    went back in time.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: If you try to read or write to our test object, you will notice the request
+    will just hang; this is Ceph protecting your data. There are three ways to fix
+    this problem. The first solution and the most ideal one is to get a valid copy
+    of this object back online; this could either be done by bringing `osd.0` online,
+    or by using the `objectstore` tool to export and import this object into a healthy
+    OSD. For the purpose of this section, let's assume that neither of those options
+    is possible. Before we cover the remaining two options, let's investigate further
+    to uncover what is going on under the hood.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Run the Ceph health detail to find out which PG is having the problem:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/4985dfe4-dd65-4f14-a96a-38319e8e59ee.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'In this case, it''s `pg 0.31`, which is in a degraded state, because it has
+    an unfound object. Let''s query the `pg`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE44]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The following screenshot is the output for the preceding command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/8a0cc1a9-ac7a-4928-88c5-924fcc9e84b9.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Look for the recovery section; we can see that Ceph has tried to probe `"osd":
+    "0"` for the object, but it is down. It has tried to probe `"osd": "1"` for the
+    object, but for whatever reason it was of no use, we know the reason is that it
+    is an out-of-date copy.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, let''s look into some more detail on the missing object:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE45]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The following screenshot is the output for the preceding command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/721776ae-9340-4867-a3cb-04b3690a84cf.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: The `need` and `have` lines reveal the reason. We have `epoch 383'5`, but the
+    valid copy of the object exists in `398'6`; this is why `min_size=1` is bad. You
+    might be in a situation where you only have a single valid copy of an object.
+    If this was caused by a disk failure, you would have bigger problems.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To recover from this, we have two options: we can either choose to use the
+    older copy of the object or simply delete it. It should be noted that if this
+    object is new and an older copy does not exist on the remaining OSDs, it will
+    also delete the object.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To delete the object, run this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE46]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'To revert it, run this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE47]'
+  prefs: []
+  type: TYPE_PRE
+- en: Recovering from a complete monitor failure
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In the unlikely event that you lose all of your monitors, all is not lost. You
+    can rebuild the monitor database from the contents of the OSDs with the use of `ceph-objectstore-tool`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To set the scenario, we will assume that an event has occurred and has corrupted
+    all three monitors, effectively leaving the Ceph cluster inaccessible. To recover
+    the cluster, we will shut down two of the monitors and leave a single failed monitor
+    running. We will then rebuild the monitor database, overwrite the corrupted copy,
+    and restart the monitor to bring the Ceph cluster back online.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `objectstore` tool needs to be able to access every OSD in the cluster to
+    rebuild the monitor database; in this example, we will use a script, which will
+    connect via `ssh` to access the OSD data. As the OSD data is not accessible by
+    every user, we will use the root user to log into the OSD hosts. By default, most
+    Linux distributions will not allow remote, password-based root logins, so ensure
+    you have copied your public `ssh` key to the root users on some remote OSD nodes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following script will connect to each of the OSD nodes specified in the
+    hosts variable, and it will extract the data required to build the monitor database:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE48]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This will generate the following contents in the `/tmp/mon-store` directory:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/0cca07f6-fdc4-4f29-a8e8-041ae47b8c4d.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'We also need to assign new permissions via the `keyring`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE49]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The following screenshot is the output for the preceding command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/10feb3c6-60c8-478b-86dc-b78a329c1e95.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: '[PRE50]'
+  prefs: []
+  type: TYPE_PRE
+- en: '![](img/35b21c1e-aa9b-4cec-8c54-609dd0eb3dc7.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Now that the monitor database is rebuilt, we can copy it to the monitor directory,
+    but before we do so, let''s take a backup of the existing database:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE51]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now, copy the rebuilt version:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE52]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'If you try to start the monitor now, it will get stuck in a probing state,
+    as it tries to probe for other monitors. This is Ceph trying to avoid a split-brain
+    scenario; however, in this case, we want to force it to form a quorum and go fully
+    online. To do this, we need to edit `monmap`, remove the other monitors, and then
+    inject it back into the monitors database:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE53]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Check the contents of `monmap`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE54]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The following screenshot is the output for the preceding command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/6b94da93-d24d-438c-afb3-23d1d79c8a56.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'You will see that there are three `mons` present, so let''s remove two of them:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE55]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now, check again to make sure they are completely gone:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE56]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The following screenshot is the output for the preceding command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/5f0a16e4-2500-4f5f-bd48-d7ad9b961af2.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: '[PRE57]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Restart all your OSDs, so they rejoin the cluster; then you will be able to
+    successfully query the cluster status and see that your data is still there:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/d1eb22c8-c9fd-478e-9029-788cdbb74f97.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Using the Ceph object-store tool
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Hopefully, if you have followed best practices, your cluster is running with
+    three replicas and is not configured with any dangerous configuration options.
+    Ceph, in most cases, should be able to recover from any failure.
+  prefs: []
+  type: TYPE_NORMAL
+- en: However, in the scenario where a number of OSDs go offline, a number of PGs
+    and/or objects may become unavailable. If you are unable to reintroduce these
+    OSDs back into the cluster to allow Ceph to recover them gracefully, the data
+    in those PGs is effectively lost. However, there is a possibility that the OSD
+    is still readable to use the `objectstore` tool to recover the PGs contents. The
+    process involves exporting the PGs from the failed OSDs and then importing the
+    PGs back into the cluster. The `objectstore` tool requires that the OSDs' internal
+    metadata is still in a consistent state, so full recovery is not guaranteed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In order to demonstrate the use of the `objectstore` tool, we will shut down
+    two of our three test cluster OSDs, and then recover the missing PGs back into
+    the cluster. In real life, it''s unlikely you would be facing a situation where
+    every single PG from the failed OSDs is missing, but for demonstration purposes,
+    the required steps are the same:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Set the pool size to `2`, so we can make sure that we lose all the copies of
+    some PGs when we stop the OSD service:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/023010d3-2bab-462a-a54e-eaee3b8ffe27.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Shut down two of the OSD services, and you will see from the Ceph status screen
+    that the number of PGs will go offline:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/8e86c55f-84bc-4853-85e5-87ae38a2d9c3.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Running a Ceph health detail will also show which PGs are in a degraded state:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/43a5b418-5f23-48c5-9549-f8836f399cd7.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: The stale PGs are the ones that no longer have a surviving copy, and it can
+    be seen that the acting OSD is the one that was shut down.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If we use `grep` to filter out just the stale PGs, we can use the resulting
+    list to work out what PGs we need to recover. If the OSDs have actually been removed
+    from the cluster, the PGs will be listed as incomplete rather than stale.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Check the OSD to make sure the PG exists in it:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE58]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The following screenshot is the output for the preceding command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/c2f4b88f-9d71-4e1f-9381-f38af27cd549.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Use the `objectstore` tool to export the `pg` to a file. As the amount of data
+    in our test cluster is small, we can just export the data to the OS disk. In real
+    life, you probably want to consider connecting additional storage to the server.
+    USB disks are ideal for this, as they can easily be moved between servers as part
+    of the recovery process:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE59]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The following screenshot is the output for the preceding command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/7ff2b4b2-413c-46c2-9aa1-9b29c935605d.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: If you experience an assert while running the tool, you can try running it with
+    the `--skip-journal-replay` flag, which will skip replaying the journal into the
+    OSD. If there was any outstanding data in the journal, it will be lost. But this
+    may allow you to recover the bulk of the missing PGs that would have otherwise
+    been impossible. And repeat this until you have exported all the missing PGs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Import the missing PGs back into an operating OSD. While we could import the
+    PGs into an existing OSD, it is much safer to perform the import on a new OSD,
+    so we don't risk further data loss. For this, create a directory-based OSD on
+    the disk used by the failed OSD. It's highly recommended in a real disaster scenario
+    that the data would be inserted into an OSD running on a separate disk, rather
+    than using an existing OSD. This is done so that there is no further risk to any
+    data in the Ceph cluster.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Also, it doesn't matter that the PGs that are being imported are all inserted
+    into the same temporary OSD. As soon as Ceph discovers the objects, it will recover
+    them to the correct location in the cluster.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Create a new empty folder for the OSD:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE60]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Use `ceph-disk` or `ceph-volume` to prepare the directory for Ceph:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE61]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Change the ownership of the folder to the `ceph` user and the group:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE62]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Activate the OSD to bring it online:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE63]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Set the weight of the OSD to stop any objects from being backfilled into it:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE64]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Proceed with the PG import, specifying the temporary OSD location and the PG
+    files that we exported earlier:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE65]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The following screenshot is the output for the preceding command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/d99e0733-217c-47b3-ad51-6e1f9becc339.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Repeat this for every PG that you exported previously. Once complete, reset
+    file ownership and restart the new temp OSD:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE66]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Check the Ceph status output, you will see that your PGs are now active, but
+    in a degraded state. In the case of our test cluster, there are not sufficient
+    OSDs to allow the objects to recover to the correct amount of copies. If there
+    were more OSDs in the cluster, the objects would then be backfilled around the
+    cluster and would recover to full health with the correct number of copies:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/2dbf57f8-5e7b-4825-ada7-e60441f96a32.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Investigating asserts
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Assertions are used in Ceph to ensure that, during the execution of the code,
+    any assumptions that have been made about the operating environment remain true.
+    These assertions are scattered throughout the Ceph code and are designed to catch
+    any conditions that may go on to cause further problems if the code is not stopped.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you trigger an assertion in Ceph, it's likely that some form of data has
+    a value that is unexpected. This may be caused by some form or corruption or unhandled
+    bug.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If an OSD causes an assert and refuses to restart, the usual recommended approach
+    would be to destroy the OSD, recreate it, and then let Ceph backfill objects back
+    to it. If you have a reproducible failure scenario, it is probably also worth
+    filing a bug in the Ceph bug tracker.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As mentioned, OSDs can fail either due to hardware or software faults in either
+    the stored data or OSD code. Software faults are much more likely to affect multiple
+    OSDs at once; if your OSDs have become corrupted due to a power outage, it's highly
+    likely more than one OSD will be affected. In the case where multiple OSDs are
+    failing with asserts and they are causing one or more PGs in the cluster to be
+    offline, simply recreating the OSDs is not an option. The OSDs that are offline
+    contain all the three copies of the PG, so recreating the OSDs would make any
+    form of recovery impossible and result in permanent data loss.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Before attempting the recovery techniques in this chapter, such as exporting
+    and importing PGs, investigation into the asserts should be done. Depending on
+    your technical ability and how much downtime you can tolerate before you need
+    to start focusing on other recovery steps, investigating the asserts may not result
+    in any success. By investigating the assert and looking through the Ceph source
+    referenced by the assert, it may be possible to identify the cause of the assert.
+    If this is possible, a fix can be implemented in the Ceph code to avoid the OSD
+    asserting. Don't be afraid to reach out to the community for help on these matters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In some cases, the OSD corruption may be so severe that even the `objectstore`
+    tool itself may assert when trying to read from the OSD. This will limit the recovery
+    steps outlined in this chapter, and trying to fix the reason behind the assert
+    might be the only option. Although by this point, it is likely that the OSD has
+    sustained heavy corruption, and recovery may not be possible.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Example assert
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The following assert was taken from the Ceph user''s mailing list:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE67]'
+  prefs: []
+  type: TYPE_PRE
+- en: The top part of the assert shows the function from where the assert was triggered
+    and also the line number and file where the assert can be found. In this example,
+    the `hit_set_trim` function is apparently the cause of the assert. We can look
+    into the `ReplicatedPG.cc` file around line 10,514 to try to understand what might
+    have happened. Note the version of the Ceph release (0.94.7), as the line number
+    in GitHub will only match if you are looking at the same version.
+  prefs: []
+  type: TYPE_NORMAL
+- en: From looking at the code, it appears that the returned value from the `get_object_context`
+    function call is directly passed to the `assert` function. If the value is zero –
+    indicating the object containing the hit-set to be trimmed could not be found – the
+    OSD will assert. From this information, there is a chance that investigation could
+    be done to work out why the object is missing and recover it. Or the `assert`
+    command could be commented out to see whether it allows the OSD to continue functioning.
+    In this example, allowing the OSD to continue processing will likely not cause
+    an issue, but in other cases, an assert may be the only thing stopping more serious
+    corruption from occurring. If you don't 100% understand why something is causing
+    an assert, and the impact of any potential change you might make, seek help before
+    continuing.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, you learned how to troubleshoot Ceph when all looks lost. If
+    Ceph is unable to recover PGs itself, you now understand how to manually rebuild
+    PGs from failed OSDs. You can also rebuild the monitor's database if you lose
+    all of your monitor nodes but still have access to your OSDs. You explored the
+    process of recreating RBDs from the raw data remaining on your OSDs. Finally,
+    you configured two separate Ceph clusters and configured replication between them
+    using RBD mirroring to provide a failover option, should you encounter a complete
+    Ceph cluster failure.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Questions
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: What Ceph daemon allows RBDs to be replicated to another Ceph cluster?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'True or false: RBDs by default are just a concatenated string of objects.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What tool can be used to export or import a PG from or to an OSD?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'True or false: An unfound object status means that data has been lost forever.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What is the main disadvantage you are left with after rebuilding CephFS metadata?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL

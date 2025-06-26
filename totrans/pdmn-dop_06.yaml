@@ -1,0 +1,1456 @@
+- en: '*Chapter 5*: Implementing Storage for the Container''s Data'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In the previous chapters, we explored how to run and manage our containers using
+    Podman, but we will soon come to realize in this chapter that these operations
+    aren't useful in certain scenarios where the applications included in our containers
+    need to store data in a persistent mode. Containers are ephemeral by default,
+    and this is one of their main features, as we described in the first chapter of
+    this book, and for this reason, we need a way to attach persistent storage to
+    a running container to preserve the container's important data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we''re going to cover the following main topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Why does storage matter for containers?
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Containers' storage features
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Copying files into and out of a container
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Attaching host storage to a container
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Before proceeding with the chapter's lecture and examples, a machine with a
+    working Podman installation is required. As stated in [*Chapter 3*](B17908_03_epub.xhtml#_idTextAnchor068),
+    *Running the First Container*, all the examples in the book are executed on a
+    Fedora 34 system or later but can be reproduced on the reader's OS of choice.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, a good understanding of the topics covered in [*Chapter 4*](B17908_04_epub.xhtml#_idTextAnchor083),
+    *Managing Running Containers*, is useful in terms of being able to easily grasp
+    concepts regarding OCI images and container execution.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Why does storage matter for containers?
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Before moving forward in the chapter and answering this interesting question,
+    we need to distinguish between two kinds of storage for containers:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: External storage attached to running containers to store data, making it persistent
+    on a container's restart
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Underlying storage for root filesystems of our containers and container images
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Talking about external storage, as we described in [*Chapter 1*](B17908_01_epub.xhtml#_idTextAnchor015),
+    *Introduction to Container Technology*, containers are stateless, ephemeral, and
+    often with a read-only filesystem. This is because the theory behind the technology
+    states that containers should be used for spawning scalable and distributed applications
+    that have to scale horizontally instead of vertically.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Scaling an application horizontally means that in case we require additional
+    resources for our running services, we will not increase CPU or RAM for a single
+    running container, but we will instead launch a brand new container that will
+    handle the incoming requests along with the existing container. This is the same
+    well-known paradigm adopted in the public cloud. The container in principle should
+    be ephemeral because any additional copy of the existing container image should
+    be run at any time for empowering the existing running service.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Of course, exceptions exist, and it could happen that a running container cannot
+    be scaled horizontally or that it simply needs to share configurations, cache,
+    or any other data relevant to other copies of the same container images at startup
+    time or during runtime.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's understand this with the help of a real-life example. Using a car-sharing
+    service to get a new car for every destination inside a city can be a useful and
+    smart way to move around without worrying about parking fees, fuel, and other
+    things. However, at the same time, this service cannot allow you to store or leave
+    your stuff inside of a parked car. Therefore, when using a car-sharing service,
+    we can unpack our stuff once we get into a car, but we must pack it back before
+    we leave that car. The same applies similarly to containers, where we must attach
+    to them some storage for letting our container write data down but then, once
+    our container stops, we should detach that storage so that a brand-new container
+    can use it when needed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here''s another more technical example: let''s consider a standard three-tier
+    application with a web, a backend, and a database service. Every layer of this
+    application may need storage, which it will use in a variety of ways. The web
+    service may need a place to save a cache, store rendered web pages, some customized
+    images at runtime, and so on. The backend service will need a place to store configuration
+    and synchronization data between the other running backend services, if any, and
+    so on. The database service will surely need a place to store the DB data.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Storage is often associated with low-level infrastructure, but in a container,
+    the storage becomes important even for developers, who should plan where to attach
+    the storage, and the features needed for their application.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If we extend the topic to container orchestration, then the storage inherits
+    a strategic role because it should be as elastic and feasible as the Kubernetes
+    orchestrator that we might use it with. The container storage in this case should
+    become more like software-defined storage – able to provide storage resources
+    in a self-service way to developers, and to containers in general.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Although this book will talk about local storage, it's important to note that
+    this is not enough for the Kubernetes orchestrator because containers should be
+    portable from one host to another depending on the availability and scaling rules
+    defined. This is where software-defined storage could be the solution!
+  prefs: []
+  type: TYPE_NORMAL
+- en: As we can deduct from the previous examples, external storage matters in containers.
+    The usage may vary depending on the running application inside our container,
+    but it is required. At the same time, another key role is driven by the underlying
+    container storage that is responsible for handling the correct storage of containers
+    and the container images' root filesystem. Choosing the right, stable, and performing
+    underlying local storage will ensure better and correct management of our containers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: So, let's first explore a bit of the theory of container storage and then discuss
+    how to work with it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Containers' storage features
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Before going into a real example and use cases, we should first dig into the
+    main differences between container storage and a **container storage interface**
+    (**CSI**).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Container storage, previously referred to as *underlying container storage*,
+    is responsible for handling container images on **Copy-on-Write** (**COW**) filesystems.
+    Container images need to be transferred and move around until a container engine
+    is instructed to run them, so we need a way to store that image until it is run.
+    That's the role of container storage.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Once we start using an orchestrator such as Kubernetes, CSI instead is responsible
+    for providing container block or file storage that containers need to write data
+    to.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next section of this chapter, we will concentrate on container storage
+    and its configuration. Later, we will talk about external storage for containers
+    and the options we have in Podman to expose the host local storage to the running
+    containers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A great innovation introduced with Podman is the *containers/storage* project
+    ([https://github.com/containers/storage](https://github.com/containers/storage)),
+    a great way to share an underlying common method for accessing container storage
+    on a host. With the arrival of Docker, we were forced to pass through the Docker
+    daemon to interact with container storage. With no other way to directly interact
+    with the underlying storage, the Docker daemon just hid it from the user as well
+    as the system administrator.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With the *containers/storage* project, we now have an easy way to use multiple
+    tools for analyzing, managing, or working with container storage at the same time.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The configuration of this low-level piece of software is so important for Podman
+    as well as for other companion tools of Podman and can be inspected or edited
+    through its configuration file available at `/etc/containers/storage.conf`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Looking at the configuration file, we can easily discover that we can change
+    a lot of options in terms of how our containers interact with the underlying storage.
+    Let's inspect the most important option – the storage driver.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Storage driver
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The configuration file, as one of its first options, gives the opportunity
+    to choose the default **Copy On Write** (**COW**) container storage driver. The
+    configuration file in the current version, at the time of writing this book, supports
+    the following COW drivers:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: overlay
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: vfs
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: devmapper
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: aufs
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: btrfs
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: zfs
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: These are also often referred to as **graph drivers** because most of them organize
+    the layers they handle in a graph structure.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using Podman on Fedora 34 or later, the container's storage configuration file
+    is shipped with overlay as the default driver.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Another important thing to mention is that, at the time of writing this book,
+    there are two versions of the overlay filesystem – version 1 and version 2\.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The original overlay filesystem version 1 was initially used by the Docker container
+    engine, but was later abandoned in favor of version 2\. That's why Podman and
+    the container's storage configuration file refers generically to the name overlay,
+    but it instead uses the new version 2.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Before going into detail regarding the other options and, finally, the practical
+    examples contained in this chapter, let's further explore how one of these COW
+    filesystem drivers works.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The overlay union filesystem has been present in a Linux kernel since version
+    3.18\. It is usually enabled by default and activated dynamically once a mount
+    is initiated with this filesystem.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The mechanism behind this filesystem is really simple but powerful – it allows
+    a directory tree to be overlaid on another, storing only the differences, but
+    showing the latest updated, *squashed* tree of directories.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Usually, in the world of containers, we start using a read-only filesystem,
+    adding one or more layers, read-only again, until a running container will use
+    this bunch of *squashed* layers as its root filesystem. This is where the last
+    read-write layer will be created as an overlay of the others.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s see what happens under the hood once we pull down a brand-new container
+    image with Podman:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you wish to proceed with testing the following example on your test machine,
+    ensure that you remove any running container and container images to easily match
+    the image with the layers that Podman will download for us.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: We can see from the previous command output that multiple layers have been downloaded.
+    That's because the container image we pulled down is composed of many layers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now we can start inspecting just the downloaded layers. First of all, we have
+    to locate the right directory, which we can search for inside the configuration
+    file. Alternatively, we can use an easier technique. Podman has a command dedicated
+    to displaying its running configuration and other useful information – `podman
+    info`. Let''s see how it works:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: To reduce the output of the `podman info` command, we used the `grep` command
+    to only match the `store` section that contains the current configuration in place
+    for container storage.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As we can see, the driver used is `overlay`, and the root directory to search
+    our layers is reported as the `graphRoot` directory: `/var/lib/containers/storage`;
+    for rootless containers, the equivalent is `$HOME/.local/share/containers/storage`.
+    We also have other paths reported, but we will talk about these later in this
+    section. The keyword `graph` is a term derived from the category of drivers we
+    just introduced earlier.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s take a look into that directory to see what the actual content is:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We have several directories available for which the names are pretty self-explanatory.
+    The ones we are looking for are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`overlay-images`: This contains the metadata of the container images downloaded.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`overlay-layers`: This contains the archives for all the layers of every container
+    image.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`overlay`: This is the directory containing the unpacked layers of every container
+    image.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Let''s check the content of the first directory, `overlay-images`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: As we can imagine, in this directory, we can find the metadata of the only container
+    image we pulled down and, in the directory with a very long ID, we will find the
+    manifest file describing the layers that make up our container image.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s now check the content of the second directory, `overlay-layers`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As we can see, we just found all the layers'' archives downloaded for our container
+    image, but where they have been unpacked? The answer is easy – in the third folder,
+    `overlay`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: The first question that could arise when looking at the latest directory content
+    is, what's the purpose of the `l` (L in lowercase) directory?
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To answer this question, we have to inspect the content of a layer directory.
+    We can start with the first one on the list:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Let''s understand the purpose of these files and directories:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`diff`: This directory represents the upper layer of the overlay, and is used
+    to store any changes to the layer.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`lower`: This file reports all the lower layer mounts, ordered from uppermost
+    to lowermost.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`merged`: This directory is the one that the overlay is mounted on.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`work`: This directory is used for internal operations.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`link`: This file contains a unique string for the layer.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Now, coming back to our question, what's the purpose of the `l` (L in lowercase)
+    directory?
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Under the `l` directory, there are symbolic links with unique strings pointing
+    to the `diff` directory for every layer. The symbolic links reference lower layers
+    in the `lower` file. Let''s check it:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: To double-check what we just learned, let's find the first layer of our container
+    image and check whether there is a lower file for it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s inspect the manifest file for our container image:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Then, we must compare the checksum of the compressed archive with the list
+    of all the layers we downloaded:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Good to Know
+  prefs: []
+  type: TYPE_NORMAL
+- en: SHA-256 is an algorithm used to produce a unique cryptographic hash that can
+    be used to verify the integrity of a file (checksum).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: The file we just analyzed, `overlay-layers/layers.json`, was not indented. For
+    this reason, we used the `jq` utility to format it and make it human-readable.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Good to Know
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you cannot find the `jq` utility on your system, you can install it through
+    the operating system default package manager. On Fedora, for example, you can
+    run `dnf install jq`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As you can see, we just found the ID of our root layer. Now, let''s look at
+    its content:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: As we can verify, there is not a `lower` file inside the layer's directory because
+    this is the first layer of our container image!
+  prefs: []
+  type: TYPE_NORMAL
+- en: The difference we might notice is the presence of a directory named `empty`.
+    This is because if a layer has no parent, then the overlay system will create
+    a dummy lower directory named `empty` and it will skip writing a `lower` file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, as the last stage of our practical example, let's run our container
+    and verify that a new `diff` layer will be created. We expect that this layer
+    will contain only the difference between the lower ones.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, we run our container image we just analyzed:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As you can see, we started it in the background through the `-d` option to
+    continue working on the system host. After this, we will execute a new shell on
+    the pod to actually check the container''s root folder and create a new file on
+    it:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This new file we just created will be temporary and will only last for the
+    lifetime of the container. It is now time to find the `diff` layer that was just
+    created by the overlay driver on our host system. The easiest way is to analyze
+    the mount points used in the running container:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As you can see, the first mount point of the list shows a very long line full
+    of layer paths divided by colons. In this long line, we can find the `upperdir`
+    directory we are searching for:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now, we can inspect the content of this directory and navigate to the various
+    paths available to find the container root directory where we wrote that file
+    in the previous commands:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: As we verified, the data is stored on the host operating system, but it is stored
+    in a temporary layer that will sooner or later be removed once the container is
+    removed!
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, coming back to the original topic that sent us on this small trip under
+    the hood of the overlay storage driver, we were talking about `/etc/containers/storage.conf`.
+    This file holds all the configurations for the *containers/storage* project that
+    is responsible for sharing an underlying common method to access container storage
+    on a host.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The other options available in this file are related to the customization of
+    the storage driver as well as changing the default path for the internal storage
+    directories.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The last point we should briefly talk about is the `runroot` directory. In this
+    folder, the container storage program will store all temporary writable content
+    produced by the container.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If we inspect the folder on our running host where we started the container
+    for the previous example, we will find that there is a folder named with its ID
+    with various files that have been mounted on the container to replace the original
+    files:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see from the preceding output, the container's folder under the `runroot`
+    path contains various files that have been mounted directly onto the container
+    to customize it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To wrap up, in the previous examples, we analyzed the anatomy of a container
+    image and what happens once we run a new container from that image. The technology
+    behind the scenes is amazing and we saw that a lot of features are related to
+    the isolation capabilities offered by the operating system. Here, storage offers
+    other important functionalities that have made containers the greatest technology
+    that we all now know about.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Copying files in and out of a container
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Podman enables users to move files into and out of a running container. This
+    result is achieved using the `podman cp` command, which can move files and folders
+    to and from a container. Its usage is quite simple and will be illustrated in
+    the next example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, let''s start a new Alpine container:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now, let''s grab a file from the container – we have chosen the `/etc/os-release`
+    file, which provides some information about the distribution and its version ID:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The file has been copied to the host `/tmp` folder and can be inspected:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In the opposite direction, we can copy files or folders from the host to the
+    running container:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: This example copies the `/tmp/build_folder` folder, and all its content, under
+    the root filesystem of the Alpine container. We can then inspect the result of
+    the copy command by using `podman exec` with the `ls` utility command.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Interacting with overlayfs
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: There is another way to copy files from a container to the host, which is by
+    using the `podman mount` command and interacting directly with the merged overlays.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To mount a running rootless container''s filesystem, we first need to run the
+    `podman unshare` command, which permits users to run commands inside a modified
+    user namespace:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This command drops a root shell in a new user namespace configured with *UID
+    0* and *GID 0*. It is now possible to run the `podman mount` command and obtain
+    the absolute path of the mount point:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: The preceding command uses shell expansion to change to the path of the `MergedDir`,
+    which, as the name says, merges the `LowerDir` and `UpperDir` contents to provide
+    a unified view of the different layers. From now on, it is possible to copy files
+    to and from the container root filesystem.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The previous examples were based on rootless containers, but the same logic
+    applies to rootful containers. Let''s start a rootful Nginx container:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'To copy files in and out, we need to prepend the `sudo` command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: The preceding command copies the default `index.html` page to the host `/tmp`
+    directory. Keep in mind that `sudo` elevates the user privileges to root, and
+    therefore copied files will have *UID 0* and *GID 0* ownership.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The practice of copying files and folders from a container is especially useful
+    for troubleshooting purposes. The opposite action of copying them inside a running
+    container can be useful for updating and testing secrets or configuration files.
+    In that case, we have the option of persisting those changes, as described in
+    the next subsection.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Persisting changes with podman commit
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The previous examples are not a method for permanently customizing running containers,
+    since the immutable nature of containers implies that persistent modifications
+    should go through an image rebuild.
+  prefs: []
+  type: TYPE_NORMAL
+- en: However, if we need to preserve the changes and produce a new image without
+    starting a new build, the `podman commit` command provides a way to persist the
+    changes to a container into a new image.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The commit concept is of primary importance in Docker and OCI image builds.
+    In fact, we can see the different steps of a Dockerfile as a series of commits
+    applied during the build process.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following example shows how to persist a file copied into a running container
+    and produce a new image. Let''s say we want to update the default `index.html`
+    page of our Nginx container:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Let''s test the changes applied:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now we want to persist the changed `index.html` file into a new image, starting
+    from the running container with `podman commit`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: The preceding command persists the changes by effectively creating a new image
+    layer containing the updated files and folders.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The previous container can now be safely stopped and removed before testing
+    the new custom image:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Let''s test the new custom image and inspect the changed `index.html` file:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: In this section, we have learned how to copy files to and from a running container
+    and how to commit the changes on the fly by producing a new image.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next section, we are going to learn how host storage is attached to a
+    container by introducing the concept of **volumes** and **bind mounts**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Attaching host storage to a container
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: We have already talked about the immutable nature of containers. Starting from
+    pre-built images, when we run a container, we instance a read/write layer on top
+    of a stack of read-only layers using a copy-on-write approach.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Containers are ephemeral objects based on a stateful image. This implies that
+    containers are not meant to store data inside them – if a container crashes or
+    is removed, all the data would be lost. We need a way to store data in a separate
+    location that is mounted inside the running container, preserved when the container
+    is removed, and ready to be reused by a new container.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There is another important caveat that should not be forgotten – **secrets**
+    and **config files**. When we build an image, we can pass all the files and folders
+    we need inside it. However, sealing secrets like certificates or keys inside a
+    build is not a good practice. If we need, for example, to rotate a certificate,
+    we must rebuild the whole image from scratch. In the same way, changing a config
+    file that resides inside an image implies a new rebuild every time we change a
+    setting.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For these reasons, OCI specifications support **volumes** and **bind mounts**
+    to manage storage attached to a container. In the next sections, we will learn
+    how volumes and bind mounts work and how to attach them to a container.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Managing and attaching bind mounts to a container
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Let's start with bind mounts since they leverage a native Linux feature. According
+    to the official Linux man pages, a bind mount is *a way to remount a part of the
+    filesystem hierarchy somewhere else*. This means that using bind mounts, we can
+    replicate the view of a directory under another mount point in the host.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Before learning how containers use bind mounts, let''s see a basic example
+    where we simply bind mount the `/etc` directory under the `/mnt` directory:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After issuing this command, we will see the exact contents of `/etc` under
+    `/mnt`. To unmount, simply run the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: The same concept can be applied to containers – Podman can bind mount host directories
+    inside a container and offers dedicated CLI options to simplify the mount process.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Podman offers two options that can be used to bind mount: `-v|--volume` and
+    `–mount`. Let''s cover these in more detail.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: -v|--volume option
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'This option uses a compact, single field argument to define the source host
+    directory and the container mount point with the pattern `/HOST_DIR:/CONTAINER_DIR`.
+    The following example mounts the `/host_files` directory on the `/mnt` mount point
+    inside the container:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'It is possible to pass extra arguments to define mount behavior; for example,
+    to mount the host directory as read-only:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: Other viable options for bind mounts using the `-v|--volume` option can be found
+    in the run command man page (`man podman-run`).
+  prefs: []
+  type: TYPE_NORMAL
+- en: --mount option
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'This option is more verbose since it uses a *key=value* syntax to define source
+    and destinations as well as the mount type and extra arguments. This option accepts
+    different mount types (bind mounts, volumes, tmpfs, images, and devpts) in the
+    `type=TYPE,source=HOST_DIR,destination=CONTAINER_DIR` pattern. The source and
+    destination keys can be replaced with the shorter `src` and `dst`, respectively.
+    The previous example can be rewritten as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We can also pass an extra option by adding an extra comma; for example, to
+    mount the host directory as read-only:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE35]'
+  prefs: []
+  type: TYPE_PRE
+- en: Despite being very simple to use and understand, bind mounts have some limitations
+    that could impact the life cycle of the container in some cases. Host files and
+    directories must exist before running the containers and permissions must be set
+    accordingly to make them readable or writable. Another important caveat to keep
+    in mind is that a bind mount always obfuscates the underlying mount point in the
+    container if populated by files or directories. A useful alternative to bind mounts
+    is **volumes**, described in the next subsection.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Managing and attaching volumes to a container
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: A volume is a directory created and managed directly by the container engine
+    and mounted to a mount point inside the container. They offer a great solution
+    for persisting data generated by a container.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Volumes can be managed using the `podman volume` command, which can be used
+    to list, inspect, create, and remove volumes in the system. Let''s start with
+    a basic example, with a volume automatically created by Podman on top of the Nginx
+    document root:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE36]'
+  prefs: []
+  type: TYPE_PRE
+- en: This time, the `–v` option has an argument with only one item – the document
+    root directory. In this case, Podman automatically creates a volume and bind mounts
+    it to the target mount point.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To prove that a new volume has been created, we can inspect the container:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE37]'
+  prefs: []
+  type: TYPE_PRE
+- en: In the `Mounts` section, we have a list of objects mounted in the container.
+    The only item is an object of the `volume` type, with a generated UID as its `Name`
+    and a `Source` field that represents its path in the host, while the `Destination`
+    field is the mount point inside the container.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can double-check the existence of the volume with the `podman volume ls`
+    command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE38]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Looking inside the source path, we will find the default files in the container
+    document root:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE39]'
+  prefs: []
+  type: TYPE_PRE
+- en: This demonstrated that when an empty volume is created, it is populated with
+    the content of the target mount point. When a container stops, the volume is preserved
+    along with all the data and can be reused when the container is restarted by another
+    container.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The preceding example shows a volume with a generated UID, but it is possible
+    to choose the name of the attached volume, as in the following example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE40]'
+  prefs: []
+  type: TYPE_PRE
+- en: In the preceding example, Podman creates a new volume named `nginx_vol` and
+    stores it under the default volumes directory. When a named volume is created,
+    Podman does not need to generate a UID.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The default volumes directory has different paths for rootless and rootful
+    containers:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: For rootless containers, the default volume storage path is `<USER_HOME>/.local/share/containers/storage/volumes`.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: For rootful containers, the default volume storage path is `/var/lib/containers/storage/volumes`.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Volumes created in those paths are persisted after the container is destroyed
+    and can be reused by other containers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To manually remove a volume, use the `podman volume rm` command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE41]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'When dealing with multiple volumes, the `podman volume prune` command removes
+    all the unused volumes. The following example prunes all the volumes in the user
+    default volume storage (the one used by rootless containers):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE42]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The next example shows how to remove volumes used by rootful containers by
+    using the `sudo` prefix:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE43]'
+  prefs: []
+  type: TYPE_PRE
+- en: Important Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: Do not forget to monitor volumes accumulating in the host since they consume
+    disk space that could be reclaimed, and prune unused volumes periodically to avoid
+    cluttering the host storage.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Users can also preliminarily create and populate volumes before running the
+    container. The following example uses the `podman create volume` command to create
+    the volume mounted to the Nginx document root and then populates it with a test
+    `index.html` file:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE44]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We can now run a new Nginx container using the pre-populated volume:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE45]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The HTTP test shows the updated contents:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE46]'
+  prefs: []
+  type: TYPE_PRE
+- en: This time, the volume, which was not empty in the beginning, obfuscated the
+    container target directory with its contents.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Mounting volumes with the --mount option
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'As with bind mounts, we can freely choose between the `-v|--volume` and the
+    `--mount` options. The following example runs an Nginx container using the `--mount`
+    flag:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE47]'
+  prefs: []
+  type: TYPE_PRE
+- en: While the `-v|--volume` option is compact and widely adopted, the advantage
+    of the `--mount` option is a more clear and expressive syntax, along with an exact
+    statement of the mount type.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Volume drivers
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The preceding volume examples are all based on the same `/usr/share/containers/containers.conf`
+    file in the `[engine.volume_plugins]` section by passing the plugin name followed
+    by the file or socket path.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The local volume driver can also be used to mount `/data/db` directory:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE48]'
+  prefs: []
+  type: TYPE_PRE
+- en: A prerequisite of the preceding example is the preliminary configuration of
+    the NFS server, which should be accessible by the host running the container.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Volumes in builds
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Volumes can be pre-defined during the image build process. This lets image
+    maintainers define which container directories will be automatically attached
+    to volumes. To understand this concept, let''s inspect this minimal Dockerfile:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE49]'
+  prefs: []
+  type: TYPE_PRE
+- en: The only change made to the `docker.io/library/nginx` image is a **VOLUME**
+    directive, which defines which directory should be externally mounted as an anonymous
+    volume in the host. This is simply metadata, and the volume will be created only
+    at runtime when a container is started from this image.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If we build the image and run a container based on the example Dockerfile,
+    we can see an automatically created anonymous volume:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE50]'
+  prefs: []
+  type: TYPE_PRE
+- en: Without an explicit volume creation option, Podman has already created and mounted
+    the container volume. This automatic volume definition at build time is a common
+    practice in all containers that are expected to persist data, like databases.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For example, the `docker.io/library/mongo` image is already configured to create
+    two volumes, one for `/data/configdb` and one for `/data/db`. The same behavior
+    can be identified in the most common databases, including PostgreSQL, MariaDB,
+    and MySQL.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'It is possible to define how pre-defined anonymous volumes should be mounted
+    when the container is started. The default ID `--image-volume` option. The following
+    example starts a MongoDB container with its default volumes mounted as tmpfs:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE51]'
+  prefs: []
+  type: TYPE_PRE
+- en: In [*Chapter 6*](B17908_06_epub.xhtml#_idTextAnchor116), *Meet Buildah – Building
+    Containers from Scratch*, we will cover the build process in greater detail. We
+    now close this subsection with an example of how to mount volumes across multiple
+    containers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Mounting volumes across containers
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'One of the greatest advantages of volumes is their flexibility. For example,
+    a container can mount volumes from an already running container to share the same
+    data. To accomplish this result, we can use the `--volumes-from` option. The following
+    example starts a MongoDB container and then cross mounts its volumes on a Fedora
+    container:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE52]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The second container drops an interactive root shell we can use to inspect
+    the filesystem content:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE53]'
+  prefs: []
+  type: TYPE_PRE
+- en: As expected, we can find the MongoDB volumes mounted in the Fedora container.
+    If we stop and even remove the first `mongodb01` container, the volumes remain
+    active and mounted inside the Fedora container.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Until now, we have seen basic use cases with no specific segregation between
+    containers or mounted resources. If the host has SELinux enabled and in enforcing
+    mode, some extra considerations must be applied.
+  prefs: []
+  type: TYPE_NORMAL
+- en: SELinux considerations for mounts
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: SELinux recursively applies labels to files and directories to define their
+    context. Those labels are usually stored as extended filesystem attributes. SELinux
+    uses contexts to manage policies and define which processes can access a specific
+    resource.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The `ls` command is used to see the type context of a resource:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE54]'
+  prefs: []
+  type: TYPE_PRE
+- en: In the preceding example, the `passwd_file_t` label defines the type context
+    of the `/etc/passwd` file. Depending on the type context, a program can or cannot
+    access a file while SELinux is running in enforcing mode.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Processes also have their type context – containers run with the label `container_t`
+    and have read/write access to files and directories labeled with `container_file_t`
+    type context, and read/execute access to `container_share_t` labeled resources.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Other host directories accessible by default are `/etc` as read-only and `/usr`
+    as read/execute. Also, resources under `/var/lib/containers/overlay/` are labeled
+    as `container_share_t`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: What happens if we try to mount a directory not correctly labeled?
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Podman still executes the container without complaining about the wrong labeling,
+    but the mounted directory or file will not be accessible from a process running
+    inside the containers, which are labeled with the `container_t` context type.
+    The following example tries to mount a custom document root for an Nginx container
+    without respecting the labeling constraints:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE55]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Apparently, everything went fine – the container started properly and the processes
+    inside it are running, but if we try to contact the Nginx server, we see the error:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE56]'
+  prefs: []
+  type: TYPE_PRE
+- en: '`403 – Forbidden` shows that the Nginx process cannot access the `index.html`
+    page. To fix this error, we have two options – put SELinux in **permissive** mode
+    or relabel the mounted resources. By putting SELinux in permissive mode, it continues
+    to track down the violations without blocking them. Anyway, this is not a good
+    practice and should be used only when we cannot correctly troubleshoot access
+    issues and need to put SELinux out of the equation. The following command sets
+    SELinux to permissive mode:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE57]'
+  prefs: []
+  type: TYPE_PRE
+- en: Important Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: Permissive mode is not equal to disabling SELinux entirely. When working in
+    this mode, SELinux still logs AVC denials without blocking. System admins can
+    immediately switch between permissive and enforcing modes without rebooting. Disabling,
+    on the other hand, implies a full system reboot.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The second preferred option is to simply relabel the resources we need to mount.
+    To achieve this result, we could use SELinux command-line tools. As a shortcut,
+    Podman offers a simpler way – the `:z` and `:Z` suffixes applied to the volume
+    mount arguments. The difference between the two suffixes is subtle:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `:z` suffix tells Podman to relabel the mounted resources in order to enable
+    all containers to read and write it. It works with both volumes and bind mounts.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The `:Z` suffix tells Podman to relabel the mounted resources in order to enable
+    only the current container to read and write it exclusively. This also works with
+    both volumes and bind mounts.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'To test the difference, let''s try to run the container again with the `:z`
+    suffix and see what happens:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE58]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now, the HTTP calls return the expected results since the process was able
+    to access the `index.html` file without being blocked by SELinux:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE59]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Let''s look at the SELinux file context automatically applied to the mounted
+    directory:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE60]'
+  prefs: []
+  type: TYPE_PRE
+- en: Let's focus on the `system_u:object_r:container_file_t:s0` label. The final
+    `s0` field is a `s0` sensitivity level will be able to mount the resource with
+    read/write access privileges. This also represents a security issue since a malicious
+    container on the same host would be able to attack other containers by stealing
+    or overwriting data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The solution to this problem is called **Multi-Category Security** (**MCS**).
+    SELinux uses MCS to configure additional categories, which are plaintext labels
+    applied to the resources along with the other SELinux labels. MCS-labeled objects
+    are then accessible only to processes with the same categories assigned.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When a container is started, processes inside it are labeled with MCS categories,
+    following the pattern **cXXX,cYYY**, where XXX and YYY are randomly picked integers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Podman automatically applies MCS categories to mounted resources when `Z` (uppercase)
+    is passed. To test this behavior, let''s run the Nginx container again with the
+    `:Z` suffix:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE61]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We can immediately see that the mounted folder has been relabeled with MCS
+    categories:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE62]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'A simple test will return the expected `Hello World!` text, proving that the
+    processes inside the container are allowed to access the target resources:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE63]'
+  prefs: []
+  type: TYPE_PRE
+- en: What happens if we run a second container with the same approach, by applying
+    `:Z` again to the same bind mount?
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE64]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This time, we run the HTTP test on port `8081` and `HTTP GET` still works correctly:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE65]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'However, if we test once again the container mapped to port `8080`, we will
+    get an unexpected `403 Forbidden` message:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE66]'
+  prefs: []
+  type: TYPE_PRE
+- en: Not surprisingly, the second container was executed with the `:Z` suffix and
+    relabeled the directory with a new pair of MCS categories, thus making the first
+    container unable to access the previously available content.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: The previous examples were conducted with bind mounts, but applied to volumes
+    in the same way. Use these techniques with caution to avoid unwanted relabels
+    of a bind mounted system or home directories.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this subsection, we demonstrated the power of SELinux to manage containers
+    and resource isolation. Let's conclude this chapter with an overview of other
+    types of storage that can be attached to containers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Attaching other types of storage to a container
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Along with bind mounts and volumes, it is possible to attach other types of
+    storage to containers, more specifically, of the kinds **tmpfs**, **image**, and
+    **devpts**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Attaching tmpfs storage
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Sometimes, we need to attach storage to containers that is not meant to be persistent
+    (for example, cache usage). Using volumes or bind mounts would clutter the host
+    local disk (or any other backend if using different storage drivers). In those
+    particular cases, we can use a **tmpfs** volume.
+  prefs: []
+  type: TYPE_NORMAL
+- en: tmpfs is a virtual memory filesystem, which means that all its contents are
+    created inside the host virtual memory. A benefit of tmpfs is that it provides
+    faster I/O since all the read/write operations mostly happen in the RAM.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To attach a tmpfs volume to a container, we can use the `--mount` option or
+    the `--tmpfs` option.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The `--mount` flag has the great advantage of being more verbose and expressive
+    regarding the storage type, source, destination, and extra mount options. The
+    following example runs an `httpd` container with a tmpfs volume attached to the
+    container:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE67]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The preceding command creates a tmpfs volume of 512 MB and mounts it on the
+    `/tmp` folder of the container. We can test the correct mount creation by running
+    the `mount` command inside the container:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE68]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This demonstrates that the tmpfs filesystem has been correctly mounted inside
+    the container. Stopping the container will automatically discard tmpfs:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE69]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The following example mounts a tmpfs volume using the `--tmpfs` option:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE70]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This example provides the same results as the previous one: a running container
+    with a 512 MB tmpfs volume mounted on the `/tmp` directory in read/write mode
+    and `1777` permissions.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: By default, the tmpfs volume is mounted inside the container with the following
+    mount options – **rw**, **noexec**, **nosuid**, and **nodev**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Another interesting feature is the automatic MCS labeling from SELinux. This
+    provides automatic segregation of the filesystem and prevents any other container
+    from accessing the data in memory.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Attaching images
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: OCI images are the base that provides layers and metadata to start containers,
+    but they can also be attached to a container filesystem at runtime. This can be
+    useful for troubleshooting purposes or for attaching binaries that are available
+    in a foreign image. When an OCI image is mounted inside a container, an extra
+    overlay is created. This implies that even when the image is mounted with read/write
+    permissions, users never alter the original image but the upper overlay only.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following example mounts a `busybox` image with read/write permissions
+    inside an Alpine container:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE71]'
+  prefs: []
+  type: TYPE_PRE
+- en: Important Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: The mounted image must already be cached in the host. Podman only pulls the
+    base container image if it is available when a container is created, but it expects
+    the mounted images to already be available. A preliminary pull of the images will
+    solve the issue.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Attaching devpts
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: This option is useful for attaching a `/dev/` from the host into the container,
+    while still creating a terminal. The `/dev` pseudo filesystem of the host enables
+    containers to gain direct access to the machine's physical or virtual devices.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To create a container with the `/dev` filesystem and a `devpts` device attached,
+    run the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE72]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'To check the result of the mount option, we require an extra tool inside the
+    container. For this reason, we can install it with the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE73]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The resulting container has an extra, non-isolated, `devpts` device mounted
+    on `/dev/pts`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE74]'
+  prefs: []
+  type: TYPE_PRE
+- en: The preceding output was extracted by running the `mount` command inside the
+    container.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we have completed a journey on container storage and Podman
+    features offered to manipulate it. The material in this chapter is crucial to
+    understanding how Podman manages both ephemeral and persistent data and provides
+    best practices to users to manipulate their data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the first section, we learned why container storage matters and how it should
+    be correctly managed both in single host and orchestrated, multi-host environments.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the second section, we took a deep dive into container storage features and
+    storage drivers, with a special focus on overlayfs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the third section, we learned how to copy files to and from a container.
+    We also saw how changes could be committed to a new image.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The fourth section described the different possible scenarios of storage attached
+    to a container, covering bind mounts, volumes, tmpfs, images, and devpts. This
+    section was also a perfect fit to discuss SELinux interaction with storage management
+    and see how we can use it to isolate storage resources across containers on the
+    same host.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next chapter, we will learn a very important topic for both developers
+    and operations teams, which is how to build OCI images with both Podman and **Buildah**,
+    an advanced and specialized image-building tool.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Further reading
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Refer to the following resources for more information:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Containers Storage project page: [https://github.com/containers/storage](https://github.com/containers/storage)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Container Labeling: [https://danwalsh.livejournal.com/81269.html](https://danwalsh.livejournal.com/81269.html
+    )'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Why you should be using Multi-Category Security for your Linux containers:
+    [https://www.redhat.com/en/blog/why-you-should-be-using-multi-category-security-your-linux-containers](https://www.redhat.com/en/blog/why-you-should-be-using-multi-category-security-your-linux-containers)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Udica: Generate SELinux policies: [https://github.com/containers/udica](https://github.com/containers/udica)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Overlay source code: [https://github.com/containers/storage/blob/main/drivers/overlay/overlay.go](https://github.com/containers/storage/blob/main/drivers/overlay/overlay.go)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

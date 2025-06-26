@@ -1,0 +1,630 @@
+- en: Troubleshooting and Validation
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Troubleshooting is, in itself, an art and, in this chapter, we will provide
+    some useful guidelines on how to quickly detect and fix problems. You will discover
+    useful endpoints that expose critical information, learn about promtool, Prometheus'
+    command-line interface and validation tool, and how to integrate it into your
+    daily workflow. Finally, we'll look into the Prometheus database and collect insightful
+    information regarding its usage.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In brief, the following topics will be covered in this chapter:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The test environment for this chapter
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Exploring promtool
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Logs and endpoint validation
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Analyzing the time series database
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The test environment for this chapter
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we'll be focusing on the Prometheus server and will be deploying
+    a new instance so that we can apply the concepts covered in this chapter using
+    a new test environment.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Deployment
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'To create a new instance of Prometheus, move into the correct repository path:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Ensure that no other test environments are running and spin up this chapter''s
+    environment:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You can validate the successful deployment of the test environment using the
+    following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This should output the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: The new instance will be available for inspection and the Prometheus web interface
+    is accessible at `http://192.168.42.10:9090`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You can now access the Prometheus instance by executing the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now that you're connected to the Prometheus instance, you can validate the instructions
+    described in this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Cleanup
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'When you finish testing, just make sure you''re inside `chapter08/` and execute
+    the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: Don't worry too much – you can easily spin up the environment again if you so
+    require.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Exploring promtool
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Prometheus ships with a very useful supporting command-line tool called `promtool`.
+    This small Golang binary can be used to quickly perform several troubleshooting
+    actions and is packed with helpful subcommands.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The features available can be divided into four categories, which we'll be covering
+    next.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Checks
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The subcommands that belong to this category provide the user with the ability
+    to check and validate several configuration aspects of the Prometheus server and
+    metric standards compliance. The following sections depict their usage.
+  prefs: []
+  type: TYPE_NORMAL
+- en: check config
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: There are several types of checks presented by `promtool`. One of the most valuable
+    is the check for the main configuration file for the Prometheus server.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`check config` expects a path to the Prometheus main configuration file and
+    outputs its assessment of the validity of the configuration. When something is
+    amiss, this subcommand can tell the user what the problem is: if it''s a non-breaking
+    issue, such as an empty discovery file, it will output a warning but permit `promtool`
+    to exit with success; when it encounters breaking errors, such as incorrect syntax,
+    it will output an error and will mark the check as a failure. Using the exit code
+    returned by the tool – `0` for success and `1` for failure – is a great way to
+    ensure configuration changes won''t break Prometheus upon restart and should be
+    used as a pre-flight check. Besides the main configuration file, this option also
+    recursively checks any referenced file, such as rules files.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following example illustrates its usage:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: check rules
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '`check rules` analyzes and pinpoints misconfigurations in rule configuration
+    files. It allows the targeting of specific rules files directly, which lets you
+    test files that aren''t yet referenced in the main Prometheus configuration. This
+    ability can be handy in both the development cycle of rule files and for validating
+    automatic changes in said files when using configuration management. We''ll be
+    covering these concepts in depth in [Chapter 9](9aa1e3da-13cf-4051-845d-1d1c924ef47b.xhtml),
+    *Defining Alerting and Recording Rules*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here''s the expected output when checking a rule file:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: check metrics
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The `check metrics` subcommand validates whether the metrics passed to it follow
+    the Prometheus guidelines in terms of consistency and correctness. This can be
+    useful in the development cycle to make sure new instrumentation conforms to the
+    standard, as well as using it in automation if you have some control over whether
+    new jobs follow the same rules. It expects the metrics payload as input via `STDIN`,
+    so you can pipe either a file or, the output of `curl` directly into it. For the
+    sake of this example, we are exposing an issue that occurred in Prometheus prior
+    to version `2.8.0`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As you can see, there appears to be an issue with the `prometheus_tsdb_storage_blocks_bytes_total`
+    metric. Let''s have a look at this particular metric to troubleshoot the error:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: In these older versions of Prometheus, it appears the metric is declared as
+    a gauge but has the `_total` suffix, which should only be used in counters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Queries
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The subcommands that belong to this category enable the execution of PromQL
+    expressions directly from the command line. These queries rely on the Prometheus
+    public HTTP API. The following topics demonstrate how to use them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: query instant
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The `query instant` subcommand allows the querying of the Prometheus server
+    directly via the command line based on the current time. For it to work, a Prometheus
+    server URL must be supplied as an argument, as well as the query to execute, like
+    so:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: query range
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Similar to the previous subcommand, `query range` enables the results to be
+    displayed for a specified time range. As such, we must provide the start and end
+    Unix-formatted timestamps, as well as the query and Prometheus server endpoint.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As an example, we''ll be using the `date` command to define the start and end
+    timestamps, generating a Unix-formatted timestamp for five minutes ago and another
+    for now. We may also specify the resolution of our query using the `--step` flag,
+    which in our example is one minute. Finally, we place the PromQL expression to
+    be executed, ending up with an instruction similar to the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `date` command available inside our test environment is from GNU `coreutils`,
+    which differs from the BSD-based one available on macOS. The syntax might not
+    be directly compatible between the two.
+  prefs: []
+  type: TYPE_NORMAL
+- en: query series
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'With the `query series` subcommand, you can search all of the time series that
+    match a set of metric names and labels. Here''s how to use it:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: query labels
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Using `query labels`, you can search for a specific label across all the available
+    metrics and return all the possible values attached to it; for example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: Debug
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The subcommands that belong to this category allow the extraction of debug data
+    from the running Prometheus server so it can be analyzed. We'll be demonstrating how
+    to use them next.
+  prefs: []
+  type: TYPE_NORMAL
+- en: debug pprof
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The Prometheus server, like most serious software written in Go, is instrumented
+    using a package from the standard library named `pprof`, which provides runtime
+    profiling information using a specific format. The files produced in this format
+    can then be read by a command-line tool with the same name (`pprof`), which uses
+    them to generate reports and visualizations of the profiling data. `promtool`
+    offers the `debug pprof` subcommand, which we can see in action in the following
+    snippet:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'When we extract the archive generated by the previous command, we can see a
+    few files:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Using `pprof`, we can generate an image of the dump, as we can observe in the
+    next snippet:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: The test environment comes with the `pprof` command-line tool ready to be used.
+    More information on how to build and deploy it is available at [https://github.com/google/pprof](https://github.com/google/pprof).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'On your host machine, inside the code repository under the `./cache/` path
+    (relative to the repository root), you should now have a scalable vector graphics
+    file named `heap.svg`, which can be opened by your browser for inspection. The
+    following screenshot shows what you might see when looking at the file produced
+    by the preceding example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/4f459c31-a4a3-4664-8d7d-fab050e008cf.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 8.1: Example of a heap map generated by pprof'
+  prefs: []
+  type: TYPE_NORMAL
+- en: debug metrics
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'This subcommand downloads the metrics exposed by the supplied Prometheus instance
+    in a compressed archive. `debug metrics` is not commonly used as the `/metrics`
+    Prometheus endpoint is available to anyone able to run this command; it exists
+    so that it is easier to provide the current state of a Prometheus instance to
+    external assistance (such as the Prometheus maintainers) when asked to. This subcommand
+    can be used as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: debug all
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'This option aggregates the previous debug subcommands into a single instruction,
+    as we can see in the following example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: Tests
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '`promtool` has recently gained the ability to run unit tests against defined
+    recording and alerting rules. This feature is very useful in situations where
+    you might need to check whether an expression matches certain conditions that
+    have never happened before, thus making it difficult to be sure they will work
+    when the time comes. This subcommand is called `test rules` and takes one or more
+    test files as arguments. We''re going to provide a deep dive of this feature later
+    on, when we tackle how to best take advantage of rules in [Chapter 9](9aa1e3da-13cf-4051-845d-1d1c924ef47b.xhtml),
+    *Defining Alerting and Recording Rules*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Logs and endpoint validation
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In the next sections, we go through several useful HTTP endpoints and service
+    logs that can be fundamental to troubleshoot issues with a Prometheus instance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Endpoints
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Checking whether Prometheus is up and running is usually very simple, as it
+    follows the conventions most cloud-native applications use for service health:
+    one endpoint to check whether the service is healthy and another to check whether
+    it is ready to start handling incoming requests. For those who use or have used
+    Kubernetes in the past, these might sound familiar; in fact, Kubernetes also uses
+    these conventions to assess whether a container needs to be restarted (for example,
+    if the application deadlocks and stops responding to health probes) and whether
+    it can start sending traffic to the container. In Prometheus, these are the `/-/healthy`
+    and `/-/ready` endpoints.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You can try these endpoints yourself by running the following commands in the
+    test environment and checking their output, as well as their HTTP status code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: In traditional infrastructure, it is usual to use the readiness endpoint as
+    the backend health probe when using load balancers in front of a set of Prometheus
+    instances, as only one health check can be configured. By using the readiness
+    endpoint, traffic is only routed to an instance ready to accept it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Additionally, Prometheus exposes a `/debug/pprof/` endpoint, which is used
+    by the `promtool debug pprof` command, as was shown in the previous section. This
+    endpoint also exposes a navigable web UI where `pprof` debug information can be
+    consulted, such as current goroutines and their stack traces, heap allocations,
+    memory allocations, and more:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/1b086a77-cbde-4025-b506-eb3680ceeba3.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 8.2: Information available on the Prometheus server/debug/pprof endpoint'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Logs
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Prometheus logging is very terse when compared with most current software. This
+    is a very conscious effort from the part of the Prometheus maintainers, as extraneous
+    logging can lead to performance issues. Additionally, supporting different log
+    streams (such as application logs, access logs, and slow query logs) without just
+    writing it all to standard output - and thus spamming the application log with
+    other types of logs - would force Prometheus to explicitly support writing to
+    files, which is undesirable in cloud-native environments. Having said that, you
+    can configure Prometheus to increase application log verbosity by setting the
+    `--log.level` flag. As an example, failed scrapes are considered normal operating
+    behavior and, as such, do not show up in the logs; however, they can be recorded
+    by increasing the log verbosity to the `debug` log level.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The Prometheus instance in the test environment for this chapter is already
+    configured with the log level set to debug. You can confirm this by running the
+    following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The relevant section should have the following flags set:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'So, now we can see what happens when a scrape fails. To make this happen, we
+    can stop the `node_exporter` service on the test environment and have a look at
+    the Prometheus logs:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: Analyzing the time series database
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: A critical component of the Prometheus server is its time series database. Being
+    able to analyze the usage of this database is essential to detect series churn
+    and cardinality problems. Churn, in this context, refers to time series that become
+    stale (for example, from the origin target stop being collected or the series
+    disappearing from one scrape to the next), and a new series with slightly different
+    identity starts being collected next. A usual example of churn is related to Kubernetes
+    application deploys, where the pod instance IP address changes making the previous
+    time series obsolete, and replacing it with a new one. This impacts performance
+    when querying, as samples with – possibly – no relevance are returned.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Thankfully, there's an obscure tool within the source code for the Prometheus
+    database that allows analyzing its data, and is appropriately named `tsdb`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can find the source code for the `tsdb` tool at [https://github.com/prometheus/tsdb/](https://github.com/prometheus/tsdb/).
+    It can easily be built by running  `go get github.com/prometheus/tsdb/cmd/tsdb` on
+    a system with the proper Go toolchain installed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using the tsdb tool
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The `tsdb` tool can run against Prometheus'' entire database or just a particular
+    block of data, and outputs useful information about the health of that data. To
+    run this tool, we must ensure the Prometheus server is stopped:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We''ll be running the `tsdb` tool targeting the Prometheus database path. For
+    the sake of brevity, we''ll limit the output to three entries per section. If
+    no block name is specified as an argument, the last available one will be used:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The output is split into a couple of sections. In the heading, we can find
+    a summary for the block, including the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Its full path location
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The block duration span, which, in standard Prometheus deployments defaults
+    to two hours
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The number of series and label names contained in the block
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Statistics regarding the number of index entries
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Here, we can see the output generated by the previous instruction:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'While churn isn''t really an issue in our test environment, we can see what
+    label pairs were detected with the highest involvement in producing churn:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Next, we can find the label names with the highest churn:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Right after the label names churn, we are presented with the most common label
+    pairs:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Finally, we reach the high cardinality sections, starting with labels:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: '`__name__` is the internal label that stores the metric name, so it''s normal
+    in a healthy Prometheus system for it to be considered the label with the highest
+    cardinality. Keep in mind that this doesn''t mean a metric name can''t be wrongly
+    used as a label (for example, suffixing metric names with IDs), so it''s important
+    to keep an eye out for sudden increases in cardinality.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Finally, we find statistics regarding metric names:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: The preceding statistics are collected from a two hour block. This, however,
+    can also be queried for a given moment via the expression browser using a query
+    similar to `topk(3, count({__name__=~".+"}) by (__name__))`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As stated before, you can choose a different block to analyze:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: The benefit of the `tsdb` report is that it provides a deeper understanding
+    of how metrics and labels are being used, and pinpoints good candidates to be
+    explored and validated against their targets.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we had the opportunity to experiment with a couple of useful
+    tools to troubleshoot and analyze Prometheus configuration issues and performance.
+    We started with `promtool` and went through all its available options; then, we
+    used several endpoints and logs to ensure everything was working as expected.
+    Finally, we described the `tsdb` tool and how it can be used to troubleshoot and
+    pinpoint problems with cardinality and the churn of metrics and labels in our
+    Prometheus database.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We can now step into recording and alerting rules, which will be covered in
+    the next chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Questions
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: How can you validate whether the main Prometheus configuration file has an issue?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: How can you assess whether metrics exposed by a target are up to Prometheus
+    standards?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Using `promtool`, how would you perform an instant query?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: How can you find all the label values being used?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: How do you enable debug logs on the Prometheus server?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What's the difference between ready and healthy endpoints?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: How can you find the churn of labels on an old block of Prometheus data?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Further reading
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '**Golang pprof**: [https://golang.org/pkg/runtime/pprof/](https://golang.org/pkg/runtime/pprof/)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

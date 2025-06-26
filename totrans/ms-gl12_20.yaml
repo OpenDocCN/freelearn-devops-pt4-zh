@@ -1,0 +1,635 @@
+- en: Using GitLab Runners with Docker or Kubernetes
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In the previous chapter, we installed a GitLab Runner with the shell executor.
+    In this chapter, we will take a closer look at containerized GitLab Runners. You
+    can run a GitLab Runner in a container in multiple ways:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**With the Shell executor running in a custom-built Docker container**: This
+    is not recommended because you are responsible for building and supporting this
+    custom container afterward. On the other hand, if you want to tightly control
+    the components inside the container and the behavior of them, then it might be
+    a good way to containerize the Runner. Scaling this solution also requires more
+    work from your side because the Runner itself only knows how to run jobs and connect
+    to GitLab. You will collect state (files in `/tmp` or elsewhere) in your containers
+    if they don''t restart after a job, so be prepared to handle that as well.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**With the Docker executor, which pulls and starts a Docker image for your
+    job**: This is a much more scalable solution, with the added bonus of having no
+    state. Each build gets a pristine clean environment and starts all over again.
+    Another bonus is that you are able to create services for a job, which is another
+    container or several that are started in parallel with a container for your job.
+    For instance, you can start a MySQL database and it will be a linked service that
+    is available under the service name.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**With the Kubernetes executor so that you can use a Kubernetes cluster**:
+    The Runner can communicate with the cluster management API and ask for resources
+    to spin up containers. The Runners are completely stateless and when there is
+    a decreasing number of jobs in the queue, the number of containers is scaled back
+    automatically.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**With the Docker executor and autoscaling enabled (Docker Machines creates
+    new Runners)**: In this configuration, the GitLab Runner controls the Docker Machine
+    binary. It can create new Runner containers on the fly and scale down again if
+    there are less jobs in the queue.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In this chapter, we are going to take a look at the basic way of running a GitLab
+    Runner, and how to orchestrate this using a management system such as Kubernetes.
+    The autoscaling executors will be part of the next chapter. The reason for this
+    is that the autoscaling Docker executor has a lot of options and requires more
+    planning and system management features to maintain.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following topics will be covered in this chapter:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Runner client architecture
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Creating your own Dockerized GitLab Runner
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using a prebuilt Docker container to deploy GitLab Runners
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using a Kubernetes cluster to spawn GitLab Runners
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: To follow along with the instructions in this chapter, please download this
+    book's GitHub repository, along with the examples that are available, from GitHub
+    at [https://github.com/PacktPublishing/Mastering-GitLab-12/tree/master/Chapter16](https://github.com/PacktPublishing/Mastering-GitLab-12/tree/master/Chapter16).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The other requirements for this chapter are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Docker installed for your platform
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The `wget` command-line download tool ([https://www.gnu.org/software/wget/](https://www.gnu.org/software/wget/))
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Access to the Alpine Docker image ([https://hub.docker.com/_/alpine](https://hub.docker.com/_/alpine))
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Access to the Python Alpine Docker image ([https://hub.docker.com/r/lgatica/python-alpine](https://hub.docker.com/r/lgatica/python-alpine))
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Access to the GitLab Runner Docker image ([https://hub.docker.com/r/gitlab/gitlab-runner](https://hub.docker.com/r/gitlab/gitlab-runner))
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The `kubectl` utility on your system (you can find installation instructions
+    at [https://kubernetes.io/docs/tasks/tools/install-kubectl/](https://kubernetes.io/docs/tasks/tools/install-kubectl/))
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Helm or Tiller (a Kubernetes utility to help you to manage clusters: [https://helm.sh/docs/using_helm/](https://helm.sh/docs/using_helm/))
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Runner client architecture
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'If you utilize a GitLab Runner with Docker, the resulting architecture differs
+    from the one in the previous chapter in one way. The Runner binary is executed
+    from inside a Docker container instead of directly on a host system. The following
+    diagram shows this architecture:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/752fc375-9252-4ff6-9b2f-492f2ec7b80c.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: The image is the same whether you create a container yourself or you use an
+    existing container from the internet.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If you are going to orchestrate your GitLab Runners using Kubernetes, the architecture
+    is going to look a bit different. You can see that, inside the cluster, a **GitLab
+    Runner** with the Kubernetes architecture can talk to the cluster''s Kubernetes
+    API to scale up the number of Runner instances:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/933b0dfe-812b-4c39-8117-60663c61fd66.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: The two architectures both use Docker containers as the core unit of operation. The
+    first needs more management in the field of scaling, upgrading the software, and
+    setting up a network. Much of that has already been arranged with Kubernetes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, we know about the difference between these architectures and that a Runner
+    is deployed without a container, but what does this mean in practice? We will
+    explore this in the following sections.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating your own Dockerized GitLab Runner
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Most people will use prebuilt Docker containers, but there are reasons to build
+    your own. Maybe you have special requirements when building your software that
+    aren't installed in the default Docker images that are available or maybe it's
+    just not possible because of security restrictions. A lot of default images have
+    software included that contain vulnerabilities.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's create our own Dockerized GitLab Runner for the project from [Chapter
+    10](1eceee2e-41d6-41cc-95eb-3d225f25f3fa.xhtml), *Create Your Product, Verify,
+    and Package it*, that is, the event manager documentation, using a Dockerfile. You
+    will find our first attempt in the next section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let me stress that this Dockerfile is purely for demonstration purposes. We
+    don't recommend building containers like this for production-like systems or even
+    your own development systems. It's being used here to show you how easily you
+    can wrap commands and services in containers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The first line of the file is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: This is the base image we used for the container. It is from the Alpine Linux
+    distribution, which contains only the bare minimum to run programs. It is only
+    4.41 MB and, when using container security scanners such as Clair ([https://github.com/coreos/clair](https://github.com/coreos/clair)),
+    it doesn't show vulnerabilities. You can also build containers from scratch (see
+    [https://ericchiang.github.io/post/containers-from-scratch/](https://ericchiang.github.io/post/containers-from-scratch/)),
+    but this is a very tedious task. The Alpine Linux image is safe enough and is
+    ready to go immediately.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the following lines, we install some basic packages:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: We need CA certificates because we need the GitLab Runner client to connect
+    to our HTTPS endpoint, where a TLS handshake will take place. The Git binary is
+    also necessary to clone code from a project.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Finally, the last command that is set to run in the creation sequence of the
+    container is used to download, execute, and register the GitLab Runner with our
+    GitLab server:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'For this example''s sake, we have hardcoded all of the arguments in the Dockerfile
+    to show you how easy it is to Dockerize your command (don''t do this normally):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`non-interactive`: Without it, there would be a dialog that takes you through
+    the configuration settings.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`url`: This is the URL of our GitLab server.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`registration-token`: This is the token of a Runner from the project, group,
+    or GitLab instance''s scope.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`executor`: This specifies which kind of Runner to implement. We chose to use
+    the shell executor.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`shell`: This specifies which kind of shell to implement; this could be `bash`, `sh`,
+    or `powershell` on Windows. We chose `sh` as it is the most basic one.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`description`: This is what description you will see in GitLab.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`tag-list`: We can put tags on Runners for easier management in GitLab. In
+    this case, we have used `docker`.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`run-untagged`: We set it to `true`, which means that any job with or without
+    tags can be run on this Runner.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`locked`: The Runner isn''t tied to a project.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The next step is to build the Docker container with the `docker build` command
+    (we specify `–no-cache` so that we can rebuild every time). The output is as follows,
+    and we will go through it step by step. The first part is pulling the Alpine base
+    image:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The first Docker layer has been created. The second step is adding the necessary
+    packages:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The previous code downloaded the packages we specified, as well as some dependencies.
+    This is still a modest amount of packages. In the following build step, the GitLab
+    Runner binary is downloaded:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The next step is the execution of the Runner:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Then, we need to register it:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The binary was successfully downloaded, and the registration was successful;
+    a specific Runner token was created and is now part of the Docker image. The final
+    part of the build sets the entry point for the instantiation of a Docker instance
+    with this image:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'It automatically tagged the image with `latest`. The image is now available
+    on the machine where its build was executed. You can view it by using the following
+    command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'If you go to GitLab and open the Runner list in the administrative settings
+    menu, a new Runner will appear there:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/46ba2707-2ebe-4c45-bf16-b953004b46b8.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Now, it''s time to start the Runner and try to build the `eventmanager-documentation`
+    project. You can start the Runner in the foreground using the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The following output should appear after a brief pause:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see, it has successfully loaded a configuration that was saved in
+    the container during the registration phase. It also mentions the fact that it
+    didn't load a metrics and debug session server, so this Runner exposes no service
+    of any kind to the outside world. It has connected to the GitLab server and is
+    now waiting for commands.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'When we try to run the `eventmanager-documentation` project pipeline for the
+    master branch, it will spin off a build job to the new GitLab Runner:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Unfortunately, it''s failed to build the project. If we look at the job log,
+    we get the following output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/7fdcd13d-9b72-4b72-9bf8-b59bcc6f21f1.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: It's quite clear why the job failed. We created a basic GitLab Runner container
+    without support for the Python language. That is why it complains about the **Python
+    Package Manager** (**PIP**) not being found. We need Python to install the **Amazon**
+    **Web** **Services** **Command-Line** **Interface** (**AWS CLI**) utility, which
+    is defined in the `.gitlab-ci.yml` file for this project.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This is easy to fix. We can change the first line in the Dockerfile to the
+    following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: This will change the base image of the Docker container to a version of Linux
+    with Python included. Now, you can rebuild the image using the exact same preceding
+    command line and starting the container again.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If we run the pipeline for this project again, the job will succeed:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/ba7011ed-5490-4bfe-b4a6-0edcfee8d0ad.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: You can create much more elaborate container images, but this was a basic way
+    to containerize a Runner.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this section, we have created our own GitLab Runner container and registered
+    it with a GitLab instance. In the next section, we will use a prebuilt image that
+    GitLab provides from their site.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using a prebuilt Docker container to deploy GitLab Runners
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'There are two basic flavors of prebuilt Docker containers available (Ubuntu-based
+    and Alpine-based). The big difference between them is that the Alpine one is much
+    smaller and has a better security track. You can find it here: [https://gitlab.com/gitlaborg/gitlabrunner/blob/master/dockerfiles/alpine/Dockerfile](https://gitlab.com/gitlaborg/gitlabrunner/blob/master/dockerfiles/alpine/Dockerfile).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can run the container with arguments that will be passed through to the
+    GitLab Runner binary that is started inside the container. This also enables easier
+    runtime registration of the Runner with a GitLab instance. Remember from the *Creating
+    your own Dockerized GitLab Runner* section that we baked the registration of the
+    Runner inside the image. You can find the appropriate images on Docker Hub: [https://hub.docker.com/r/gitlab/gitlab-runner/tags](https://hub.docker.com/r/gitlab/gitlab-runner/tags).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Just start a container using the following command. It will automatically download
+    the right image:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You can check the logs of the running container with the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: The preceding output means that the `gitlab-runner` software is running inside
+    the container, but it isn't registered yet.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The next step is to register it and save the configuration file in the container
+    (in the configuration volume you specified with `-v`):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'If you examine the container logs (maybe you left the window open) after this,
+    a message should appear:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: This means that the Runner now has a valid configuration and is online with
+    GitLab.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If we try to trigger the pipeline for the `eventmanager-documentation` project
+    again, a job will be run:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In GitLab, you will see this job running:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/9ca6f192-edb0-4d8c-aab6-ab2b8288fb4e.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'In the log file of the container, a message will appear if the job succeeds:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This is also visible in the job log in GitLab:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/225c4efc-b8f2-4186-8f5b-8177f110b7fb.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'This concludes the two ways of running Docker locally with relatively simple
+    containers:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Building your own container
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using a prebuilt image
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: How can you manage this if you have massive amounts of build jobs? You can use
+    an orchestration system such as Kubernetes, which is the subject of the next section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using a Kubernetes cluster to spawn GitLab Runners
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The best method of deploying a GitLab Runner container into a Kubernetes cluster
+    is by using the GitLab Runner Helm chart.
+  prefs: []
+  type: TYPE_NORMAL
+- en: It contains all of the configuration information that's run using the GitLab
+    Runner Kubernetes executor. For each new job it receives from GitLab CI/CD, it
+    will provision a new pod within the specified namespace to run it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You can run the install using the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This command can take some time to complete. After some time, you will receive
+    the following output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: This shows quite a bit of output, but the important part is that the status
+    of the Helm chart is `DEPLOYED`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The GitLab Runner should now be registered to the GitLab instance reachable
+    at [https://gitlab-ee.joustie.nl/](https://gitlab-ee.joustie.nl/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: We have run this deployment on my local Kubernetes cluster.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You can find out which Kubernetes pods are running by using the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As you can see, the Runner was deployed in Kubernetes in the Runner list of
+    the administrative section of GitLab:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/e3e42102-c4ee-4cfe-ac72-57ce5833725a.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'We can run the pipeline for the `eventmanager-documentation` project that was
+    introduced in [Chapter 10](1eceee2e-41d6-41cc-95eb-3d225f25f3fa.xhtml), *Create
+    Your Product, Verifying it, and Packaging it,* to demonstrate the fact that multiple
+    Runners are spawned on the Kubernetes cluster. Here is the pipeline view in GitLab
+    showing multiple parallel jobs:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/e80b020c-9086-45f1-a007-c2c6142fdf6b.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'If you look into individual jobs, you will see that it takes some time to spin
+    up the new Runner resources in the cluster. Until it is ready, the job is polled:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/20bb77e4-4c92-4486-ac83-2b858610ec41.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'After some time, a Runner is spawned in the Kubernetes cluster and the jobs
+    are dispatched to it:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/68dcf651-55e4-4809-ad45-63014911eadc.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'You can view a list of pods on the Kubernetes cluster and see that many pods
+    were created:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/349e3596-bab6-4413-b629-551bcfb3f0fc.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'After some time, you will see that some parallel started jobs are finishing
+    (in green):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/f274f9f4-9cdb-436a-8a91-cffa490d7e98.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'In the end, all of the jobs will succeed and the pipeline will be passed:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/ebbe1740-7893-4758-9a3d-aa46e9c27c2a.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: After this job, the number of GitLab Runners is reduced once more.
+  prefs: []
+  type: TYPE_NORMAL
+- en: By doing this, we've shown you how to use Kubernetes to manage containers and
+    how to handle scaling on the fly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we showed you how to run GitLab Runners in containers. First,
+    we looked at a quick way to containerize an existing Runner. Then, we showed you
+    how to use existing Docker images that are provided by GitLab itself. Afterward,
+    we talked about a way to manage a greater amount of containers and how you can
+    handle this more economically with Kubernetes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the next chapter, we will discuss another way to scale Runners: with autoscaling.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Questions
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: What are the advantages of the Docker executor?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What is the basic build command for a Docker container?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Which file contains the building instructions for a container?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What is the name of a small Linux container distribution?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What tool is used to configure a Kubernetes cluster with much more ease?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: How can you set the number of Runners to spawn by default in Kubernetes?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Further reading
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '*Kubernetes Course from a DevOps Guru (Kubernetes and Docker)*, by *Tao W*,
+    *James Lee*, and *Basit Mustafa*: [https://www.packtpub.com/application-development/kubernetes-course-devops-guru-kubernetes-docker](https://www.packtpub.com/application-development/kubernetes-course-devops-guru-kubernetes-docker)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Learn Docker – Fundamentals of Docker 18.x*, by *Gabriel N. Schenker*: [https://www.packtpub.com/in/networking-and-servers/learn-docker-fundamentals-docker-18x](https://www.packtpub.com/in/networking-and-servers/learn-docker-fundamentals-docker-18x)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Hands-On Continuous Integration and Delivery*, by *Jean-Marcel Belmont*: [https://www.packtpub.com/in/virtualization-and-cloud/hands-continuous-integration-and-delivery](https://www.packtpub.com/in/virtualization-and-cloud/hands-continuous-integration-and-delivery)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Containers from Scratch*: [https://ericchiang.github.io/post/containers-from-scratch/](https://ericchiang.github.io/post/containers-from-scratch/)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

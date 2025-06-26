@@ -1,0 +1,784 @@
+- en: 'Chapter 19: Protecting Data in Flight and at Rest'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: As you and your developers start to connect to your systems, security is not
+    always front of mind. This is especially the case if you think that encryption
+    keys and certificate handshakes could cause latency. Incorporating encryption
+    both for data in transit and at rest is a must, especially in today's environments.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There are multiple ways to incorporate encryption into your environment. It
+    can start with how to secure the transmissions you are sending back and forth
+    between you and AWS. It then progresses to securing data that you are storing
+    on the Amazon cloud and then moves on to data that you are serving for your customers
+    to access.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we''re going to cover the following main topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding KMS keys
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Adding encryption to storage
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Adding encryption to data stores
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Protecting data in transit with AWS Certificate Manager
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Adding a certificate to Amazon CloudFront
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Data encryption introduction
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'There are many reasons why there is a bigger push to encrypt data these days.
+    The requirement could stem from a regulation that your company needs to follow
+    for the industry they are in. It may be that there is internal compliance governance
+    that states that data needs to be encrypted. And it just may come down to taking
+    a proactive stance on security by adding an additional layer of protection to
+    your environment. No matter what the driving reason is, the goal, in the end,
+    is to have a more secure platform for your customers to use and better data protection:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 19.1 – The AWS cryptography stack'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/Figure_19.1_B17405.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 19.1 – The AWS cryptography stack
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the end, what you and your organization's end goal should be with the use
+    of encryption can be simplified by minimizing the unauthorized physical and logical
+    access to data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'There are three categories to be aware of when looking at data and encryption:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Data in transit
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Data at rest
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Data in use
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: If you go by the recommendation from Amazon, then you should encrypt as much
+    as possible in your environment. This includes encrypting data at rest when it's
+    stored and encrypting data in transit, as it's being shipped back and forth between
+    client and server.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Options for encrypting data at rest in AWS
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Throughout this chapter, we will be concentrating on two services from AWS,
+    Key Management Service and Certificate Manager. There are other services in the
+    Amazon ecosystem that play a part in the data encryption process, and we wanted
+    to give them a brief mention just in case they happened to appear on the test.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The first is part of Amazon Virtual Private Cloud, and the second is **AWS Virtual
+    Private Network** (**AWS VPN**). Using an AWS site-to-site VPN connection to connect
+    your data center to your VPC allows your transmissions of data to happen securely
+    over the IPSec protocol. This is a group of protocols for encrypting internet
+    transmissions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You get started by setting up a customer gateway, which usually consists of
+    a router, and then create the VPN gateway on your VPC. VPNs have a throughput
+    limit of 1.25 gigabits per second.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we understand the options for encrypting data at rest in our AWS accounts,
+    let's concentrate on using AWS **Key Management Service** (**KMS**) to protect
+    our data at rest.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding KMS keys
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: KMS is a managed service from Amazon that makes it easy to produce and manage
+    **Customer-Managed Keys** (**CMKs**). CMKs are the encryption keys used to secure
+    and control access data stored on AWS. KMS integrates seamlessly with many other
+    services, especially the IAM service, so that you can control who is allowed access
+    to the keys.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'AWS creates the key material for the KMS key. You, as the customer, cannot
+    extract, export, view, or manage this key material. You can delete the key but
+    cannot delete the key material itself:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 19.2 – Master and data keys in AWS KMS'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/Figure_19.2_B17405.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 19.2 – Master and data keys in AWS KMS
+  prefs: []
+  type: TYPE_NORMAL
+- en: One of the key concepts to understand in KMS is **envelope encryption**. When
+    AWS encrypts your data, your data is secured, but your key needs to be protected
+    as well. AWS does this by encrypting your data with a data key and then encrypting
+    the data key with another key. That top-level plaintext key is known as the master
+    key.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Using the envelope encryption process provides a number of benefits:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**It protects the data keys** – This way, you can store the encrypted data
+    key beside the encrypted data.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**You can encrypt the same data using multiple keys** – KMS allows you to only
+    re-encrypt the data keys that protect the raw data instead of all raw data that
+    the key encrypts.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**You can combine the strengths of multiple algorithms** – Symmetric key algorithms
+    are smaller than public-key algorithms generally. However, public-key algorithms
+    allow for inherited separation of roles. Using envelope encryption allows you
+    to use both strategies at the same time.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using AWS-managed CMKs keys to encrypt storage
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Each AWS service that offers encryption has its own AWS-managed KMS key.
+  prefs: []
+  type: TYPE_NORMAL
+- en: One of the key differences between AWS-managed CMKs and user-created CMKs is
+    the rotation schedule. With AWS-managed keys, key rotation is required, and it
+    happens every 1,095 days or every 3 years.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The similarity between the two different types of keys is the fact that both
+    AWS-managed keys and CMKs are used only for your AWS account.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using KMS with S3 to protect objects stored at rest
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'KMS integrates seamlessly with S3 object storage. S3 has its own service-managed
+    key that allows you to encrypt objects in your buckets with almost little to no
+    effort on your part. There are also the following security controls available
+    to help incorporate KMS with S3:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Amazon S3 has the ability to encrypt all new objects placed into a bucket automatically.
+    This is done through a bucket setting in the **Properties** section labeled **default
+    encryption**. Once you have turned this setting on, then any new object that is
+    uploaded into the bucket is automatically encrypted with either the Amazon-managed
+    S3 key (by default) or the specified customer-managed S3 key.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: If you need to retroactively encrypt items in an S3 bucket, you can do so using
+    the S3 batch process. Amazon S3 has its own ability to perform batch processing
+    on objects within the buckets. If your internal guidance has changed, or an audit
+    has found that a user (either internal or external) has been adding items to a
+    bucket without encryption, then you can use S3 Batch Operations to remediate the
+    situation.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: If you want to check which items are or are not encrypted in an S3 bucket, then
+    you can run an S3 inventory report.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Now that we have seen how KMS works smoothly with Amazon S3, especially in the
+    case of Amazon-managed keys, we will now look at how to create and manage our
+    own key, and the important differences between a customer-managed key and an Amazon-managed
+    key.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating and managing a customer-managed key in KMS
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: There may be cases where certain users or teams may need to have access to data
+    and others should not have the right to access it. This is one of the ideal use
+    cases for integrating a CMK along with an IAM policy for who can access the key.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As we will see in this exercise, there is a separation of duties between key
+    administrators and key users. Key administrators are the users who control the
+    key access, including the ability to rotate and delete the key. There are also
+    key users. These are the users and service roles that have the ability to use
+    the key on a day-to-day basis. These are important concepts to understand as you
+    both create and manage the keys in your account. There may be individuals and
+    groups who need the ability to manage the keys but do not need access to data
+    that is protected by the keys.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the following exercise, we are going to create our own customer-managed
+    key using KMS. We will also designate both key administrators and key users before
+    we are finished creating the key:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Log on to the AWS Management Console and search for `Key Management Service`
+    from the top search menu bar:![Figure 19.3 – The Key Management Service icon from
+    the search menu
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '](img/Figure_19.3_B17405.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Figure 19.3 – The Key Management Service icon from the search menu
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Once at KMS, we can now click on the orange **Create a key** button.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Now on the **Configure Key** page, choose the **Symmetric** key type and click
+    on the orange **Next** button at the bottom of the page.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: This should bring us to the `chapter19` as the KMS key alias. We can use `example
+    key` as the **Description**. Scroll down to the bottom of the page and click on
+    the orange **Next** button:![Figure 19.4 – Adding the KMS key alias and description
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '](img/Figure_19.4_B17405.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Figure 19.4 – Adding the KMS key alias and description
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Now it's time to choose key administrators. This is an important step that determines
+    who can control the key access and who can delete the key, but not the people
+    and groups who can use the key. Since you have most likely logged in with your
+    `devops` user that we created at the beginning of our exercises, choose this user,
+    and if you have another administrator account that you either use or would like
+    to have access to the key, check the box next to that name as well. Once you have
+    selected the names for the administrators, click the orange **Next** button at
+    the bottom of the screen.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: We should now be on the `devops` user, let's add the developer user that we
+    created previously, `mariel`, to the list of authorized users as well. Once you
+    have made your selections, click the orange **Next** button at the bottom of the
+    screen.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: On the **Review** page, scroll down and click the orange **Finish** button to
+    create the key.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Now that we have gone through the process of creating our CMK, let's see how
+    we can use this key to keep our data secure via encryption.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Adding encryption to data stores using our custom KMS key
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Let''s now take a look at how we can use the CMK we just created to encrypt
+    objects in an S3 bucket that we have created previously. For the examples shown,
+    we will be using the bucket that we created back in [*Chapter 4*](B17405_04_Final_JM_ePub.xhtml#_idTextAnchor110),
+    *Amazon S3 Blob Storage*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Log on to the AWS Management Console and navigate to `devopspro-beyond`. Once
+    you find it, click on the name of the bucket to enter it.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Once inside the bucket, click on the top horizontal menu on the tab named **Properties**:![Figure
+    19.5 – The Properties menu item in the S3 horizontal menu
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '](img/Figure_19.5_B17405.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Figure 19.5 – The Properties menu item in the S3 horizontal menu
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Now displaying the properties items of the S3 bucket, scroll down until you
+    find the **Default encryption** heading. Click on the white **Edit** button on
+    the top right corner of the **Default encryption** box to enter the settings.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: You should now be on the page labeled **Edit default encryption**. Under the
+    label of **Server-side encryption**, click on the radio button next to **Enable**.
+    Once you have selected this radio button, another set of selections will appear
+    below for **Encryption key type**. Choose the radio button next to the **AWS Key
+    Management Service key (SSE-KMS)** option:![Figure 19.6 – Enabling the KMS key
+    on an S3 bucket
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '](img/Figure_19.6_B17405.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Figure 19.6 – Enabling the KMS key on an S3 bucket
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Once the `chapter19` that we created in the previous hands-on exercise. Once
+    selected, you can then scroll down to the bottom of the page and click the orange
+    **Save changes** button.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: With our bucket set up for object encryption, click on the **Objects** menu
+    item on the horizontal menu to be brought back to the main bucket page. Click
+    on the orange **Upload** button, and on the **Upload** screen, click on the white
+    **Add files** button. Choose any random file to upload to your bucket. Once your
+    file has been queued to upload, click the orange **Upload** button.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: When your file completely uploads to the S3 bucket, you can click on the orange
+    **Close** button. This will bring you back to the **Objects** page for the S3
+    bucket. Click on the name of the object and then scroll down to **Server-side
+    encryption settings** to see that your object has been encrypted with your KMS
+    key.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Important Note
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: If you are done with your KMS key, then you might want to go back and schedule
+    its deletion. KMS keys do not get deleted right away and have a minimum of seven
+    days before they can be deleted. Encrypted objects whose key has been deleted
+    will not be able to be accessed.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: With an understanding of how to protect our objects at rest using KMS under
+    our belt, we will next move on to protecting data in transit using AWS Certificate
+    Manager.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Protecting data in transit with AWS Certificate Manager
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'When your external site presents a **Transport Layer Security** (**TLS**) certificate
+    and uses the secure HTTP protocol (HTTPS/443), customers know that you are protecting
+    data they are sending to and from your systems in an encrypted manner:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 19.7 – How SSL/TLS works from browser to client'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/Figure_19.7_B17405.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 19.7 – How SSL/TLS works from browser to client
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'When you or your customers request a website that is presenting as HTTPS secured
+    by an SSL/TLS certificate, the following steps take place:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The server attempts to connect to the website over the secure `443` port. That
+    web server then identifies itself.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The server then sends a copy of its SSL certificate.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The client will then check the certificate to see whether it's been issued from
+    a trusted authority. If it trusts the certificate, it then sends a message of
+    acknowledgment back to the server.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The server then issues a digitally signed acknowledgment that will start the
+    SSL session.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Data is then shared securely between the client and the server.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**AWS Certificate Manager** (**ACM**) is a server that can help you quickly
+    and easily create, manage, and deploy TLS certificates on AWS services. ACM also
+    supports public certificates. ACM handles the hardest and most complicated parts
+    of **Private Key Infrastructure** (**PKI**). This includes tasks such as creating
+    the certificate, certificate renewal, and issuing the certificate.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'ACM can quickly and easily provision the TLS certificates for use with external-facing
+    AWS resources such as the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Elastic Load Balancing
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: AWS Elastic Beanstalk
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Amazon EC2 instances
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Amazon API Gateway
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Amazon CloudFront
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Any certificate that ACM creates is valid for 13 months (395 days). However,
+    you cannot download the private key for an ACM certificate that you create. Once
+    a certificate has been issued, you can neither add nor remove domain names from
+    that certificate. You can create wildcard certificates (`*.domain.com`) or you
+    will need to create a new certificate if a new domain is needed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When we talk about domains in the following paragraph, we are referring to domains
+    registered with a registrar and being hosted on a DNS server or service such as
+    Route 53\. This many times can be thought of as the domain name. When first issuing
+    a requested Amazon certificate for a domain, ACM must verify that you either own
+    or control the domain for which you are requesting the certificate. This can be
+    done in two ways. The first is via email verification. ACM will send out email
+    messages to the three email addresses listed on the WHOIS database and you have
+    up to 72 hours to validate by acting on that email. The second way for validation
+    is via DNS validation. ACM creates two CNAME records for your domain and requests
+    that you put those entries into your DNS database for validation. Once it sees
+    those entries, the service knows that you are the owner of the domain name.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The two functions that ACM can serve
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: We have explained the role of secure certificates mainly as they pertain to
+    public-facing websites. Issuing these certificates is one of the critical roles
+    that ACM plays. However, this is not the only role that it can serve in your AWS
+    environment. ACM can provide two separate services. The first is to manage, provision,
+    and renew enterprise-grade TLS certificates for use with services such as Elastic
+    Load Balancing, API Gateway, and CloudFront, along with other front-facing services.
+    The second service that ACM provides is being a private certificate authority.
+    This allows you to issue secure and trusted private certificates for your applications
+    and infrastructure for your workloads and organization.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we know what functions ACM can perform, we will go through a hands-on
+    exercise of creating and provisioning a certificate using ACM and then using that
+    provisioned certificate in a publicly available CloudFront distribution.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Adding a certificate to Amazon CloudFront
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: With a solid understanding of the ACM service, we will now move on to the final
+    hands-on exercise of this chapter. We will start off by creating a TLS certificate
+    using ACM. Then, we will create a very simple CloudFront distribution and secure
+    it for anyone who tries to connect to the distribution using our secure certificate.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If you do not have a domain name for use, you can easily register one using
+    the Amazon Route 53 service to complete this exercise at a very nominal cost.
+    Otherwise, you can read through the steps of the following exercises to understand
+    the process:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Log on to the AWS Management Console and search for the ACM service. Once it
+    appears from the drop-down menu, click on the icon to be taken to the main service
+    page. For the certificate to work with the CloudFront service, we need to create
+    it in the `us-east-1` region. If you create the certificate in any other region,
+    you will not be able to see it in the second part of this exercise.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: On the ACM main page, find the icon and heading that is labeled **Provision
+    certificates**. Click on the blue **Get started** button under this heading.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: On the **Request a certificate** page, since we do not have a Private Certificate
+    Authority available, there is only one option available to us. Keep this option
+    selected and press the blue **Request a certificate** button at the bottom of
+    the page.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The first step when creating a certificate is to add domain names to the certificate.
+    Unless you only want the certificate to be used for a single subdomain (for example,
+    www), you can use an asterisk to serve as a wildcard for your entire domain. Type
+    your wildcard domain in the textbox in the form of `*.devopsandbeyond.com` and
+    then click on the blue **Next** button:![Figure 19.8 – Adding the wildcard domain
+    name to our ACM-created certificate
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '](img/Figure_19.8_B17405.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Figure 19.8 – Adding the wildcard domain name to our ACM-created certificate
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: The next step will be validating that you actually own the domain. We are going
+    to assume that you are managing your DNS via Route53 and will go for **DNS validation**.
+    Keep the **DNS validation** option selected and then click the blue **Next** button.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: This will bring you to the **Add tags** page. Simply click the blue **Review**
+    button at the bottom of the page. When you are brought to the **Review** page,
+    after verifying that your domain was typed in correctly, press the blue **Confirm
+    and request** button.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: You will then need to add the requested CNAME to your DNS file. Take the value
+    and go to the Route53 service. Add the entry as a new CNAME record in your domain's
+    Route53 hosted zone. You will most likely need to wait a few minutes for the values
+    to propagate before you see **Validation status** turn green and say **Success**.
+    Once this happens, you can click the blue **Continue** button at the bottom of
+    the screen:![Figure 19.9 – Validation status showing Success after the DNS entry
+    has been added
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '](img/Figure_19.9_B17405.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Figure 19.9 – Validation status showing Success after the DNS entry has been
+    added
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: With our certificate now created, we can now move on to creating a CloudFront
+    distribution. Amazon CloudFront is the AWS native **Content Distribution Network**
+    (**CDN**). CloudFront allows you to serve content using a single origin to many
+    customers all over the world simultaneously with much lower latency than if you
+    were trying to serve the content from a single point of presence, such as a server
+    or Auto Scaling group.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: We will now need to navigate to the CloudFront service from the top search bar
+    on the AWS Management Console. Once you arrive on the service main page, click
+    on the orange **Create a CloudFront distribution** button to start creating a
+    new CloudFront distribution.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The page heading should now be titled `devopspro-beyond`; however, your bucket
+    will be named something different. Choose your origin bucket from the drop-down
+    list. The origin will be suffixed by `.s3.us-east-2.amazonaws.com`.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: In the next textbox, `/pages` in the **Origin path** textbox.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Allow the name created by CloudFront to remain and move on to the **S3 bucket
+    access** section. Choose the **Yes Use OAI** option. This option will allow us
+    to keep our bucket private and make users go through the CloudFront distribution,
+    rather than trying to bypass the CDN and access the assets in the origin directly.
+    Click on the white **Create a new OAI** button; you can keep the name that CloudFront
+    provides. Then click the orange **Create** button.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: When the dialog window closes, under the **Bucket policy** heading, select the
+    **Yes, update the bucket policy** option.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Scroll down until you get to the `Redirect HTTP to HTTPS` value is selected.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: We can keep other options in place until we get down to the **Settings** heading.
+    The first thing we want to do is optimize on costs, so under **Price class**,
+    we want to select **Use only North America and Europe**.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Now, we are about to install our custom certificate from ACM. Under the **Custom
+    SSL certificate –** *optional* label, use the drop-down menu option to find the
+    certificate you created in the first part of the exercise under the **ACM certificates**
+    heading.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: With your certificate selected, scroll down to the bottom of the page and click
+    on the orange **Create distribution** button.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: While the CloudFront distribution is being created, make a note of the **Distribution
+    domain name**; this is how you will access CloudFront without adding a Route53
+    alias:![Figure 19.10 – The CloudFront Distribution domain name
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '](img/Figure_19.10_B17405.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Navigate back to S3\. Once there, find the bucket that you designated as the
+    origin for your CloudFront distribution. Click on the name of this bucket to enter
+    it.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Once inside the bucket, we will need to click on the white `pages`, just as
+    we did in the options for the CloudFront distribution. Click the orange **Create
+    folder** button once you have named the folder.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Click on the newly created pages directory and then click the orange `index.html`
+    file that we created at the beginning of this section. Once the index page has
+    been added for upload, click the orange **Upload** button.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: We have just seen how to create and implement a secure certificate using ACM.
+    Let's now review what we learned in this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we looked at protecting your data both at rest and in transit
+    in your Amazon account. We began truly at an account level, looking at how to
+    implement encryption during the transmission of data to your VPC using secure
+    VPN connections over an IPSec tunnel. After that, we took a look at KMS and the
+    differences between an Amazon-managed key and a CMK. Finally, we looked at securing
+    data in transit using ACM. We saw how easy ACM makes it to create and implement
+    SSL and TLS certificates on several AWS services.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the next chapter, we will look at how to enforce standards and compliance
+    within your organization with two powerful automation tools offered by AWS: Systems
+    Manager and Config.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Review questions
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: A new set of compliance regulations has come down from the security department
+    in the company you are working for. They are now stating that all encryption keys
+    must be rotated every 12 months without exceptions. Which one of the following
+    options would not meet the proposed new guidelines?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: a. Using imported key material with a CMK
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: b. Using an AWS-managed key
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: c. Using an AWS customer-managed symmetric CMK
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: d. Using an AWS customer-managed asymmetric CMK
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: You have been brought into a company that is working with confidential data.
+    However, they are transferring the data unencrypted, both on the Amazon administrative
+    console and using the CLI. What steps can you take to immediately secure the transport
+    of data using encryption?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: a. Create a set of CMKs in KMS. Using envelope encryption, have each user encrypt
+    each transaction before any CLI command.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: b. Use ACM to create a certificate to create a secure login and encrypt transmissions
+    to the Amazon administrative console.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: c. Create a customer gateway and a VPN gateway on the primary VPC. Ensure that
+    any other VPCs that need to be accessed by the development team are either peered
+    or connected via a transit VPC connector.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: d. Have all users add a multi-factor authentication to their account to ensure
+    secure communications via both the CLI and the AWS Management Console.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Review answers
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: b
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: c
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL

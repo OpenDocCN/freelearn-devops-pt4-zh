@@ -1,0 +1,702 @@
+- en: '*Chapter 10*: Working with Monitoring Standards'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: You have already seen how Datadog-supplied integrations and REST APIs are useful
+    in extending Datadog's features. In this chapter, we will explore more options
+    available for extending these features that are essentially an implementation
+    of standards in the monitoring space, and how they can be used for rolling out
+    your custom monitoring requirements.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'These are the topics that are covered in this chapter:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Monitoring networks using SNMP
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Consuming application metrics using JMX
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Working with the DogStatsD interface
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'To try out the examples mentioned in this book, you need to have the following
+    tools installed and resources available:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: An **Ubuntu 18.04** environment with a Bash shell. The examples might work on
+    other Linux distributions also, but suitable changes must be made to the Ubuntu-specific
+    commands.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A Datadog account with admin-level access.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The Datadog Agent running at the host level or as a microservice, depending
+    on the example, pointing to the Datadog account.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: curl.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Python 2.7**, **Python 3.8**, or higher'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Monitoring networks using SNMP
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '**Simple Network Management Protocol** (**SNMP**) is a protocol for managing
+    equipment within a network. It has been used to track the devices in networks
+    and their performance, and vendors have adopted it as the standard for publishing
+    related data. Even though in a public cloud environment the requirement for networking
+    monitoring is minimal to nil, in a large-scale operational environment, setting
+    up a colocation to connect to a customer or managing some physical network equipment
+    internally is always possible. Plugging in that equipment to the existing Datadog
+    platform could be handy, instead of rolling out a different monitoring solution
+    for that.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: On SNMP-enabled devices, the agent collects the performance metrics from the
+    devices and stores them in a `snmpwalk` is a popular command-line tool that is
+    used to scan devices for such data. Datadog integrates with SNMP and an agent
+    can be configured to scan multiple network devices to collect metrics.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As it's not easy to find a network device for testing, especially when you are
+    in a cloud environment, we will run the SNMP service on a virtual machine and
+    look at the metrics using `snmpwalk`. Also, the steps to enable SNMP integration
+    in Datadog will be explained using that environment.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You need an Ubuntu host to try out the following SNMP tutorial. These steps
+    were tested on an AWS EC2 node running **Ubuntu 18.04**:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Install the SNMP packages:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Edit `/etc/snmp/snmp.conf` and comment out the configuration for `mibs`.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Restart the SNMP daemon:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'These steps are enough to have an SNMP service up and running locally and you
+    can use `snmpwalk` to scan the service:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: '*(This output is only an excerpt.)*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As you can see in the sample output, different system performance metrics are
+    available in the scanning result. Let''s look at the command-line options used
+    for `snmpwalk`. Similar information is needed to enable the Datadog SNMP integration
+    also:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `-mALL` option directs `snmpwalk` to look at all the MIBs available. On
+    the Ubuntu host, those files are stored under the `/usr/share/snmp/mibs` directory.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`-v2c` points to the version of the SNMP protocol to be used. There are three
+    versions and in Datadog it defaults to `v2`, the same as what''s used here.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`-cpublic` indicates that the community string used for the scan is `public`.
+    A community string in `v1` and `v2` of the SNMP protocol is like a passphrase.
+    In `v3`, that is replaced with credential-based authentication.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Now, let''s see how the SNMP integration in Datadog can be configured to access
+    the SNMP service running on the Ubuntu host:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Set up `conf.yaml` by copying it from the example file:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Edit `conf.yaml` and enable the following: under the `instances` section, point
+    `ip_address` to `127.0.0.1`, which corresponds to localhost.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Set `community_string` to `public`.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Add two custom tags so the metrics published by SNMP integration can easily
+    be tracked:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Restart the Datadog Agent for these changes to take effect. Check the status
+    and verify that the Datadog Agent can query the SNMP service locally by running
+    the following:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The metrics that get published to Datadog from this integration could be looked
+    up in the **Metrics Explorer**, as in the following screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 10.1 – Looking up metrics from the SNMP integration'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/Figure_10.1_B16483.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 10.1 – Looking up metrics from the SNMP integration
+  prefs: []
+  type: TYPE_NORMAL
+- en: Multiple network devices can be specified under the `instances` section of the
+    SNMP integration configuration file and the metrics could be differentiated using
+    appropriate tags. The Datadog Agent can be configured to scan an entire network
+    subnet for devices that are SNMP-enabled. For the details and configuration, consult
+    the official documentation at [https://docs.datadoghq.com/network_performance_monitoring/devices/setup](https://docs.datadoghq.com/network_performance_monitoring/devices/setup).
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next section, we will discuss **JMX**, which is an important area related
+    to the monitoring of Java applications, and you will learn how Datadog is integrated
+    with it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Consuming application metrics using JMX
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '**Java Management Extensions** (**JMX**) is a Java technology that Java applications
+    can use to publish their operational statistics. JMX has additional features that
+    help with managing the application overall, but we are focused only on its ability
+    to expose application metrics that could be used for monitoring. Datadog provides
+    support for collecting those metrics.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Typically, a JMX-compliant client application such as **JConsole** could be
+    used to consume the metrics published by JMX and view them. As it's common for
+    Java applications to publish operational metrics using JMX, most modern monitoring
+    platforms provide options to integrate with JMX, and Datadog is no exception.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Rolling out application-level monitoring is inherently challenging as it relies
+    on publishing custom metrics that track the health and performance of the application.
+    As some customization is needed in the application and monitoring tool to publish
+    and consume custom metrics, such efforts are not easy to implement and so the
+    monitoring is minimal to nil in many organizations where the scope of monitoring
+    is usually limited to infrastructure and platform monitoring features that are
+    available out of the box. In Java applications, it's much easier to publish metrics
+    using JMX, instead of building API endpoints for monitoring. Datadog makes the
+    usage of JMX much easier by providing specific integrations for popular Java-based
+    platform components such as **Cassandra** and **Tomcat** that publish operational
+    metrics via JMX, in addition to providing a general-purpose JMX integration. You
+    will learn about both features in this section with the help of examples.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Cassandra as a Java application
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '**Apache Cassandra** is a highly scalable NoSQL database system that can manage
+    both structured and unstructured data across multiple data centers and cloud regions.
+    It can run on commodity hardware with a highly resilient design.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In production, Cassandra is run on a cluster of machines that might span multiple
+    data centers for reliability. To demonstrate its JMX features, we will run it
+    in a single node using a binary **tarball** installable that you can download
+    from [https://cassandra.apache.org/download/](https://cassandra.apache.org/download/),
+    where you can also pick up the latest stable version:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The selected tarball can be downloaded as in the following sample command:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Extract the tarball and change the directory to where it''s extracted:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Make sure **Java 8** is available in the environment. If not, install it. On
+    an Ubuntu host, this can be done by installing from a package, as follows:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Start the Cassandra service as follows:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: That's pretty much it if everything goes smoothly and if this instance is not
+    intended for use with an application. You could use this service for testing Datadog's
+    JMX support.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, let''s look at the runtime details of Cassandra and the corresponding
+    `nodetool`, and you could also look at the log for any issues:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'One important thing to note here is the way the Cassandra Java application
+    was started up, enabling JMX. If you look at the Java command line, the following
+    options can be found:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`-Dcassandra.jmx.local.port=7199`: This specifies on which port the JMX service
+    is available for the client applications, such as a monitoring tool to consume
+    data. You will see later that this port is used in client configurations so the
+    client applications can locate the service.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`-Dcom.sun.management.jmxremote.authenticate=false`: This option indicates
+    whether the JMX service can be accessed remotely.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`-Dcom.sun.management.jmxremote.password.file=/etc/cassandra/jmxremote.password`:
+    This is the authentication.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We have looked at how Datadog can be configured to consume application metrics
+    via the JMX interface using the example of Cassandra in this section. You will
+    learn more about JMX-based integration in the next section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using Cassandra integration
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: We have seen that the Cassandra service is started up with the JMX service enabled
+    and have made it available on port `7199`. Datadog takes it from there and provides
+    an integration with Cassandra that consumes the monitoring information available
+    via the JMX interface.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To enable Cassandra integration, you need to follow these standard steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'On the Cassandra host, there should also be a Datadog Agent running. Under
+    the `/etc/datadog-agent/conf.d/cassandra.d` directory, use the example configuration
+    file to set up the configuration file for Cassandra integration:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The configuration file copied from the example is good to enable the integration.
+    Note that port `7199` and the metrics specified in the configuration file for
+    collecting data are compatible with the JMX. Also, the nature of this integration
+    is very clear from the following setting in the configuration file:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'After setting up the configuration file, restart the Datadog Agent service:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Check the status of the Cassandra integration, specifically that listed under
+    the `JMXFetch` section:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The metrics fetched by this integration can be looked up in the **Metrics Explorer**.
+    For example, see how one of the metrics fetched from the JMX interface is looked
+    up and charted on the **Metrics Explorer**:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 10.2 – A Cassandra metric listed on the Metrics Explorer'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/Figure_10.2_B16483.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 10.2 – A Cassandra metric listed on the Metrics Explorer
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this case, you don't need to know anything about JMX to consume monitoring
+    data that is published through the JMX interface.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Accessing the Cassandra JMX interface
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Datadog can also be configured to consume metrics from the **Cassandra JMX**
+    interface using the generic JMX integration instead of the specific Cassandra
+    integration used earlier. Datadog uses this generic method to consume JMX metrics
+    from a third-party application for which there is no Datadog integration available.
+    That approach is also applicable to your own Java application if it publishes
+    application metrics via JMX:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Before the generic JMX integration is enabled, disable the Cassandra integration
+    by renaming the `conf.yaml` configuration file at `/etc/datadog-agent/conf.d/cassandra.d`
+    to `conf.yaml.BAK`.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Make the `conf.yaml` configuration file from the example file, `conf.yaml.example`,
+    available at `/etc/datadog-agent/conf.d/jmx.d`.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'You can verify that the JMX port specified in the configuration file is `7199`:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Add these tags to the configuration file so you can filter the metrics later
+    using them:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Restart the Datadog Agent to have the JMX integration enabled:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Check the status of `JMXFetch` to make sure that the integration is working
+    as expected:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note that Cassandra was mentioned under the `JMXFetch` status in the previous
+    example and this time it is `jmx` instead.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'With the JMX integration working, you will be able to look up any default JMX
+    metrics in the **Metrics Explorer** as in the following screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 10.3 – Default metrics from the Cassandra JMX interface'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/Figure_10.3_B16483.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 10.3 – Default metrics from the Cassandra JMX interface
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To collect the application-specific metrics from the JMX interface, those metrics
+    should be specified explicitly in the configuration file for JMX integration as
+    follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: This is just a sample set of the metrics available. Cassandra publishes a large
+    set of metrics that you can look up in `/etc/datadog-agent/conf.d/cassandra.d/metrics.yaml`.
+    The point to note here is that for Datadog to collect application metrics from
+    the JMX interface, they must be indicated in the configuration file as you have
+    done in the sample.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Also, set the value of the `metrics-type` tag to `cassandra` for the easy filtering
+    of metrics collected by Datadog from this example. As usual, for these configuration
+    changes to take effect, you need to restart the Datadog Agent.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You will be able to look up the new metrics collected by Datadog on the **Metrics
+    Explorer**, as in the following screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 10.4 – Application metrics specific to Cassandra'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/Figure_10.4_B16483.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 10.4 – Application metrics specific to Cassandra
+  prefs: []
+  type: TYPE_NORMAL
+- en: The details of how Datadog integrates with JMX are available in the official
+    documentation at [https://docs.datadoghq.com/integrations/java](https://docs.datadoghq.com/integrations/java).
+    If you plan to configure Datadog for consuming metrics from your Java applications,
+    that is a good starting point.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next section, you will learn about StatsD, a popular monitoring standard,
+    and how Datadog supports it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Working with the DogStatsD interface
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '**StatsD** is an open source project for publishing application metrics, originally
+    conceived by the photo-sharing website **Flickr**. It went through multiple implementations
+    and its latest version is a Node.js application. The StatsD code and documentation
+    can be found at [https://github.com/statsd/statsd](https://github.com/statsd/statsd).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The StatsD service typically runs on port `8125` and listens for statistics
+    sent over UDP or TCP. By default, StatsD listens on the UDP port and sends aggregates
+    to charting and monitoring applications such as Graphite. Datadog bundles this
+    service as DogStatsD and it's available out of the box as a UDP service running
+    on port `8125`, where the Datadog Agent runs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The status of the DogStatsD service can be checked for in the `datadog-agent
+    status` output on the host where the Datadog Agent is running, and it would look
+    like the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: The preceding steps describe the process to access JMX metrics from a Java application.
+    While some applications, such as Cassandra, provide application-specific integration
+    to access JMX metrics, this generic integration is enough to consume JMX metrics
+    from any Java application.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Publishing metrics
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Custom metric values can be published to the Datadog backend using various
+    means so that they can be used in monitors and dashboards. As an example, an arbitrary
+    metric value can be sent to the DogStatsD service running on localhost as in the
+    following example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The test metric value sent to the DogStatsD service will be consumed by Datadog
+    as a backend application and that metric value can be looked up in the **Metrics
+    Explorer**, as in the following screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 10.5 – Looking up a metric value sent via DogStatsD in the Metrics
+    Explorer'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/Figure_10.5_B16483.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 10.5 – Looking up a metric value sent via DogStatsD in the Metrics Explorer
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Values for a variety of metric types, such as **count**, **gauge**, **set**,
+    and **histogram**, can be posted to the Datadog backend using the DogStatsD interface.
+    The following Python code example demonstrates how such a time series dataset
+    could be published:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: The program basically picks a random number between `50` and `70` and posts
+    it as the outdoor temperature with the tag `metric-source:dogstatsd`. It runs
+    in an infinite loop with a wait of *10* seconds for posting the metric each time,
+    mimicking a time series dataset.
+  prefs: []
+  type: TYPE_NORMAL
+- en: An important thing you should note here is that there is no authentication required
+    to post data. As long as the DogStatsD service port (by default `8125`) is open
+    on the host where the Datadog Agent (DogStatsD is part of the Datadog Agent) runs,
+    the preceding sample program can post the metrics. While this offers flexibility,
+    it could also be a security hole if the network where the Datadog Agents run is
+    not hardened.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The data posted into the Datadog backend can be looked up in the **Metrics
+    Explorer** using the metric name and tags if needed, as shown in the following
+    screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 10.6 – Time series metric values posted via the DogStatsD interface'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/Figure_10.6_B16483.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 10.6 – Time series metric values posted via the DogStatsD interface
+  prefs: []
+  type: TYPE_NORMAL
+- en: StatsD is a general-purpose interface for publishing only metrics. However,
+    the implementation by Datadog, DogStatsD, has extensions to support Datadog-specific
+    resources such as events and service checks. Those additional features would be
+    useful if DogStatsD were used as a hub for posting status and updates to the Datadog
+    backend from your integration, especially if your application uses DogStatsD as
+    the primary channel to publish monitoring information into the Datadog backend.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Posting events
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Posting an event to the Datadog events stream is simple and is illustrated
+    in the following Python program:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This program will post an event to the events stream as shown in the following
+    screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 10.7 – Event posted by DogStatsD integration'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/Figure_10.7_B16483.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 10.7 – Event posted by DogStatsD integration
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you'd like to keep the StatsD interface more generic so other compatible
+    monitoring applications can also consume metrics from it, it's better to use it
+    only for publishing metrics following the StatsD standard. For publishing Datadog-specific
+    resources, it's better to use the Datadog API.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You have learned about three different monitoring standards, very different
+    but very powerful options to roll out comprehensive monitoring solutions, and
+    next, let's see what the best practices related to them are.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Best practices
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Now, let''s look at the best practices in making use of monitoring standards
+    and the support provided by Datadog:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: When monitoring network devices using SNMP integration, the number of metrics
+    that you must handle can be overwhelming. So, it's important to identify a few
+    key metrics that can track performance and proactively identify issues, and implement
+    monitors using those.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: JMX can be used to manipulate the workings of the application and such things
+    shouldn't be implemented on the monitoring infrastructure side because monitoring
+    is essentially a *ready-only* activity. In other words, monitoring applications
+    won't initiate any corrective actions usually because monitoring is not considered
+    part of the application system and the non-availability of a monitoring tool should
+    not hamper the workings of the main application it monitors.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: StatsD is designed to handle only metrics that can be consumed by applications
+    such as Datadog. It's better to publish only metrics via DogStatsD if there are
+    multiple monitoring tools in your environment and Datadog is just one of them,
+    to maintain the flexibility of moving data between multiple systems.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: As DogStatsD doesn't require any authentication besides access to the service
+    port, the environment where DogStatsD runs, a host or container, should be secured
+    well so no unauthorized posting of information can happen.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, you have learned about three important monitoring standards,
+    SNMP, JMX, and StatsD, that help with integrating network devices and custom applications
+    in Datadog. As these are general-purpose standards, they are supported by most
+    of the popular monitoring tools. The general pattern of using these standards
+    is to stick with the standard features and not to use the extensions as the former
+    approach would make your monitoring friendly with other monitoring tools as well.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next chapter, the last chapter of the integration part of the book, we
+    will discuss how integration is handled directly from custom applications. There
+    are both official and community-developed programming libraries available to integrate
+    applications directly with Datadog. We will explore how some of those libraries
+    and the Datadog REST APIs are used to integrate custom applications with Datadog.
+  prefs: []
+  type: TYPE_NORMAL

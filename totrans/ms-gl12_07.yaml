@@ -1,0 +1,503 @@
+- en: Importing Your Project from GitHub to GitLab
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In the first section, we explained the GitLab architecture and how to install
+    and configure GitLab in several ways. In this part of the book, we will look at
+    several ways of migrating source projects from third parties to GitLab. We will
+    start with GitHub, which resembles GitLab a lot and which was the inspiration
+    to develop it. After years of development, the two products still share the same
+    basic functionality, but have diverged in additional features. There are several
+    ways you can import projects from GitHub.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, the following points will be covered:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using the GitHub integration feature in GitLab (also known as the GitHub importer)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using a GitHub token—create this in GitHub for third party application integration
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using a GitLab rake task—you need access to a GitLab instance that can run rake
+    tasks, and when you possess administrator rights
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: For each method, we will present what you have to configure and prepare in GitHub
+    and GitLab. Finally, we will run the import for each method.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In order to manage omnibus installs, you need to use a central configuration
+    file called `gitlab.rb`. You need to create it or copy an example of one. Fortunately,
+    a template is available, which you can find at [https://gitlab.com/gitlab-org/omnibus-gitlab/blob/master/files/gitlab-config-template/gitlab.rb.template](https://gitlab.com/gitlab-org/omnibus-gitlab/blob/master/files/gitlab-config-template/gitlab.rb.template).
+    It isn't updated after upgrades. Later on in this chapter, I will quote and discuss
+    parts of this file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To follow along with the instructions in this chapter, please download the GitHub
+    repository, along with the examples available on the GitHub repository, at [https://github.com/PacktPublishing/Mastering-GitLab-12/tree/master/Chapter05](https://github.com/PacktPublishing/Mastering-GitLab-12/tree/master/Chapter05).
+  prefs: []
+  type: TYPE_NORMAL
+- en: You will also need a GitHub account, as well as a GitLab account in the cloud
+    or on premise.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In regards to user matching, you want to make sure that the GitHub users associated
+    with the repository have the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A GitLab account that uses OAuth-based login using the GitHub icon
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A GitLab account with an email address that is identical to their public email
+    address in GitHub
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using the GitHub integration feature
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: To export things from GitHub, the proper authorizations must be set. This can
+    be done using GitHub integration with OAuth registration, where GitLab authenticates
+    with GitHub to access a list of projects for the user.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The best result of mapping authors and assignees from GitHub to GitLab is achieved
+    when using the GitHub integration features that are available in GitLab instead
+    of using a single personal access token from GitHub.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The integration covers all the import items we just mentioned and tries to keep
+    all the references intact. For instance, the importer will try to find the GitHub
+    authors and assignees of issues and pull requests. This means that GitLab integration
+    has to be enabled in your GitLab instance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Preparing GitHub for export
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'To register GitLab as an application that can connect to GitHub, you have to
+    log in to your GitHub account. To do this, go to [https://github.com/settings/applications](https://github.com/settings/applications)
+    and register GitLab as an OAuth application:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/5c66df76-6768-447d-995e-cefccd70e3d4.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Fill in the form using the following data:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Application name (the name of your application)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Homepage URL (the full URL to your application)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Application description (general description)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Authorization callback URL (the most important setting, the URL to send to
+    after authentication):'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![](img/376a67e1-8643-4fd7-a530-aa61e4aa04d0.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'After the registration has succeeded, an overview is presented with two very
+    important pieces of information: the client ID and client secret are shown, and
+    also how many users have used the OAuth link to connect GitHub repositories. The
+    client ID and client secret are needed later to configure GitLab for integration.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following screen appears after a successful registration:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/a2dd924e-8188-41ee-bfd0-a8df0bc9aa41.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: You now have GitHub configured and can move on to the *Preparing GitLab for
+    import* section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Preparing GitLab for import
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: To finish the setup for the GitHub integration, we have to set up our GitLab
+    instance so that we can connect as a registered OAuth application to GitHub. We
+    do this by adding an `omniauth_provider` to the GitLab configuration. Remember
+    the client ID and the client secret? We will need these here.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For GitLab omnibus installations, we need to create a section in `/etc/gitlab/gitlab.rb`
+    like the following one. `app_id` is the client ID, while `app_secret` is the client
+    secret. The name that is provided isn''t important. After the file has been saved,
+    you have to use `gitlab-ctl reconfigure`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'For GitHub Enterprise, you can specify the URL of your GitHub instance as well:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'For GitLab installations from source, we edit the `config.yml` file, as follows.
+    and restart GitLab after saving it:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: See [https://github.com/gitlabhq/omnibus-gitlab/blob/master/files/gitlab-config-template/gitlab.rb.template](https://github.com/gitlabhq/omnibus-gitlab/blob/master/files/gitlab-config-template/gitlab.rb.template) for
+    more information on settings you can set in the `gitlab.rb` file. Also see [Chapter
+    2](8e9ca130-15d0-4c6e-af6b-2fe5292f3618.xhtml), *Installing GitLab* about this
+    subject.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Running the import
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Follow these steps to learn how to run the import:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In GitLab, choose to create a new project and use the Import project tab to
+    find the GitHub icon:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/fbc7226d-38b4-4503-b865-ff1bd177ffe7.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'After clicking on the GitHub icon, you will find a page where you can click
+    List your GitHub repositories:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/019320d6-c3ab-40cd-8821-370d8c864b37.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'When GitHub integration is enabled, the next step will be to authorize GitLab
+    to access your projects:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/13b52810-0caf-41f7-8b2d-61954e620f44.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'If authorization succeeds, a list of projects that can be migrated is shown.
+    Select the projects to be migrated, and click Import:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/06876c9b-ed20-43be-b397-a3356ad433c0.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Make sure that you don''t have projects with the same name already in GitLab
+    in your namespace, otherwise you will receive a 422 error, as shown in the following
+    screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/222a7c5d-564b-4370-9ade-b209486e6237.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'When the import is finished, you will receive a message:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/f375f36e-1286-44c1-814f-e7be3266cdde.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: The project has been successfully imported!
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using a GitHub token
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: When using a GitHub token to import, there's nothing special to configure in
+    GitLab – you can enter it immediately, as you will see later.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Preparing GitHub for export
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'A personal token can be used as delegated authorization from your GitHub account.
+    Let''s get started:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You create one via [https://github.com/settings/tokens](https://github.com/settings/tokens):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/6cdf9d9d-4c7a-46cd-bb80-b84f1aa81f11.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Make sure you set a meaningful token description and choose the repo scope
+    only. We want the GitLab importer to access these objects:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/550ff051-6cbd-4c7f-b145-5ff1e180ae8f.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Once the token has been created, make sure to record the token somewhere because
+    it won''t be shown again, and losing it means that you have to recreate it:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/f00996ad-083c-4e72-84ba-474698fc682f.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: You now have a GitHub token and can choose to use it directly in the GitLab
+    web interface.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Running the import
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Let''s get started and learn how to prepare GitLab for import:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In GitLab, create a new project and use the import tab to find the GitHub icon,
+    as shown in the following screenshot:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/d8a01fa1-4844-483c-a0ff-3bcfcb83a2bb.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'If GitHub integration is disabled, the next screen won''t have an option for
+    you to list your GitHub repositories. To choose a project to migrate, you have
+    to enter the personal token you created on [https://github.com/](https://github.com/):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/6c19143c-0340-4635-acdc-adb443739ce6.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Again, if authorization succeeds, a list of projects that can be migrated is
+    shown. Select the projects to be migrated and click Import:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/d4065957-92ad-4f0f-a3b6-f321bd3af2e5.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'When the import is finished, you will receive a message:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/12a78eeb-8510-4a8f-93c5-642ec2290fa7.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: The project has successfully been imported using the token.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using a GitLab rake task
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In order to retrieve and import GitHub repositories, you will need a GitHub
+    personal access token, as demonstrated earlier.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Preparing GitLab for import
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'For importing projects using a rake task, there is only one option to configure
+    in GitLab beforehand: the number of Sidekiq resources. You will notice that for
+    big projects, it can take quite some time to import all the data. To speed up
+    this process, assign more Sidekiq workers to the following queues:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`github_importer`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`github_importer_advance_stage`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'For GitLab omnibus installations, these queues are part of the default Sidekiq
+    process. Giving more threads to Sidekiq will mean that there will be more workers:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: See [https://github.com/gitlabhq/omnibus-gitlab/blob/master/files/gitlab-config-template/gitlab.rb.template](https://github.com/gitlabhq/omnibus-gitlab/blob/master/files/gitlab-config-template/gitlab.rb.template) for
+    more information on settings you can set in the `gitlab.rb` file. Also, see [Chapter
+    2](8e9ca130-15d0-4c6e-af6b-2fe5292f3618.xhtml), *Installing GitLab* about this
+    subject.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Running the import
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The GitLab rake task can import a single project or multiple projects at once.
+    It is invoked from the command line, so you need administrator access to the machine
+    where the GitLab application is running.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When specifying a GitHub repository as the fourth argument to the rake task,
+    you can directly import it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To import a specific GitHub project (named `joustie/github_repo` here), do
+    the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Omnibus installations**:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: '**Installations from source**:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'To import a project from the list of your available GitHub projects, do the
+    following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Omnibus installations**:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: '**Installations from source**:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: It is also possible to specify subgroups such as `<groupname/groupname/project>`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For my example project, you will see the following results:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/13bbe949-684b-47e2-9ca6-d2b89ad6e8bf.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'The GitHub importer obtained a list of projects with your GitHub personal access
+    token. When you want to specify one particular project, use the ID:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/9033dbba-3738-4577-8ed3-737fbbe2891c.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'The importer will ask for confirmation after that:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/3cd50d98-889d-492c-a1c7-efeeb666e82a.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'The rake tasks will run synchronously and perform the import. After the import
+    operation, a summary of the timings is given:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/5c03aedf-9943-4e1d-adf5-6f0fb201ae30.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: When you log in to your GitLab instance, you will find the imported project.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: We started this chapter by explaining what items can be migrated from GitHub
+    to GitLab, and what the possibilities are. There are three options regarding migrating
+    your data, and which ones you can use depend on how your GitLab instance is configured.
+    The recommended way is to use the GitHub importer. This mechanism presents the
+    most user-friendly and complete migration path.
+  prefs: []
+  type: TYPE_NORMAL
+- en: GitHub and GitLab are very comparable, but in the next chapter, we will take
+    a look at CVS and how it compares to Git as a versioning tool, and how to migrate
+    it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Questions
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: What is the equivalent of a pull request in GitLab?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Which ways exist to import GitHub projects into GitLab?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What is needed to display the authors correctly?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Which authentication mechanism is used to connect to GitHub?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What is the secret called that's needed to connect to GitHub?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What scope do you need for a token to import as much as possible from GitHub?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What is the name of the two queues that process the import?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Where can you find the import button for GitHub in GitLab?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What is the name of the rake task to import from GitHub?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Is it possible to import one particular project only?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Further reading
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '*GitHub Essentials – Second Edition*, by *Achilleas Pipinellis*: [https://www.packtpub.com/web-development/github-essentials-second-edition](https://www.packtpub.com/web-development/github-essentials-second-edition)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

@@ -1,0 +1,2222 @@
+- en: '*Chapter 6*: Building Code Using Cloud Build, and Pushing to Container Registry'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The last chapter focused on managing source code using **Cloud Source Repositories**
+    (**CSR**). CSR provides a fully managed private Git repository, provides one-way
+    sync with GitHub and Bitbucket, and integrates with GCP services. This is the
+    first step in the **Continuous Integration** (**CI**) flow.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This chapter will focus on the constructs required to build code, create image
+    artifacts using Cloud Build and manage artifacts using GCP's Container Registry.
+    This forms the crux of the CI workflow as the code is continuously built, artifacts
+    are continuously created and stored in the registry, and application code is continuously
+    deployed as containers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we''re going to cover the following main topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Key terminology** – Quick insights into the terminology around Docker and
+    containers'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Understanding the need for automation** – Understanding the need for automation
+    by exploring the Docker life cycle'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Building and creating container images** – Cloud Build essentials such as
+    cloud builders and build configuration files, building code, storing and viewing
+    build logs, managing access controls, and best practices to optimize the build
+    speed'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Managing container artifacts** – CSR essentials to push and pull images,
+    manage access controls, configure authentication methods, and CI/CD integrations
+    with CSR'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Hands-on lab** – Step-by-step instructions to deploy an application to Cloud
+    Run when a code change is pushed to the master branch'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'There are three main technical requirements:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'A valid **Google Cloud Platform** (**GCP**) account to go hands-on with GCP
+    services: [https://cloud.google.com/free](https://cloud.google.com/free).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Install Google Cloud SDK: [https://cloud.google.com/sdk/docs/quickstart](https://cloud.google.com/sdk/docs/quickstart).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Install Git: [https://git-scm.com/book/en/v2/Getting-Started-Installing-Git](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Key terminology (prerequisites)
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'There are several key terminologies that are important to understand while
+    trying to build, deploy, and maintain a distributed application that runs on containers.
+    The following is a quick insight into some of those critical terminologies when
+    dealing with containers:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Operating system** – An **Operating System** (**OS**) is system software
+    that is critical to control a computer''s hardware and software requirements across
+    multiple applications, such as memory, CPU, storage, and so on. The OS coordinates
+    tasks to ensure each application gets what it needs to run successfully. The OS
+    consists of a kernel and software. The kernel is responsible for interacting with
+    the hardware and the software is responsible for running the UI, drivers, file
+    managers, compilers, and so on.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Virtualization** – Virtualization is the act of doing more with less by creating
+    a virtual or software-based version of compute, storage, a network, and so on.
+    It allows you to run multiple applications on the same physical hardware. Each
+    application and its associated OS can run on a separate, completely isolated,
+    software-based machine called a **virtual machine** or **VM**.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Hypervisor** – A hypervisor is software that creates and runs VMs, and essentially
+    implements the concept of virtualization. A hypervisor allows one host computer
+    to support multiple guest VMs by virtually sharing resources such as memory, storage,
+    processing, and so on, and is responsible for giving every VM the required resources
+    for peak performance.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Container** – A container is a unit of software that packages code and all
+    its dependencies, which include libraries and configuration files. This enables
+    applications to run quickly and reliably across computing environments. Containers
+    use low-level OS constructs that allow you to specify unique system users, hostnames,
+    IP addresses, filesystem segments, RAM, and CPU quotas.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Docker** – Docker is an open source platform for developing, building, deploying,
+    and managing containerized applications. Docker uses OS-level virtualization to
+    deploy or deliver software in packages called containers, providing the flexibility
+    to run anywhere. Docker can also run any flavor of OS if the underlying OS kernel
+    is Linux. As an example, containers can run different flavors of the Linux OS,
+    such as Debian, CentOS, Fedora, and so on.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Docker daemon** – The Docker daemon represents the server that runs one or
+    more containers. It is the service that runs the host OS. Additionally, the CLI
+    represents the client, and the combination with the Docker daemon forms a client-server
+    architecture.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Dockerfile** – A Dockerfile is a text document that contains a series or
+    list of commands that can be executed from a command line in order to potentially
+    assemble an image. A Dockerfile is the input for Docker to build images. The process
+    automates the execution of a series of instructions or commands.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Docker layers** – A Docker layer represents an intermediate image that is
+    created by executing each instruction in a Dockerfile. The link between the instruction
+    and the intermediate image is stored in the build cache. A Docker container is
+    essentially an image that has a readable/writable Docker layer built on top of
+    multiple read-only images.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Docker images** – A Docker image consists of multiple Docker layers that
+    are used to execute code in one or more containers. Essentially, a Docker image
+    represents a plan that needs to be executed or, in other words, deployed.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The next section illustrates the Docker life cycle and emphasizes one of the
+    key **Site Reliability Engineering** (**SRE**) objectives, which is to eliminate
+    toil by investing in automation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding the need for automation
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Once code is checked into a source code repository, the next step in a CI process
+    is to build code and create artifacts as per the requirements to run the application.
+    Once the artifacts are created, the artifacts are further stored in a repository
+    and are later used by the **Continuous Deployment/Delivery (CD)** process to run
+    the application. Given that the running theme in this book is to work with containers,
+    Docker forms a key role as the OS-level virtualization platform to deploy applications
+    in containers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Following is an illustration of the Docker life cycle that highlights the multiple
+    steps involved in creating container images to actually deploy containers that
+    run the actual application:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The developer hosts code in a source code repository. The code can be changed
+    during the development or enhancement process.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The source code repository can be set up to have trigger points, such as raising
+    a pull request or merging code into a specific branch. The trigger points can
+    be tied to initiate the code build process.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The code build process will look for a Dockerfile, which is essentially a set
+    of instructions to create an application along with its dependencies.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: A Dockerfile is used to create the build artifact – the container image, using
+    `docker build`.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The created image can be pushed to an artifact repository to store container
+    images, such as Docker Hub or GCP's Container Registry, and so on.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The application is created by downloading the container image from the repository
+    into a compute environment and subsequently building a container, which essentially
+    is a package that contains code, libraries, and dependencies.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'If the preceding steps are converted into actual commands, then it will look
+    like the following snippet:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: The steps mentioned as part of the Docker workflow are steps that need to be
+    executed and in sequence. If there is a code fix or an incremental code change,
+    then the steps need to be repeated in order to build, push, and deploy the code.
+    This forms a repetitive or even an infinite loop, causing a lot of pain and suffering
+    for developers. This is because the more manual steps there are, the greater the
+    chance of human error. This qualifies as toil, since the steps are manual, repetitive
+    in nature, devoid of any value, and can be automated.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Given that SRE's objective is to eliminate toil through automation, this forms
+    a feasible approach to eliminate the infinite loop of pain and suffering. In addition,
+    the preceding steps need to be executed in an environment that would need special
+    attention or setup. For example, Docker will need to be set up to execute the
+    preceding commands. In addition, the machine needs to have enough computing power
+    and storage requirements to run the preceding steps in a repeated fashion. The
+    machine also needs to be scaled if there are multiple parallel builds that are
+    initiated at once.
+  prefs: []
+  type: TYPE_NORMAL
+- en: GCP offers a service called **Cloud Build**, an automation engine that plays
+    a key part in the CI/CD workflow. Cloud Build can import the source code, build
+    in a managed workspace, and create artifacts such as Docker images, Java packages,
+    binaries, and so on. Cloud Build can practically combine the steps to build, tag,
+    and push a container image into a single configuration file. The container artifacts
+    created by Cloud Build can be pushed and stored in another GCP service called
+    **Container Registry**. The container image can be pulled from Container Registry
+    at the time of container deployment. CloudBuild is capable of automating all these
+    steps into a declarative syntax; also known as the build configuration file, which
+    can be effectively run as many times as needed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The upcoming sections will go into the details of the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Cloud Build as the GCP service to build and create container images
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Container Registry as the GCP service to manage container artifacts
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Building and creating container images – Cloud Build
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Cloud Build is a service to build and create artifacts based on the commits
+    made to source code repositories. The artifacts produced by Cloud Build can either
+    be container or non-container artifacts. Cloud Build can integrate with GCP''s
+    CSR as well as popular external repositories such as GitHub and Bitbucket. Key
+    features of Cloud Build include the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Serverless platform**: Cloud Build removes the need to pre-provision servers
+    or pay in advance for computing power or storage required to build the code and
+    produce artifacts. Based on the number of commits being made in parallel, scaling
+    up or scaling down is an inherent process and doesn''t require manual intervention.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Access to builder images**: Cloud Build provides cloud builders, which are
+    pre-baked ready-to-use container images with support for multiple common languages
+    and tools installed. For example, Docker Cloud Builders run the Docker tool.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**The ability to add custom build steps**: Cloud Build requires a build config
+    file where the list of steps can be explicitly specified by the user. The user
+    can also specify the order of execution and include any dependencies as needed.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**A focus on security**: Cloud Build supports vulnerability scanning and provides
+    the ability to define policies that can block the deployment of vulnerable images.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The foundation for these Cloud Build features is based upon certain key elements
+    that will be discussed in the upcoming sub-sections.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Cloud Build essentials
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: There are two key essential concepts with respect to Cloud Build, cloud builders
+    and the build configuration.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Cloud builders
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Cloud builders are container images that run the build process. The build process
+    within a cloud builder is essentially a set of pre-defined build steps. In addition,
+    a cloud builder can also include custom build steps. Cloud builder images are
+    packaged with common languages and tools. Cloud Build can be used to run specific
+    commands inside the builder containers within the context of cloud builders. Cloud
+    builders can either be Google-managed, community-contributed, or public Docker
+    Hub images.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Google-managed builders
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Google provides managed pre-built images that can be used to execute one or
+    more build steps. These pre-built images are in Google's Container Registry. Popular
+    examples include docker builder (to perform `docker build`, `docker tag`, and
+    `docker push` commands), gcloud builder (to perform the `docker run` command to
+    deploy against a Google service such as Cloud Run), gke-deploy builder (to deploy
+    in a GKE cluster), and so on. The complete list of Google-managed builders can
+    be found at [https://github.com/GoogleCloudPlatform/cloud-builders](https://github.com/GoogleCloudPlatform/cloud-builders).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Community-contributed builders
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Community-contributed builders are open source builders and are managed by the
+    Cloud Build developer community. These are not pre-built images and, instead,
+    only source code is made available by the developer community. Individual adaptations
+    should build the source code and create an image. Popular examples include Helm
+    (to manage the Kubernetes package), Packer (to automate the creation of images),
+    and so on. The complete list of community-contributed builders can be found at
+    [https://github.com/GoogleCloudPlatform/cloud-builders-community](https://github.com/GoogleCloudPlatform/cloud-builders-community).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Public Docker Hub builders
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Public Docker Hub builders refers to publicly available Docker images that can
+    be used to execute a set of build tasks. From a thought process standpoint, these
+    builders are very similar to Google-managed builders but the images are not stored
+    in Google Container Registry and are instead stored in Docker Hub. The complete
+    list of public Docker Hub builders can be found at [https://hub.docker.com/search?q=&type=image](https://hub.docker.com/search?q=&type=image).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The build configuration
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The build configuration is a configuration file that encapsulates the steps
+    to perform build-related tasks. A build configuration file can be written in JSON
+    or YAML format. The configuration steps specifically make use of cloud builders,
+    which are either pre-built images (Google-managed or public Docker images) or
+    images built by code maintained by the developer community, and essentially represent
+    templated steps that could be reused with an option to pass explicit arguments.
+    These templated steps can be used to fetch dependencies, perform unit and integration
+    tests, and create artifacts using build tools such as Docker, Gradle, Maven, Bazel,
+    and Gulp. An example of a build config file can contain instructions to build,
+    package, and push Docker images to a container registry of choice. The structure
+    of such a file will be detailed in the next sub-section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Structure
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'A build config file consists of various fields or options. The most important
+    of them is the build step (refer to *Figure 6.1*). There could be one or more
+    build steps defined to reflect tasks required for the build process. Each build
+    step essentially executes a Docker container and provides the flexibility to include
+    multiple options:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Name**: Specifies a cloud builder that is a container image running common
+    tools.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`args` will be used as arguments to that entry point; otherwise, the first
+    element in `args` will be used as the entry point, and the remainder will be used
+    as arguments.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Env**: Takes a list of environment variables in the form of a key-value pair.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`/workspace`) or a specific absolute path.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**id**: Used to set a unique identifier for a build step.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**waitFor**: Used if a specific build step is required to run prior. If not
+    specified, then all prior steps need to be completed prior to the current build
+    step.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**entrypoint**: Used to override the default entry point provided by the cloud
+    builder.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**secretEnv**: Allows you to define a list of environment variables encrypted
+    by Cloud KMS.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**volumes**: Represents a Docker container volume that is mounted into build
+    steps to persist artifacts across build steps.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**timeout**: To specify the amount of time that a build can run. The default
+    value is 10 minutes and the maximum allowed is 24 hours. Time should be specified
+    in seconds.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Figure 6.1* shows the skeleton structure of a build configuration file that
+    could consist of one or more build steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.1 – Build steps in a build configuration file'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B15597_06_01.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 6.1 – Build steps in a build configuration file
+  prefs: []
+  type: TYPE_NORMAL
+- en: Apart from the options that form the build steps of a build configuration file,
+    additional possible options along with their details can be found at [https://cloud.google.com/cloud-build/docs/build-config](https://cloud.google.com/cloud-build/docs/build-config).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Building code using Cloud Build
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The combination of cloud builders and build configuration files forms the core
+    of Cloud Build. When Cloud Build is initiated, the following steps happen in the
+    background:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The application code, Dockerfile, and other assets in a given directory are
+    compressed.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The compressed code is then uploaded to a Cloud Storage bucket, which is either
+    the default bucket created by Cloud Build on a per-project basis or a user-supplied
+    Cloud Storage bucket.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: A build is initiated with the uploaded files as input and the output of the
+    build is a container image that is tagged with the provided image name.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The container image is then pushed to Container Registry or a destination registry
+    of choice.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: There are multiple approaches to invoke the build process via Cloud Build manual
+    invocation and automatic builds using triggers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Cloud Build – manual invocation via the gcloud CLI
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'There are two ways to initiate a build manually through Cloud Build using the
+    `gcloud` command-line tool, which essentially uses the Cloud Build API:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using a Dockerfile
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using Cloud Build – build configuration file
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The upcoming sub-sections go into the details of the preceding two ways to initiate
+    a build through Cloud Build.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Cloud Build – a manual build using a Dockerfile
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The Dockerfile should contain all the information required to build a Docker
+    image using Cloud Build. The following command will initiate the build process
+    manually. This command should be run from the directory that contains the application
+    code, Dockerfile, and any other required assets:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: Once the build is complete, the build ID will be displayed on the terminal or
+    shell from where the `build` command was invoked. The build ID can be used to
+    filter through the builds displayed in the Cloud Build console and is subsequently
+    useful to view the build logs. Additionally, the newly created image will be pushed
+    to Container Registry as per the preceding example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Cloud Build – a manual build using a build configuration file
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Another approach to initiate a manual build through Cloud Build is to use a
+    build configuration file. The build configuration file uses cloud builders, which
+    essentially are critical to minimize the manual steps in a templated specification
+    file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following is an example build configuration file that uses docker cloud
+    builder to build code and push an image to Container Registry. The name of the
+    container image used here is `builder-myimage` and the name of the configuration
+    file is `cloudbuild.yaml`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The following command will initiate the Cloud Build process by using the build
+    configuration file (which is `cloudbuild.yaml` in this case) as the input, along
+    with the path to the source code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: Cloud Build – automatic build using triggers
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The manual invocation of Cloud Build does not fit into the CI/CD workflow as
+    it adds toil. The preferred approach is to automatically build code whenever a
+    qualified event is detected. Cloud Build facilitates this feature by using the
+    option of triggers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The user can create a trigger that could be invoked on one of the following
+    qualifying events:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Push to a branch.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Push a new tag.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A pull request (GitHub app only).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The trigger continuously monitors for the configured event against the configured
+    repository. If the event occurs, the trigger initiates the build process using
+    either the Dockerfile or Cloud Build configuration file (as configured on the
+    trigger) and subsequently, the build process will result in build artifacts. A
+    step-by-step hands-on lab is illustrated toward the end of this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Dockerfile versus cloudbuild.yaml
+  prefs: []
+  type: TYPE_NORMAL
+- en: A Dockerfile allows you to build and compose a Docker container image using
+    the `docker build` command. A Dockerfile also allows you to incorporate build
+    steps using bash commands; they could include commands specific to Google Cloud;
+    after specifying the installation of Google Cloud SDK as one of the steps.
+  prefs: []
+  type: TYPE_NORMAL
+- en: On the contrary to using a Dockerfile, `Cloudbuild.yaml` also allows you to
+    build and compose a Docker container image and to utilize Google-managed or community-managed
+    builders that come with pre-built images and offer more customization. The choice
+    between the two comes to intent, choice of cloud platform, and ease of customization.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This concludes the sub-section on how a build can be initiated through Cloud
+    Build. The next sub-section focuses on details related to storing and viewing
+    build logs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Storing and viewing build logs
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Cloud Build creates a log trail for actions performed as part of a build process.
+    This log information is stored in Cloud Logging. Additionally, Cloud Build stores
+    the log information in a Cloud Storage bucket. In fact, a default Cloud Storage
+    bucket is created on a per-project basis, once the Cloud Build API is enabled.
+    The bucket is named in the format `<project-id_cloudbuild>`. The logs related
+    to every build are compressed and stored in the storage bucket.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'So, the default option to store the Cloud Build logs is both in Cloud Logging
+    as well as a Cloud Storage bucket. However, it is possible to choose either of
+    the two options specifically in the build configuration file by using the *logging*
+    field:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: If set to `CLOUD_LOGGING_ONLY`, then logs are written only to Cloud Logging.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: If set to `GCS_ONLY`, then logs are written only to the Cloud Storage bucket.
+    The default bucket will be used unless a Cloud Storage bucket is explicitly specified
+    using the **logsBucket** option.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: It's possible that the user will go with an option other than the default options
+    either due to cost constraints or it's possible that logs are ingested to another
+    logging framework with the Cloud Storage bucket being the source.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following is a code snippet that demonstrates the usage of the *logging*
+    option as part of the build configuration file:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: Logs can be viewed using the Cloud Logging console. If logs need to be viewed
+    at an individual build level, it is preferred to view the logs from the Cloud
+    Build console. The information in the Cloud Build console will be derived from
+    the Cloud Storage bucket (either the default or the explicit bucket). In order
+    to view the logs, the user should either have the *Storage Object Viewer* role
+    or the *Project Viewer* role.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To view the build logs, follow these steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Navigate to **Cloud Build** in the GCP Console (by default, the user will be
+    taken to the **Build History** page).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Select a build to view its respective logs (builds that succeeded will be in
+    green, and in red otherwise).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'The user can view the build log per build step. In addition, execution details
+    and the storage locations of any relevant build artifacts are also displayed.
+    Optionally, the source of the cloud logs is also shown (refer to *Figure 6.2*):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![Figure 6.2 – Build log from Cloud Build'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B15597_06_02.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 6.2 – Build log from Cloud Build
+  prefs: []
+  type: TYPE_NORMAL
+- en: If a need arises to delete the build logs, then logs cannot be deleted from
+    a Google-created log bucket. However, logs can be deleted from a user-created
+    log bucket or by deleting the user-created bucket itself that contains one or
+    more build logs. This requires the user to have access to Cloud Storage to delete
+    a file – through Cloud Storage; specifically, the role Storage Admin or Storage
+    Object Admin (depending upon whether the intention is to delete the entire user-created
+    bucket or the specific build log file respectively).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Managing access controls
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: A build can be triggered either by a user or by an application. As per Google's
+    recommended practices, if an application needs access to a service, then it can
+    be possible through a service account. So, to be precise, access control to Cloud
+    Build can either be managed via **end user IAM roles** or through a **Cloud Build
+    service account**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: End user IAM roles
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Cloud Build has a set of predefined IAM roles that can provide granular access
+    and can also align to a specific job role. This prevents unwanted access and allows
+    you to implement the principle of least privilege.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following table summarizes the critical IAM roles required to access or
+    perform actions on Cloud Build:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/B15597_06_Table_01.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Cloud Build service accounts
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Google recommends using a **service account (SA)** when a task needs to be performed
+    by an application or on behalf of a user. A service account is a special kind
+    of account that is used by an application or a VM to make authorized API calls
+    but not by an individual. The regular practice in such scenarios is to create
+    a SA and assign the necessary permissions to the SA so that the application with
+    that SA can perform the necessary actions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Cloud Build instead creates a specific Cloud Build SA for a project when the
+    Cloud Build API is enabled on the project. The Cloud Build SA has a minimal number
+    of permissions assigned to it, for example, Cloud Storage. If you want to use
+    other services, the SA needs to be updated to reflect the desired permissions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The set of pre-assigned permissions for the Cloud Build SA will essentially
+    allow Cloud Build to perform the following actions on behalf of the user:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Create, list, get, or cancel builds.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Create, patch, delete, or run a build trigger.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Pull source code from CSR.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Store images in and get images from Container Registry.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Store artifacts in and get artifacts from Cloud Storage.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Store artifacts in and get artifacts from Artifact Registry.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Create build logs in Cloud Logging.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Store build logs in a user-created logs bucket.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Push build updates to Pub/Sub.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Get project information and list projects.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: This concludes the topic on managing access controls, giving insights into the
+    required IAM roles. The upcoming topic focuses on best practices while executing
+    the build process, which could essentially reduce the build execution time.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Cloud Build best practices – optimizing builds
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Decreasing the build time helps in optimizing the build process. Given that
+    the focus is on handling containers, there are two common strategies to increase
+    the build speed:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Building Leaner Containers**: As a part of this strategy, the size of a container
+    can be reduced if files related to build-time dependencies and any intermediate
+    files are not included in the container image.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`--cache-from` argument and can be used for subsequent builds as the starting
+    point. The cached image will be retrieved from a registry. A cached Docker image
+    is only supported for Docker builds and is not supported by cloud builders.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'In addition to a generic strategy of building leaner containers to optimize
+    the build speed, Cloud Build specifically prescribes the following best practices,
+    which can additionally be used:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Kaniko cache
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Cloud Storage for caching directories
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Custom VM sizes
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Ignoring unwanted files
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The following are the details of the above-mentioned best practices.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Kaniko cache
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Kaniko cache is based on the open source tool Kaniko and is also a feature of
+    Cloud Build where intermediate container image layers are directly written to
+    Google's Container Registry without an explicit push step.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To enable Kaniko cache, as part of the build configuration file `cloudbuild.yaml`,
+    the following is a code snippet that could incorporate it:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The following are recommendations that should be taken into consideration while
+    implementing Kaniko cache through the `kaniko-project` cloud builder:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Use `kaniko-project/executor` instead of `cloud-builders/docker`.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The `destination` flag should refer to the target container image.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The `cache` flag should be set to `true`.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The cache-ttl flag should be set to the required cache expiration time.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Alternatively, Kaniko cache can be enabled via the gcloud CLI by running the
+    command as shown in the following snippet:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: Kaniko cache speeds up the build execution time by storing and indexing the
+    intermediate layers within a Container Registry and eventually saves build execution
+    time since it can be used by subsequent builds.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Cloud Storage for caching directories
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Conceptually, this is like a cached Docker image. The results of a previous
+    build can be reused by copying from a Cloud Storage bucket and the new results
+    can also be written back to the Cloud Storage bucket. This concept is not restricted
+    only to Docker builds but can also be extended to any builder supported by Cloud
+    Build.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Additionally, Cloud Build uses a default working directory named `/workspace`,
+    which is available to all steps in the build process. The results of one step
+    can be passed on to the next step by persisting it in the default working directory.
+    The working directory can also be explicitly set using the `dir` field as part
+    of the build step.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following is a sample snippet of a build configuration file where Cloud
+    Storage is used for caching directories:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: The preceding example also shows the usage of a specific working directory,
+    `my-cloud-build/examples`, as specified under the `dir` field as part of the build
+    steps. Like Kaniko cache, cloud storage can be used to optimize build speeds by
+    using the results from a previous build.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Custom VM sizes
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Cloud builds are executed against a managed VM of a standard size. However,
+    Cloud Build provides an option to increase the speed of a build by using a higher
+    CPU VM, which essentially speeds up the build process. This is done by specifying
+    the `--machine-type` argument. Cloud Build specifically provides a choice of 8
+    cores or 32 cores across two families of VMs. Specific choices are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`N1_HIGHCPU_8`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`N1_HIGHCPU_32`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`E2_HIGHCPU_8`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`E2_HIGHCPU_32`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The following is the CLI command to specify a machine type while initiating
+    the Cloud Build process:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: Ignoring unwanted files
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Cloud Build uploads the code directory to a Cloud Storage location. The upload
+    process can be made quicker by ignoring files that are not relevant to the build
+    process. These files might include third-party dependencies, compiled code, binaries,
+    or JAR files used for local development. In addition, documentation and code samples
+    are not required for the build process. These files can be specified as part of
+    the `gcloudignore` file to optimize the upload time.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This completes our deep dive into Cloud Build and its key constructs, which
+    include cloud builders and the build configuration, options available to initiate
+    a build process, automating the available options using triggers, viewing build
+    results with information stored in Cloud Storage, defining access controls, and
+    prescribing recommended practices to optimize builds.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The next section focuses on the concepts of artifact management and the usage
+    of Container Registry to manage build artifacts while working with containers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Managing build artifacts – Container Registry
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Source code management is the first step in the CI process. This is followed
+    by building the code. Code can be built based on various trigger points; either
+    against a development branch or when a PR is merged into the master branch. The
+    code build process can result in one or more artifacts. Based on the nature of
+    the code being built, the resultant artifacts can either be binaries, packages,
+    container images, or a combination. These artifacts are stored in a registry and
+    then deployed into a computing environment and form the CD process. In between
+    the CI and CD process, there is an intermediate process where the build artifacts
+    are stored and then subsequently deployed. This is known as **artifact management**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Artifact management acts as a single source of truth and a critical integration
+    point between CI and CD. Many artifact management systems provide versioning,
+    the ability to scan for vulnerabilities, provide consistent configuration, and
+    accommodate unified access control.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Given that the theme of this book is working with containers, the critical build
+    artifacts in this case will be the container images. Images are typically stored
+    in a central registry. The most common container registry is Docker Hub, which
+    stores public Docker images. However, when working within an enterprise, it is
+    generally a requirement to secure access to the container images produced by building
+    code that is specific to the enterprise. In such scenarios, a private registry
+    is preferred over a public registry, since a private registry can offer role-based
+    access controls to provide more security and governance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Container Registry is GCP's private container image registry service, which
+    supports Docker Image Manifest V2 and OCI image formats including Docker. The
+    Container Registry service can be accessed through secure HTTPS endpoints and
+    allows users to push or pull images from any possible compute option.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Artifact Registry
+  prefs: []
+  type: TYPE_NORMAL
+- en: Artifact Registry is a managed service offering from GCP that is similar to
+    Container Registry but also provides options to store non-container artifacts
+    such as Java packages, Node.js modules, and so on. It is currently not part of
+    the GCP DevOps Professional exam.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Container Registry – key concepts
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Container Registry is one of Google's approaches to artifact management. Like
+    any other service, it has certain key constructs and concepts. The following sub-sections
+    dive into those details.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Enabling/disabling Container Registry
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The Container Registry service can be enabled or disabled using the GCP Console
+    via the **APIs & Services** section. Additionally, the service can be enabled
+    or disabled through the CLI using the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: Container Registry service accounts
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Like Cloud Build, when Container Registry is enabled, a Google-managed SA will
+    get created that is specific to your current project. This SA allows Container
+    Registry to access critical GCP services such as Pub/Sub and Cloud Storage within
+    the project. Google makes this possible by assigning the Container Registry Service
+    Agent role to the Container Registry SA.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The structure of Container Registry
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'There could be one or more registries in a Container Registry service. Each
+    registry is identified by the hostname, project ID, and image (tag or image digest).
+    The following are the two possible formats:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`HOSTNAME / PROJECT_ID / IMAGE:TAG`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`HOSTNAME / PROJECT_ID / IMAGE@IMAGE-DIGEST`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'In the preceding code, we have the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`HOSTNAME`: Refers to the location where the image is stored. Images are stored
+    in a Cloud Storage bucket. If the hostname is `gcr.io`, then by default the images
+    are stored in the United States. Additionally, the user can specify specific hosts
+    such as `us.gcr.io`, `eu.gcr.io`, or `asia.gcr.io`, where each host is tied to
+    a specific geographic region where the images are hosted.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`PROJECT_ID`: Refers to the specific GCP project ID.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`IMAGE`: Refers to the image name. Registries in Container Registry are listed
+    by image name. A single registry can hold different versions of an image. Adding
+    either `:TAG` or `@IMAGE-DIGEST` helps to differentiate between images with the
+    same image name. If neither is specified, then the image is tagged as latest.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Examples**:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following are examples of a registry for a specific image where the version
+    of the image is differentiated by either adding a tag or image digest:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: This completes the topic that details the structure of Container Registry, an
+    understanding that is critical to upload or download container images to/from
+    Container Registry. This will be detailed in upcoming topics.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Uploading images to Container Registry
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The build process, on completion, will produce container images as artifacts.
+    These artifacts are generally created in the local directory where the build process
+    was run. These local Docker images need to be uploaded to a private registry such
+    as Container Registry. The process of uploading an image to Container Registry
+    is also synonymous with pushing images to Container Registry.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To break it down, there are two main steps that push images to Container Registry:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Tag the local image with the registry name (as shown in the following snippet):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Push the tagged image to Container Registry (as shown in the following snippet):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'A container image can be pushed to a new registry or an existing registry:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: If pushed to a new registry, that is, a registry with a new hostname, then Container
+    Registry will create a multi-regional storage bucket.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: If pushed to an existing registry, then a new version of the image is created
+    either with an image tag or image digest. If neither is present, then the image
+    is tagged as `latest`.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Specifying the location of Container Registry
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: The location of Container Registry can be specified under the hostname. If `gcr.io`
+    is used, then the default location is *United States*. If a specific location
+    needs to be used, then the host can be specified as `eu.gcr.io`.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'The newly created image can be listed using the following gcloud CLI command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: This concludes the topic on uploading or pushing a container image to GCP's
+    Container Registry. Now the newly pushed image can be deployed by any application
+    by downloading the image from Container Registry. This will be covered as the
+    next topic.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Downloading images from Container Registry
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The CD process feeds on the output of the CI process, which essentially is stored
+    in a registry such as Container Registry in the form of an OCI image. So, for
+    the CD process to progress, the Docker image needs to be downloaded from Container
+    Registry. The process of downloading an image from Container Registry is synonymous
+    with pulling images from Container Registry.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'An image can be pulled from Container Registry either using the image tag or
+    image digest. If neither is specified, then the image with a tag of `latest` will
+    be downloaded (as shown in the following snippet):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: This completes the topic on downloading images from Container Registry. To either
+    upload or download images to or from Container Registry, it is critical that the
+    user or application trying to perform those actions has the necessary access controls.
+    This will be covered as the next topic.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Container Registry access controls
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Container Registry is a repository for container images. The images are physically
+    stored in a Cloud Storage bucket. So, in order to push or pull images from Container
+    Registry, the user or SA should be granted the following roles:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/B15597_06_Table_02.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: If an application is deployed using GCP's available compute options, such as
+    Compute Engine, App Engine, or GKE, then each of these services will have default
+    service accounts with a pre-defined set of roles. However, the use of default
+    service accounts is not recommended as this practice does not follow the principle
+    of least privilege. Alternatively, it is also possible that the compute options
+    could use a custom SA with the minimum set of required permissions. Either way,
+    it is important to understand the scope of these service accounts and their impact
+    during the CD process. This will be discussed in detail in the next topic.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Continuous Delivery/Deployment integrations via Container Registry
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: As mentioned previously, artifact management is the bridge between CI and CD.
+    GCP has multiple compute options where code or an application can be deployed
+    as part of the CD process. Each of GCP's compute options has a way to interact
+    and integrate with Container Registry, which are detailed in the following sub-sections.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Compute Engine
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The **Compute Engine** service uses either a SA or access scopes to identify
+    the identity and provide API access to other services. The following is a summary
+    of the possibilities or potential changes to successfully push or pull an image
+    originating from a Compute Engine instance:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The default Compute Engine SA or the default access scope provides read-only
+    access to storage and service management. This allows you to download or pull
+    images from Container Registry within the same project.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: To push images, either the read-write storage access scope should be used, or
+    the default Compute Engine SA should be configured with the Storage Object Admin
+    role.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: If the VM instance is using a SA other than the default Compute Engine SA or
+    if the VM instance is in a project different from Container Registry, then the
+    SA should be given the appropriate permissions to access the storage bucket used
+    by Container Registry.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Google Kubernetes Engine
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: A **Google Kubernetes Engine** (**GKE**) cluster is essentially a collection
+    of Google Compute Engine VMs that represents a node pool. This also means that
+    GKE uses the SA configured on the VM instance. So, eventually, GKE's access to
+    Container Registry is based on the access granted to the VM's SA. So, refer to
+    the previous sub-section on *Compute Engine* for the possibilities or potential
+    changes to successfully push or pull an image originating from a compute instance
+    within GKE.
+  prefs: []
+  type: TYPE_NORMAL
+- en: App Engine flexible
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '**App Engine flexible** supports the deployment of Docker containers. The default
+    SA tied with App Engine flexible has the required permissions to push and pull
+    images from Container Registry, provided both are present in the same project.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: If App Engine is in a different project than Container Registry or if App Engine
+    is using a different SA than the default App Engine SA, then the SA tied to App
+    Engine should be given the appropriate permissions to access the storage bucket
+    used by Container Registry.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This completes the topic on how GCP compute options can integrate with Container
+    Registry. Outside the compute options provided by GCP, there are several use cases
+    where CD systems use a compute option that is not native to GCP.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The next topic discusses the details of how third-party clients can access artifacts
+    in GCP's Container Registry.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Container Registry authentication methods
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: There are compute options outside Google Cloud that could potentially deploy
+    an application by pulling container images from Google Cloud's Container Registry.
+    Such compute options are referred to as third-party clients. A **Red Hat Enterprise
+    Linux (RHEL**) cluster is an example of a third-party client that is a compute
+    option from Red Hat and can download a container image from Container Registry.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Apart from ensuring that the third-party client has the required access control
+    to pull or push images, it is mandatory for third-party clients to authenticate
+    with Container Registry prior to initiating an attempt to push or pull images.
+    The following are the possible authentication methods that third-party clients
+    can use to authenticate with Container Registry:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: gcloud credential helper
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Standalone credential helper
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The details on how third-party clients can authenticate with Container Registry
+    are elaborated on in the upcoming sub-sections.
+  prefs: []
+  type: TYPE_NORMAL
+- en: gcloud credential helper
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'This is the recommended authentication method and mandates the installation
+    of Google''s Cloud SDK or the usage of GCP''s Cloud Shell. This method essentially
+    uses the gcloud tool to configure authentication. The following are the required
+    steps to use this authentication method:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Log into gcloud as the IAM user that will run the Docker commands:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'If the intent is to log into gcloud as a SA, then run the following Docker
+    command. This uses a JSON key file that contains the information about the SA
+    and retrieves an access token that is valid for 60 minutes:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Configure Docker with the following command, which allows Docker to authenticate
+    with Container Registry:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: The next sub-section details an alternative approach to how the Docker standalone
+    credential helper can be used as an authorization method for third-party clients
+    to interact with GCP's Container Registry.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Standalone credential helper
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '`docker-credential-gcr` is GCP Container Registry''s standalone credential
+    helper. This authentication method is used when Google Cloud SDK is not installed
+    or GCP Cloud Shell is not used but Docker needs to be configured to authenticate
+    with GCP Container Registry. This credential helper implements the Docker Credential
+    Store API and enables more advanced authentication schemes for using GCP Container
+    Registry. It allows you to fetch credentials from application default credentials
+    and is also capable of generating credentials without an explicit login operation.
+    More details about `docker-credential-gcr` can be found at [https://github.com/GoogleCloudPlatform/docker-credential-gcr](https://github.com/GoogleCloudPlatform/docker-credential-gcr).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following are the required steps to use the standalone credential helper
+    as the authentication method:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Log on to the machine as the user that will run the Docker commands.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Download `docker-credential-gcr` from GitHub releases: ([https://github.com/GoogleCloudPlatform/docker-credential-gcr/releases](https://github.com/GoogleCloudPlatform/docker-credential-gcr/releases)).'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Configure Docker with the following command. Internally, the credential helper
+    will use a SA that is supplied in a JSON key file:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Container Analysis
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '**Container Analysis** is a construct of Container Registry and even Artifact
+    Registry. The purpose of this construct is to analyze the image that is being
+    pushed into GCP Container Registry for any vulnerabilities that might be a security
+    concern. The resulting metadata from vulnerability scanning is stored and is made
+    available through an API for consumption. This metadata is later used in the authorization
+    process.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'There are two specific APIs through which Container Analysis provides metadata
+    storage and vulnerability scanning:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Container Analysis API**: Enables metadata storage. Metadata storage includes
+    information about vulnerability or build information, also referred to as *note*.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Container Scanning API**: Enables vulnerability scanning across the project.
+    The process comprises scanning and continuous analysis to find malicious activity
+    or potential compromises leading to system failure.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The following are the steps involved in configuring Container Analysis as part
+    of Container Registry:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Enable the Container Analysis API: Navigate to `Container Analysis API`, and
+    select the **Enable** option.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Enable the Container Scanning API: Navigate to `Container Scanning API`, and
+    select the `On-Demand Scanning API` and enable it.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Navigate to **Container Registry** and under **Settings**, verify that **Vulnerability
+    Scanning** is enabled. If enabled, the **Settings** screen will be similar to
+    *Figure 6.3*. If not, enable it:![Figure 6.3 – Vulnerability scanning enabled
+    in Container Registry
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '](img/B15597_06_03.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Figure 6.3 – Vulnerability scanning enabled in Container Registry
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Now when an image is pushed to Container Registry, container analysis and vulnerability
+    scanning will be performed automatically. The results will be displayed under
+    the **Images** section of **Container Registry**. *Figure 6.4* represents the
+    summary of the container analysis:![Figure 6.4 – Summary of container analysis
+    on a newly created image
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '](img/B15597_06_04.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Figure 6.4 – Summary of container analysis on a newly created image
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'The details of all the vulnerabilities scanned and the categorization of them
+    can be found by clicking on the summary. *Figure 6.5* represents the detailed
+    report:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![Figure 6.5 – Details of vulnerability scanning through Container Analysis'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B15597_06_05.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 6.5 – Details of vulnerability scanning through Container Analysis
+  prefs: []
+  type: TYPE_NORMAL
+- en: This completes multiple sub-sections related to how GCP's compute options, as
+    well as other third-party CD systems, can integrate with GCP Container Registry.
+    This also concludes the deep dive into several of the key factors related to Container
+    Registry.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The next section is a hands-on lab that tries to combine multiple concepts learned
+    across sections of this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Hands-on lab – building, creating, pushing, and deploying a container to Cloud
+    Run using Cloud Build triggers
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The goal of this hands-on lab is to provide a step-by-step illustration of how
+    code can be automatically built, pushed, and deployed to a compute option called
+    Cloud Run.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Cloud Run
+  prefs: []
+  type: TYPE_NORMAL
+- en: Cloud Run is GCP's managed serverless compute option, which deploys containers
+    and abstracts away the infrastructure management. Cloud Run can scale up or down
+    from zero based on traffic and charges on a pay-per-use model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The hands-on lab implements concepts across Cloud Build and Container Registry.
+    The following is a high-level breakdown of the steps involved. Each of the steps
+    is further elaborated into multiple sub-steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating an empty repository in Source Repositories
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Creating a Cloud Build trigger
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Adding code and pushing it to the master branch
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Code walk-through to build, create, push, and deploy the container image
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Viewing the build results in Cloud Build, Container Registry, and Cloud Run
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Let's take a look at these steps in detail.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating an empty repository in Source Repositories
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The following are the steps required to create an empty repository in GCP''s
+    Source Repositories:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Navigate to **Source Repositories** in the GCP Console.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Create a new repository by using the `my-cloud-build-trigger`).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Creating a Cloud Build trigger
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The following are the steps required to create a Cloud Build trigger against
+    a specific repository, which will be invoked on a specific repository event (refer
+    to *Figure 6.6*):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Navigate to the **Triggers** section under **Cloud Build** in the GCP console.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Select the **Create Trigger** option.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Enter an appropriate name for the trigger, for example, `build-on-push-to-master`.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Enter an appropriate description.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Select a choice of event. Available options are **Push to a branch**, **Push
+    new tag**, or **Pull request**. In this specific example, select the **Push to
+    a branch** option.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Select a source repository. In this specific example, select the newly created
+    repository, that is, `my-cloud-build-trigger`.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Select a choice of branch. It can be `*` or a specific branch. In this specific
+    example, enter the option as `^master$`.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Select the source for the build configuration. It can either be a Cloud Build
+    configuration file or a Dockerfile. In this specific example, select the `/cloudbuild.yaml`).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Create the Cloud Build trigger (refer to *Figure 6.6*):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![Figure 6.6 – Steps to illustrate the creation of the Cloud Build trigger'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B15597_06_06.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 6.6 – Steps to illustrate the creation of the Cloud Build trigger
+  prefs: []
+  type: TYPE_NORMAL
+- en: Adding code and pushing it to the master branch
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'We have created a repository and set up a trigger against the repository. The
+    trigger will build code when the code is pushed to the master branch. The next
+    step is to add code to the repository and push it to the master branch. The following
+    steps illustrate this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Clone the empty repository to a local Git repository:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Switch to the new local Git repository:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Create a remote branch:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Copy the `my-cloud-build-trigger` folder from [https://github.com/PacktPublishing/Google-Cloud-Platform-for-DevOps-Engineers/tree/main/my-cloud-build-trigger](https://github.com/PacktPublishing/Google-Cloud-Platform-for-DevOps-Engineers/tree/main/my-cloud-build-trigger).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Add files, commit the changes, and push to the remote branch:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Checkout to the master branch and fix the upstream:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Merge the remote branch with the master branch:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Code walk-through
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: As soon as the code is pushed to the master branch in the previous step, the
+    configured trigger will come into effect and will eventually build the code, create
+    a container image, push the container image to Container Registry, and eventually
+    provide the feasibility of the container image being deployed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The `my-cloud-build-trigger` repository consists of three types of files:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The application code
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Dockerfile
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The build configuration file
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The application code
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The application code represents the core code that runs the application. In
+    this specific case, the code is under `app/main.py`, is written in Python, and
+    creates a web application using the FastAPI framework. The following is the code
+    snippet:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: Dockerfile
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The Dockerfile represents the instructions required to build the application
+    code using a base image and subsequently create a container image. The following
+    is the code snippet:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: The build configuration file
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The build configuration file represents the configuration to initiate the build
+    process. In addition, it can include steps to push the container image to Container
+    Registry and subsequently deploy it. The following is the code snippet:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In this specific example, the configuration file has three specific steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Build the code using Docker Cloud Builder. The code is picked up from the specified
+    directory. In this case, it is the current directory.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The code built in the first step creates a container image that is local to
+    the cloud builder. The image is then tagged and pushed to Container Registry using
+    the Docker Cloud Builder. The container image is pushed against a specific repository.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The image pushed in *step 2* is used in this step to deploy to Google's Cloud
+    Run.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Viewing the results
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'After the code is pushed to the master branch, the configured trigger will
+    initiate the build process. To view the build results, navigate to the **History**
+    section of **Cloud Build** in the GCP console and find the build result for the
+    specific source repository (refer to *Figure 6.7*):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.7 – Summary of the build history specific to the Cloud Build trigger'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B15597_06_07.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 6.7 – Summary of the build history specific to the Cloud Build trigger
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To view the details of the build, click on the specific build. The details
+    will show reference to steps that include the execution of the Dockerfile and
+    the creation of a container image that is pushed to Container Registry (refer
+    to *Figure 6.8*):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.8 – Log to build a container image and push to Container Registry'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B15597_06_08.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 6.8 – Log to build a container image and push to Container Registry
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The newly created container can be found under **Container Registry** (refer
+    to *Figure 6.9*):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.9 – Viewing the container image in Container Registry'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B15597_06_09.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 6.9 – Viewing the container image in Container Registry
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The end of the build log will show the deployment of the container image to
+    Cloud Run. This will also include the newly created service URL to access the
+    application (refer to *Figure 6.10*):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.10 – Log to deploy the container to Cloud Run'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B15597_06_10.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 6.10 – Log to deploy the container to Cloud Run
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Navigate to the highlighted service URL to view the deployed application in
+    Cloud Run (refer to *Figure 6.11*):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.11 – Container image deployed in Cloud Run'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B15597_06_11.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 6.11 – Container image deployed in Cloud Run
+  prefs: []
+  type: TYPE_NORMAL
+- en: This completes the hands-on lab where we deployed an application automatically
+    to Cloud Run whenever a developer made a code change and pushed the code to the
+    master branch. This illustrates an automatic CI/CD process that is built using
+    GCP's native constructs such as Cloud Build and Container Registry.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we discussed two key services that are central to building
+    a CI/CD workflow in Google. These are Cloud Build and Container Registry. Cloud
+    Build is critical to build application code and output container images as build
+    artifacts. Container Registry manages these build artifacts using the concepts
+    of artifact management. The chapter went into in-depth details with respect to
+    each of the services' key constructs and concluded with a hands-on lab where users
+    can automatically deploy code to Cloud Run when a code change is detected by a
+    configured trigger.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Google strongly recommends deploying applications using containers specifically
+    against GKE, which is a key container deployment option apart from App Engine
+    flexible and Cloud Run. The key concepts of GKE will be discussed in the next
+    three chapters, which include understanding the core features of native Kubernetes,
+    learning about GKE-specific features, and topics specific to hardening a GKE cluster.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Points to remember
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The following are some important points to remember:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Cloud Build can import source code from Google Cloud Storage, CSR, GitHub, or
+    Bitbucket.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Cloud builders are container images that run the build process.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Google-managed builders are pre-built images that can be used to execute one
+    or more build steps.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Community-contributed builders are open source builders but not pre-built images
+    and only source code is made available.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The build configuration is a configuration file that encapsulates the steps
+    to perform build-related tasks, written in `yaml` or `json` format.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Manual invocation and automatic builds using triggers are the two main options
+    to invoke the build process via Cloud Build.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Cloud Build related logs are stored in Cloud Storage and Cloud Logging.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Cloud Build Editor provides full control of Cloud Build resources.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Cloud Build creates a specific Cloud Build SA (with minimal permissions assigned)
+    for a project when the Cloud Build API is enabled on a project.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Two common strategies to increase build speed are building leaner containers
+    and using cached Docker images.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Kaniko cache is a feature of Cloud Build where intermediate container image
+    layers are directly written to Google's Container Registry.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Cloud Build provides an option to increase the speed of the build by using a
+    higher CPU VM.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Unwanted files during the Cloud Build process can be ignored using the `gcloudignore`
+    file.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Container Registry is GCP's private container image registry service, which
+    supports Docker Image Manifest V2 and OCI image formats.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: If `gcr.io` is used, then the default location is considered as *United States*.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Storage Admin provides the ability to push and pull images from the Cloud Storage
+    bucket associated with Container Registry.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The gcloud credential helper and standalone credential helper are possible authentication
+    methods that third-party clients can use to authenticate with Container Registry.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Container Analysis is a service that provides vulnerability scanning and metadata
+    storage for software artifacts.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The Container Analysis API enables metadata storage and the Container Scanning
+    API enables vulnerability scanning.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Further reading
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'For more information on Cloud Build and Container Registry, read the following
+    articles:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Cloud Build**: [https://cloud.google.com/cloud-build](https://cloud.google.com/cloud-build)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Container Registry**: [https://cloud.google.com/container-registry](https://cloud.google.com/container-registry)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Practice test
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Answer the following questions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Select all possible options that Cloud Build can import source code from (multiple):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: a) GitHub and Bitbucket
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: b) Google Cloud Storage
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: c) CSR
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: d) None of the above
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Cloud Build requires a build configuration file. Select the option that represents
+    this:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: a) `cloudbuild.json`, `cloudbuild.xml`
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: b) `build.json`, `build.yaml`
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: c) `cloudbuild.json`, `cloudbuild.yaml`
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: d) `build.json`, `build.xml`
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Select the command that will configure Cloud Build to store an image in Container
+    Registry during the build process:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: a) The `push` command
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: b) The `docker put` command
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: c) The `put` command
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: d) The `docker push` command
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Which of the following options can be used to store container images?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: a) Container Analysis
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: b) Cloud Build
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: c) Container Registry
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: d) CSR
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Select the option that stores trusted metadata used later in the authorization
+    process:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: a) Container Registry
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: b) Container Analysis
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: c) Container Scanning
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: d) Container Artifactory
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Select the option that represents an intermediate image that is created by
+    executing each instruction in a Dockerfile:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: a) Docker image
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: b) Dockerfile
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: c) Docker layer
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: d) Docker daemon
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Select the option that allows you to run multiple applications on the same
+    physical hardware:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: a) OS
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: b) Virtualization
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: c) Hypervisor
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: d) All of the above
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Select all options that are applicable to Cloud Build:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: a) Managed service
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: b) Serverless
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: c) Both (a) and (b)
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: d) None of the above
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Which of the following is not a valid option that a user can provide in a build
+    step (select one):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: a) `name`
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: b) `args`
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: c) `env`
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: d) `uniqueid`
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'The build configuration file can be configured to store Cloud Build logs. Select
+    the appropriate option to store logs:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: a) Cloud Storage
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: b) Cloud Logging
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: c) Both (a) and (b)
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: d) None of the above
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Answers
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: (a) – (b) and (c).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: (c) – `cloudbuild.json`, `cloudbuild.yaml`.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: (d) – The `docker push` command.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: (c) – Container Registry.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: (b) – Container Analysis.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: (c) – Docker layer.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: (b) - Virtualization.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: (c) – Managed service and Serverless. Every serverless service is a managed
+    service.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: (d) – `uniqueid`. The right option is `id`.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: (c) – Cloud Storage and Cloud Logging.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL

@@ -1,0 +1,1442 @@
+- en: '*Chapter 6*: Meet Buildah – Building Containers from Scratch'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The great appeal of containers is that they allow us to package applications
+    inside immutable images that can be deployed on systems and run seamlessly. In
+    this chapter, we will learn how to create images using different techniques and
+    tools. This includes learning how an image build works under the hood and how
+    to create images from scratch.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we''re going to cover the following main topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Basic image building with Podman
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Meet Buildah, Podman's companion tool for builds
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Preparing our environment
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Choosing our build strategy
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Building images from scratch
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Building images from a Dockerfile
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Before proceeding with this chapter, a machine with a working Podman installation
+    is required. As stated in [*Chapter 3*](B17908_03_epub.xhtml#_idTextAnchor068),
+    *Running the First Container*, all the examples in the book are executed on a
+    Fedora 34 system or later but can be reproduced on the reader's choice of OS.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A good understanding of the topics covered in [*Chapter 4*](B17908_04_epub.xhtml#_idTextAnchor083),
+    *Managing Running Containers*, is useful to easily grasp concepts regarding **Open
+    Container Initiative** (**OCI**) images.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Basic image building with Podman
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: A container's OCI image is a set of immutable layers stacked together with a
+    copy-on-write logic. When an image is built, all the layers are created in a precise
+    order and then pushed to the container registry, which stores our layers as tar-based
+    archives along with additional image metadata.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As we learned in the *OCI Images* section of [*Chapter 2*](B17908_02_epub.xhtml#_idTextAnchor044),
+    *Comparing Podman and Docker*, these manifests are necessary to correctly reassemble
+    the image layers (the image manifest and the image index) and to pass runtime
+    configurations to the container engine (the image configuration).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Before proceeding with the basic examples of image builds with Podman, we need
+    to understand how image builds generally work to grasp the simple but very smart
+    key concepts that lay beneath.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Builds under the hood
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Container images can be built in different ways, but the most common approach,
+    probably one of the keys to the huge success of containers, is based on Dockerfiles.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A **Dockerfile**, as the name suggests, is the main configuration file for Docker
+    builds and is a plain list of actions to be executed in the build process.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Over time, Dockerfiles became a standard in OCI image builds and today are adopted
+    in many use cases.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: To standardize and remove the association with the brand, Containerfiles were
+    also introduced; they have the very same syntax as Dockerfiles and are supported
+    natively by Podman. In this book, we will use the two terms *Dockerfile* and *Containerfile*
+    interchangeably.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We will learn in detail Dockerfiles'' syntax in the next subsection. For now,
+    let''s just focus on a concept – a Dockerfile is a set of build instructions that
+    the build tool executes sequentially. Let''s look at this example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This basic example of a Dockerfile holds only four instructions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `FROM` instruction, which defines the base image that will be used
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The `RUN` instruction, which executes some actions during the build (in this
+    example, installing packages with the `dnf` package manager)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The `COPY` instruction, which copies files or directories from the build working
+    directory to the image
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The `CMD` instruction, which defines the command to be executed when the container
+    starts
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: When the `RUN` and the `COPY` actions of the example are executed, new layers
+    that hold the changes are cached in intermediate layers, represented by temporary
+    containers. This is a native feature in Docker that has the advantage of reusing
+    cached layers on further builds when no changes are requested on a specific layer.
+    All the intermediate containers will produce read-only layers merged by the overlay
+    graph driver.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Users don't need to manually manage the cached layers – the engine automatically
+    implements the necessary actions by creating the temporary containers, executing
+    the actions defined by the Dockerfile instructions, and then committing. By repeating
+    the same logic for all the necessary instructions, Podman creates a new image
+    with additional layers on top of the ones of the base image.
+  prefs: []
+  type: TYPE_NORMAL
+- en: It is possible to squash the image layers into a single one to avoid a negative
+    impact on the overlay's performances. Podman offers the same features and lets
+    you choose between caching intermediate layers or not.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Not all Dockerfile instructions change the filesystem, and only the ones that
+    do it will create a new image layer; all the other instructions, such as the `CMD`
+    instruction in the preceding example, produce an empty layer with metadata only
+    and no changes in the overlay filesystem.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In general, the only instructions that create new layers by effectively changing
+    the filesystem are the `RUN`, `COPY`, and `ADD` instructions. All the other instructions
+    in a Dockerfile or Containerfile just create temporary intermediate images and
+    do not impact the final image filesystem.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This is also a good reason to keep the number of Dockerfile `RUN`, `COPY`, and
+    `ADD` instructions limited, since having images cluttered with too many layers
+    is not a good pattern and impacts the graph driver performances.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can inspect an image''s history and the actions that have been applied to
+    every layer. The following example shows an excerpt of the output from the `podman
+    inspect` command, with the target image being a potential one created from the
+    previous sample Dockerfile:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: Looking at the last three items of the image history, we can note the exact
+    instructions defined in the Dockerfile, including the last CMD instruction that
+    does not create any new layer but instead metadata that will persist in the image
+    config.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With this deeper awareness of the image build logic in mind, let's now explore
+    the most common Dockerfile instructions before proceeding with the Podman build
+    examples.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Dockerfile and Containerfile instructions
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: As stated before, Dockerfiles and Containerfiles share the same syntax. The
+    instruction in those files should be seen as (and truly are) commands passed to
+    the container engine or build tool. This subsection provides an overview of the
+    most frequently used instructions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'All Dockerfile/Containerfile instructions follow the same pattern:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The following list provides a non-exhaustive list of the most common instructions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`FROM <image>[:<tag>]` syntax to identify the correct image to use.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`RUN <command>` syntax. The invoked binary or script must exist in the base
+    image or a previous layer.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: As stated before, the `RUN` instruction creates a new image layer; therefore,
+    it is a frequent practice to concatenate commands into the same `RUN` instruction
+    to avoid cluttering too many layers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This example compacts three commands inside the same `RUN` instruction:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: '`COPY <src>… <dest>` syntax, and it has a very useful option that lets us define
+    the destination user and group instead of manually changing ownership later –
+    `--chown=<user>:<group>`.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`ADD <src>… <dest>` syntax. This instruction also supports the automatic extraction
+    of tar files from a source directly into the target path.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`podman run <image> <arguments>`) or from the `CMD` instruction.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'An `ENTRYPOINT` image cannot be overridden by command-line arguments. The supported
+    forms are the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`ENTRYPOINT ["command", "param1", "paramN"]` (also known as the *exec* form)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`ENTRYPOINT command param1 paramN` (the *shell* form)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: If not set, its default value is `bash -c`. When set to the default value, commands
+    are passed as an argument to the `bash` process. For example, if a `ps aux` command
+    is passed as an argument at runtime or in a CMD instruction, the container will
+    execute `bash -c "ps aux"`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A frequent practice is to replace the default `ENTRYPOINT` command with a custom
+    **script** that behaves in the same way and offers more granular control of the
+    runtime execution.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`ENTRYPOINT` instruction. It can be a full command or a set of plain arguments
+    to be passed to a custom script or binary set as `ENTRYPOINT`. It supported forms
+    are the following:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`CMD ["command", "param1", "paramN"]` (the *exec* form)'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`CMD ["param1, "paramN"]` (the *parameter* form, used to pass arguments to
+    a custom `ENTRYPOINT`)'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`CMD command param1 paramN` (the *shell* form)'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`LABEL <key1>=<value1> … <keyN>=<valueN>` syntax.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`EXPOSE <port>/<protocol>` format.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`ENV <key1>=<value1>… <keyN>=<valueN>` format.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Environment variables can also be set inside a `RUN` instruction with a scope
+    limited to the instruction itself.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`VOLUME ["/path/to/dir"]`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`VOLUME /path/to/dir`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: See also the *Attaching host storage to a container* section in [*Chapter 5*](B17908_05_epub.xhtml#_idTextAnchor101),
+    *Implementing Storage for the Containers' Data*, for more details about volumes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`RUN`, `CMD`, and `ENTRYPOINT` instructions. The `GID` value is not mandatory.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The supported formats are the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`USER <username>:[<groupname>]`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`USER <UID>:[<GID>]`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`WORKDIR /path/to/workdir` format.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`FROM` instruction. Its purpose is to allow the execution of some final command
+    on a child container image.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The supported formats are the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`ONBUILD ADD . /opt/app`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`ONBUILD RUN /opt/bin/custom-build /opt/app/src`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Now that we have learned the most common instructions, let's dive into our first
+    build examples with Podman.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Running builds with Podman
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Good news – Podman provides the same build commands and syntax as Docker. If
+    you are switching from Docker, there will be no learning curve to start building
+    your images with it. Under the hood, there is a notable advantage in choosing
+    Podman as a build tool – Podman can build containers in rootless mode, using a
+    fork/exec model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This is a step forward compared to Docker builds, where communication with the
+    daemon listening on the Unix socket is necessary to run the build.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s start by running a simple build based on the `httpd` Dockerfile illustrated
+    in the first *Builds under the hood subsection*. We will use the following `podman
+    build` command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: In the preceding example, the output of the `dnf install` command was omitted
+    for the sake of clarity and space.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The command runs the instructions sequentially and persists the intermediate
+    layers until the final image is committed and tagged. The build steps are numbered
+    (`1/4` to `4/4`) and some of them (`RUN` and `COPY` here) produce non-empty layers,
+    forming part of the image lowerDirs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The first `FROM` instruction defines the base image, which is pulled automatically
+    if not present in the host.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The second instruction is `RUN`, which executes the `dnf` command to install
+    the httpd package and clean up the system upon completion. Under the hood, this
+    line is executed as `"bash –c 'dnf install -y httpd && dnf clean all –y'"`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The third `COPY` instruction simply copies the `index.html` file in the default
+    httpd document root.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Finally, the fourth step defines the default container `CMD` instruction. Since
+    no `ENTRYPOINT` instructions were set, this will translate into the following
+    command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`"bash -c ''/usr/sbin/httpd -DFOREGROUND''"`'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The next example is a custom Dockerfile/Containerfile where a custom web server
+    is built:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This example was designed for the purpose of this book to illustrate some peculiar
+    elements:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Packages installed with a package manager should be kept at a minimum. After
+    installing the `httpd` package, necessary to run the web server, the cache is
+    cleaned to save layer space.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Multiple commands can be grouped together in a single `RUN` instruction. However,
+    we don't want to continue the build if a single command fails. To provide a failsafe
+    shell execution, the `set -euo pipefail` command was prepended. Also, to improve
+    readability, the single commands were split into more lines using the `\` character,
+    which can work as a line break or escape character.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: To avoid running the isolated processes as the root user, a series of workarounds
+    were implemented in order to have the httpd process running as the generic `1001`
+    user. Those workarounds included updating files permissions and group ownership
+    on specific directories that are expected to be accessed by non-root users. This
+    is a security best practice that reduces the attack surface of the container.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A common pattern in containers is the redirections of application logs to the
+    container's `stdout` and `stderr`. The common httpd log streams have been modified
+    for this purpose using regular expressions against the `/etc/httpd/conf/httpd.conf`
+    file.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The web server ports are declared as exposed with the `EXPOSE` instruction.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The `CMD` instruction is a simple `httpd` command without any other argument.
+    This was done to illustrate how the `ENTRYPOINT` can interact with the CMD arguments.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The container `ENTRYPOINT` instruction is modified with a custom script that
+    brings more flexibility to the way the `CMD` instruction is managed. The `entrypoint.sh`
+    file tests whether the container is executed as root and checks the first `CMD`
+    argument – if the argument is `httpd`, it executes the `httpd -DFOREGROUND` command;
+    otherwise, it lets you execute any other command (a shell, for example). The following
+    code is the content of the `entrypoint.sh` script:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Let''s now build the image with the `podman build` command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The newly built image will be available in the local host cache:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After building, we can `v1.0` tag and the latest tag:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: After tagging, the image will be ready to be pushed to the remote registry.
+    We will cover the interaction with registries in greater detail in [*Chapter 9*](B17908_09_epub.xhtml#_idTextAnchor167),
+    *Pushing Images to a Container Registry*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The example image will be composed of five layers, including the base Fedora
+    image layer. We can verify the number of layers by running the `podman inspect`
+    command against the new image:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'It is possible to squash the current build layers into a single layer using
+    the `--layers=false` option. The resulting image will have only two layers – the
+    base Fedora layer and the squashed one. The following example rebuilds the image
+    without caching the intermediate layers:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Let''s inspect the output image again:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: This time, the final image has the two expected layers only.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Reducing the number of layers can be useful to keep the image minimal in terms
+    of overlays. The downside of this approach is that we will have to rebuild the
+    whole image for every configuration change without taking advantage of cached
+    layers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In terms of isolation, Podman can safely build images in rootless mode. Indeed,
+    this is considered a value since there should be no need to run builds with a
+    privileged user such as root. If rootful builds are necessary, they are fully
+    functional and supported. The following example runs a build as the root user:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: The resulting image will be available only in the system image cache and its
+    layers stored under `/var/lib/containers/storage/`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The flexible nature of Podman builds is strongly related to its companion tool,
+    **Buildah**, a specialized tool to build OCI images that provides greater flexibility
+    in builds. In the next section, we will describe Buildah's features and how it
+    manages image builds.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Meet Buildah, Podman's companion tool for builds
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Podman does an excellent job in plain builds with Dockerfiles/Containerfiles
+    and helps teams to preserve their previously implemented build pipelines without
+    the need for new investments.
+  prefs: []
+  type: TYPE_NORMAL
+- en: However, when it comes to more specialized build tasks, or when users need more
+    control on the build workflow, with the option of including scripting logic, the
+    Dockerfile/Containerfile approach shows its limitations. Communities struggled
+    to find alternative building approaches that can overcome the rigid, workflow-based
+    logic of Dockerfiles/Containerfiles.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The same community that develops Podman brought to life the Buildah (pronounced
+    *build-ah*) project, a tool to manage OCI builds with support for multiple building
+    strategies. Images created with Buildah are fully portable and compatible with
+    Docker, and all engines are compliant with the OCI image and runtime specs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Buildah is an open source project released under the Apache 2.0 license. Sources
+    are available on GitHub at the following URL: [https://github.com/containers/buildah](https://github.com/containers/buildah).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Buildah is complementary to Podman, which borrows its build logic by vendoring
+    its libraries to implement basic build functionalities against Dockerfiles and
+    Containerfiles. The final Podman binary, which is compiled in Go as a statically
+    linked single file, embeds Buildah packages to manage the build steps.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Buildah uses the *containers/image* project ([https://github.com/containers/image](https://github.com/containers/image))
+    to manage an image's life cycle and its interaction with registries, and the *containers/storage*
+    project ([https://github.com/containers/storage](https://github.com/containers/storage))
+    to manage images and containers' filesystem layers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The advanced build strategy of Buildah is based on the parallel support for
+    traditional Dockerfile/Containerfile-based builds, and for builds driven by native
+    Buildah commands that replicate the Dockerfile instructions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: By replicating Dockerfile instructions in standard commands, Buildah becomes
+    a scriptable tool that can be interpolated with custom logic and native shell
+    constructs such as conditionals, loops, or environment variables. For example,
+    the `RUN` instruction in a Dockerfile can be replaced with a `buildah run` command.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If teams need to preserve the build logic implemented in previous Dockerfiles,
+    Buildah offers the `buildah build` (or its alias, `buildah bud`) command, which
+    builds the image reading from the provided Dockerfile/Containerfile.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Buildah can smoothly run in rootless mode to build images; this is a valuable,
+    highly demanded feature from a security point of view. No Unix sockets are necessary
+    to run a build. At the beginning of this chapter, we explained how builds are
+    always based on containers; Buildah is not exempt from this behavior, and all
+    its builds are executed inside working containers, starting on top of the base
+    image.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following list provides a non-exhaustive description of the most frequently
+    used commands in Buildah:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`buildah from [options] <image>` syntax. An example of this command is `$ buildah
+    from fedora`.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`RUN` instruction of a Dockerfile; it runs a command inside a working container.
+    This command accepts the `buildah run [options] [--] <container> <command>` syntax.
+    The `--` (double dash) option is necessary to separate potential options from
+    the effective container command. An example of this command is `buildah run <containerID>
+    -- dnf install -y nginx`.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`buildah config [options] <container>` format. The options available for this
+    command are associated with the various Dockerfile instructions that do not modify
+    filesystem layers but set some container metadata – for instance, the setup of
+    the `entrypoint` container. An example of this command is `buildah config --entrypoint/entrypoint.sh
+    <containerID>`.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`ADD` instruction of the Dockerfile; it adds files, directories, and even URLs
+    to the container. It supports the `buildah add [options] <container> <src> [[src
+    …] <dst>` syntax and allows you to copy multiple files in one single command.
+    An example of this command is `buildah add <containerID> index.php /var/www.html`.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`COPY` instruction; it adds files, URLs, and directories to the container.
+    It supports the `buildah copy [options] <container> <src> [[src …] <dst>` syntax.
+    An example of this command is `buildah copy <containerID> entrypoint.sh /`.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`buildah copy [options] <container> <image_name>` syntax. The container image
+    created from this command can be later tagged and pushed to a registry. An example
+    of this command is `buildah commit <containerID> <myhttpd>`.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`buildah build [options] [context]` syntax and the `buildah bud` command alias.
+    An example of this command is `buildah build –t <imageName> .`.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`buildah ls` and `buildah ps`. The supported syntax is `buildah containers
+    [options]`. An example of this command is `buildah containers`.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`buildah delete` command is equivalent. The supported syntax is `buildah rm
+    <container>`. This command has only one option, the `–all, -a` option, to remove
+    all the working containers. An example of this command is `buildah rm <containerID>`.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`buildah mount [containerID … ]`. When no argument is passed, the command only
+    shows the currently mounted containers. An example of this command is `buildahmount<containerID>`.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`buildah images [options] [image]`. Custom output formats such as JSON are
+    available. An example of this command is `buildah images --json`.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`buildah tag <name> <new-name>` format. An example of this command is `buildah
+    tag myapp quay.io/packt/myapp:latest`.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`buildah push [options] <image> [destination]`. Examples of this command include
+    `buildah push quay.io/packt/myapp:latest`, `buildah push <imageID> docker://<URL>/repository:tag`,
+    and `buildah push <imageID> oci:</path/to/dir>:image:tag`.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`buildah pull [options] <image>`. Examples of this command include `buildah
+    pull <imageName>`, `buildah pull docker://<URL>/repository:tag`, and `buildah
+    pull dir:</path/to/dir>`.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: All the commands described previously have their corresponding `man` page, with
+    the `man buildah-<command>` pattern. For example, to read documentation details
+    about the `buildah run` command, just type `man buildah-run` on the terminal.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The next example shows basic Buildah capabilities. A Fedora base image is customized
+    to run an httpd process:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: The preceding commands will produce an OCI-compliant, portable image with the
+    same features of an image built from a Dockerfile, all in a few lines that can
+    be included in a simple script.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We will now focus on the first command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `buildah from` command pulls a Fedora image from one of the allowed registries
+    and spins up a working container from it, returning the container name. Instead
+    of simply having it printed on standard output, we will capture the name with
+    shell expansion syntax. From now on, we can pass the `$container` variable, which
+    holds the name of the generated container, to the subsequent commands. Therefore,
+    the build commands will be executed inside this working container. This is quite
+    a common pattern and is especially useful to automate Buildah commands in scripts.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: There is a subtle difference between the concept of container in Buildah and
+    Podman. Both adopt the same technology to create containers, but Buildah containers
+    are short-lived entities that are created to be modified and committed, while
+    Podman containers are supposed to run long-living workloads.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The flexible and embeddable nature of this approach is remarkable – Buildah
+    commands can be included anywhere, and users can choose between a fully automated
+    build process and a more interactive one.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For example, Buildah can be easily integrated with **Ansible**, the open source
+    automation engine, to provide automated builds using native connection plugins
+    that enable communication with working containers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can choose to include Buildah inside a CI pipeline (such as **Jenkins**,
+    **Tekton**, or **GitLab CI/CD**) to gain full control of the build and integration
+    tasks.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Buildah is also included in larger projects of the cloud-native community, such
+    as the **Shipwright** project ([https://github.com/shipwright-io/build](https://github.com/shipwright-io/build)).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Shipwright is an extensible build framework for Kubernetes that provides the
+    flexibility of customizing image builds using custom resource definitions and
+    different build tools. Buildah is one of the available solutions that you can
+    choose when designing your build processes with it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We will see more detailed and richer examples in the next subsections. Now that
+    we have seen an overview of Buildah's capabilities and use cases, let's dive into
+    the installation and environment preparation steps.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Preparing our environment
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Buildah is available on different distributions and can be installed using
+    the respective package managers. This section provides a non-exhaustive list of
+    installation examples on the major distributions. For the sake of clarity, it
+    is important to reiterate that the book lab environments were all based on Fedora
+    34:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`dnf` command:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '`apt-get` commands:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '`yum` command:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '`yum module` commands:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '`rhel-7-server-extras-rpms` repository and install with `yum`:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '`pacman` command:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '`apt-get` commands:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '`emerge` command:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '**Build from source**: Buildah can also be built from the source. For the purpose
+    of this book, we will keep the focus on simple deployment methods, but if you''re
+    curious, you will find the following guide useful to try out your own builds:
+    [https://github.com/containers/buildah/blob/main/install.md#building-from-scratch](https://github.com/containers/buildah/blob/main/install.md#building-from-scratch).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Finally, Buildah can be deployed as a container, and builds can be executed
+    inside it with a nested approach. This process will be covered in greater detail
+    in [*Chapter 7*](B17908_07_epub.xhtml#_idTextAnchor134), *Integrating with Existing
+    Application Build Processes*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: After installing Buildah to our host, we can move on to verifying our installation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Verifying the installation
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: After installing Buildah, we can now run some basic test commands to verify
+    the installation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To see all the available images in the host local store, use the following
+    commands:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: The image list will be the same as the one printed by the `podman images` command
+    since they share the same local store.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Also note that the two commands are executed as an unprivileged user and as
+    root, pointing respectively to the user rootless local store and the system-wide
+    local store.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We can run a simple test build to verify the installation. This is a good chance
+    to test a basic build script whose only purpose is to verify whether Buildah is
+    able to fully run a complete build.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For the purpose of this book (and for fun), we have created the following simple
+    test script that creates a minimal Python 3 image:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: The same test script can be executed by a non-privileged user and by root.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can verify the newly built image by running a simple container that executes
+    a Python shell:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: After successfully testing our new Buildah installation, let's inspect the main
+    configuration files used by Buildah.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Buildah configuration files
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The main Buildah configuration files are the same ones used by Podman. They
+    can be leveraged to customize the behavior of the working containers executed
+    in builds.
+  prefs: []
+  type: TYPE_NORMAL
+- en: On Fedora, these config files are installed by the `containers-common` package,
+    and we already covered them in the *Prepare your environment* section in [*Chapter
+    3*](B17908_03_epub.xhtml#_idTextAnchor068), *Running the First Container*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The main config files used by Buildah are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`/usr/share/containers/mounts.conf`: This config file defines the files and
+    directories that are automatically mounted inside a Buildah working container.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`/etc/containers/registries.conf`: This config file has the role of managing
+    registries allowed to be accessed for image searches, pulls, and pushes.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`/usr/share/containers/policy.json`: This JSON config file defines image signature
+    verification behavior.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`/usr/share/containers/seccomp.json`: This JSON config file defines the allowed
+    and prohibited syscalls to a containerized process.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In this section, we have learned how to prepare the host environment to run
+    Buildah. In the next section, we are going to identify the possible build strategies
+    that can be implemented with Buildah.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Choosing our build strategy
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'There are basically three types of build strategies that we can use with Buildah:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Building a container image starting from an existing base image
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Building a container image starting from scratch
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Building a container image starting from a Dockerfile
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We have already provided an example of the build strategy from an existing base
+    image in the *Meet Buildah, Podman's companion* section. Since this strategy is
+    pretty similar from a workflow point of view to building from scratch, we will
+    focus our practical examples on the last one, which provides great flexibility
+    to create a small footprint and secure images.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Before going through the various technical details in the next section, let's
+    start exploring all these strategies at a high level.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Even though we can find a lot of prebuilt container images available on the
+    most popular public container registries, sometimes we might not be able to find
+    a particular configuration, setup, or bundle of tools and services for our containers;
+    that is why container image creation becomes a really important step that we need
+    to practice.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Also, security constraints often require us to implement images with reduced
+    attack surfaces, and therefore, DevOps teams must know how to customize every
+    step of the build process to achieve this result.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With this awareness in mind, let's start with the first build strategy.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Building a container image starting from an existing base image
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Let's imagine finding a well-done prebuilt container image for our favorite
+    application server that our company is widely using. All the configurations for
+    this container image are okay, and we can attach storage to the right mount points
+    to persist the data and so on, but sooner or later, we may realize that some particular
+    tools that we use for troubleshooting are missing in the container image, or that
+    some libraries are missing that should be included!
+  prefs: []
+  type: TYPE_NORMAL
+- en: In another scenario, we could be happy with the prebuilt image but still need
+    to add custom contents to it – for example, the customer application.
+  prefs: []
+  type: TYPE_NORMAL
+- en: What would be the solution in those cases?
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this first use case, we can extend the existing container image, adding stuff
+    and editing the existing files to suit our purposes. In the previous basic examples,
+    Fedora and Alpine images were customized to serve different purposes. Those images
+    were generic OS filesystems with no specific purpose, but the same concept can
+    be applied to a more complex image.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the second use case, we can customize an image – for example, the default
+    library Httpd. We can install PHP modules and then add our application's PHP files,
+    producing a new image with our custom contents already built in.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We will see in the next sections how we can extend an existing container image.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's move on to the second strategy.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Building a container image starting from scratch
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The previous strategy would be enough for many common situations, where we can
+    find a prebuilt image to start working with, but sometimes it may be that the
+    particular use case, application, or service that we want to containerize is not
+    so common or widely used.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Imagine having a custom legacy application that requires some old libraries
+    and tools that are no longer included on the latest Linux distribution or that
+    may have been replaced by more recent ones. In this scenario, you might need to
+    start from an empty container image and add piece by piece all the necessary stuff
+    for your legacy application.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We have learned in this chapter that, actually, we will always start from a
+    sort of initial container image, so this strategy and the previous one are pretty
+    much the same.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's move on to the third and final strategy.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Building a container image starting from a Dockerfile
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In [*Chapter 1*](B17908_01_epub.xhtml#_idTextAnchor015), *Introduction to Container
+    Technology*, we talked about container technology history and how Docker gained
+    momentum in that context. Podman was born as an alternative evolution project
+    of the great concepts that Docker helped to develop until now. One of the great
+    innovations that Docker created in its own project history is, for sure, the Dockerfile.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Looking into this strategy at a high level, we can affirm that even when using
+    a Dockerfile, we will arrive at one of the previous build strategies. The reality
+    is not far away from the latest assumption we made, because Buildah under the
+    hood will parse the Dockerfile, and it will build the container that we briefly
+    introduced for previous build strategies.
+  prefs: []
+  type: TYPE_NORMAL
+- en: So, in summary, are there any differences or advantages we need to consider
+    when choosing our default build strategy? Obviously, there is no ultimate answer
+    to this question. First of all, we should always look into the container communities,
+    searching for some prebuilt image that could help our *build* process; on the
+    other hand, we can always fall back on the *build from scratch* process. Last
+    but not least, we can consider Dockerfile for easily distributing and sharing
+    our build steps with our development group or the wider container communities.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This ends up our quick high-level introduction; we can now move on to the practical
+    examples!
+  prefs: []
+  type: TYPE_NORMAL
+- en: Building images from scratch
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Before going into the details of this section and learning how to build a container
+    image from scratch, let's make some tests to verify that the installed Buildah
+    is working properly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First of all, let''s check whether our Buildah image cache is empty:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: Important Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: Podman and Buildah share the same container storage; for this reason, if you
+    previously ran any other example shown in this chapter or book, you will find
+    that your container storage cache is not that empty!
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As we learned in the previous section, we can leverage the fact that Buildah
+    will output the name of the just-created working container to easily store it
+    in an environment variable and use it once needed. Let''s create a brand-new container
+    from scratch:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see, we used the special `from scratch` keywords that are telling
+    Buildah to create an empty container with no data inside it. If we run the `buildah
+    images` command, we will note that this special image is not listed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s check whether the container really is empty:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: No executable was found in our empty container – what a surprise! The reason
+    is that the working container has been created on an empty filesystem.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's see how we can easily fill this empty container. In the following example,
+    we will interact directly with the underlying storage, using the package manager
+    of our host system to install the binaries and the libraries needed for running
+    a `bash` shell in our container image.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First of all, let''s instruct Buildah to mount the container storage and check
+    where it resides:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: Good to Know
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you start the build in rootless mode, Buildah will run the mount in a different
+    namespace, and for this reason, the mounted volume might not be accessible from
+    the host when using a driver different than vfs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Great! Now that we have found it, we can leverage the host package manager
+    to install all the needed packages in this `root` folder, which will be the `root`
+    path of our container image:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: Important Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you are running the previous command on a Fedora release different than version
+    34, (for example, version 35), then you need to import the GPG public keys of
+    Fedora 34 or use the `--nogpgcheck` option.
+  prefs: []
+  type: TYPE_NORMAL
+- en: First of all, we will save the very long directory path in an environment variable
+    and then execute the `dnf` package manager, passing the just-obtained directory
+    path as the install root directory, setting the release version of our Fedora
+    OS, specifying the packages that we want to install (`bash` and `coreutils`),
+    and finally, disabling weak dependency, accepting all the changes to the system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The command should end up with a `Complete!` statement; once done, let''s try
+    again with the same command that we saw failing earlier in this section:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'It worked! We just installed a Bash shell in our empty container. Let''s see
+    now how to finish our image creation with some other configuration steps. First
+    of all, we need to add to our final container image a command to be run once it
+    is up and running. For this reason, we will create a Bash script file with some
+    basic commands:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We have created a Bash script file that prints the Fedora release of the container
+    and the system date. The file must have execute permissions before being copied:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now that we have filled up our underlying container storage with all the needed
+    base packages, we can unmount the `working-container` storage and use the `buildah
+    copy` command to inject files from the host to the container:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE35]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `buildah copy` command gives us the ability to work with the underlying
+    storage without worrying about mounting it or handling it under the hood.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We are now ready to complete our container image by adding some metadata to
+    it:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE36]'
+  prefs: []
+  type: TYPE_PRE
+- en: We started with the `cmd` option, and after that, we added some descriptive
+    metadata. We can finally commit our `working-container` into an image!
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE37]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Let''s clean up the environment and check the available container images into
+    the host:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE38]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We can now inspect the details of the just-created container image:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE39]'
+  prefs: []
+  type: TYPE_PRE
+- en: As we can see from the previous output, the container image has a lot of metadata
+    that can tell us many details. Some of them we set through the previous commands,
+    such as the `created_by`, `name`, and `Cmd` tags; the other tags are populated
+    automatically by Buildah.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, let's run our brand-new container image with Podman!
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE40]'
+  prefs: []
+  type: TYPE_PRE
+- en: This ends our journey in creating a container image from scratch. As we saw,
+    this is not a typical method for creating a container image; in many scenarios
+    and for various use cases, it can be enough to start with an OS base image, such
+    as `from fedora` or `from alpine`, and then add the required packages, using the
+    respective package managers available in those images.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Good to Know
+  prefs: []
+  type: TYPE_NORMAL
+- en: Some Linux distributions also provide base container images in a **minimal**
+    flavor (for example, **fedora-minimal**) that reduce the number of packages installed,
+    as well as the size of the target container image. For more information, refer
+    to [https://www.docker.com/](https://www.docker.com/) and [https://quay.io/](https://quay.io/)!
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's now inspect how to build images from Dockerfiles with Buildah.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Building images from a Dockerfile
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: As we described earlier in this chapter, the Dockerfile can be an easy option
+    to create and share the build steps for creating a container image, and for this
+    reason, it is really easy to find a lot of source Dockerfiles on the net.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The first step of this activity is to build a simple Dockerfile to work with.
+    Let''s create a Dockerfile for creating a containerized web server:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE41]'
+  prefs: []
+  type: TYPE_PRE
+- en: Looking at the previous output, we first created a new directory, and inside,
+    we created a text file named `Dockerfile`. After that, we inserted the various
+    keywords and steps commonly used in the definition of a brand-new Dockerfile;
+    every step and keyword has a dedicated description comment on top, so the file
+    should be easy to read.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Just to recap, these are the steps contained in our brand-new Dockerfile:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Start from the latest Fedora container base image.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Update all the packages for the container base image.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Install the `httpd` package.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Expose HTTP port `80`.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Set the default command to run once the container is started.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: As seen previously in this chapter, Buildah provides a dedicated `buildah build`
+    command to start a build from a Dockerfile.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s see how it works:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE42]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As we can see from the previous output, we pass the following options to the
+    `buildah build` command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`-f`: To define the name of the Dockerfile. The default filename is `Dockerfile`,
+    so in our case, we can omit this option because we named the file as the default
+    one.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`-t`: To define the name and the tag of the image we are building. In our case,
+    we are only defining the name. The image will be tagged `latest` by default.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Finally, as the last option, we need to set the directory where Buildah needs
+    to work and search for the Dockerfile. In our case, we are passing the current
+    `.` directory.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Of course, these are not the only options that Buildah gives us to configure
+    the build; we will see some of them later in this section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Coming back to the command we just executed, as we can see from the output,
+    all the steps defined in the Dockerfile have been executed in the exact written
+    order and printed with a given fractional number to show the intermediate steps
+    against the total number. In total, six steps were executed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can check the result of our command by listing the images with the `buildah
+    images` command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE43]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As we can see, our container image has just been created with the `latest`
+    tag; let''s try to run it:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE44]'
+  prefs: []
+  type: TYPE_PRE
+- en: Looking at the output, we just ran our container in detached mode; after that,
+    we inspected the logs to find out the IP address that we need to pass as an argument
+    for the `curl` test command.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We just run the container as the root user on our workstation, and the container
+    just received an internal IP address on Podman''s container network interface.
+    We can check that the IP address is part of that network by running the following
+    commands:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE45]'
+  prefs: []
+  type: TYPE_PRE
+- en: As we can see, the container's IP address was taken from the network reported
+    in the previous `10.88.0.1/16` output.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As we anticipated, the `buildah build` command has a lot of other options that
+    can be useful while developing and creating brand-new container images. Let's
+    explore one of them that is worth mentioning – `--layers`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We already learned how to use this option with Podman earlier in this chapter.
+    Starting from version 1.2 of Buildah, the development team added this great option
+    that gives us the ability to enable or disable the layers' caching mechanism.
+    The default configuration sets the `--layers` option to *false*, which means that
+    Buildah will not keep intermediate layers, resulting in a build that squashes
+    all the changes in a single layer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: It is also possible to set the management of the layers with an environment
+    variable – for example, to enable layer caching, run `export BUILDAH_LAYERS=true`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Obviously, the downside of this option is that the retained layers actually
+    use storage space on the system host, but on the other hand, we can save computational
+    power if we need to rebuild a given image, changing only the latest layers and
+    without rebuilding the whole image!
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we explored a fundamental topic of container management – their
+    creation. This step is mandatory if we want to customize, keep updated, and manage
+    our container infrastructure correctly. We learned that Podman is often partnered
+    with another tool called Buildah that can help us in the process of container
+    image building. This tool has a lot of options, like Podman, and shares a lot
+    of them with it (storage included!). Finally, we went through the different strategies
+    that Buildah offers us to build new container images, and one of them is actually
+    inherited by the Docker ecosystem – the Dockerfile.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This chapter is only an introduction to the topic of container image building;
+    we will discover more advanced techniques in the next chapter!
+  prefs: []
+  type: TYPE_NORMAL
+- en: Further reading
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Buildah project tutorials: [https://github.com/containers/buildah/tree/main/docs/tutorials](https://github.com/containers/buildah/tree/main/docs/tutorials)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'How to use Podman inside of a container: [https://www.redhat.com/sysadmin/podman-inside-container](https://www.redhat.com/sysadmin/podman-inside-container)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'How to build tiny container images: [https://www.redhat.com/sysadmin/tiny-containers](https://www.redhat.com/sysadmin/tiny-containers)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

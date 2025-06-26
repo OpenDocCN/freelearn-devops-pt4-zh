@@ -1,0 +1,682 @@
+- en: Troubleshooting
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Ceph is largely autonomous in taking care of itself and recovering from failure
+    scenarios, but in some cases human intervention is required. This chapter will
+    look at common errors and failure scenarios and how to bring Ceph back to working
+    order by troubleshooting them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter we will cover the following topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: How to correctly repair inconsistent objects
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: How to solve problems with the help of peering
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: How to deal with `near_full` and `too_full` OSDs
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: How to investigate errors via Ceph logging
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: How to investigate poor performance
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: How to investigate PGs in a down state
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Repairing inconsistent objects
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: With BlueStore, all data is checksumed by default, so the steps in this section
+    to safely determine the correct copy of the object no longer apply.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We will now see how we can correctly repair inconsistent objects:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To be able to recreate an inconsistent scenario, create an RBD, and later we''ll
+    make a filesystem on it:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/07131b2d-a45a-446f-b60a-e029ac54549d.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Check to see which objects have been created by formatting the RBD with a filesystem:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/7473fca0-98dc-42ca-b93c-651d0ba4b467.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Pick one object at random and use the `osd map` command to find out which PG
+    the object is stored in:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/0b42bd82-9f14-4bc1-9327-194ba0dadd0c.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Find this object on the disk on one of the OSD nodes; in this case, it is `OSD.0`
+    on `OSD1`:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/d3c6ed04-34c8-48ca-8728-6ea21a10cc01.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Corrupt it by echoing garbage over the top of it:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/649ee1fe-2df4-4335-8864-7a2463d82dec.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Tell Ceph to do a scrub on the PG that contains the object we corrupted:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/88baf197-08c4-4eff-8fda-3494cb3b8983.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'If you check the Ceph status, you will see that Ceph has detected the corrupted
+    object and marked the PG as inconsistent. From this point onward, forget that
+    we corrupted the object manually and work through the process as if it were for
+    real:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/7cee2fad-1997-4a02-a5cd-a53fc520565c.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: By looking at the detailed health report, we can find the PG that contains the
+    corrupted object. We could just tell Ceph to repair the PG now; however, if the
+    primary OSD is the one that holds the corrupted object, it will overwrite the
+    remaining good copies. This would be bad, so in order to make sure this doesn't
+    happen, before running the `repair` command, we will confirm which OSD holds the
+    corrupt object.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/03111330-f1b8-4f31-92c6-fd6cb77f37e3.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: By looking at the health report, we can see the three OSDs that hold a copy
+    of the object; the first OSD is the primary.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Log onto the primary OSD node and open the log file for the primary OSD. You
+    should be able to find the log entry that indicates what object was flagged by
+    the PG scrub.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Navigate through the PG structure, find the object mentioned in the log file,
+    and calculate a `md5sum` of each copy:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/498fda62-7f79-4431-8771-1f64691af145.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: '`md5sum` of object on `osd` node one.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/e1633c2f-2f8c-4009-a610-75059eb6a8cc.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: '`md5sum` of object on `osd` node two.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/e4ccb034-e57a-4107-acf2-e93029fa69c2.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: '`md5sum` of object on `osd` node three.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We can see that the object on `OSD.0` has a different `md5sum`, and so we know
+    that it is the corrupt object.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Although we already know which copy of the object was corrupted as we manually
+    corrupted the object on `OSD.0`, let''s pretend we hadn''t done it, and that this
+    corruption was caused by some random cosmic ray. We now have the `md5sum` of the
+    three replica copies and can clearly see that the copy on `OSD.0` is wrong. This
+    is a big reason why a 2x replication scheme is bad; if a PG becomes inconsistent,
+    you can''t figure out which one is the bad one. As the primary OSD for this PG
+    is 2, as can be seen in both the Ceph health details and the Ceph `OSD map` commands,
+    we can safely run the `ceph pg repair` command without the fear of copying the
+    bad object over the top of the remaining good copies:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/a17d3536-836b-47bb-8cb4-b9c5c63fa0b6.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'We can see that the inconsistent PG has repaired itself:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/cc5c798c-1389-4ab6-b0f4-1c80d33d4cbc.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'In the event that the copy is corrupt on the primary OSD, then the following
+    steps should be taken:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Stop the primary OSD.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Delete the object from the PG directory.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Restart the OSD.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Instruct Ceph to repair the PG.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Full OSDs
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: By default, Ceph will warn us when OSD utilization approaches 85%, and it will
+    stop writing I/O to the OSD when it reaches 95%. If, for some reason, the OSD
+    completely fills up to 100%, the OSD is likely to crash and will refuse to come
+    back online. An OSD that is above the 85% warning level will also refuse to participate
+    in backfilling, so the recovery of the cluster may be impacted when OSDs are in
+    a near-full state.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Before covering the troubleshooting steps around full OSDs, it is highly recommended
+    that you monitor the capacity utilization of your OSDs, as described in [Chapter
+    8](e1176b5d-603f-424a-83db-023605c29083.xhtml), *Monitoring Ceph*. This will give
+    you advanced warning as OSDs approach the `near_full` warning threshold.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If you find yourself in a situation where your cluster is above the near-full
+    warning state, you have two options:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Add some more OSDs
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Delete some data
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: However, in the real world, both of these are either impossible or will take
+    time, in which case the situation can deteriorate. If the OSD is only at the `near_full`
+    threshold, you can probably get things back on track by checking whether your
+    OSD utilization is balanced, and then perform PG balancing if not. This was covered
+    in more detail in [Chapter 9](5c0bf2de-c75e-4aa7-b3d9-8a1e038e3735.xhtml), *Tuning
+    Ceph*. The same applies to the `too_full` OSDs as; although you are unlikely going
+    to get them back below 85%, at least you can resume write operations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If your OSDs have completely filled up, they are in an offline state and will
+    refuse to start. Now you have an additional problem. If the OSDs will not start,
+    no matter what rebalancing or deletion of data you carry out, it will not be reflected
+    on the full OSDs as they are offline. The only way to recover from this situation
+    is to manually delete some PGs from the disk's filesystem to let the OSD start.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following steps should be undertaken for this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Make sure the OSD process is not running.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Set `nobackfill` on the cluster, to stop the recovery from happening when the
+    OSD comes back online.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Find a PG that is in an active, clean, and remapped state and exists on the
+    offline OSD.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Delete this PG from the offline OSD using ceph-objectstore-tool.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Restart the OSD.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Delete data from the Ceph cluster or rebalance the PGs.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Remove `nobackfill`.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Run a scrub and repair the PG you just deleted.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Ceph logging
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'When investigating errors, it is very handy to be able to look through the
+    Ceph log files to get a better idea of what is going on. By default, the logging
+    levels are set so that only the important events are logged. During troubleshooting,
+    the logging levels may need to be increased in order to reveal the cause of the
+    error. To increase the logging level, you can either edit `ceph.conf`, add the
+    new logging level, and then restart the component, or, if you don''t wish to restart
+    the Ceph daemons, you can inject the new configuration parameter into the live
+    running daemon. To inject parameters, use the `ceph tell` command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: Then, set the logging level for the OSD log on `osd.0` to `0/5`. The number
+    `0` is the disk logging level, and the number `5` is the in-memory logging level.
+  prefs: []
+  type: TYPE_NORMAL
+- en: At a logging level of `20`, the logs are extremely verbose and will grow quickly.
+    Do not keep high-verbosity logging enabled for too long. Higher logging levels
+    will also have an impact on performance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Slow performance
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Slow performance is defined as when the cluster is actively processing I/O requests,
+    but it appears to be operating at a lower performance level than what is expected.
+    Generally, slow performance is caused by a component of your Ceph cluster reaching
+    saturation and becoming a bottleneck. This maybe due to an increased number of
+    client requests or a component failure that is causing Ceph to perform recovery.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Causes
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Although there are many things that may cause Ceph to experience slow performance,
+    here are some of the most likely causes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Increased client workload
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Sometimes, slow performance may not be due to an underlying fault; it may just
+    be that the number and type of client requests may have exceeded the capability
+    of the hardware. Whether this is due to a number of separate workloads all running
+    at the same time, or just a slow general increase over a period of time, if you
+    are capturing the number of client requests across your cluster, this should be
+    easy to trend. If the increased workload looks like it's permanent, the only solution
+    is to add some additional hardware.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Down OSDs
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: If a significant number of OSDs are marked as down in a cluster, perhaps due
+    to a whole OSD node going offline – although recovery will not start until the
+    OSDs are marked out – the performance will be affected, as the number of IOPs
+    available to service the client IO will now be lower. Your monitoring solution
+    should alert you if this is happening and allow you to take action.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Recovery and backfilling
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: When an OSD is marked out, the affected PGs will re-peer with new OSDs and start
+    the process of recovering and backfilling data across the cluster. This process
+    can put a strain on the disks in a Ceph cluster and lead to higher latencies for
+    client requests. There are several tuning options that can reduce the impact of
+    backfilling by reducing the rate and priority. These should be evaluated against
+    the impact of slower recovery from failed disks, which may reduce the durability
+    of the cluster.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Scrubbing
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: When Ceph performs deep scrubbing to check your data for any inconsistencies,
+    it has to read all the objects from the OSD; this can be a very IO-intensive task,
+    and on large drives, the process can take a long time. Scrubbing is vital to protect
+    against data loss and therefore should not be disabled. Various tuning options
+    were discussed in Chapter 9, *Tuning Ceph*, regarding setting windows for scrubbing
+    and its priority. By tweaking these settings, a lot of the performance impact
+    on client workloads from scrubbing can be avoided.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Snaptrimming
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: When you remove a snapshot, Ceph has to delete all the objects that have been
+    created due to the copy-on-write nature of the snapshot process. From Ceph 10.2.8
+    onward, there is an improved OSD setting called `osd_snap_trim_sleep`, which makes
+    Ceph wait for the specified number of settings between the trimming of each snapshot
+    object. This ensures that the backing object store does not become overloaded.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Although this setting was available in previous jewel releases, its behavior
+    was not the same and should not be used.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Hardware or driver issues
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: If you have recently introduced new hardware into your Ceph cluster and, after
+    backfilling has rebalanced your data, you start experiencing slow performance,
+    check for firmware or driver updates relating to your hardware, as newer drivers
+    may require a newer kernel. If you have only introduced a small amount of hardware,
+    you can temporarily mark the OSDs out on it without going below your pool's `min_size`;
+    this can be a good way to rule out hardware issues.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Monitoring
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This is where the monitoring you configured in Chapter 8, *Tiering with Ceph,*
+    can really come in handy, as it will allow you to compare long-term trends with
+    current metric readings and see whether there are any clear anomalies.
+  prefs: []
+  type: TYPE_NORMAL
+- en: It is recommended you first look at the disk performance as, in most cases of
+    poor performance, the underlying disks are normally the components that become
+    the bottleneck.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you do not have monitoring configured or wish to manually drill deeper into
+    the performance metrics, there are a number of tools you can use to accomplish
+    this.
+  prefs: []
+  type: TYPE_NORMAL
+- en: iostat
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '`iostat` can be used to get a running overview of the performance and latency
+    of all the disks running in your OSD nodes. Run `iostat` with the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You will get a display similar to this, which will refresh once a second:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/4e342165-b756-45b0-b46d-77d9cd040e68.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: As a rule of thumb, if a large number of your disks are showing a high `%` util
+    over a period of time, it is likely that your disks are being saturated. It may
+    also be worth looking at the `r_await` time to see whether read requests are taking
+    longer than what is expected for the type of disk in your OSD nodes. As mentioned
+    earlier, if you find that high disk utilization is the cause of slow performance
+    and the triggering factor is unlikely to dissipate soon, extra disks are the only
+    solution.
+  prefs: []
+  type: TYPE_NORMAL
+- en: htop
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Like the standard top utility, `htop` provides a live view of the CPU and the
+    memory consumption of the host. However, it also produces a more intuitive display
+    that may make judging overall system-resource use easier, especially with the
+    rapidly-changing resource usage of Ceph:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/0f53b1ff-e4ce-4d2f-a58d-6f82e4202196.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: atop
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: atop is another useful tool. It captures performance metrics for CPU, RAM, disk,
+    network, and can present this all in one view; this makes it very easy to get
+    a complete overview of the system resource usage.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Diagnostics
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'There are a number of internal Ceph tools that can be used to help diagnose
+    slow performance. The most useful command for investigating slow performance is
+    dumping current inflight operations, which can be done with the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This will dump all current operations for the specified OSD and break down
+    all the various timings for each step of the operation. Here is an example of
+    an inflight IO:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/1e43402e-9b97-44e2-b365-76ae84c5b8b6.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: From the previous example IO, we can see all the stages that are logged for
+    each operation; it is clear that this operation is running without any performance
+    problems. However, in the event of slow performance, you may see a large delay
+    between two steps, and directing your investigation into this area may lead you
+    to the root cause.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Extremely slow performance or no IO
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: If your cluster is performing really slowly, to the point that it is barely
+    servicing IO requests, there is probably an underlying fault or configuration
+    issue. These slow requests will likely be highlighted on the Ceph status display
+    with a counter for how long the request has been blocked. There are a number of
+    things to check in this case.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Flapping OSDs
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Check `ceph.log` on the monitors, and see whether it looks like any OSDs are
+    flapping up and down. When an OSD joins a cluster, its PGs begin peering. During
+    this peering process, IO is temporarily halted, so in the event of a number of
+    OSDs flapping, the client IO can be severely impacted. If there is evidence of
+    flapping OSDs, the next step is to go through the logs for the OSDs that are flapping,
+    and see whether there are any clues as to what is causing them to flap. Flapping
+    OSDs can be tough to track down as there can be several different causes, and
+    the problem can be widespread.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Jumbo frames
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Check that a network change hasn't caused problems with jumbo frames if in use.
+    If jumbo frames are not working correctly, smaller packets will most likely be
+    successfully getting through to other OSDs and MONs, but larger packets will be
+    dropped. This will result in OSDs that appear to be half-functioning, and it can
+    be very difficult to find an obvious cause. If something odd seems to be happening,
+    always check that jumbo frames are being allowed across your network using ping.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Failing disks
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: As Ceph stripes data across all disks in the cluster, a single disk, which is
+    in the process of failing but has not yet completely failed, may start to cause
+    slow or blocked IO across the cluster. Often, this will be caused by a disk that
+    is suffering from a large number of read errors, but it is not severe enough for
+    the disk to completely fail. Normally, a disk will only reallocate sectors when
+    a bad sector is written to. Monitoring the SMART stats from the disks will normally
+    pick up conditions such as these and allow you to take action.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Slow OSDs
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Sometimes an OSD may start performing very poorly for no apparent reason. If
+    there is nothing obvious being revealed by your monitoring tools, consult `ceph.log`
+    and the Ceph health detail output. You can also run Ceph `osd perf`, which will
+    list all the commit and apply latencies of all your OSDs and may also help you
+    identify a problematic OSD.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If there is a common pattern of OSDs referenced in the slow requests, there
+    is a good chance that the mentioned OSD is the cause of the problems. It is probably
+    worth restarting the OSD in case that resolves the issue; if the OSD is still
+    problematic, it would be advisable to mark it out and then replace the OSD.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Out of capacity
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: If your Ceph cluster fills up past 95%, the OSDs will stop accepting IO. The
+    only way to recover from this situation is to delete some data to reduce the utilization
+    on each OSD. If an OSD will not start or you are unable to delete data, you can
+    adjust the full threshold with the `mon_osd_full_ratio` variable. This will hopefully
+    buy you enough time to remove some data and get the cluster into a usable state.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Investigating PGs in a down state
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'A PG in a down state will not service any client operations, and any object
+    contained within the PG will be unavailable. This will cause slow requests to
+    build up across the cluster as clients try to access these objects. The most common
+    reason for a PG to be in a down state is when a number of OSDs are offline, which
+    means that there are no valid copies of the PGs on any active OSDs. However, to
+    find out why a PG is down, you can run the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This will produce a large amount of output; the section we are interested in
+    shows the peering status. The example here was taken from a PG whose pool was
+    set to `min_size` `1` and had data written to it when only OSD `0` was up and
+    running. OSD `0` was then stopped and OSDs `1` and `2` were started:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/08cc15aa-68de-4a19-b672-bdacb54e86e0.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: We can see that the peering process is being blocked, as Ceph knows that the
+    PG has newer data written to OSD `0`. It has probed OSDs 1 and 2 for the data,
+    which means that it didn't find anything it needed. It wants to try to poll OSD
+    0, but it can't because the OSD is down, hence the `starting or marking this osd
+    lost may let us proceed` message appeared.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Large monitor databases
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Ceph monitors use `leveldb` to store all of the required monitor data for your
+    cluster. This includes things such as the monitor map, OSD map, and PG map, which
+    OSDs and clients pull from the monitors to be able to locate objects in the RADOS
+    cluster. One particular feature that you should be aware of is that during a period
+    where the health of the cluster doesn't equal `HEALTH_OK`, the monitors do not
+    discard any of the older cluster maps from its database. If the cluster is in
+    a degraded state for an extended period of time and/or the cluster has a large
+    number of OSDs, the monitor database can grow very large.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In normal operating conditions, the monitors are very lightweight on resource
+    consumption; because of this, it's quite common for smaller disk sizes to be used
+    for the monitors. In the scenario where a degraded condition continues for an
+    extended period, it's possible for the disk holding the monitor database to fill
+    up, which, if it occurs across all your monitor nodes, will take down the entire
+    cluster.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To guard against this behavior, it may be worth deploying your monitor nodes
+    using LVM so that, if the disks need to be expanded, it can be done a lot more
+    easily. When you get into this situation, adding disk space is the only solution,
+    until you can get the rest of your cluster into a `HEALTH_OK` state.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If your cluster is in a `HEALTH_OK` state, but the monitor database is still
+    large, you can compact it by running the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: However, this will only work if your cluster is in a `HEALTH_OK` state; the
+    cluster will not discard old cluster maps, which can be compacted, until it's
+    in a `HEALTH_OK` state.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, you learned how to deal with problems that Ceph is not able
+    to solve by itself. You now understand the necessary steps to troubleshoot a variety
+    of issues that, if left unhandled, could become bigger problems. Furthermore,
+    you have a good idea of the key areas to look at when your Ceph cluster is not
+    performing as expected. You should feel confident that you are in a good place
+    to handle Ceph-related issues whenever they appear.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next chapter, we will continue to look into troubleshooting processes
+    and will explore the situations where data loss has already happened.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Questions
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: What is the command to repair an inconsistent PG?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What command can you use to change the logging level on the fly?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Why might the monitor databases grow large over time?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What is the command to query a PG?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Why might scrubbing have a performance impact on a Ceph cluster?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL

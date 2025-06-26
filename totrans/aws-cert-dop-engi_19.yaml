@@ -1,0 +1,1019 @@
+- en: 'Chapter 16: Various Logs Generated (VPC Flow Logs, Load Balancer Logs, CloudTrail
+    Logs)'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Logs are a river of information, and they flow from various sources. The logs
+    that come from the Load Balancer can be a valuable source of data or a resource
+    for troubleshooting. Knowing how to enable these resources can be vital when setting
+    up or running your environment. Any action taken in the AWS environment, either
+    via the AWS Management Console, the CLI, or an SDK, is recorded via the underlying
+    API call to CloudTrail. As a DevOps engineer, it's essential to know who and what
+    is making changes to your environment and be able to retrieve that data, especially
+    when requested.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we''re going to cover the following main topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The power of AWS CloudTrail
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Enabling Elastic Load Balancer logs
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using VPC Flow Logs
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Cleaning up the resources
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Previous logs discussed
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: So far, we have mainly been discussing logs that are generated from the application
+    itself. Also included in some of those earlier exercises with CloudWatch Logs
+    were some logs that AWS gives us as wrappers around those logs; however, these
+    are still, for the most part, just application and AWS service logs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When we want to understand how users are interacting with our environment, be
+    it our network environment or how they are adding and removing resources within
+    our account, then we would not be able to find that information in the application
+    logs. Instead, we must look at some of the other logs available in AWS.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Knowing which logs to use for which purpose can also help us when it comes to
+    other services to protect our environment, such as **GuardDuty**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: We will discuss GuardDuty in [*Chapter 22*](B17405_22_Final_JM_ePub.xhtml#_idTextAnchor486),
+    *Other Policy and Standards Services to Know About*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we've looked at where we have been and where we are going, let's start
+    with our first set of logs – CloudTrail logs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The power of AWS CloudTrail
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '**CloudTrail** enables governance, compliance, risk auditing, and operational
+    auditing with either your AWS account or multiple accounts using AWS organizations.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In AWS, every action is performed by an API call. This is true if you are using
+    the AWS Management Console, the Amazon CLI, or any of the available SDKs. All
+    of these use API calls to perform the necessary actions, then those API actions
+    are recorded by the CloudTrail service if it has been turned on:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 16.1 – The flow of actions to logs via the CloudTrail service'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/Figure_16.1_B17405.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 16.1 – The flow of actions to logs via the CloudTrail service
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'These include recording calls to start and stop EC2 instances, uploading and
+    deleting objects from S3, adding or removing security groups from a VPC, adding
+    or dropping indexing from a DynamoDB table, and many more. When an activity occurs
+    within your account, CloudTrail will capture and record that activity as a CloudTrail
+    event. This CloudTrail event contains the following details:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Who performed the request
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The date and time that the request was made
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The source IP of the request
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: How the request was made
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: What action is being performed
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The region the action is being conducted in
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The response to the request
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: It's also important to note that CloudTrail logs are not pushed in real-time
+    to the S3 bucket that they are stored in. Instead, the CloudTrail service publishes
+    updated log files every 5 minutes with a batch of events it has collected.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When it comes to securing the CloudTrail logs themselves, by default, the service
+    encrypts the files, which it stores in Amazon S3 with **S3 server-side encryption**
+    (**SSE**). You also have the option to create an encryption key using the **KMS**
+    service and encrypt the CloudTrail logs with that key.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The CloudTrail service offers several benefits. The first is that it records
+    user and resource activity. Using these recordings, you can identify who did what
+    and when they performed an action on a resource in your AWS account. Secondly,
+    since event logs are automatically stored and recorded, compliance reporting becomes
+    much more manageable. Third, you gain the ability to monitor, alarm, and react
+    to the events that are happening by sending the CloudTrail events to CloudWatch
+    Logs. The fourth and final benefit that we will mention here is the ability to
+    search through the logs using the CloudWatch service using a SQL-like syntax.
+    This enables you to perform powerful queries on the large amounts of data that
+    CloudTrail produces.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we know about the CloudTrail service, we will set up CloudTrail in
+    our account.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Setting up CloudTrail
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: We are going to set up CloudTrail before we look at the logs that CloudTrail
+    has recorded. We're doing this so that as we perform other exercises in this chapter,
+    we are sure that the CloudTrail service is on and recording our actions. This
+    will also ensure that we have a comprehensive set of recordings to search through
+    when we perform the CloudTrail exercise later.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Amazon has updated the default way that it creates CloudTrail trails so that
+    all the regions are included when it''s initialized. In this section, we want
+    to create a trail that will be specific to the region that we are working in.
+    This is still possible, but only if we use the AWS CLI:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Open your terminal so that you have access to the AWS CLI. First, we will need
+    to create an S3 bucket so that our CloudTrail logs can be captured and placed.
+    Use the following *example* command, remembering that each S3 bucket name is unique
+    and that you will need to create your own S3 bucket:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'For the CloudTrail service to be able to put logs into the S3 bucket, we need
+    to attach a bucket policy to our bucket. Cut and paste the following bucket policy
+    into a local file (where you are performing your terminal commands) called `cloudtrail_s3.json`.
+    Look for the two instances of the word `BucketName`; you will need to replace
+    those with the name of the bucket that you created in the previous step. A copy
+    of this file can be downloaded from the `Chapter-16` folder of this book''s GitHub
+    repository:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Once you have created the policy file, you can attach it to your bucket using
+    the following command. Be sure to change your bucket name so that the policy attaches
+    to your bucket:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'With our S3 bucket attached, we can create our single-region trail. Use the
+    following command to create your trail, remembering to switch out the name of
+    the S3 bucket in the command for the bucket that you created in *step 1* of this
+    exercise. Note how we named our trail `sixteen`. We will be referencing this trail
+    name later in this chapter:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'If the trail was created successfully, then you should see JSON returned, similar
+    to the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now, it''s time to start the trail. Just because we created the trail doesn''t
+    make it automatically start recording events. Use the following command to start
+    the trail so that it captures all the API calls in the region:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Next, to stream our logs to CloudWatch Logs (so that we can search for them
+    later), we will need to log into the AWS Management Console and make a quick edit
+    to our trail. After logging into the console, navigate to the CloudTrail service.
+    When you are brought to the CloudTrail dashboard, you should see the trail that
+    we created named **sixteen**. Click on this trail's name:![Figure 16.2 – The sixteen
+    CloudTrail trail on the Dashboard
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '](img/Figure_16.2_B17405.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Figure 16.2 – The sixteen CloudTrail trail on the dashboard
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: When you are in the sixteen cloud trail, you should see a section named **CloudTrail
+    logs**. Click the button to the right of the section labeled **Edit**.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: On the `CloudTrailRole-sixteen`. Then, click the orange **Save changes** button
+    at the bottom of the screen.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Now that we have set up the CloudTrail service to record the API actions that
+    we will perform going forward, we will look at Elastic Load Balancer logs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Enabling Elastic Load Balancer logs
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The **Elastic Load Balancing** service lets you capture more data about your
+    environment. This can help with troubleshooting, especially regarding latency.
+    Elastic Load Balancer access logs can also let you see the path that a user or
+    service took from an originating address to the destination service. Sometimes,
+    this information is not captured on application logs since the originating address
+    that is captured is the Elastic Load Balancer address. The Elastic Load Balancer
+    access logs include the following information:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The client's IP address
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Request paths taken
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The time and date that the request was received
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Server responses (in numerical format)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'We looked at how load balancing helps spread the load between both instances
+    and services when we examined in-depth services such as Elastic Beanstalk and
+    OpsWorks. At this point, we should also understand that Elastic Load Balancing
+    can be used to attach multiple instances and even instances that are part of an
+    auto-scaling group:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 16.3 – The flow of the access logs from an Elastic Load Balancer to
+    an S3 bucket'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/Figure_16.3_B17405.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 16.3 – The flow of the access logs from an Elastic Load Balancer to an
+    S3 bucket
+  prefs: []
+  type: TYPE_NORMAL
+- en: Once you have enabled access logs for your Elastic Load Balancer, there is no
+    additional charge for logging. There is a charge, however, for storing the logs
+    in S3\.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Setting up an Elastic Load Balancer and enabling logging
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In our first hands-on example for this chapter, we will use two cross-referenced
+    CloudFormation templates to stand up a VPC; the second template will stand up
+    an Elastic Load Balancer with two EC2 instances serving a simple website. The
+    child template will also create an S3 bucket for capturing our access logs. Once
+    we have stood up our test environment, we will need to go into the AWS Management
+    Console and turn on logging for our Elastic Load Balancer. Once logging has been
+    turned on, we can try to access the website a few times. Doing this should put
+    some records in our S3 bucket that we can access and analyze. The templates referenced
+    in this exercise are located in the `Chapter-16` directory of this book''s GitHub
+    repository. You should download all the templates before starting. Let''s get
+    started:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Log into **AWS Management Console** and navigate to the **CloudFormation** service.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Once you're on the **CloudFormation** page, if you are brought to the main CloudFormation
+    service page, then click on the orange **Create stack** button. Otherwise, if
+    you are brought to a listing of your current stacks, then click on the **Create
+    stack** button at the top right of the main window and choose the **With new resources
+    (standard)** option:![Figure 16.4 – The Create stack button from the stacks listing
+    page in CloudFormation
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '](img/Figure_16.4_B17405.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Figure 16.4 – The Create stack button from the stacks listing page in CloudFormation
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Whichever way you got here, we should now be on the `vpc.yaml` template to upload
+    it. Then, click the **Open** button in the dialog box. Once the file has been
+    uploaded, you can click the orange **Next** button.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: This will bring you to the `Chapter16-VPC` when naming your stack. This name
+    will be important as this stack will create some of the resources that will be
+    used by the next stack, and it will reference those resources by the name of the
+    stack. Once you have entered the name, click the orange **Next** button at the
+    bottom of the page.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: On the **Configure stack options** page, scroll down to the bottom and hit the
+    orange **Next** button.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: At this point, we will be on the `Chapter16-VPC` stack. Scroll down to the bottom
+    of the page and fill in the box under the **Capabilities** section, acknowledging
+    that this template will create an IAM role. After this, you can click the orange
+    **Create stack** button so that our initial stack can be initialized and created.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Clicking on the `Chapter16-VPC` stacks page of the CloudFormation service. Once
+    the stack has been created, go to **Outputs** via the horizontal menu. At this
+    point, you should see the six outputs that the VPC stack has created, including
+    the VPCid, two private subnets, and two public subnets:![Figure 16.5 – The outputs
+    from the initial stack creation
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '](img/Figure_16.5_B17405.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Figure 16.5 – The outputs from the initial stack creation
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: With our VPC template created and showing the outputs, we can move on to our
+    next template. This next template will set up the Load Balancer, along with two
+    EC2 instances running the Apache web server. Each server is running a static web
+    page, but you will know the difference if you are being directed to instance number
+    one or instance number two based on the page displayed.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Since we are already on the **CloudFormation** page of the **Outputs** section,
+    we can simply go to the top right-hand corner and click on the white **Create
+    stack** button. When the drop-down list appears, choose the **With new resources
+    (standard)** option.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Now, back on the `cross-stack-website.yaml` template to upload it. Once the
+    template has been uploaded, click on the orange **Next** button at the bottom
+    of the page.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: You should now be on the `Chapter16-Elastic Load Balancer`. Enter this value
+    in the **Stack name** box.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: You will also see a box for parameters. It should already be filled out with
+    `Chapter16-VPC`. You won't need to change this value if you named your previous
+    stack `Chapter16-VPC`. If you named it something other than this, then you will
+    need to provide the name here, as this is the value that drives all intake for
+    the outputs we saw earlier. Once you have filled in your values, click the orange
+    **Next** button at the bottom of the page:![Figure 16.6 – The Stack name and Parameters
+    fields on the Specify stack details page
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '](img/Figure_16.6_B17405.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Figure 16.6 – The Stack name and Parameters fields on the Specify stack details
+    page
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: At this point, you will be taken to the **Configure stack options** page. There
+    is nothing to configure on this page, so we will scroll down to the bottom of
+    the page and click the orange **Next** button.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Finally, we will be on the **Review stack** page. Briefly look over the options
+    you have chosen for your stack. If you don't see any errors, then click on the
+    orange **Create stack** button at the bottom of the page.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: It will take a few minutes for our stack to be created as it is creating the
+    two EC2 instances and installing the software and web page. It is also creating
+    a classic Load Balancer, registering those instances with that Load Balancer,
+    and performing the initial health checks.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Once the stack has completed, click on **Outputs** from the horizontal menu,
+    as we did with the previous stack. This time, you will find the URL of a key there
+    and the value of the public URL for the Elastic Load Balancer. Right-click on
+    the URL to open it in a new tab.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Now, click on the **Resources** menu item in the same horizontal menu where
+    you found **Outputs**. Click on the **Physical ID** link for the Elastic Load
+    Balancer so that you are taken directly to the Elastic Load Balancer's details
+    page:![Figure 16.7 – The resource listing of the ELB shown in CloudFormation
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '](img/Figure_16.7_B17405.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Figure 16.7 – The resource listing of the Elastic Load Balancer shown in CloudFormation
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Now, scroll down to the bottom half of the screen until you find the **Attributes**
+    heading. Under this heading, you will find the **Access logs** section. It should
+    have a value next to it that is currently set to **Disabled**. Click the gray
+    button labeled **Configure Access logs**.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'When the dialog box appears, you will need to fill in the following values:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Check the **Enable Access logs** box.
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Change the interval in which the logs are being pushed to **5 minutes**.
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Choose a name for a **NEW** S3 bucket where the Elastic Load Balancer access
+    logs can be stored.
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Check the box to have the S3 bucket created for you:'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![Figure 16.8 – Configure access logs'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/Figure_16.8_B17405.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 16.8 – Configure access logs
+  prefs: []
+  type: TYPE_NORMAL
+- en: Once you have filled out all the values, click on the blue **Save** button.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, with the logs turned on, it is time to go back to the browser tab that
+    you opened previously that contained the URL for the Elastic Load Balancer. Refresh
+    the page multiple times; if both servers came up healthy for the Elastic Load
+    Balancer, then you should see a mix of server one and server two appear on the
+    screen.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Once you have generated some traffic, we can start to navigate to the S3 bucket
+    that we created for our Elastic Load Balancer access log storage. However, remember
+    that the logs are only pushed once every 5 minutes, so you might need to be a
+    bit patient as you wait for the logs to appear.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: At this point, it's time to navigate to the S3 service and find the name of
+    the bucket you created to store your Elastic Load Balancer access logs. Click
+    the name of the bucket. You should see a *folder* named `AWSLogs` and then a *subfolder*
+    underneath that is numerically named based on an account number. In that account
+    folder, there should be further subfolders named `elasticloadbalancing` and then
+    subfolders based on region, year, month, and day. Finally, you will get to the
+    log files. Click on one of the log files, download it, and open it in Textpad
+    or Notepad.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: With that, we've learned how to enable logs and see the traffic patterns coming
+    from our Elastic Load Balancers. Don't take down this set of CloudFormation templates
+    just yet, however. We are going to use the VPC that we created here in the next
+    section to examine VPC Flow Logs. But first, let's look at the use cases for Elastic
+    Load Balancer logs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Use cases for Elastic Load Balancer logs
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'You may be wondering why you would be interested in turning on Elastic Load
+    Balancer logs when you could get information such as a client''s address from
+    your application''s log files? Let''s look at a few use cases in detail:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding the latency from requests – how long it takes to respond to a
+    request.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Monitoring access requests – where the requests are coming from and going to.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Measuring how efficient the operation is between the client and the resources
+    – are there any bottlenecks in the process that can be detected easily?
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Now that we understand when we would use Elastic Load Balancer logs, let's look
+    at VPC Flow Logs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using VPC Flow Logs
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Flow logs help you capture information regarding the IP traffic going in and
+    out of the network interfaces of your **Virtual Private Cloud** (**VPC**). Once
+    this data has been captured, it can be written to either an S3 bucket or pushed
+    out to a CloudWatch log group.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Once a flog log group has been created and has started writing logs, the logs
+    do not appear immediately. It can take up to 5 minutes for the logs to appear
+    in either the S3 bucket or the log group:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 16.9 – VPC Flow Logs traveling to and from different sources'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/Figure_16.9_B17405.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 16.9 – VPC Flow Logs traveling to and from different sources
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Flow logs can be created for network interfaces. These include the network
+    interface of a VPC itself or even other services that contain network interfaces,
+    such as the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Elastic Load Balancers
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Amazon RDS databases
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Amazon ElastiCache caches
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Amazon Redshift databases
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Amazon WorkSpaces
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Transit Gateway
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: NAT Gateway
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Now that we understand what VPC Flow Logs are and what they can be attached
+    to, let's see what kind of limitations they have before we set up the flow logs
+    on the VPC we stood up earlier.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Limitations regarding VPC Flow Logs
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Although VPC Flow Logs allow you to capture most traffic either coming from
+    or going to the different network interfaces in your **VPC**, there are cases
+    where this isn''t possible. Let''s take a quick look at those. In this case, if
+    one of these scenarios comes up either in the DevOps professional exam or in real
+    life, we know that flow logs would not be the optimal solution. An example of
+    this is when flow logs cannot be enabled for peered VPCs unless the VPCs have
+    been peered within the same account. Another thing to note is that Flow Logs do
+    not capture all IP traffic. There is specific traffic that is *dropped* and specifically
+    not captured by the flow log files:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Any traffic from instances trying to contact the Amazon DNS server.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Any traffic from a Windows instance for Amazon Windows license registration.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: All traffic to and from `169.254.169.254` for metadata information
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: All traffic to and from `169.254.169.123` for the Amazon Time Sync service
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Any DHCP traffic
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Any traffic to the VPC router that travels on a reserved IP address
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: All traffic between an endpoint network interface and a Network Load Balancer
+    interface
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Enabling VPC Flow Logs
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: As we mentioned previously in our previous hands-on exercise, we are going to
+    use the same **VPC** that we stood up in this hands-on exercise to capture the
+    VPC Flow Logs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'When you create a flow log, you need to specify the following items:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The AWS resource that you want to have
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: If you wish to capture accepted traffic, rejected traffic, or all the traffic
+    in the flow log
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Where you want the data to be published to (an S3 bucket or CloudWatch Logs)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Let''s get started:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Start by going to the **CloudWatch** service. On the left-hand menu, find **Logs**
+    and click on **Log groups**.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: At the top right, click on the orange **Create log group** button.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Create a log group called `FlowLogs`. You can change the retention settings
+    to allow the logs to expire after 7 days (1 week). Once you have updated these
+    settings, scroll to the bottom of the page and click the orange **Create** button.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Navigate back to the `Chapter16-VPC`. Click on this stack name to get to the
+    details of this stack.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Then, from the top horizontal menu of the stack, click on the **Resources**
+    menu item. Once the table of resources appears, scroll down until you find the
+    listing for the VPC (it might be near the bottom since it was one of the first
+    resources we created). Click on the blue **Physical ID** link for the VPC to be
+    taken to the VPC. (Make a note of the physical ID before you click it; remember
+    the last 4 alphanumeric characters of the VPC).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Once you are on the **Your VPCs** page, *check* the box to the right of the
+    name of the VPC. Once the box has been checked, click on the white button named
+    **Actions** at the top right of the screen. Once you've done this, a drop-down
+    menu should appear. Select the **Create flow log** menu item.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: At this point, you will be brought to the `All`
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '`1 minute`'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '`Send to CloudWatch Logs`'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '`FlowLogs`'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '`VpcFlowLogRole`)'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: After you have filled out all these settings, click the orange **Create flow
+    log** button.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Now, it's time to go back to your Elastic Load Balancer URL and send some traffic
+    to the websites that have been loaded on the EC2 instances. Doing this will generate
+    logs for the VPC Flow Logs. Once you have generated some traffic, go back to the
+    CloudWatch Log group called `FlowLogs` and look at the records that it generated.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: We just learned how to create a custom CloudWatch log group and turn on VPC
+    Flow Logs so that we could capture traffic from our VPC. Next, we will look at
+    some use cases when it makes sense to turn VPC Flow Logs on.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Use cases for VPC Flow Logs
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: With so many types of logs available, let's look at some clear use cases for
+    using VPC Flow Logs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using VPC Flow Logs to monitor remote logins
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Remotely logging in to instances on your cloud infrastructure should only be
+    done through authorized personnel, as well as trusted addresses. You can use VPC
+    Flow Logs to see what users and IP addresses are gaining access to or trying to
+    gain access to via protocols such as **Remote Desktop Protocol** (**RDP**) or
+    **Secure Shell Access** (**SSH**).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You can connect to AWS Mac instances using a **Virtual Network Connection**
+    (**VNC**) client; however, this type of connection is insecure. To make the connection
+    secure, you can wrap the connection in an SSH tunnel, as mentioned here: [https://aws.amazon.com/premiumsupport/knowledge-center/ec2-mac-instance-gui-access/](https://aws.amazon.com/premiumsupport/knowledge-center/ec2-mac-instance-gui-access/).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Detecting threats with VPC Flow Logs
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: If you choose to capture all events, both ingress and egress, with VPC Flow
+    Logs, then you can detect threats to your environment such as port scans being
+    performed on your network, network scans, someone trying to look for weakness
+    or entry points into your system, or data being pushed out to unauthorized sources.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you find that your system has been impacted by an event, then you can use
+    VPC Flow Logs to trace the path that the offender took through the network.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Diagnosing and troubleshooting network issues
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: With layered security, there will be times where you are trying to figure out
+    why access to a particular instance or service is not being allowed, which is
+    troublesome.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Gaining an understanding of your network traffic
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: You can use VPC Flow Logs to analyze how the users of your network and AWS account
+    are behaving and generate reports of any unsafe behavior that might be occurring.
+    This can include using unprotected ports or allowing access from the world, rather
+    than restricting access to origin assets to specific IP addresses and leaving
+    world access to content delivery servers such as CloudFront.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we've looked at the various use cases for VPC Flow Logs, we will turn
+    our attention to the initial logs that we looked at – CloudTrail logs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Going back to our CloudTrail logs
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Now that we have created some resources through the exercises we have performed
+    in the chapter, as well as several different API calls, we can go back to our
+    CloudTrail logs and see how they have been populated with events.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Searching through CloudTrail logs
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Since we have performed enough activities to generate CloudTrail logs at this
+    point, we will start to search through our logs to see what we have captured:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Navigate back to the **CloudWatch** service. From the left-hand menu, find **Logs**,
+    but this time click on the submenu named **Log Insights**.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: From the drop-down menu for selecting log groups, choose the **CloudTrail**
+    log group.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Place the following query in the query box and then press the orange **Run
+    query** button:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: You should see a graphic similar to the following:![Figure 16.10 – The CloudWatch
+    logs insights visualization graph
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '](img/Figure_16.10_B17405.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Figure 16.10 – The CloudWatch Logs insights visualization graph
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: You can try and see what other things you can find in your CloudTrail log if
+    you like.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: With that, we've learned how to query CloudTrail logs using CloudWatch Log Insights.
+    Now, let's clean up the resources we created before we summarize this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Cleaning up the resources
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: We created a lot of resources in this chapter that, if left up and running,
+    may leave you with a higher AWS bill than you may expect. After completing this
+    chapter, be sure to delete the CloudFormation templates that were used to create
+    the instances and Elastic Load Balancer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we looked at three different sources of logs that can provide
+    information for your AWS accounts that are not CloudTrail or application logs.
+    Initially, we learned how to set up a CloudTrail trail to record all the API calls
+    that happen inside of an account. Next, we looked at Elastic Load Balancer access
+    logs and how they record the IP addresses, time, and responses coming into an
+    Elastic Load Balancer. Finally, we looked at how VPC Flow Logs can capture network
+    traffic from a variety of network interfaces.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next chapter, we will wrap up our discussion on logging by going over
+    how enterprises complement the AWS services that capture logs. Then, we'll learn
+    how log storage and advance searching are handled.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Review questions
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: You are working as a DevOps engineer at a company that has implemented multiple
+    CI/CD pipelines. One pipeline is used to push out the application code and its
+    features. Another pipeline is used to update the underlying infrastructure and
+    security settings of the account. After the last set of security group updates
+    for the application, all the users at one of the company's remote offices can
+    no longer access the instances in the autoscaling group. These users can still
+    access the application from the web protocol via the Elastic Load Balancer. These
+    users contain members of multiple IAM groups, including developers, power users,
+    and even an administrator. Where can you go for information to try and find out
+    where the issue is occurring?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: a. Gather the IAM usernames that have been denied access. Use these usernames
+    to search through the IAM log group in CloudWatch.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: b. Make sure that VPC Flow Logs have been turned on. Search the VPC Flow Logs
+    for both the internal and external IP addresses for the remote office.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: c. Gather the IAM usernames that have been denied access. Go to the CloudTrail
+    service and search for the usernames to find denial.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: d. Turn on logging to the application's Elastic Load Balancer. Check the Elastic
+    Load Balancer logs for both the internal and external IP addresses for the remote
+    office.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: You have been brought into a company that is about to make a major production
+    push and release of their application. As part of this release, they are implementing
+    a new governing model that requires all activity on the AWS account to be monitored.
+    How can you quickly and effectively help the company achieve this goal?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: a. Set up the Amazon Inspector service to constantly inspect all of the activity
+    happening on the account.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: b. Turn on VPC Flow Logs for all the VPCs, making sure that you are capturing
+    both inbound and outbound traffic.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: c. Set up the AWS CloudTrail service to monitor and record all the activity
+    in all regions.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: d. Create a designated CloudWatch Logs log group so that any creation or termination
+    events can be filtered specifically to this log group.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Review answers
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: b
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: c
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL

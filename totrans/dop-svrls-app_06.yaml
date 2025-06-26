@@ -1,0 +1,674 @@
+- en: DevOps with Google Functions
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Google decided to launch its serverless platform as Cloud Functions, but it
+    is still in its maturing stage. At the time of writing this book, we can only
+    write Google Cloud Functions with Node.js. The functions can be triggered through
+    Google's internal event bus—Pub/Sub and through HTTP as mobile events from Firebase.
+    I am not going to delve much into what Google Functions does, because we have
+    already covered that in earlier chapters. So, in this chapter, we will be covering
+    how we apply DevOps to Google Functions and what are the best practices of deployment,
+    release management, monitoring, and logging. We will look into various examples
+    and a demo with a `gcloud` command line, Serverless Framework, and Jenkins. So,
+    let's jump in to DevOps.
+  prefs: []
+  type: TYPE_NORMAL
+- en: CI and CD pipelines with Google Functions
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: As Google currently allows coding only with JavaScript, we will be using Node.js
+    throughout this book, with examples and demos. Google terms its serverless functions
+    as Cloud Functions, so we will be using this term throughout this chapter. So,
+    Cloud Functions are to be written in JavaScript and executed in Node.js v6.11.5
+    (at the time of writing this book) and the cloud function source must be exported
+    in a Node.js module. The module will be loaded using a `require()` call. So, functions
+    are contained within an `index.js` file. We can invoke the function from HTTP
+    request methods such as `GET`, `POST`, `PUT`, `OPTIONS`, and `DELETE`. The deployment
+    can be done through a command-line tool provided by Google Cloud CLI, through
+    the cloud function UI on a GCP console, and can also be done through a serverless
+    framework. We will be looking into each way throughout this chapter. The deployable
+    is a ZIP file, which has functions packaged into it, and it is deployed on the
+    Google Cloud storage bucket. Functions source code can be directly put into Cloud
+    Functions as well, or we can reference it by uploading to the Google Cloud storage
+    bucket. Let's look at various way to deploy function and further automate it through
+    the Jenkins pipeline.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Prerequisites for Cloud Functions
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Let''s look at how to create and deploy a Cloud Function using the GCP console.
+    But before that prerequisite, we need to have access to the Google Function platform.
+    At the time of writing, Google provides a free GCP account with $300 credit for
+    a year to use for any product on the GCP. So let''s create one. Please follow
+    the given steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Go to the following link: [https://cloud.google.com/free/](https://cloud.google.com/free/).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Click on the TRY IT FREE button, which will be redirected to the Google account
+    page. If you already have a Google account, you can then use it or create a new
+    Google account.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Feed in the credentials and you will be redirected to the GCP home page.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: As the account is already created, let's create a GCP project. So go to the MANAGE
+    RESOURCES PAGE([https://console.cloud.google.com/cloud-resource-manager](https://console.cloud.google.com/cloud-resource-manager)).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: We will now create a project, so let's click on Create Project, enter the project
+    name as `My Serverless Project` and click on Create. You will see that the project
+    is getting created in the notification bell image on the top right-hand side of
+    the page. Once it has stopped, refresh the page and you will see the project in
+    the list.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Now enable the cloud API for the project by opening the link: [https://console.cloud.google.com/flows/enableapiapiid=cloudfunctions&redirect=https://cloud.google.com/functions/quickstart](https://console.cloud.google.com/flows/enableapi?apiid=cloudfunctions&redirect=https://cloud.google.com/functions/quickstart).
+    The page will have a drop-down list for projects. Select My Serverless Project
+    and click on Continue; then API will be enabled for the project.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'We will now install and configure the Google Cloud SDK. The following link
+    will guide you through this: [https://cloud.google.com/sdk/docs/](https://cloud.google.com/sdk/docs/).
+    While doing the `gcloud init`, you will be prompted to select the project. Select
+    the project My Serverless Project which we created, and we will be authenticated
+    with GCP as well.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Set up the Node.js environment.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Cloud Functions through the GCP console
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'We will now create a cloud function through the GCP console:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Go to the Cloud Functions overview page in the GCP console, select the project
+    from the drop-down list for which the function is attached.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Click on Create Function.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Name the function as `my-serverless-function`.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Select the trigger as an HTTP trigger.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Let''s use the default code, so it should be checked by an inline editor. The
+    text area will have two scripts, one is `index.js` and the other is `package.json`.
+    This is a simple `helloworld` function provided by Google Functions. The function
+    logs a message which you provide in a later step. When you finish the steps you
+    will see something similar to the following screenshot:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/b7c56459-ac0a-4339-932f-35351b4a5b05.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Click on the Create button. Now the function will be deployed and the GCP console
+    redirects to the Overview page. While the function is being deployed, the icon
+    next to it is a small spinner. After deployment is complete, the spinner turns
+    to a green check mark.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'We will test the function. Click on the three vertical dots on the right-hand
+    side of the page for the particular function and click on the Test function:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/725e0903-84b5-468d-b09c-e13add91db1d.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'We will be redirected to a function test page. In the Triggered Event field,
+    replace the text with `{"message":"Hello World!"}` and click on Test function.
+    In the Output field we should see the Success: Hello World!. and in the Logs field
+    the status code 200 will indicate that the function ran successfully. We can see
+    detailed logs by clicking on the arrow for each log.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'We can see the logs history by click on VIEW LOGS on top right. So, this is
+    how we create and deploy the function through the GCP console and also view the
+    function logs and their history:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/49b170dc-c885-47cb-9b63-168d19285b4f.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Cloud Function using a gcloud command line
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In this part of this chapter, we will be deploying the `helloworld` application
+    through the `gcloud` command line. First, we need to have created a GCP project
+    through the Manage resources page, enabled the Cloud Function API as a prerequisite,
+    and, most importantly, to have installed the `gcloud` SDK locally:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s update the `gcloud` components. Go to your Command Prompt and add the
+    following command. You will be prompted to install components using the `gcloud beta` commands.
+    Go ahead and install them. The `gcloud` selected components will be installed
+    and configured locally:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: We can follow the deployment steps with Google Cloud Shell ([https://console.cloud.google.com/?cloudshell=true](https://console.cloud.google.com/?cloudshell=true))
+    as well. Google Cloud Shell is a command-line environment with `gcloud` SDK on
+    the GCP console.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s create a function for this. We need to create a directory where our
+    function will reside:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Let''s create a file `index.js` in the `helloServerless` directory with the
+    following content:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We will deploy the function using the following command. It will deploy the
+    function into the GCP. The `--trigger-http`is the trigger we need to be specified.
+    While deploying with the trigger, the function will be assigned an endpoint which
+    can viewed by using the `describe` command. There are various different triggers
+    which can be used for deployment:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Once the function has successfully deployed, we can execute the function through
+    the URL property from the deployment output, or we can get the URL through the
+    following command:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Copy, paste, and run the URL on any browser and then we should be able to see
+    the following message:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: So, you can see how easy it is to deploy the function through `gcloud` on the
+    GCP. But how do we make sure we unit test it, integrate test, and finally automate
+    the deployment? That is what we are going to cover further on in the chapter.
+    But we can do most of this locally by setting up a development environment.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Building and testing locally
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'As the Cloud Functions run on a `Node.js` environment, we can build and test
+    our application locally just using a `Node.js` emulator with development tools.
+    The emulator is an open source and code is hosted on the GitHub. Let''s look at
+    how to use it:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Install the emulator through npm or Yarn; you need to make sure you have `Node.js`
+    installed on your machine:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Let''s start the emulator. This command will start the emulator and wait for
+    the prompt:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Deploy the function locally; so go into a folder before the function folder
+    and run the following command:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Open the URL mentioned in the output in the browser. You should see the message
+    `Hello My Serverless World!` ; or execute it through the command line:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Also, you can see the following logs:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: More details for the emulator can be found in the link below. We can integrate
+    the emulator with the our favorite development tools and debug the Google Functions: [https://github.com/GoogleCloudPlatform/cloud-functions-emulator](https://github.com/GoogleCloudPlatform/cloud-functions-emulator).
+    For debugging Cloud Functions:[https://github.com/GoogleCloudPlatform/cloud-functions-emulator/wiki/Debugging-functions](https://github.com/GoogleCloudPlatform/cloud-functions-emulator/wiki/Debugging-functions).
+  prefs: []
+  type: TYPE_NORMAL
+- en: CI and CD with testing
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Until now, we have just created a function and come up with a couple of ways
+    to build and deploy. We have also learned how to run the function locally through
+    emulator. But we cannot manually build and deploy every function each time, and
+    we should also be versioning the code. We will looking into all those aspects
+    within this part of the chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Source code management
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '**Source code management** is a very important part of software development.
+    It is always best to version and tag the code. Git is the most popular source
+    code management tool, and we have been using it throughout this chapter. So, for
+    a perfect deployment cycle, we should always create different branches. These
+    are feature branch, develop branch, release branch, and then we have the default
+    master branch. I have already covered best practice around this in earlier chapters,
+    so I won''t talk here about the structuring of branches and how code flow across
+    branches is managed. However, it is important to about the folder structure to
+    be followed for Cloud Functions. In earlier chapters, we wrote function in `index.js`.
+    If functions are limited then they can easily be managed within `index.js`. But
+    if we have hundreds of functions then managing them within one file becomes really
+    tedious and painful. So, one simple way to structure the functions would be as
+    follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: There are many ways to structure it, but I have kept it simple. However, I would
+    let the developer decide over the structure.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Continuous integration and testing
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Continuous integration and testing are other important aspects of the development
+    cycle. Continuous integration clubs the codes together, and testing will make
+    sure that the code which goes into production is bug free, and that most of the
+    issues are mitigated in a lower environment. There are many different way of testing:
+    unit testing, integration testing and system testing. We will be integrating this
+    testing in an automated pipeline in the example. I will be using the examples
+    provided by Google Cloud with a simple `hello world` function, and running them
+    in an automated way, and then putting them into a pipeline for single-touch deployment.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'I have created a `HelloWorld` function referencing from Google''s existing
+    example repository. I have put them on my local repository, which we will be using
+    for setting continuous integration and testing. I have also created a Dockerfile,
+    which will help us to create a docker container for Jenkins, pre-installed `gcloud`,
+    Node.js and the functions emulator which we will be using to set up our DevOps
+    automation:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Git clone the Git repository mentioned as follows. We are cloning this locally
+    to get the Dockerfile, and you can play around with it by making changes to the
+    script and testing the deployment:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: We will build a Docker image locally and then start a Jenkins portal to enable
+    us to set up the automation. You need to make sure Docker is installed on your
+    local machine for this example.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'We move to the Dockerfile directory:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We create a Docker image with Jenkins, `gcloud`, a function emulator, Node.js
+    and all other required libraries:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here, run the Docker container with the image  created in the previous line.
+    The Docker container will be hosted locally with port `8080` and `50000` exposed.
+    We will also map the volume with a local host directory:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: Once the container is running, we will browse the Jenkins portal through `http://localhost:8080`.
+    If you are creating this container for the first time without mapped volume, you
+    will be asked to copy and paste the password and install a default plugin.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Log in to the Jenkins portal using the credentials you had created earlier,
+    or you already had. Then click on New Item.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Enter the item name as `my-serverless-google-functions`, select the freestyle
+    project and then click on OK.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Go to the tab Source Code Management and select Git, then copy and paste the
+    repository mentioned below into the Repository URL textbox and leave the rest
+    as default: [https://github.com/shzshi/google-functions-helloworld.git](https://github.com/shzshi/google-functions-helloworld.git)[.](https://github.com/shzshi/google-functions-helloworld.git)'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'We need to create a Google service account for `gcloud` within Jenkins to authenticate
+    with GCP:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Go to the OPEN THE LIST OF CREDENTIALS ([https://console.cloud.google.com/apis/credentials?_ga=2.77044693.-1734735492.1524930885](https://console.cloud.google.com/apis/credentials?_ga=2.77044693.-1734735492.1524930885))
+    page
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Click on Create Credentials
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Select the Service Account Key
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Click on the drop-down for Service accountand select New Service Account
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Enter a name for the service account in Name
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Use the default Service account ID or generate a different one
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Select the Key type: JSON'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Click Create, the Service account created window is displayed, and the private
+    key for the Key type you selected is downloaded automatically to our local machine
+    which we will be using further.
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Click Close
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: You need to fork your repository and copy the content of the `gcloud` service
+    account key JSON file into the file `My-Serverless-Project-1d8bacd4886d.json`,because
+    we will be using this JSON file in Jenkins to authenticate: [https://github.com/shzshi/google-functions-helloworld.git](https://github.com/shzshi/google-functions-helloworld.git).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Go to the Build tab, and from the drop-down menu''s Add build stepselect Execute
+    Shell and then add the following steps into the Command text area:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We need to parameterize the job, which means that we need to add two text parameters,
+    one for the `gcloud` project id and another for the `gcloud` region. Add the parameters
+    as mentioned in the following screenshot. The **Default Value** needs to be changed
+    with your project name and region:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/de053287-d843-4dd4-ab7a-b0ee18a83465.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Once everything looks fine, as mentioned in the previous 13 steps, click SAVE,
+    and save the project.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: To run the job, click Build with Parameters and run the job with a default parameter.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'If the job runs successfully, we should see the following output and therefore
+    Google Function has successfully passed the unit, integration and system tests:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: So, through the previous example, we were able to build, test and deploy the
+    function locally and on `gcloud`. But we did this just randomly on a project.
+    Imagine that we need to have multiple environments, and performance systems, and
+    performance testing with very minimal manual intervention. We need to set up a
+    pipeline with approval gates which deploys to multiple environments, mitigating
+    most of the problems before the function is actually in production. This is where
+    continuous delivery comes in handy.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Continuous delivery with Google Functions
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '**Continuous delivery** is about removing risk, delivering frequently and getting
+    fast feedback, and it helps speed up the time to get the product to market. So,
+    how do we do that for Cloud Functions? There are many ways of doing it, but I
+    would like to use a serverless framework to achieve this. There are couple of
+    reason for this. One reason for this is that a serverless framework is a very
+    mature framework for serverless functions deployment. It supports many different
+    vendors, as we have seen, and also has good community support. We can achieve
+    continuous delivery even through `gcloud` and the Jenkins pipeline. We will be
+    reusing most of the setup which we used in previous sections of this chapter.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Google environments
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'It is essential to have multiple environments for setting up continuous delivery
+    for any type of application. But for a serverless world, there is no clear demarcation
+    for the environment. So we always have to come up with alternatives. We have to
+    do the same for Cloud Functions. We set up environment separation in two ways—first,
+    we could separate the functions for the environment with separate names, for example,
+    `my-serverless-dev`, `my-serverless-sit` or `my-serverless-prod`, but this will
+    add unnecessary complications. So, the ideal way would be to separate the environment
+    by creating a different project, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Log on to the GCP console, go to the **Manage Resource Page** ([https://console.cloud.google.com/cloud-resource-manager?_ga=2.108039562.-900655901.1524348645](https://console.cloud.google.com/cloud-resource-manager?_ga=2.108039562.-900655901.1524348645)),
+    click on **CREATE PROJECT**, enter the project name as `Serverless-SIT` in the
+    **Project Name** and click on **Create**. You will see that the project is being
+    created in the notification bell image on the top right-hand side of the page.
+    Once it has stopped, refresh the page and you will see the project in the list.
+    Likewise, let's create `Serverless-UAT` and `Serverless-PROD` projects. I am not
+    creating `dev` as we are using a local emulator for `dev` environment.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Let's enable the cloud API for the project by opening the link: [https://console.cloud.google.com/flows/enableapi?apiid=cloudfunctions&redirect=https://cloud.google.com/functions/quickstart](https://console.cloud.google.com/flows/enableapi?apiid=cloudfunctions&redirect=https://cloud.google.com/functions/quickstart).
+    The page will have a drop-down list for projects. Select **My Serverless Project** and
+    click on **Continue**, then API will be enabled for the project.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Log in to the Jenkins portal (`http://localhost:8080`), which we created in
+    a previous section of the chapter. Then click on **New Item**.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Enter the item name in the textbox as `my-serverless-google-function-pipeline` and
+    then select **Pipeline** from the list and then click **OK**.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Click on the checkbox **This project is parameterized** and, in the **Add Parameter**
+    drop-down, select **String Parameter**. Then let's add `DEV_PROJECT_ID` in the
+    Name textbox and the **Default Value** textbox should have `project id` for the
+    `dev` which we created in Step 1\. Likewise, let's create a text parameter for
+    each environment until PROD, and then the last text parameter should be `YOUR_GCF_REGION`.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Click on the Pipeline tab, in the definition dropdown **Pipeline script from
+    SCM**, and in the SCM dropdown select **Git**. Now, in the repository URL textbox
+    add `https://github.com/shzshi/google-functions-helloworld.git` and then keep
+    everything as default and click on **Save**.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Once the job is saved, we will build the pipeline, for which we need to click
+    on **Build with Parameters**, so we will see default values for each parameter.
+    In case you want to change the environment or add a different project id, we can
+    feed it through the textbox.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Now click on Build, the job should first init, which is setting up pre-requisites,
+    then it will run a unit test, then the function is deployed on the local dev environment,
+    then integrate test run. In the next stage, functions are deployed into the UAT
+    environment and the same will happen to other environments. The gated approval
+    is been setup for production deployment. This pipeline can be done in many ways.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Monitoring and logging
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Google has provided a dashboard to view the invocation and also view the logs
+    of the invocation through the console. So, once you log in to the console and
+    select the specific function, we should be able to see the invocation graph and
+    also should be able to see the execution time and also the memory used. We can
+    view the source code and also test the function. If we click on **View Logs**,as
+    per the following screenshot, we should be able to see the logs of the invocation
+    and also be able to drill down to a detailed log:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/c0d77f3b-a187-4770-b170-fc184b7a63be.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: With the dashboard, Google Cloud also has a monitoring and logging platform
+    called **stackdriver**. It show us insights into the health, performance, and
+    availability of Cloud Function. It is natively integrated with the Google Cloud
+    platform. Stackdriver provides a wide variety of metrics, dashboards, alerting,
+    log management, reporting, and tracing capabilities.
+  prefs: []
+  type: TYPE_NORMAL
+- en: It has advanced alerting to help you identify issues quickly. Integrated logging,
+    tracing, and error reporting enable rapid drill-down and root-cause analysis.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Stackdriver gives you access to logs, metrics, traces, and other signals from
+    your infrastructure platform(s), virtual machines, containers, middleware, and
+    application tier, so that you can track issues all the way from your end user
+    to your backend services and infrastructure. Native support for distributed systems,
+    auto-scaling, and ephemeral resources means that your monitoring works seamlessly
+    with your modern architecture.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Best practice
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Google Function is still in beta and it is being evaluated and getting better
+    day by day. In terms of best practice for DevOps, it would be pretty similar to
+    what I suggested in the previous chapter, in that I would recommend using a serverless
+    framework for automating deployment in Google Functions. A serverless framework
+    also supplies a template for creating a basic function setup for Node.js.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Developing a DevOps culture across the organisation and moving from monolithic
+    application to micro-services will have a huge impact. But we should be able to
+    guide the team to follow the right path. This would call for some mentoring and
+    educating the team with new processes and terms.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We must extend security to the DevOps tools and organization as well. Security
+    should be part of every aspects of DevOps, right from the automated testing, continuous
+    integration and continuous deployment processes on the cloud platform. It is good
+    to look into monitor security within DevOps in the cloud, and you should have
+    a dedicated person doing this.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Vendor lock-in** is really is painful when we develop functions or projects
+    on AWS and then want to move to Google Cloud. The code has to be modified as per
+    the vendor requirements. But, in terms of deployment, I recommend using a serverless
+    framework for DevOps as it mitigates vendor locking of the DevOps tools and framework.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we learned how to set up CI and CD with Google Functions and
+    set up a dynamic dashboard for Google Functions. In the next chapter, we will
+    talk about how to set up our own private serverless form. We will also will talk
+    about setting up CI and CD for this serverless architecture, as well as monitoring
+    and logging, and unit and integration testing.
+  prefs: []
+  type: TYPE_NORMAL

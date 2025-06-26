@@ -1,0 +1,681 @@
+- en: Autoscaling GitLab CI Runners
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In the previous chapter, we were able to scale GitLab Runners using the Kubernetes
+    executor. Depending on your requirements of how many jobs should be able to run
+    concurrently, the number of available Runners in a Kubernetes cluster can go up
+    or down. Having a big number of runners available can be very costly. Even if
+    they were to be turned off, they would still cost money. It's much better to have
+    them created on demand and destroyed when they are no longer needed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There is another GitLab Runner executor that can behave in this elastic way
+    and dynamically add or remove Runner instances, and this is known as the Docker
+    Machine executor. We will show you what this looks like from an architectural
+    point of view, explain some of its settings, and provide you with some examples
+    of running the Docker Machine executor with the VirtualBox driver and the Amazon
+    EC2 driver.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we will cover the following topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Runner client architecture
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Setting up the environment
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Configuring the GitLab Runner
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: You can find the code file for this chapter in this book's GitHub repository
+    at [https://github.com/PacktPublishing/Mastering-GitLab-12/tree/master/Chapter17](https://github.com/PacktPublishing/Mastering-GitLab-12/tree/master/Chapter17).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The other requirements for this chapter are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Docker Machine is automatically installed with the Docker software distributions
+    for macOS or Windows. If you don't have it, you can find it at the following link: [https://github.com/docker/machine/releases/](https://github.com/docker/machine/releases/).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: You need a Linux bastion host with up-to-date patches.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Access to the Docker registry image is required ([https://hub.docker.com/_/registry](https://hub.docker.com/_/registry)).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Access to the MinIO Docker images is required ([https://hub.docker.com/r/minio/minio](https://hub.docker.com/r/minio/minio)).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: You need VirtualBox installed on the bastion host ([http://www.virtualbox.org](http://www.virtualbox.org)).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: You need an AWS account, which will be used for scaling with the EC2 infrastructure.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Runner client architecture
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: First, we will describe the architecture of this solution. Expanding on the
+    architecture that was put forward in previous chapters, we have a GitLab instance
+    with a GitLab CI that receives a request from a GitLab Runner that's running a
+    dedicated host. This can be either a local virtual machine or an instance in the
+    cloud. The Runner is equipped with the Docker Machine program.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The Docker Machine executor type is basically a GitLab Runner that executes
+    Docker Machine commands. With Docker Machine, you can create virtual hosts that
+    run the Docker Engine. You can control these hosts with it and create new virtual
+    machines with Docker Engine installed, which in turn can run GitLab Runner container
+    instances. This is explained in the following diagram:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/3775cd7a-9448-4495-85fc-3e9d21452cb6.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: In the preceding diagram, you can see the **Docker Machine** component and that
+    it can instantiate multiple runners. There are also two other components in the
+    diagram called a **Caching server** (which can store dependencies for builds)
+    and the **Docker registry proxy **(which can cache Docker images from places such
+    as the Docker Hub). Both components will be explained in more detail in the *Configuring
+    the Runner* section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Setting up the environment
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'To enable a Docker Machine-based Runner, the following steps have to be performed:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Prepare a bastion host as the host where Docker will create new machines.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Deploy the GitLab Runner software on this machine.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Install Docker Machine.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Preparing a bastion host
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: For this example, we chose my macOS-based machine. This can be a Linux virtual
+    machine or your laptop—any machine that can run a recent version of the GitLab
+    Runner software. The only function this host will have is executing the GitLab
+    Runner software with the Docker Machine executor. It should be tightly secured
+    as a bastion to withstand attacks since it can control multiple Runner instances
+    through the `docker-machine` commands, and that makes it a target.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Deploying the GitLab Runner software
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'On macOS, we use the Homebrew package manager. To install the Runner software,
+    you can execute the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After that, you can `register` the Runner, as shown in [Chapter 15](4e94f5e4-336d-42ae-af76-477949936356.xhtml),
+    *Installing and Configuring GitLab Runners*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: Choose the Docker Machine executor when you're asked for an executor in the
+    registration process.
+  prefs: []
+  type: TYPE_NORMAL
+- en: After the Runner has been registered, don't start it just yet—we need to edit
+    the `config.toml` configuration file that's located in `~/.gitlab-runner/config.toml` on
+    macOS. We will do that in the *Configuring the Runner* section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: First, though, we need to install the Docker Machine binary before we configure
+    the Runner in order to start the Docker Machine executor.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Installing Docker Machine
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'If you''ve installed Docker on macOS or on Windows, you will already have the
+    binary installed. You can test the installation by using the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You can create new Docker hosts with this tool. They can be created on your
+    local machine or network, but also in the cloud with the help of big providers
+    such as Microsoft, Amazon, and Google. Docker Machine has plugins for many systems.
+    The following is a list of them:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: All VMware products
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Virtualbox
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Microsoft Hyper-V
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Digitial Ocean
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Amazon Web Services (EC2)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Microsoft Azure
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Exoscale
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Google Computing Engine
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Scaleway
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: IBM Softlayer
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Rackspace
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: OpenStack
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Linode
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: If you are running Linux, you can download and install Docker Machine from [https://github.com/docker/machine/releases/](https://github.com/docker/machine/releases/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If you look at the Dockerfile of GitLab Runner on [https://hub.docker.com/r/gitlab/gitlab-runner/dockerfile](https://hub.docker.com/r/gitlab/gitlab-runner/dockerfile),
+    which is used to build the default container, there is a line that says the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: The Docker Machine binary is installed directly in this container image and
+    is used by the GitLab Runner software. When you have verified that the Docker
+    Machine binary is available, the next step is to configure the Runner.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Configuring the Runner
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Now that you've installed the Runner software and Docker Machine, it's time
+    to edit the Runner configuration file. On macOS, you can find the `config.toml`
+    file in `~/.gitlab-runner/config.toml`. It is in your home directory because the
+    Runner runs in the user space on macOS.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, we will take a look at some of the configuration options you can specify
+    in the `config.toml` file that are specifically for the autoscaling Runner.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Off-peak time mode configuration
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Most organizations don't have the need for 24/7 capacity since they don't need
+    to use CI runners all of the time. The most work is done during work hours in
+    a regular work week, and at the weekends, there's less of a need for software
+    to be built. In this situation, it makes no sense to have machines sitting idle,
+    waiting for jobs. By specifying a schedule with the `OffPeakPeriods` option, you
+    can specify these times of lower productivity. During those times, the parameters
+    to control the creation of the runner's capacity are different. You specify them
+    by putting `OffPeak` in front of it. Therefore, `IdleCount` becomes `OffpeakIdleCount`,
+    `IdleTime` becomes `OffPeakIdletime`, and so on. The functionality of the algorithm
+    stays the same.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the following schedule (which is common), you can see off-peak times on
+    weekdays during the night, evening, and the entire weekend:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: Distributed runners caching
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: GitLab Runners have a built-in caching mechanism. It can be set on a global
+    level, as well as for an individual project.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Setting the cache globally
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'You can set a path in your `config.toml` configuration file so that it will
+    cache every job:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: Setting the cache at the project level
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'You can set which path is to be cached in the `.gitlab-ci.yml` file for the
+    project itself:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The preceding settings apply to the context of just a single Runner host. If
+    we use autoscaling, we need a way to have this cache shared by all of the runners
+    to help gain speed. We can use external storage such as an S3 bucket to act as
+    a cache. We just have to add the `[runners.cache.s3]` part to the `config.toml`
+    file of the runners:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'If this is your first time doing this, it will try to get the `cache.zip` file
+    from the S3 storage bucket. However, if there is no file, it will complain and
+    continue:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After the build, which populates the `node_modules` directory with dependencies,
+    the contents of that directory is zipped and sent to the S3 storage bucket:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'If we retry the job, we will find that there''s now a `cache.zip` file in S3,
+    and it will be used instead of downloading all of those node dependencies again:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: Distributed container registry mirroring
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Another situation that can slow down building considerably is that the runners
+    continuously download Docker containers from the internet. It is a much better
+    idea to create a proxy for that. In `runners.machine`, you can specify which `engine-registry-mirror`
+    should be used. If this is used on your local network, this saves a lot of traffic.
+    Here, you see the section as I used it in our example project:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: In the most basic way, the Docker Machine executor uses `docker-machine` to
+    spawn new instances of the GitLab Runner container.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can combine this with other features, such as shared caching and using a
+    dedicate container registry to facilitate large amounts of instances.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you enable these settings for your runner, you need to deploy a caching server
+    and a registry mirroring service, which we will show you in the next section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Installing and running a proxy container registry and a caching server
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The two extra machines are necessary to help with performance when your plan
+    is to deploy an entire elastic fleet of GitLab Runners. If you have more than
+    five runners that can operate simultaneously, you will already gain an advantage
+    when running a registry proxy and a caching server. An extra feature you get is
+    that a bit of high availability is introduced in your architecture: you are able
+    to do builds when your internet connection is flaky or offline.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: For a proxy container registry, you need to have a proxy that implements the Docker
+    Registry HTTP API V2, which we will install in the next section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Proxy container registry
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'There is a convenient Docker container readily available to fulfill this role.
+    You can start this Docker container immediately by using the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'If you create such a registry proxy and check the log file when the runners
+    start a job, you will find that the proxy serves the Runner by fetching and caching
+    images:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: There isn't much to configure, but you can find more information here: [https://hub.docker.com/_/registry](https://hub.docker.com/_/registry).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Caching server
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: There are two options for creating a caching server. You can either get an S3
+    bucket in Amazon or another cloud provider or run an object storage service yourself
+    such as MinIO, which can be found at [https://min.io](https://min.io).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating an S3 bucket in Amazon Web Services
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Log in to the Amazon Web Services console and find the S3 dashboard via Services
+    | S3\. Click on Create bucket:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/c07dc11e-b1f5-484d-ba44-923b4af697eb.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'We have named it `joustie-gitlab-runner-cache` and left the rest as the default:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/18cb12bc-c41e-4dd1-adb3-7a5137854437.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Creating your own MinIO server
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This is also conveniently available as a Docker image. It is recommended to
+    run this on a dedicated host because the storage that's involved can grow quite
+    large, and you don't want this service to take down any other service that is
+    running on that host.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Run the container with the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: Take note of the `/s3` volume that is mounted in the container, which will serve
+    as the directory that stores the cached objects.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The output of the preceding command will appear after some time:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: The container image will be downloaded.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'After that, the MinIO container will start and report the location it uses,
+    as well as `AccesKey` and `SecretKey`, which are to be used by the runners:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: We will demonstrate the usage of the cache by building a Node.js example project.
+    It contains a `node_modules` directory, which we specify as a cached location
+    in the `.gitlab-ci.yml` file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'When you build the Node.js project using a GitLab Runner, it will report its
+    use of the cache in the Runner job log file:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'When we looked on the dedicated machine where the MinIO container was running,
+    we found the following directory structure when we typed in the `tree` command
+    in `/s3` (this is the directory that''s used by the MinIO Docker container to
+    store objects):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: We ran the GitLab Runner job again, which found `cache.zip` in the MinIO bucket.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This was an example of using a single runner. However, you may want to use these
+    options to scale your Runner instances. Let's look at this in the next section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Scaling your runners
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In the previous section, we configured the software and prepared our environment
+    so that we could scale up and down the number of runners while also providing
+    some shared services like a registry proxy and a caching server. Now, let's look
+    at two examples. We will run jobs on a Runner that's been configured to use VirtualBox
+    and one that's been configured to use Amazon Web Services. VirtualBox is the open
+    source virtualization solution from Oracle and can be found at [https://www.virtualbox.org/](https://www.virtualbox.org/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Almost all of the Runner configuration files (the `config.toml` file) can be
+    identical; we only change the machine driver part. Let's start with the VirtualBox
+    option.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using Docker Machines with a local VirtualBox instance
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'We start with the local `gitLab-runner` service with the `config` file for
+    VirtualBox:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After a few seconds, we will see that VirtualBox spins up a number of virtual
+    machines:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/daf1c152-8dfd-42bd-b88b-caa67f7d22fe.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'When we started a build of the event manager project in [Chapter 10](1eceee2e-41d6-41cc-95eb-3d225f25f3fa.xhtml),
+    *Create Your Product, Verify, and Package it*, we saw that it needs more runners
+    (five parallel jobs) to run the pipeline. Therefore, we will start more machines:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/3e8fdca2-9509-4534-a302-adb39c6f12c6.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'When the build has finished, after `IdleTime` has gone by, the number of machines
+    will be reduced:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/b15110be-a3ce-4c39-a857-d2457f5f17cb.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: The VirtualBox driver is an excellent choice if you already have some servers
+    with VirtualBox installed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using docker machines that have been created on Amazon Web Services (EC2)
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: If you change the machine driver from VirtualBox to Amazon EC2 and restart the
+    runners, Docker Machine will spin up runners in Amazon if you have your credentials
+    saved in your home directory or inserted in your shell environment. If not, then
+    you will need to save them in the `config.toml` file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'After some time, the runners will appear in the EC2 web interface:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/eb8d180d-96ea-4ea7-9b4f-dceb79b5ecf2.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'When those runners are started, you can change your Docker context to the one
+    in Amazon so that you can run Docker commands and control those machines:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'When you access the logs of the Runner on your bastion host, you will see that
+    it will scale down the number of machines to `IdleCount`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'If we start the same job from earlier (event manager project), we will see
+    that many jobs are queued following the start of the build pipeline:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/02f62556-6b64-4240-902c-3976150881b2.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'The `docker-machine ls` command will show us that many EC2 instances are started
+    on AWS by the autoscaling GitLab Runner:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You can also view new Runner instances in the AWS web console:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/bafb055f-28c8-4d73-986b-3c58622efce5.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'After successfully completing some of the jobs in the pipeline, the Runner
+    will scale back down again:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/5fc5c3d4-fc5c-48b5-bda9-7d36ab44b19d.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: As you can see, it's quite simple to change the Docker Machine driver in the
+    Runner configuration file and get the same behavior. The Runner scaled up virtual
+    machines in VirtualBox are used to run Docker containers, as well as Amazon Web
+    Services.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we explained the autoscaling feature of GitLab Runners. Like
+    in Kubernetes, it gives you the option of creating Runner instances on demand
+    and scaling back in times of less need. Under the hood, it uses Docker Machine
+    to manage these replicas. There are several drivers available that instantly allow
+    runners to be created on a big list of platforms.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next chapter, we will take a look at the options for monitoring all of
+    these instances.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Questions
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: What Docker feature is used by the `docker-machine` executor?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What additional servers are recommended when you use autoscaling?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: In what file is the runner's distributed cache saved?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What is the name of the object storage that was used in this chapter?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What is the name of the configuration file of a GitLab Runner?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What is the name of the Docker image that's used as a registry cache?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Further reading
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '*Getting Started with Containerization*, by *Gabriel N. Schenker*, *Hideto
+    Saito*, *Hui-Chuan Chloe Lee*, and *Ke-Jou Carol Hsu*: [https://www.packtpub.com/in/virtualization-and-cloud/getting-started-containerization](https://www.packtpub.com/in/virtualization-and-cloud/getting-started-containerization)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Mastering Docker – Third Edition*, by *Russ McKendrick* and *Scott Gallagher*: [https://www.packtpub.com/in/virtualization-and-cloud/mastering-docker-third-edition](https://www.packtpub.com/in/virtualization-and-cloud/mastering-docker-third-edition)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Getting Started with Oracle VM VirtualBox*, by *Pradyumna Dash*: [https://www.packtpub.com/in/virtualization-and-cloud/getting-started-oracle-vm-virtualbox](https://www.packtpub.com/in/virtualization-and-cloud/getting-started-oracle-vm-virtualbox)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Hands-On AWS System Administration*, by *Glauber Gallego*, *Daniel Stori*,
+    and *Satyajit Das*: [https://www.packtpub.com/in/virtualization-and-cloud/hands-aws-system-administration](https://www.packtpub.com/in/virtualization-and-cloud/hands-aws-system-administration)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

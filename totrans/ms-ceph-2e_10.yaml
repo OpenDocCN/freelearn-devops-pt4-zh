@@ -1,0 +1,931 @@
+- en: Monitoring Ceph
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: When you are operating a Ceph cluster, it's important to monitor its health
+    and performance. By monitoring Ceph, you can be sure that your cluster is running
+    at full health and also be able to quickly react to any issues that may arise.
+    By capturing and graphing performance counters, you will also have the data that's
+    required to tune Ceph and observe the impact of your tuning on your cluster.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, you will learn about the following topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Why it is important to monitor Ceph
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: How to monitor Ceph's health by using the new built-in dashboard
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: What should be monitored
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The states of PGs and what they mean
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: How to capture Ceph's performance counters with collectd
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Example graphs using Graphite
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Why it is important to monitor Ceph
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The most important reason to monitor Ceph is to ensure that the cluster is running
+    in a healthy state. If Ceph is not running in a healthy state, be it because of
+    a failed disk or for some other reason, the chances of a loss of service or data
+    increase. Although Ceph is highly automated in recovering from a variety of scenarios,
+    being aware of what is going on and when manual intervention is required is essential.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Monitoring isn't just about detecting failures; monitoring other metrics such
+    as used disk space is just as essential as knowing when a disk has failed. If
+    your Ceph cluster fills up, it will stop accepting I/O requests and will not be
+    able to recover from future OSD failures.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, monitoring both the operating systems and Ceph's performance metrics
+    can help you spot performance issues or identify tuning opportunities.
+  prefs: []
+  type: TYPE_NORMAL
+- en: What should be monitored
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The simple answer is everything, or, as much as you can. You can never predict
+    what scenario may be forced upon you and your cluster, and having the correct
+    monitoring and alerting in place can mean the difference between handing a situation
+    gracefully or having a full-scale outage. A list of things that should be monitored
+    in decreasing order of importance is as follows.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Ceph health
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The most important thing to capture is the health status of Ceph. The main reporting
+    item is the overall health status of the cluster, either `HEALTH_OK`, `HEALTH_WARN`,
+    or `HEALTH_ERR`. By monitoring this state, you will be alerted any time Ceph itself
+    thinks that something is not right. In addition to this, you may also want to
+    capture the status of the PGs and number of degraded objects, as they can provide
+    additional information as to what might be wrong without having to actually log
+    on to a Ceph server and use the Ceph toolset to check the status.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Operating system and hardware
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: It's also highly recommended that you capture the current status of the operating
+    system running the Ceph software and also the status of the underlying hardware.
+    Capturing things such as CPU and RAM usage will alert you to possible resource
+    starvation before it potentially becomes critical. Also, long-term trending on
+    this data can help to plan hardware choices for Ceph. Monitoring the hardware
+    to capture hardware failures, such as disks, PSUs, and fans, is also highly recommended.
+    Most server hardware is redundant and it may not be obvious that it is running
+    in a degraded state unless it is monitored. In addition, monitoring network connections
+    so that you can be sure that both NICs are available in bonded configuration are
+    working is also a good idea.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Smart stats
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Using your operating system's smart monitoring tool suite to probe the health
+    of the disks is also a good idea. They may help to highlight failing disks or
+    ones with abnormal error rates. For SSDs, you can also measure the wear rate of
+    the flash cells, which is a good indication of when the SSD is likely to fail.
+    Finally, being able to capture the temperature of the disks will allow you to
+    make sure that your servers are not overheating.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Network
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: As Ceph relies on the network it runs over to be reliable, it can be beneficial
+    to monitor network devices for errors and performance issues. Most network devices
+    can be polled via SNMP to obtain this data. Since the Mimic release of Ceph, it
+    automatically sends jumbo-sized frames in its heartbeats to try and catch scenarios
+    where jumbo frames are not correctly configured across the network. However, it
+    is also worth considering deploying your own jumbo-frame-checking monitoring to
+    catch misconfigurations, as misconfigured jumbo frames can easily bring a Ceph
+    cluster to its knees.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Performance counters
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: By monitoring performance counters from both the operating system and Ceph,
+    you are arming yourself with a wealth of knowledge to gain a better understanding
+    of how your Ceph cluster is performing. If storage permits, it's worth trying
+    to capture as many of these metrics as possible; you never know when the metrics
+    will come in handy. It's quite often the case when diagnosing a problem that a
+    metric that was previously thought to have no connection to the issue suddenly
+    sheds light on the actual cause. The traditional approach of only monitoring key
+    metrics is very limiting in this regard.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Most monitoring agents that run on Linux will allow you to capture a large array
+    of metrics, from resource consumption to filesystem usage. It's worth spending
+    time analyzing what metric you can collect and configuring them appropriately.
+    Some of these monitoring agents will also have plugins for Ceph, which can pull
+    out all of the performance counters from Ceph's various components, such as `osd`
+    and `mon` nodes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Ceph dashboard
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Introduced in the Mimic release, Ceph now has an extremely useful dashboard
+    based on the open ATTIC project. The dashboard in the initial Mimic release gives
+    the Ceph operator the ability to monitor many aspects of their Ceph cluster that
+    are needed on a daily basis. With preceding releases of Ceph, the dashboard has
+    had further refinements and can now be used to manage some common tasks; over
+    time, it is expected that the dashboard will continue to gain new features.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The dashboard is provided as a Ceph Mgr module and is included along with any
+    dependencies in the standard Ceph installation. That means that all that is required
+    to start using the Ceph dashboard is to simply enable the `mgr` module:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'SSL either needs to be disabled or a SSL certificate needs to be configured.
+    Luckily, Ceph has a simple one-liner to get you started with a self-signed certificate:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: It's recommended that you use a proper certificate in production deployments.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Lastly, a username and password are required to log in to the dashboard. Again,
+    Ceph has a simple command to carry out this action:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now you should be able to browse to `https://<active mgr>:8443` and log in
+    with the credentials you have just created. In this is case, `<active mgr>` is
+    the Ceph node that is currently running the active mgr daemon; this can be seen
+    via the `ceph -s` Ceph status screen:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/b5517428-b827-4ed0-9bc3-f736940dd212.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: The first screen that's presented when you log into the dashboard gives an overview
+    of the Ceph cluster's health and utilization.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Across the top of the page are a number of menus that allow you to view more
+    detailed information about the Ceph cluster, such as details on the OSDs and PGs.
+    The block menu allows you to view details on created RBD images and likewise the
+    filesystems menu shows information about any CephFS filesystems.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Object Gateway will show information about the RADOS Gateway, but requires
+    configuration with a valid RGW user; please consult the official Ceph documentation
+    for more information if required.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With the development future of the Ceph dashboard looking bright, it is highly
+    recommended to deploy it for any Ceph cluster you manage. With future releases
+    set to bring further enhancements around being able to manage your Ceph cluster
+    from it, the dashboard will certainly become more and more useful over time. However,
+    even in its current state, the ability for less knowledgeable administrators to
+    easily be able to explore the current status of a running Ceph cluster is extremely
+    useful.
+  prefs: []
+  type: TYPE_NORMAL
+- en: PG states – the good, the bad, and the ugly
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Each placement group in Ceph has one or more statuses assigned to it; normally,
+    you want to see all your PGs with `active+clean` against them. Understanding what
+    each state means can help us identify what is happening to PG and whether you
+    need to take action.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The good ones
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The following states are indications of a healthy operating cluster, for which
+    no action needs to be taken.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The active state
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The `active` state means that the PG is in full health, and it is capable of
+    accepting client requests.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The clean state
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The `clean` state means that the PG's objects are being replicated the correct
+    number of times and are all in a consistent state.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Scrubbing and deep scrubbing
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Scrubbing means that Ceph checks the consistency of your data and is a normal
+    background process. Scrubbing on its own is where Ceph checks that the objects
+    and relevant metadata exists. When Ceph performs a deep scrub, it compares the
+    contents of the objects and their replicas for consistency.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The bad ones
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The following states indicate that Ceph is not in full health, but shouldn't
+    cause any immediate problems.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The inconsistent state
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The `inconsistent` state means that during the scrub process, Ceph has found
+    one or more objects that are inconsistent with its replicas. See [Chapter 11](bf50389d-8256-4cbf-ae32-01a494ab4189.xhtml),
+    *Troubleshooting*, later in this book on how to deal with these errors.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The backfilling, backfill_wait, recovering, and recovery_wait states
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: These states mean that Ceph is copying or migrating data from one OSD to another.
+    This may possibly mean that this PG has less than the desired number of copies.
+    If it's in the `wait` state, it means that due to throttles on each OSD, Ceph
+    is limiting the number of concurrent operations to reduce the impact on client
+    operations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The degraded state
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The `degraded` state means that the PG is missing or has out-of-date copies
+    of one or more objects. These will normally be corrected by the recovery/backfill
+    process.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Remapped
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In order to become active, the PG is currently mapped to a different OSD or
+    set of OSDs. This is likely to occur when OSD is down but has not been recovered
+    to the remaining OSDs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Peering
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The peering state is part of the normal process of a PG becoming active and
+    it should only be in this state briefly. It is listed in the bad section as a
+    PG that remains in the peering state will block I/O.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The ugly ones
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: These states are not ones you want to see. If you see any of these states, it's
+    quite likely that client access to the cluster will be affected, and unless the
+    situation can be fixed, data loss may occur.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The incomplete state
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: An `incomplete` state means that Ceph is unable to find any valid copies of
+    objects within the PG across any of the OSDs that are currently up in the cluster.
+    This can either be that the objects are simply not there or the available objects
+    are missing newer writes that may have occurred on now unavailable OSDs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The down state
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This will accompany the `incomplete` state. The PG is missing objects that are
+    known to possibly be on unavailable OSDs and the PG cannot be started.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The backfill_toofull and recovery_toofull state
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Ceph has tried to recover your data, but your OSD disks are too full and it
+    cannot continue. Extra OSDs are needed to fix this situation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Monitoring Ceph with collectd
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Previously in this chapter, we covered what monitoring should be done around
+    your entire Ceph infrastructure and also looked at the new, builtin Ceph dashboard.
+    To gain further insights into the operation of your Ceph cluster and associated
+    infrastructure, a more detailed monitoring setup is required. Although alert monitoring
+    is out of scope of this book, we will now look at capturing the Ceph performance
+    metrics with collectd, storing them in Graphite, and then finally creating a dashboard
+    with graphs using Grafana. These captured metrics can then be used in the following
+    chapter to help tune your Ceph cluster.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We will build this monitoring infrastructure on one of our monitor nodes in
+    our test cluster. In a production cluster, it is highly recommended that it gets
+    its own dedicated server.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Graphite
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Graphite is a time series database that excels in storing large amounts of metrics
+    and has a mature query language, which can be used by applications to manipulate
+    data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We first need to install the required Graphite packages:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The preceding command gives the following output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/488cb2df-39ad-4069-9510-6cc07aef46b6.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Edit the `/etc/graphite/storage-schemas.conf` storage schemas file and place
+    the following into it:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now, we can create the graphite database by running the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The preceding command will give the following output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/dc018797-5e89-447f-bbbc-17b1d8a825ec.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Set the password for the root user when prompted:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The preceding command gives the following output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/d98b277c-89aa-43f5-a02f-be4fb9f33818.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'To stop the default Apache site from conflicting with the Graphite web service,
+    we need to disable it by running the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The preceding command gives the following output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/6158b809-8725-4c61-92a8-4ea5951a75e8.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'We can now copy the Apache Graphite configuration into the Apache environment:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The preceding commands give the following output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/b67de3db-4876-4bdb-ad1b-1001c51266f3.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Restart the Apache service:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: Grafana
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'We will edit the apt repository file and add the repository for Grafana:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Place the following line into the file and save it:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now run the following commands to retrieve the `gpg` key and update the package
+    lists:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Install Grafana using the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The preceding command gives the following output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/1990df5e-78f0-4130-97d8-39dcc0c54b9e.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: With the standard Vagrant configuration, you will not be able to connect to
+    the HTTP port provided by Grafana. To access Grafana, we will need to port forward
+    via `ssh port 3000` to our local machine.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'An example of using PuTTY is shown in the following screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/31fc51b4-0eab-477e-a122-028cf70d2aac.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Now, use `http://localhost:3000` in the URL. You should be taken to the Grafana
+    home page. Navigate to data sources and then configure Grafana to poll our newly
+    installed Graphite installation:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/15f24153-3f71-479e-9096-d04d90cce146.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: If you get the green success bar when you click on the Save & Test button, then
+    you have successfully installed and configured Graphite and Grafana.
+  prefs: []
+  type: TYPE_NORMAL
+- en: collectd
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Now that we have a shiny installation of Graphite and Grafana to look at, we
+    need to put some data into it to be able to generate some graphs. collectd is
+    a well-respected metric collection tool, which can output metrics to Graphite.
+    The core collectd application is very minimal, and it relies on a series of plugins
+    to collect metrics and forwards them onto applications such as Graphite for storage.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Before we start collecting metrics from our Ceph nodes, let''s install collectd
+    on the same VM where we installed Graphite and Grafana. We will do this to gain
+    a better understanding of collectd and the process required to configure it. We
+    will then use Ansible to install and configure collectd on all of our Ceph nodes,
+    which would be the recommended approach if this was being rolled out in a production
+    environment. We have the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The preceding command will give the following output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/0f642770-d575-41e3-ad62-3e4df0a4042e.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'This will install collectd and a basic set of plugins for querying standard
+    operating system resources. There is a sample configuration stored in the following
+    location:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'It lists all of the core plugins and sample configuration options. It is worth
+    reviewing this file to learn about the various plugins and their configuration
+    options. For this example, however, we will start with an empty configuration
+    file and configure a few basic resources:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Create a new `collectd` configuration file using the following command:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Add the following to it:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Restart the `collectd` service using the following command:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now, navigate back to Grafana and browse the dashboard''s menu item. Click
+    on the button in the middle of the screen to create a new dashboard:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/9bc0bcbc-9a1b-4fe0-8c99-02258224a4e9.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Select Graph to add a new graph to the dashboard. An example graph will now
+    appear, which we will want to edit to replace with our own graphs. To do this,
+    click on the graph title and a floating menu will appear:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/aaee7386-fe72-40ab-9912-810b7e05ae6d.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Click on Edit to go to the graph widget editing screen. From here, we can delete
+    the fake graph data by selecting the *dustbin* icon, as shown in the following
+    three-button menu box:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/d0e5a750-326a-4385-b305-ac92ede696af.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Now, from the drop-down menu, change the panel data source to the Graphite
+    source we have just added and click on the `Add query` button:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/3b546ef4-57e5-4469-b7b1-d4bb86043723.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'A query box will appear at the top of the editing panel. It will also have
+    the three-button menu box, like before. From here, we can toggle the edit mode
+    of the query editor by clicking on the button with the three horizontal lines:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/6813b9b8-0701-4b84-a9ae-b5c86c0063a6.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: The Toggle Edit Mode option switches the query editor between click and select
+    mode, where you can explore the available metrics and build up basic queries and
+    the text editor mode. The click and select mode is useful if you do not know the
+    names of the metrics and only want to create basic queries. For more advanced
+    queries, the text editor is required.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We will first make a query for our graph using the basic editor mode and then
+    switch to the text mode for the rest of this chapter to make it easier to copy
+    the queries from this book.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s first graph the system load of VM where we have installed collectd:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/4caf3d8a-b599-45c4-8617-026be2452002.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: This will now produce a graph, showing the system load.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'By further clicking on the + symbol, you can expand the query by applying different
+    functions against the data. These could be used to add multiple data sources together
+    or to find the average. We will cover this further in this chapter as we begin
+    to craft some queries to analyze Ceph performance. Before we continue, let''s
+    switch the query editor mode to text mode to see what the query looks like:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/b4d18c67-6af8-408f-aff4-77ecd678509c.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: You can see that each leaf of the tree of metrics is separated by a dot. This
+    is how the Graphite query language works.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Deploying collectd with Ansible
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Now that we have confirmed that our monitoring stack is installed and working
+    correctly, let's use Ansible to deploy collectd to all our Ceph nodes, so we can
+    start monitoring it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Switch to the `ansible` directory:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Edit your Ansible `site.yml` file and add the `collectd` role to the plays
+    for your `mon` and `osd` nodes so that they look like the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/7d5cd9a1-44e9-42fb-a7f3-b4a5d6323845.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Edit `group_vars/all` and enter the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/62a74bf3-b1d3-49c0-bec3-23374be862f0.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Now, run your `site.yml` playbook:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The preceding command gives the following output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/919339d4-9a37-48bc-abcb-af659d1f22ea.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'You should see from the status at the end that Ansible has deployed `collectd`
+    to all your Ceph nodes, and it has configured the `collectd` Ceph plugin. In Grafana,
+    you should now be able to see your Ceph nodes showing up as available metrics.
+    The following is one of our monitor nodes:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/798fee5c-ad98-4313-b060-90d786c8da5a.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'For example, we can now create a graph showing the number objects stored in
+    the Ceph cluster. Create a new graph in Grafana and enter the following query:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This will produce a graph like the following one:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/df871fb2-0d6f-44a9-a95a-c531e2e838a7.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: It's advised that you spend some time browsing through the available metrics
+    so that you are familiar with them before proceeding to the next section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Sample Graphite queries for Ceph
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Although you can generate some very useful graphs by simply selecting individual
+    metrics, by harnessing the power of Graphite's functions to manipulate the metrics,
+    graphs can be created, which offer a much more detailed insight into your Ceph
+    cluster. The following Graphite queries are useful for generating common graphs
+    and are also a good starting point so that you can create your own custom queries.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Number of Up and In OSDs
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'It''s very handy to be able to quickly glance at a dashboard and see how many
+    OSDs are `Up` and `In`. The following two queries show these values:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note the use of the `maxSeries` function, which allows data to be pulled from
+    all the `mon` nodes and will take the highest value.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Showing the most deviant OSD usage
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Due to the way CRUSH places PGs on each OSD, there will never be a perfect
+    balance of PGs per OSD. The following query will create a graph that will show
+    the ten most deviant OSDs, so you can see if PG balancing would be beneficial.
+    We have the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: Total number of IOPs across all OSDs
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'This uses the `sumSeries` function and wildcards to add all the `op` metrics
+    from every OSD together:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: There are also counters that will show read and write operations individually,
+    named `opR` and `opW`, respectively.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Total MBps across all OSDs
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Similarly, there are also counters that show MBps for each OSD, such as the
+    `op` counters; the `sumSeries` function can also be used. We have the following
+    code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: Cluster capacity and usage
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The following two queries show the total capacity of bytes in the cluster and
+    the number of bytes used. They can be used to generate a pie chart in Grafana
+    to show the percentage of used space. Note that these counters show the raw capacity
+    before replication:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: Average latency
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The following two queries can be used to graph the average latency of the cluster.
+    Larger I/O sizes per operation will increase the average latency, as larger I/Os
+    take longer to process. As such, these graphs will not give a clear picture of
+    your cluster''s latency if the average I/O size changes over time. We have the
+    following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: Custom Ceph collectd plugins
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Although the standard collectd Ceph plugin does a good job of collecting all
+    of Ceph''s performance counters, it falls short of collecting all the required
+    data to allow you to get a complete view of your cluster health and performance.
+    This section will demonstrate how to use additional custom collectd plugins to
+    collect the PG states, per pool performance stats, and more realistic latency
+    figures:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Jump on to one of your `mon` nodes via SSH and clone the following Git repository:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Create a `ceph` directory under the `collectd/plugins` directory:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Copy the `plugins` directory to `/usr/lib/collectd/plugins/ceph` using the
+    following command:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now, create a new `collectd` configuration file to enable the plugins:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Place the following configuration inside it and save the new file:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: The latency plugin uses a RADOS bench to determine the cluster latency; this
+    means that it is actually running RADOS bench and will write data to your cluster.
+    The `TestPool` parameter determines the target for the RADOS bench command. It
+    is therefore recommended that on a production cluster, a separate small pool is
+    created for this use.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you are trying to use these extra plugins on Kraken+ releases of Ceph, you
+    will need to edit the `ceph_pg_plugin.py` file and modify the variable name on
+    line 71 from `fs_perf_stat` to `perf_stat`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Restart the `collectd` service:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The average cluster latency can now be obtained with the following query:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs: []
+  type: TYPE_PRE
+- en: This figure is based on doing 64 KB writes, and so, unlike the OSD metrics,
+    it will not change depending on the average client I/O size.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, you learned the importance of monitoring your Ceph cluster
+    and its supporting infrastructure. You should also have a good understanding of
+    the various components that you should monitor and some example tools that can
+    be used. We covered some of the PG states that, in conjunction with a monitoring
+    solution will allow you to understand the current status of your Ceph cluster.
+    Finally, we deployed a highly scalable monitoring system comprising collectd,
+    Graphite, and Grafana, which will enable you to create professional looking dashboards
+    to show the status and performance of your Ceph cluster.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next chapter, we will look at ways to tune the performance of you Ceph
+    cluster, this leans heavily on being able to capture performance stats, which
+    you should now be able to do following this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Questions
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: What port does the Ceph Dashboard run on?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What Ceph daemon is the Ceph Dashboard controlled by?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What does the inconsistent PG state mean?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What does the backfilling PG state mean?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What should you aim to monitor in your Ceph infrastructure?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL

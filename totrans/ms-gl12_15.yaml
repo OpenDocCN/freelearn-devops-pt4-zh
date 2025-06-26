@@ -1,0 +1,712 @@
+- en: Monitoring with Prometheus
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we will explore how to monitor using the Prometheus time series,
+    and we will also run some automated security tests. The built-in security tests
+    in GitLab are only available when running with a GitLab Ultimate license on-premises
+    or with a Gold subscription on [http://gitlab.com](http://gitlab.com).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we will cover following topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Setting up Prometheus
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Customizing monitoring
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The static analysis of security vulnerabilities
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Dynamic Application Security Testing** (**DAST**)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Dependency checking
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: To be able to manage Omnibus installs, there is one central configuration file
+    required, called `gitlab.rb`. You need to create this file or copy an example.
+    There is a template available at [https://gitlab.com/gitlab-org/omnibus-gitlab/blob/master/files/gitlab-config-template/gitlab.rb.template](https://gitlab.com/gitlab-org/omnibus-gitlab/blob/master/files/gitlab-config-template/gitlab.rb.template).
+    This file is not updated after upgrades. Throughout this chapter, we will quote
+    and discuss elements of this file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To follow along with the instructions in this chapter, please download the Git
+    repository with examples, available at GitHub: [https://github.com/PacktPublishing/Mastering-GitLab-12/tree/master/Chapter12](https://github.com/PacktPublishing/Mastering-GitLab-12/tree/master/Chapter12)[.](https://github.com/PacktPublishing/Mastering-GitLab-12/tree/master/Chapter12)
+  prefs: []
+  type: TYPE_NORMAL
+- en: You will also need to have Python installed to create the Python sample exporter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Setting up Prometheus
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Prometheus is an open source monitoring system inspired by Borgmon, Google's
+    production monitoring system. Since it was introduced in 2012, the project has
+    built up an active community and has already been used by many companies. It is
+    an example of a TSDB, a time-series monitoring database. This means that time
+    is a deliberate X-axis in all of your measurements. Every new entry is an insert
+    and not an update of a data-row.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This is best visualized in a table:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| **Time(x)** | **Key ** | **Value** |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 12.01.33 | ping-latency | 0.234556 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 12.03.33 | ping-latency | 0.223344 |'
+  prefs: []
+  type: TYPE_TB
+- en: 'The two main advantages of this approach are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Scalability**: These databases are tuned to ingest data and do so very efficiently.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Usability**: They provide all kinds of tools and functions, for example,
+    data retention and continuous queries.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Whereas most monitoring systems focus on measuring external system behaviors
+    through health checks, Prometheus emphasizes measuring internal system behaviors
+    by requesting metrics from the software itself. With Prometheus, you can set up
+    monitoring dynamically, making it a valuable tool for gaining insight into distributed
+    setups, such as software on a Kubernetes cluster.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Prometheus project provides client librariesthat make it easier to export
+    metrics from software. These libraries enable you to integrate monitoring as part
+    of your software. It opens a port to metrics inside your application, so to speak.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can also use functions and objects from client libraries to expose the metrics
+    inside your application.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Another method is to run separate smaller programs that gather data that will
+    be scraped by the Prometheus server. Some officially endorsed exporters are available
+    in the Prometheus group on GitHub: [https://github.com/prometheus](https://github.com/prometheus).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'GitLab is packaged with both methods. When enabled, it can expose metrics from
+    within GitLab itself, but the omnibus package can also deliver extra exporter
+    instances that are able to monitor a number of components. The monitoring architecture
+    is as follows (as you can see, the functionality runs on the GitLab application
+    server):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/f570a655-b4e2-4232-86a6-ae6470d40845.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'You can see several exporters in the image; let''s go through them:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The (GitLab) Metrics Exporter: GitLab has incorporated the client functions
+    into itself and can expose metrics if the setting is enabled. You can find this
+    feature in the **Admin |** Settings | Metrics and profiling | Metrics Prometheus,
+    as shown in the following screenshot:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![](img/eb1415e4-1073-4f57-9d01-dd146f279b8f.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'This works by allowing you to view the exporters'' output on `http://{your
+    gitlab url}}/-/metrics?token=something`. An example is given on the Health Check
+    page via Monitoring | Health check, as shown in the following screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/4cd04fa5-9c88-4dcc-8155-a9e8d0bb13ea.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Make sure that you append the token to the request otherwise you won''t see
+    any data. An example output shown when visiting the URL is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/261b4612-c78d-4f46-8b9f-59fab5a8232d.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'The Redis Exporter: This is an external program you can find at [https://github.com/oliver006/redis_exporter/blob/master/README.md#whats-exported](https://github.com/oliver006/redis_exporter/blob/master/README.md#whats-exported).
+    It is a Go binary that exposes metrics about Redis, the in-memory database and
+    cache that GitLab uses for storing background job queues, and session state and
+    UI caching.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'When used together with Grafana, dashboards can be quickly set up, as shown
+    in the following screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/9b1797ed-1f0f-43da-b37d-7e096cb02a68.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'The Postgres Exporter: Again, this is a Go binary and external project available
+    at: [https://github.com/wrouesnel/postgres_exporter](https://github.com/wrouesnel/postgres_exporter).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The GitLab Monitor: This exporter is a bit different in that it is built-in
+    with Ruby and exposes metrics with the Sinatra web server gem. The project page
+    is [https://gitlab.com/gitlab-org/gitlab-monitor](https://gitlab.com/gitlab-org/gitlab-monitor).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'When you query the GitLab Monitor, you can provide different parameters, which
+    represent the kind of metric you want to scrape; they include the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Database**: Provides information about tables, rows, and CI build'
+  prefs:
+  - PREF_OL
+  - PREF_OL
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Git**: Provides information about Git pulls'
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Process**: Provides information about CPU, process count, sidekiq stats,
+    and more'
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The Node Exporter: This is perhaps one of the best-known exporters for Prometheus.
+    It consists of a lot of basic metrics for an application node. Again, this exporter
+    is written in Go and is available at [https://github.com/prometheus/node_exporter](https://github.com/prometheus/node_exporter).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: To enable the built-in Prometheus server on the GitLab application server, edit
+    the `/etc/gitlab/gitlab.rb` file. Search for `prometheus['enable']`, uncomment
+    it, and set it to `true`. There are several other options, but just enabling it
+    will already deliver you a working instance.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The part of the `gitlab.rb` file you should change is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: After changing `gitlab.rb`, you should run a reconfiguration to activate the
+    changes. You will see messages explaining that certain exporters and the Prometheus
+    server have been started.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You can navigate to the Prometheus console by going to the address configured
+    in `prometheus[''listen_address'']`. You will be presented with a query interface.
+    If you click the drop-down list, you should see a list of metrics that can be
+    queried, as shown in the following screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/54af35bc-dbc6-4de2-a8e5-963c48a55fb9.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Once you have chosen a metric, it will display all values it has recorded in
+    the database (including data that was actively scraped from Prometheus exporters).
+    In this case, the chose view mode was probably Console. You can also view the
+    data as a graph by clicking on Graph, as shown in the following screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/13390e57-6aa6-4383-88c2-40120dde5c69.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Using an external Prometheus host
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: If you are not using the omnibus package to manage GitLab or insist on using
+    an external Prometheus server, the picture will be a bit different. You should
+    be aware that the default security model that Prometheus uses is rather simple;
+    it assumes that anyone can view the stored time series data, and the server provides
+    no authentication, authorization, or encryption. If you need these features, you
+    should prepare a reverse proxy in front of the Prometheus server to help. More
+    information about this can be found at [https://prometheus.io/docs/operating/security/](https://prometheus.io/docs/operating/security/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The monitoring architecture for this situation is shown in the following diagram
+    (as you can see, some functionality is running on a separate server):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/847051bd-70e3-4b4d-a840-2d4aec4d79fd.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Now we have to make sure we have an external Prometheus host configured that
+    is ready to scrape the data. As we''ve previously mentioned, Prometheus is a single
+    Go binary. To specify which configuration file to load, use the `--config.file`
+    flag. This configuration file has to have the YAML format. How a single Prometheus
+    server monitors the GitLab Metrics Exporter embedded in GitLab is shown in the
+    following `prometheus.yml` example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The `gitlab_metrics_exporter_sd.yml` file contains the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: If you put both files in `/tmp`, or elsewhere, and run Prometheus as a Docker
+    container (as seen in the following example), you should have an external Prometheus
+    ready for action. Of course, you can also install it from source and run it on
+    a dedicated server somewhere else if preferred.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: You now know how Prometheus runs on the GitLab application server itself, as
+    well as on a separate server.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Enabling the external dashboard link
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Since GitLab 12.0 it also possible to enable a link to an external dashboard
+    from inside of GitLab.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Go to Settings | Operations and navigate to External dashboard
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Insert the location to your external dashboard and click on Save Changes:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/fdc121f6-4512-4700-80dc-c0ac29f13d41.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Customizing monitoring
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: There are several ways to create custom monitoring scripts that will supply
+    time series data to your Prometheus server. As noted earlier in the *Setting up
+    Prometheus* section,there are many client libraries available, such as [https://github.com/prometheus/client_python](https://github.com/prometheus/client_python).
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the following screenshot, you can see that the preceding project is not very
+    big but does have stars on GitHub.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/b6a6c593-5b1e-4777-8060-5b123cb8eb66.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'To use this library, install it using pip (a Python package manager for modules)
+    with the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You can also create a simple exporter by running the following code from a
+    Python interpreter or via a file:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The exporter will start on `localhost`, on port 8000, and the following page
+    will appear when called:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/da943227-3d2d-4991-98b3-8c5e657809f9.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'You can add this exporter to your Prometheus server by adding the following
+    code to `prometheus.yml` and restarting Prometheus with `gitlab-ctl restart prometheus` on
+    an omnibus-installed GitLab application server, or you can use `service prometheus
+    restart` on an externally-installed Prometheus:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: You now have the option to modify your own Python application to report metrics,
+    or you can create Python code that gathers metrics from your system. For instance,
+    you may want to parse a log file for certain patterns and accumulate the relevant
+    metrics.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The static analysis of security vulnerabilities
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '**Static Application Security Testing** (**SAST**) is used to analyze source
+    code or binaries and to detect holes or weak points in security. When automated,
+    this contributes to making your DevOps methodology resemble DevSecOps, where security
+    testing and awareness is part of the DevOps life cycle.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: GitLab, in its Ultimate license model, provides automated testing as part of
+    the development of your application.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Currently, the following languages and frameworks are supported:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Language/Framework | Scan tool |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| .NET | Security Code Scan |'
+  prefs: []
+  type: TYPE_TB
+- en: '| C/C++ | Flawfinder |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Go | gosec |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Groovy (Gradle and Grail) | find-sec-bugs |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Java (Maven and Gradle)  | find-sec-bugs |'
+  prefs: []
+  type: TYPE_TB
+- en: '| JavaScript | ESLint security plugin |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Node.js | NodeJsScan |'
+  prefs: []
+  type: TYPE_TB
+- en: '| PHP | phpcs-security-audit |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Python | bandit |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Ruby on Rails | brakeman |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Scala (sbt) | find-sec-bugs |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Typescript | TSLint Config Security |'
+  prefs: []
+  type: TYPE_TB
+- en: First, you need GitLab Runner with a Docker-in-Docker executor.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This is a normal Docker executor, but it runs in privileged mode. This means
+    it can run its own Docker daemon and therefore run containers itself.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You enable this functionality by changing the GitLab Runner configuration file
+    (`config.toml`), making sure it has `privileged = true`. After changing this,
+    restart the runner as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Secondly, you need a specific `.gitlab-ci.yml` in your GitLab project folder
+    to make the actual coupling, as shown in the following snippet:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As an example, we downloaded the following code from [https://github.com/CSPF-Founder/JavaVulnerableLab](https://github.com/CSPF-Founder/JavaVulnerableLab)
+    into our own project. We added `.gitlab-ci.yml` to run a scan. When the code was
+    pushed, the workflow started and prepared for the scan:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In the next stage, the repository containing the code to be scanned is cloned,
+    shown as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In the next step, the run tries to get a specific Docker image for the scan.
+    It will not find that locally and will instead try to get it from `gitlab.org`,
+    as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After successfully downloading the image, it will start the scan, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After 10 minutes, the results should be as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The scan will report on which plugin or module can be use (in other words,
+    it checks project compatibility), as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You should now see a report of the findings, as in the following example (which
+    is not entirely complete):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As you can see in the following snippet, a lot of security issues were discovered:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: The scan finally finishes by uploading the report.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Essentially, SAST tries to analyze your code and applies plugins based on which
+    code could be scanned. It will look for security hazards in your code. The scan
+    is done in a special container delivered by GitLab. After scanning, a report is
+    available.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Dynamic Application Security Testing
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '**Dynamic Application Security Testing** (**DAST**) runs PEN tests like scans
+    of your application.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The test uses OWASP ZAProxy ([https://github.com/zaproxy/zaproxy](https://github.com/zaproxy/zaproxy))
+    to scan a running instance in your web application. It runs a passive scan, which
+    means it only tries to discover your application by exploring links, will not
+    find links created dynamically, and will not attack your application actively.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Before GitLab 12.0, this scan also used the Docker-in-Docker mechanism, but
+    now it just retrieves and runs a container and the test. This means the image
+    is cached on GitLab runners, and after retrieving the image for the first time,
+    the security test will run faster.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As with SAST, you control how scanning happens through the `.gitlab-ci.yml`
+    file, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: When you push code to the repository, the DAST scan will start preparing, as
+    shown in the following snippet. First, it will try to find the ZAProxy Docker
+    container and pull it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The scan will start as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'It will try to scan the whole website, as shown in the following example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'It will then report vulnerabilities immediately, as shown in the following
+    snippet:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After scanning, the report is created and uploaded as an artifact, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see from the preceding examples, by utilizing GitLab Runners with
+    Docker, it is very easy to start a dynamic security scan.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Dependency checking
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Known vulnerabilities in third-party components or dependencies are very common.
+    They could even be part of the OWASP Top 10 List of Using Components with Known
+    Vulnerabilities. The OWASP Web Malware Scanner (see [https://www.owasp.org](https://www.owasp.org))
+    is a malware scanner for web applications. It can be used to scan a web application
+    by using signatures from a community build and a managed database. It works by
+    testing each file of the web application for known signatures of malware.
+  prefs: []
+  type: TYPE_NORMAL
+- en: These known vulnerable components should be identified at an early development
+    stage. It is also good practice to perform vulnerability scanning of the dependency
+    components not only in the development stage but also in the production stage
+    on a regular basis.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Again, the dependency scan in your GitLab workflow is controlled through the
+    `.gitlab-ci.yml` file. It also uses the Docker-in-Docker technique, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'For this test, we used the same code ([https://github.com/CSPF-Founder/JavaVulnerableLab](https://github.com/CSPF-Founder/JavaVulnerableLab))
+    as we did in the SAST scan to show our results. Here, you can see the job as it
+    prepares after being pushed some new code. It should pull the `stable-dind` image,
+    as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Running the image will execute the dependency scan, as shown in the following
+    snippets:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: The technology used was formerly called Gemnasium. It was bought by GitLab in
+    2018, as you can see in a statement at** [https://docs.gitlab.com/ee/user/project/import/gemnasium.html](https://docs.gitlab.com/ee/user/project/import/gemnasium.html).**
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As you can see in the following code, some vulnerabilities in the MySQL library
+    used were found:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: The job ends by uploading the scan report.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Just like the other scans, dependency checking uses the same technique of running
+    a specific scan program from inside a Docker container. In this case, the scan
+    program in use is Gemnasium, which was taken over by GitLab last year. If a problematic
+    dependency is found, it is displayed in the output and in the resulting report.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'A nice feature of GitLab 12.0 is that after your conducted your dependency
+    scan, the resulting list of dependencies is saved in your project. This is a much
+    wanted feature by security/compliance teams to keep track of what dependencies
+    are used throughout the enterprise:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/a03f0cc3-c028-4476-8ae9-02a52a7fed21.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we discussed the use of monitoring in the workflow, and the
+    possibility to immediately integrate security monitoring. GitLab provides out-of-the-box
+    opportunities to set up such things. In this chapter, we also looked at Prometheus
+    and ways to write custom monitoring for it. In the next chapter, we will discuss
+    integration options for GitLab, in case you need to connect to other tools.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Questions
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: On which system is Prometheus inspired?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What is the name of the Prometheus clients?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: On what path is the GitLab Metrics Exporter normally found?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What language was used for the GitLab Monitor Exporter?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: How do you enable the built-in Prometheus server in the omnibus package?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What does SAST mean?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What does DAST mean?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Which file is used to control security testing?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Further reading
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Prometheus site: [https://prometheus.io](https://prometheus.io)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'OWASP scan: [https://www.owasp.org](https://www.owasp.org)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Practical Site Reliability Engineering*, by *Pethuru Raj Chelliah*, *Shreyash
+    Naithani*, and *Shailender Singh*: [https://www.packtpub.com/virtualization-and-cloud/practical-site-reliability-engineering](https://www.packtpub.com/virtualization-and-cloud/practical-site-reliability-engineering)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Hands-On Security in DevOps*, by *Tony Hsu*: [https://www.packtpub.com/in/networking-and-servers/hands-security-devops](https://www.packtpub.com/in/networking-and-servers/hands-security-devops)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Industrial Internet Application Development*, by *Alena Traukina*, *Jayant
+    Thomas*, *Prashant Tyagi*, and *Kishore Reddipalli*: [https://www.packtpub.com/in/application-development/industrial-internet-application-development](https://www.packtpub.com/in/application-development/industrial-internet-application-development)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

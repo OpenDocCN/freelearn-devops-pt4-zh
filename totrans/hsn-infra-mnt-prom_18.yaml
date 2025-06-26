@@ -1,0 +1,1034 @@
+- en: Integrating Long-Term Storage with Prometheus
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The single-instance design of Prometheus makes it impractical to maintain large
+    datasets of historical data, as it is limited by the amount of storage that's
+    available locally. Having time series that span large periods allows seasonal
+    trend analysis and capacity planning, and so, when the dataset doesn't fit into
+    local storage, Prometheus provides this by pushing data to third-party clustered
+    storage systems. In this chapter, we will look into remote read and write APIs,
+    as well as shipping metrics for object storage with the help of Thanos. This will
+    provide options on how to tackle this requirement, enabling several architecture
+    choices.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In brief, the following topics will be covered in this chapter:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Test environment for this chapter
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Remote write and remote read
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Options for metrics storage
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Thanos remote storage and ecosystem
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Test environment for this chapter
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we'll be focusing on clustered storage. For this, we'll be
+    deploying three instances to help simulate a scenario where Prometheus generates
+    metrics and then we'll go through some options regarding how to store them on
+    an object storage solution. This approach will allow us to not only explore the
+    required configurations but also see how everything works together.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The setup we''ll be using resembles the following diagram:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/cdf6ecf8-f54a-4bb0-9d8a-0f01dd3dc307.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 14.1: Test environment for this chapter'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next section, we will explain how to get the test environment up and
+    running.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Deployment
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'To launch a new test environment, move into this path, relative to the repository
+    root, shown as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Ensure that no other test environments are running and spin up this chapter''s
+    environment, shown as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You can validate the successful deployment of the test environment using the
+    following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This will output the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'When the deployment tasks end, you''ll be able to validate the following endpoints
+    on your host machine using your favorite JavaScript-enabled web browser:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| **Service** | **Endpoint** |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Prometheus | `http://192.168.42.10:9090` |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Thanos sidecar | `http://192.168.42.10:10902` |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Object storage`Access key: strongACCESSkey``Secret key:  strongSECRETkey`
+    | `http://192.168.42.11:9000` |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Thanos querier | `http://192.168.42.12:10902` |'
+  prefs: []
+  type: TYPE_TB
+- en: 'You should be able to access the desired instance by using one of the following
+    commands:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| **Instance** | **Command** |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Prometheus | `vagrant ssh prometheus` |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Storage | `vagrant ssh storage` |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Thanos | `vagrant ssh thanos` |'
+  prefs: []
+  type: TYPE_TB
+- en: Cleanup
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'When you''ve finished testing, just make sure that you''re inside `./chapter14/`
+    and execute the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: Don't worry too much; you can easily spin up the environment again if you need
+    to.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Remote write and remote read
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Remote write and remote read allow Prometheus to push and pull samples, respectively:
+    remote write is usually employed to implement remote storage strategies, while
+    remote read allows PromQL queries to transparently target remote data. In the
+    following topics, we''ll go into each of these functionalities and present some
+    examples of where they can be used.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Remote write
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Remote write was a very sought after feature for Prometheus. It was first implemented
+    as native support for sending samples in the openTSDB, InfluxDB, and Graphite
+    data formats. However, a decision was soon made to not support each possible remote
+    system but instead provide a generic write mechanism that's suitable for building
+    custom adapters. This enabled custom integrations decoupled from the Prometheus
+    roadmap, while opening up the possibility of supporting the read path in those
+    bridges as well. The system-specific implementations of remote write were removed
+    from the Prometheus binary and converted into a standalone adapters as an example.
+    The logic of relying on adapters and empowering the community so that it can build
+    whatever integration is required follows the philosophy we discussed in [Chapter
+    12](5360e790-3884-4eeb-aaa1-8aad21dc6c1e.xhtml), *Choosing the Right Service Discovery*,
+    for building custom service discovery integrations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Official examples of custom remote storage adapters can be found at [https://github.com/prometheus/prometheus/tree/master/documentation/examples/remote_storage/remote_storage_adapter](https://github.com/prometheus/prometheus/tree/master/documentation/examples/remote_storage/remote_storage_adapter).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Prometheus sends individual samples to remote write endpoints, using a very
+    simple format which isn't tied to Prometheus internals. The system on the other
+    end might not even be a storage system but a stream processor, such as Kafka or
+    Riemann. This was a tough decision when defining the remote write design, as Prometheus
+    already knew how to create efficient chunks and could just send those over the
+    wire. Chunks would have made supporting streaming systems impractical, and sending
+    samples is both easier to understand and easier to implement with regard to adapters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Remote write was the target of a great enhancement with the release of Prometheus
+    2.8\. Previously, when a metric failed to be delivered to a remote write endpoint
+    (due to network or service issues) there was just a small buffer to store the
+    data. If that buffer was filled, metrics would be dropped, and were permanently
+    lost to those remote systems. Even worse, the buffer could create back-pressure
+    and cause the Prometheus server to crash due to an **Out of Memory** (**OOM**)
+    error. Since the remote write API started relying on the **Write-Ahead Log** (**WAL**)
+    for bookkeeping, this doesn't happen anymore. Instead of using a buffer, the remote
+    write now reads directly from the WAL, which has all transactions in flight and
+    scraped samples. Using the WAL on the remote write subsystem makes Prometheus
+    memory usage more predictable and allows it to resume from where it left off after
+    a connectivity outage to the remote system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Configuration-wise, the following snippet illustrates the minimal code required
+    to set up a remote write endpoint in Prometheus:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: Since remote write is another instance of interfacing with external systems,
+    `external_labels` are also applied to samples before being sent. This can also
+    prevent collision of metrics on the remote side when using more than one Prometheus
+    server to push data to the same location. Remote write also supports `write_relabel_configs`
+    to allow you to control which metrics are sent and which are dropped. This relabeling
+    is run after external labels are applied.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Later in this chapter, we'll talk about a fairly new (and experimental) Thanos
+    component called **receiver** as a practical example of remote write usage.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Remote read
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: After the remote write feature was made available, requests for remote read
+    started to flow. Imagine sending Prometheus data to a remote endpoint and then
+    having to learn a new query language such as InfluxQL (the InfluxDB query language)
+    to access the aforementioned data. The inclusion of this feature enables the transparent
+    use of PromQL against data stored outside the Prometheus server as if it was locally
+    available.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Queries run against remote data are centrally evaluated. This means that remote
+    endpoints just send the data for the requested matchers and time ranges, and PromQL
+    is applied in the Prometheus instance where the query originated. Once again,
+    choosing centralized (as opposed to distributed) query evaluation was a critical
+    decision at the time of designing the API. Distributed evaluation could have spread
+    the load of each query, but would force the remote system to understand and evaluate
+    PromQL and handle numerous corner cases when data is non-disjoint, greatly increasing
+    the implementation complexity of the aforementioned systems. Centralized evaluation
+    also allows the remote systems to  downsample the requested data, which greatly
+    improves queries with very long time ranges.
+  prefs: []
+  type: TYPE_NORMAL
+- en: One example where remote read can be useful is assisting migration between major
+    versions of Prometheus, such as going from Prometheus *v1* to Prometheus *v2*.
+    The latter can be configured to a remote read from the former, thus making the
+    old instance read-only (no scrape jobs configured). This uses the *v1* instance
+    as glorified remote storage until its metrics are no longer useful. A common gotcha
+    that trips the implementer of this strategy is the fact that `external_labels`
+    from the Prometheus instance configured with remote read need to have a match
+    in the `external_labels` from the Prometheus instance being read.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'On the flipside, an example of the remote read endpoint in Prometheus itself
+    was seen in the previous chapter ([Chapter 13](3615e455-c55b-49af-8c9b-b5342d4859dd.xhtml),
+    *Scaling and Federating Prometheus*): the Thanos sidecar uses the remote read
+    API from the local Prometheus instance to get the time series data requested by
+    the Thanos querier.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Configuration-wise, it is quite simple to set up Prometheus to do a remote
+    read. The following snippet shows the required section of the configuration file:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `remote_read` section also allows you to specify a list of matchers using
+    `required_matchers` that need to be present in a selector to query a given endpoint.
+    This is useful for remote systems that aren't storage or when you only write a
+    subset of your metrics to remote storage, thus needing to restrict remote reads
+    to those metrics.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Options for metrics storage
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'By default, Prometheus does a great job of managing local storage of metrics
+    using its own TSDB. But there are cases where this is not enough: local storage
+    is limited by the amount of disk space available locally to the Prometheus instance,
+    which isn''t ideal for large retention periods, such as years, and large data
+    volumes that go beyond the amount of disk space that is feasible to have attached
+    to the instance. In the following sections, we''ll be discussing the local storage
+    approach, as well as the currently available options for remote storage.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Local storage
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Prometheus'' out-of-the-box storage solution for time series data is simply
+    local storage. It is simpler to understand and simpler to manage: the database
+    lives in a single directory, which is easy to back up, restore, or destroy if
+    needed. By avoiding clustering, Prometheus ensures sane behavior when facing network
+    partitions; you don''t want your monitoring system to fail when you need it the
+    most. High availability is commonly achieved by simply running two Prometheus
+    instances with the same configuration, each with its own database. This storage
+    solution, however, does not cover all uses cases, and has a few shortcomings:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: It's not durable – in a container orchestration deployment, the collected data
+    will disappear when the container is rescheduled (as the previous data is destroyed
+    and the current data is started afresh) if persistent volumes are not used, while
+    in a VM deployment, the data will be as durable as the local disk.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: It's not horizontally scalable – using local storage means that your dataset
+    can only be as big as the disk space you can make available to the instance.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: It wasn't designed for long-term retention, even though, with the right metric
+    criteria and cardinality control, commodity storage will go a long way.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: These shortcomings are the result of trade-offs that are made to ensure that
+    small and medium deployments (which are by far the more common use cases) work
+    great while also making advanced and large-scale use cases possible. Alerting
+    and dashboards, in the context of day-to-day operational monitoring or troubleshooting
+    ongoing incidents, only require a couple of weeks of data at most.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Before going all out for a remote metric storage system for long-term retention,
+    we might consider managing local storage through the use of TSDB admin API endpoints,
+    that is, `snapshot` and `delete_series`. These endpoints help keep local storage
+    under control. As we mentioned in [Chapter 5](12e775c2-bee9-4ebe-ad73-2f9313eeeeee.xhtml),
+    *Running a Prometheus Server*, the TSDB administration API is not available by
+    default; Prometheus needs to be started with the `--web.enable-admin-api` flag
+    so that the API is enabled.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter''s test environment, you can try using these endpoints and
+    evaluate what they aim to accomplish. By connecting to the `prometheus` instance,
+    we can validate that the TSDB admin API has been enabled, and look up the local
+    storage path by using the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Issuing an HTTP `POST` to the `/api/v1/admin/tsdb/snapshot` endpoint will trigger
+    a new snapshot that will store the available blocks in a snapshots directory.
+    Snapshots are made using hard links, which makes them very space-efficient as
+    long as Prometheus still has those blocks.  The following instructions illustrate
+    how everything is processed:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: You can then back up the snapshot directory, which can be used as the TSDB storage
+    path for another Prometheus instance through `--storage.tsdb.path` when that historical
+    data is required for querying. Note that `--storage.tsdb.retention.time` might
+    need to be adjusted to your data duration, as Prometheus might start deleting
+    blocks outside the retention period.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This, of course, will not prevent the growth of the TSDB. To manage this aspect,
+    we can employ the `/api/v1/admin/tsdb/delete_series` endpoint, which is useful
+    for weekly or even daily maintenance. It operates by means of an HTTP POST request
+    with a set of match selectors that mark all matching time series for deletion,
+    optionally restricting the deletion to a given time window if a time range is
+    also sent. The following table provides an overview of the URL parameters in question:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| **URL parameters** | **Description** |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `match[]=<selector>` | One or more match selectors, for example, `match[]={__name__=~"go_.*"}`(Deletes
+    all metrics whose name starts with `go_`) |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `start=<unix_timestamp>` | Start time for the deletion in the RFC 3339 or
+    Unix format (optional, defaults to the earliest possible time) |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `end=<unix_timestamp>` | End time for the deletion in RFC 3339 or Unix format
+    (optional, defaults to the latest possible time) |'
+  prefs: []
+  type: TYPE_TB
+- en: 'After the `POST` request is performed, an HTTP `204` is returned. This will
+    not immediately free up disk space, as it will have to wait until the next Prometheus
+    compaction event. You can force this cleanup by requesting the `clean_tombstones`
+    endpoint, as exemplified in the following instructions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: This knowledge might help you keep local storage under control and avoid stepping
+    into complex and time-consuming alternatives, when the concern is mostly around
+    scalability.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Remote storage integrations
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Opting for remote metric storage shouldn''t be taken lightly as it has several
+    implications. Some factors to consider when choosing a remote storage solution,
+    to name but a few, are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Maturity**: Some storage solutions are more mature and better maintained
+    than others.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Control**: There are some solutions where you run your own instances, while
+    others are SaaS offerings.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Availability, reliability and scalability**: If you choose to manage the
+    storage solution internally, you need to consider these aspects.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Maintainability**: Some options are truly complex to deploy and/or maintain.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Remote read and write**: Do you truly need both, or does write suffice for
+    your use case?'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Cost**: It might all come down to this; we define cost not only in the monetary
+    sense, but also in terms of the time required to learn, test, and operate a solution.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Another critical factor to consider relates to alerting. For reliability, rules
+    should only query local data; this prevents transient failures in the network
+    layer to negatively affect rule evaluation. As such, data in remote storage systems
+    shouldn't be used for critical alerting, or at least you should be able to tolerate
+    them being missing.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If the scale you''re working with demands scalable storage or if historical
+    data is crucial for your use case, for example, for capacity planning, then there
+    are a few options available. The official Prometheus documentation has a comprehensive
+    list of known remote storage integrations, available at [https://prometheus.io/docs/operating/integrations/#remote-endpoints-and-storage](https://prometheus.io/docs/operating/integrations/#remote-endpoints-and-storage).
+    This list has integrations for several different use cases: SaaS offerings (such
+    as SignalFX and Splunk); a stream processing system (Kafka); different time series
+    databases – both paid (IRONdb) and open source (InfluxDB, Cortex, TimescaleDB,
+    M3DB, to name a few); other monitoring systems (OpenTSDB, Graphite); and even
+    generic datastores (such as Elasticsearch and TiKV). A good portion of them support
+    both remote read and write. Some of them deserve an entire book of their own.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Curiously, the solution we are going to explore in depth isn''t in the aforementioned
+    list at the time of writing, as it uses an entirely different approach to the
+    problem we''re dealing with. In fact, Prometheus doesn''t even need to know about
+    it because it works like an overlay. We are going to focus on the most promising
+    long-term storage solution, which beautifully balances complexity, cost, and the
+    feature set: Thanos.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Thanos remote storage and ecosystem
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In [Chapter 13](3615e455-c55b-49af-8c9b-b5342d4859dd.xhtml), *Scaling and Federating
+    Prometheus*, we were introduced to Thanos, an open source project that was created
+    to improve upon some of the shortcomings of Prometheus at scale. Specifically,
+    we went through how Thanos solves having a global view of several Prometheus instances
+    using the Thanos sidecar and querier components. It's now time to meet other Thanos
+    components and explore how they work together to enable cheap long-term retention
+    using object storage. Keep in mind that complexity will increase when going down
+    this path, so validate your requirements and whether the global view approach
+    and local storage aren't enough for your particular use case.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Thanos ecosystem
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Besides the Thanos querier and sidecar, which we covered previously, there
+    are a few other components in the Thanos ecosystem. All of these components coexist
+    in the same binary and are run by invoking different sub-commands, which we''ll
+    enumerate later:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`query`: Commonly known as *querier*, it''s a daemon that''s responsible for
+    fanning out queries and deduplicating results to configured StoreAPI endpoints'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`sidecar`: A daemon which exposes a StoreAPI endpoint for accessing the data
+    from a local Prometheus instance and ships the aforementioned instance''s TSDB
+    blocks to object storage'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`store`: A daemon which acts as a gateway for remote storage, exposing a StoreAPI
+    endpoint'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`compact`: Commonly known as *compactor,* this daemon is responsible for compacting
+    blocks that are available in object storage and creating new downsampled time
+    series'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`bucket`: A command line-tool that can verify, recover, and inspect data stored
+    in object storage'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`receive`: Known as *receiver*, it''s a daemon that accepts remote writes from
+    Prometheus instances, exposing pushed data through a StoreAPI endpoint, and can
+    ship blocks to object storage'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`rule`: Commonly known as *ruler*, it''s a daemon that evaluates Prometheus
+    rules (recording and alerting) against remote StoreAPI endpoints, exposes its
+    own StoreAPI to make evaluation results available for querying, ships results
+    to object storage, and connects to an Alertmanager cluster to send alerts'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: You can find all the source code and installation files for Thanos at [https://github.com/improbable-eng/thanos](https://github.com/improbable-eng/thanos).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'All of the following components work together to solve several challenges:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Global view**: Querying every Prometheus instance from the same place, while
+    aggregating and deduplicating the returned time series.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Downsampling**: Querying months or even years of data is a problem if samples
+    come at full resolution; by automatically creating downsampled data, queries that
+    span large time periods become feasible.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Rules**: Enables the creation of global alerts and recording rules that mix
+    metrics from different Prometheus shards.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Long-term retention**: By leveraging object storage, it delegates durability,
+    reliability, and scalability concerns of storage to outside the monitoring stack.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: While we'll be providing a glimpse of how these challenges are tackled with
+    Thanos, our main focus will be on the long-term storage aspect of it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Storage-wise, the Thanos project settled on object storage for long-term data.
+    Most cloud providers provide this service, with the added benefit of also ensuring
+    **service-level agreements** (**SLA**) for it. Object storage usually has 99.999999999%
+    durability and 99.99% availability on any of the top cloud providers. If you have
+    an on-premise infrastructure, there are also some options available: using Swift
+    (the OpenStack component that provides object storage APIs), or even the MinIO
+    project, which we use in this chapter''s test environment. Most of these on-premise
+    object storage solutions share the same characteristic: they provide APIs that
+    are modeled to mimic the well-known AWS S3 due to so many tools supporting it.
+    Moreover, object storage from cloud providers is typically a very cost-effective
+    solution.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following diagram provides a simple overview of the core components that
+    are needed to achieve long-term retention of Prometheus time series data using
+    Thanos:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/94916cc1-d386-4b83-8afb-3e7440cc68a5.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 14.2: High-level Thanos long-term storage architecture'
+  prefs: []
+  type: TYPE_NORMAL
+- en: As we can see in the previous diagram, we only need some Thanos components to
+    tackle this challenge. In the following topics, we'll go over every component
+    and expand on its role in the overall design.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Thanos components
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Now that we've seen an overview of the Thanos long-term storage architecture,
+    it's time to meet all the available Thanos components. Besides providing an introduction
+    to every single one of them, we'll be emphasizing those that are available in
+    the test environment, expanding on their role in the ecosystem, and the configuration
+    which is in place.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can find some community-driven alerts and dashboards at [https://github.com/improbable-eng/thanos/tree/master/examples](https://github.com/improbable-eng/thanos/tree/master/examples).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Test environment specifics
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'As stated at the beginning of this book, using the provided test environments
+    won''t incur any cost. As such, since we require an object storage bucket for
+    our examples, we relied on a project called MinIO, which exposes an S3-compatible
+    API; you can find more information about it at [https://min.io/](https://min.io/).
+    Configuration-wise, this storage endpoint should be available in the storage instance
+    with the following settings:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The preceding `systemd` unit file loads the following environment variables:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'To ensure that you don''t have to wait two hours to have blocks to ship into
+    the object storage, the Prometheus server in our test environment has the following
+    settings in place:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: This configuration changes the block duration, setting the interval at which
+    to flush them to disk, from the default two hours to ten minutes. Although setting
+    such a low value is very useful for testing this particular feature, it is completely
+    ill-advised for anything else. To make this crystal clear, there's no good reason
+    to change these values to anything other than two hours, except for testing.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With the specifics for this chapter's test environment out of the way, we can
+    now proceed to introduce each individual Thanos component.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Thanos query
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In [Chapter 13](3615e455-c55b-49af-8c9b-b5342d4859dd.xhtml),* Scaling and Federating
+    Prometheus*, we had the chance to explore the Thanos querier and sidecar to solve
+    the global view problem. For this component, the features we covered then will
+    also be used in this chapter. We'll continue using querier to query several StoreAPI
+    endpoints, taking advantage of the deduplication it provides, and using the query
+    API through its web interface.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The configuration that''s available in our test environment is quite simple,
+    as we can see in the following snippet, which was taken from the `thanos` instance:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As you can see in the previous snippet, we specified several `--store` endpoints.
+    To understand which is which, we can point our browser at the Thanos querier web
+    interface, available at [http://192.168.42.12:10902/stores](http://192.168.42.12:10902/stores),
+    and see the available stores, as depicted by following screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/19cc7e59-1495-4f5f-a41a-4b6d25479ee0.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 14.3: Thanos querier /stores endpoint'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The previous screenshot illustrates all the available store APIs in our test
+    environment. These will be the sources of data that will be used any time you
+    execute a query in the Thanos querier.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Thanos sidecar
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Besides the Store API that's exposed by the Thanos sidecar we covered previously,
+    this component is also is able to gather TSDB blocks from disk and ship them to
+    an object storage bucket. This allows you to decrease the retention of the Prometheus
+    server by keeping historical data in a durable medium. In order to use the block
+    upload feature in the sidecar, the `--storage.tsdb.min-block-duration` and `--storage.tsdb.max-block-duration`
+    flags need to be set to the same value (two hours to match the default behavior),
+    so that Prometheus local compaction is disabled.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The configuration in use is available on the `prometheus` instance and can
+    be inspected by executing the following instruction:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As we can see, the `--objstore.config-file` flag loads all the required configuration
+    from the file in order to ship the TSDB blocks to an object storage bucket, such
+    as the bucket name (in our case, `thanos`), the storage endpoint, and access credentials.
+    The following are the contents of that file:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In our Prometheus test instance, a new TSDB block will be generated every 10
+    minutes, and the Thanos sidecar will take care of shipping it to the object storage
+    endpoint. We can review the available blocks in our bucket by using MinIO''s web
+    interface, available at [http://192.168.42.11:9000/minio/thanos/](http://192.168.42.11:9000/minio/thanos/).
+    After logging in with the `access_key` and `secret_key` shown in the previous
+    code snippet, you''ll be greeted with something resembling the following screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/c3a97419-6648-445d-8fcc-3dd614274523.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 14.4: MinIO object storage web interface'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We should now have some historical data available for testing. We'll need a
+    way to query this data. That's where the Thanos store gateway comes into play.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Thanos store gateway
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The Thanos store gateway's main function is to provide access to the historical
+    time series data in the blocks that are shipped to object storage through a StoreAPI
+    endpoint. This means that it effectively acts as an API gateway. All major object
+    store integrations in Thanos store (Google Cloud Storage, AWS S3, Azure Storage)
+    are considered stable enough to run in production. It uses a relatively small
+    local cache of all block metadata, and it keeps it in sync with the storage bucket.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'A minimal configuration for this component is available in the Thanos instance
+    in our test environment. The following is the snippet from it:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: As we can see, object storage configuration is done in its own configuration
+    file. Like most of the other components, a store binds a StoreAPI GRPC port for
+    receiving queries and an HTTP port so that its metrics can be collected by Prometheus.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Thanos compact
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Since Prometheus block compaction needs to be turned off for Thanos sidecar
+    upload feature to work reliably, this work is delegated to a different component:
+    Thanos compact. It was designed to use the same compaction strategy as the Prometheus
+    storage engine itself, but for blocks in object storage instead. Since compaction
+    cannot be done directly in object storage, this component requires a fair amount
+    of available space (a few hundred GB, depending on the amount stored remotely)
+    in local disks to process the blocks.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Another important function Thanos compact performs is creating downsampled
+    samples. The biggest advantage of downsampling is querying large time ranges reliably,
+    without needing to pull an overwhelming amount of data. The usage of `*_over_time`
+    functions (as discussed in [Chapter 7](205ddb34-6ee8-4e22-b80f-39d5b2198c29.xhtml),* Prometheus
+    Query Language – PromQL*) is also highly recommended when using downsampled data
+    as the method that''s used to downsample does not merely remove samples but also
+    pre-aggregates them using five different aggregation functions. This means that
+    five new time series for each raw series. Something very important to keep in
+    mind is that full resolution data is only downsampled to a five minute resolution
+    after 40 hours. Similarly, one hour''s downsampled data is only created after
+    10 days by using the previously downsampled data with five minute resolution as
+    the source. Keeping the raw data might be useful for zooming into a specific event
+    in time, which you wouldn''t be able to do with just downsampled data. There are
+    three flags for managing the retention of data (that is, how long to keep it)
+    in raw, five minute, and one hour form, as shown in the following table:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| **Flag** | **Duration** |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `--retention.resolution-raw` | The duration keeps data with a raw resolution
+    in the object storage bucket, for example, 365d (it defaults to 0d, which means
+    forever) |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `--retention.resolution-5m` | The duration to keep data with 5-minute in
+    the object storage bucket, for example, 365d (it defaults to 0d, which means forever)
+    |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `--retention.resolution-1h` | The duration to keep data with 1-hour in the
+    object storage bucket, for example, 365d (it defaults to 0d, which means forever)
+    |'
+  prefs: []
+  type: TYPE_TB
+- en: Each storage bucket should only have one Thanos compactor associated with it,
+    as it's not designed to run concurrently.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When considering retention policies, bear in mind that, as the first downsampling
+    step aggregates five minutes-worth of data and the aggregation produces five new
+    time series, you’d need to have a scrape interval lower than one minute to actually
+    save space (the number of samples in the interval needs to be higher than the
+    samples produced by the aggregation step).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The compactor can either be run as a daemon which springs to action whenever
+    it''s needed, or as single-shot job, exiting at the end of the run. In our test
+    environment, we have a Thanos compactor running in the `thanos` instance to manage
+    our object storage bucket. It''s running as a service (using the `--wait` flag)
+    to make the test environment simpler. The configuration being used is shown in
+    the following snippet:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: Just like the other components, the HTTP endpoint is useful for scraping metrics
+    from it. As can be seen in the `retention.*` flags, we're keeping the data in
+    all the available resolutions forever. We'll be discussing Thanos bucket next,
+    a debugging tool that helps inspect Thanos-managed storage buckets.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Thanos bucket
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This component of the Thanos ecosystem is responsible for verifying, repairing,
+    listing, and inspecting blocks in object storage. Unlike other components, this
+    one behaves as a command-line tool instead of a daemon.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You can try out the following example of its usage: listing the available blocks
+    in our object storage bucket:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: This tool is very useful for troubleshooting issues and quickly understanding
+    the state of blocks in the storage bucket.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Thanos receive
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This component, at the time of writing, is still very experimental. However,
+    as promised in the *Remote write and read* section of this chapter, this component
+    is an excellent example of what remote write is all about, so we decided to show
+    you what it can do. It acts as a target for Prometheus remote write requests,
+    and stores received samples locally. The receiver also implements a StoreAPI endpoint,
+    so it has the ability to act as a store node. Finally, it can also ship blocks
+    to object storage, just like sidecar.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To make more sense of what all of this means, let's explore two scenarios.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A Prometheus server will, by default, generate a block every two hours. Even
+    using Thanos sidecar with block shipping, there's no way for Thanos querier to
+    get to data that is still in the WAL without sidecar having to request it via
+    a remote read API from the Prometheus server. When you get to a scale where Grafana,
+    or another API client, generates a huge request rate against Prometheus, the odds
+    are that it will impact Prometheus' performance and eventually affect alerting,
+    even though Prometheus has some protections mechanisms, as we've seen previously.
+    By using Thanos receiver, you can simply move the client queries to it, ensuring
+    that the Prometheus server's main job is scraping and evaluating rules. In a nutshell,
+    you will effectively be separating the reads from the writes of the Prometheus
+    server. You could continue to use Thanos sidecar just to ship blocks and Thanos
+    receiver to answer all Thanos querier inquiries, just like a fresh cache, protecting
+    the Prometheus write path in the process.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Thanos receiver generates blocks every two hours and, unlike Prometheus, this
+    value is hardcoded by design.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Imagine another scenario where there are several tenants/teams using the infrastructure
+    you're managing. If they're technically savvy enough, they'll eventually want
+    to manage their own Prometheus servers. You could try to provide all the automation
+    that's required to manage their servers, but you'll quickly encounter a bottleneck.
+    One option would be to give them a Prometheus server to manage, a Thanos receiver
+    endpoint, and a Thanos store endpoint. Thanos receiver would take care of shipping
+    the blocks to object storage, and Thanos store would provide a way to access them,
+    abstracting the complexity of remote storage from the tenant altogether. This
+    would just be the first step in providing long-term storage as a service for your
+    infrastructure.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In our test environment, in the `thanos` instance, we have a Thanos receiver
+    running. In the following snippet, we can see its configuration:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Since we already have a Thanos sidecar running alongside our Prometheus server,
+    which is sending TSDB blocks to object storage, we disabled the shipping functionality
+    of the receiver just by not adding the `--objstore.config-file` flag. Notice the
+    `--labels` flag, which allows us to specify a label to add to all the time series
+    exposed by this receiver''s StoreAPI; this is effectively a way to configure external
+    labels. Another noteworthy flag is `--remote-write.address`, which is used to
+    provide the remote write endpoint. If we look into the `prometheus` instance,
+    we will see the following configuration, which takes advantage of the aforementioned
+    flag:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'To test all of this, we can simply stop the Thanos sidecar in the `prometheus`
+    instance, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After doing this, Thanos querier will no longer be able to access Thanos sidecar
+    and the recent block information won''t be flushed to disk. This way, we can validate
+    whether the receiver will provide this data. If we go over to the Thanos querier
+    web interface at [http://192.168.42.12:10902/graph](http://192.168.42.12:10902/graph)
+    and run an instant query such as `up{instance=~"prometheus.+"}`, we are presented
+    with the following output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/926c492e-582f-4f38-b16e-1c524b097a11.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 14.5: Thanos receiver showing metrics, even with the Thanos sidecar
+    down'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note the `store` label, indicating that Thanos receiver is providing data while
+    also informing us that Thanos sidecar is currently down. This proves that we can
+    query recent data thanks to the Prometheus remote write API.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The decision to use this component shouldn''t be taken lightly, as it has some
+    disadvantages: besides the fact that it is clearly marked as experimental, it
+    is effectively a push-based system, like Graphite. This means that all the downsides
+    from push-based approaches apply, namely difficulty in managing abusive/rogue
+    clients.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Thanos rule
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This component allows you to run Prometheus-compatible rules (recording/alerting)
+    against remote query endpoints, such as Thanos querier or sidecar. It exposes
+    a StoreAPI endpoint to make the results of rule evaluations available, which are
+    stored in local blocks, and can also ship these TSDB blocks to object storage.
+    It's tempting to imagine using this component as a solution for the centralized
+    management of rules instead of spreading them across multiple Prometheus instances,
+    but that's not its purpose and would be ill-advised. Throughout this book, we
+    have stressed how critical rules are, especially for alerting. We also underlined
+    the importance of running those rules locally in the Prometheus instance that
+    has the required metrics. We've provided alternatives, such as a hierarchical
+    or cross-service federation, for gathering metrics from different Prometheus instances.
+    By using the Thanos ruler for alerting, you would be adding a number of points
+    of failure to the critical path: other Thanos components, the network, and, in
+    the worst case, object storage. Alerting needs to be predictable and reliable,
+    so you can have a high level of confidence that it will work when you need it
+    the most. Though Thanos ruler can have a legitimate set of use cases, it shouldn't
+    be considered for most alerting needs. Nonetheless, it's important to acknowledge
+    its existence.
+  prefs: []
+  type: TYPE_NORMAL
+- en: More information regarding the Thanos ruler can be found at [https://thanos.io/components/rule.md](https://thanos.io/components/rule.md/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We now have a complete overview of the Thanos ecosystem and how it''s configured
+    on the test environment. We invite you to experiment with all the components while
+    evaluating their behavior: for example, stopping all the store APIs except the
+    Thanos store or using the Thanos bucket to understand what data is available in
+    the object storage bucket.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we were introduced to remote read and remote write endpoints.
+    We learned how the recent remote write strategy using WAL is so important for
+    the global performance and availability of Prometheus. Then, we explored some
+    alternatives for keeping Prometheus local storage under control, while explaining
+    the implications of opting for a long-term storage solution. Finally, we delved
+    into Thanos, exposing some of its design decisions and introducing the complete
+    ecosystem of components, providing practical examples showing how all the different
+    pieces work together. With this, we can now build a long-term storage solution
+    for Prometheus if we need to.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Questions
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: What are the main advantages of a remote write based on WAL?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: How can you perform a backup of a running Prometheus server?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Can the disk space of a Prometheus server be freed at runtime? If so, how?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What are the main advantages of Thanos using object storage?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Does it make sense to keep data in all available resolutions?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What is the role of Thanos store?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: How can you inspect the data that's available in object storage using Thanos?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Further reading
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '**Prometheus HTTP API**: [https://prometheus.io/docs/prometheus/latest/querying/api/](https://prometheus.io/docs/prometheus/latest/querying/api/)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Thanos official website**: [https://thanos.io](https://thanos.io/)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

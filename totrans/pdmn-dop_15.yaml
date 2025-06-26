@@ -1660,28 +1660,35 @@
   id: totrans-256
   prefs: []
   type: TYPE_NORMAL
+  zh: 当你更新 `domainName` 字段为新值时，变化不会立即生效。要重新生成更新后的 `dnsmasq.conf`，必须停止网络中的所有容器，以便 `dnsname`
+    插件清理当前的网络配置。当容器重新启动时，`dnsmasq` 配置将相应地重新生成。
 - en: DNS resolution on a Netavark network backend
   id: totrans-257
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 在 Netavark 网络后端上进行 DNS 解析
 - en: If the preceding example was executed on Podman 4 with a Netavark network backend,
     the `aardvark-dns` daemon would be responsible for container resolution in a similar
     way to `dnsmasq`.
   id: totrans-258
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果前面的示例在使用 Netavark 网络后端的 Podman 4 上执行，`aardvark-dns` 守护进程将负责类似于 `dnsmasq` 的容器解析。
 - en: The `aardvark-dns` project is a companion project of Netavark written in Rust.
     It is a lightweight authoritative DNS service that can work on both IPv4 A records
     and IPv6 AAAA records.
   id: totrans-259
   prefs: []
   type: TYPE_NORMAL
+  zh: '`aardvark-dns` 项目是 Netavark 的一个伴生项目，使用 Rust 编写。它是一个轻量级的权威 DNS 服务，可以同时支持 IPv4
+    A 记录和 IPv6 AAAA 记录。'
 - en: 'When a new network with DNS resolution enabled is created, a new `aardvark-dns`
     process is created, as shown in the following code:'
   id: totrans-260
   prefs: []
   type: TYPE_NORMAL
+  zh: 当创建一个启用 DNS 解析的新网络时，系统将创建一个新的 `aardvark-dns` 进程，如以下代码所示：
 - en: '[PRE51]'
   id: totrans-261
   prefs: []
@@ -1693,6 +1700,7 @@
   id: totrans-262
   prefs: []
   type: TYPE_NORMAL
+  zh: 该进程在主机网络命名空间的 `53/udp` 端口上监听根容器的请求，在 rootless 网络命名空间的 `53/udp` 端口上监听无根容器的请求。
 - en: 'The output of the `ps` command also shows the default configuration path –
     the `/run/containers/networks/aardvark-dns` directory – where the `aardvark-dns`
     process stores the resolution configurations under different files, named after
@@ -1701,6 +1709,8 @@
   id: totrans-263
   prefs: []
   type: TYPE_NORMAL
+  zh: '`ps` 命令的输出还显示了默认配置路径——`/run/containers/networks/aardvark-dns` 目录——这是 `aardvark-dns`
+    进程存储解析配置的地方，配置文件按相关网络命名。例如，对于 `net1` 网络，我们将找到类似以下内容：'
 - en: '[PRE52]'
   id: totrans-264
   prefs: []
@@ -1711,11 +1721,13 @@
   id: totrans-265
   prefs: []
   type: TYPE_NORMAL
+  zh: 该文件存储了每个容器的 IPv4 地址（如果有 IPv6 地址，也会存储）。在这里，我们可以看到容器的名称和短 ID 被解析为 IPv4 地址。
 - en: The first line tells us the address where `aardvark-dns` is listening for incoming
     requests. Once again, it corresponds to the default gateway address for the network.
   id: totrans-266
   prefs: []
   type: TYPE_NORMAL
+  zh: 第一行告诉我们 `aardvark-dns` 正在监听传入请求的地址。它再次对应于网络的默认网关地址。
 - en: 'Connecting containers across the same network allows for fast and simple communication
     across different services running in separate network namespaces. However, there
     are use cases where containers must share the same network namespace. Podman offers
@@ -1723,11 +1735,14 @@
   id: totrans-267
   prefs: []
   type: TYPE_NORMAL
+  zh: 在同一网络中连接容器可以实现不同服务之间的快速和简单通信，尤其是在不同的网络命名空间中运行的服务。然而，也有一些使用案例要求容器共享相同的网络命名空间。Podman
+    提供了一种解决方案，轻松实现这一目标：Pod。
 - en: Running containers inside a Pod
   id: totrans-268
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 在 Pod 内部运行容器
 - en: The concept of a Pod comes from the Kubernetes architecture. According to the
     official upstream documentation, "*A Pod ... is a group of one or more containers,
     with shared storage and network resources, and a specification for how to run
@@ -1735,6 +1750,7 @@
   id: totrans-269
   prefs: []
   type: TYPE_NORMAL
+  zh: Pod 的概念来源于 Kubernetes 架构。根据官方上游文档，“*一个 Pod ... 是一个包含一个或多个容器的组，共享存储和网络资源，并有一个运行容器的规范*。”
 - en: A Pod is also the smallest deployable unit in Kubernetes scheduling. All the
     containers inside a Pod share the same network, UTC, IPC, and (optionally) PID
     namespace. This means that all the services running on the different containers
@@ -1744,12 +1760,15 @@
   id: totrans-270
   prefs: []
   type: TYPE_NORMAL
+  zh: Pod 也是 Kubernetes 调度中最小的可部署单元。Pod 中的所有容器共享相同的网络、UTC、IPC 和（可选的）PID 命名空间。这意味着，在不同容器上运行的所有服务可以彼此通过
+    **localhost** 进行引用，而外部容器则继续联系 Pod 的 IP 地址。一个 Pod 接收一个 IP 地址，这个地址在所有容器之间共享。
 - en: 'There are many adoption use cases. A very common one is sidecar containers:
     in this case, a reverse proxy or an OAuth proxy runs alongside the main container
     to provide authentication or service mesh functionalities.'
   id: totrans-271
   prefs: []
   type: TYPE_NORMAL
+  zh: 有许多使用案例，其中一个非常常见的是边车容器：在这种情况下，一个反向代理或 OAuth 代理与主容器一起运行，以提供身份验证或服务网格功能。
 - en: Podman provides the basic tooling for manipulating Pods with the `podman pod`
     command. The following example shows how to create a basic Pod with two containers
     and demonstrates network namespace sharing across the two containers in the Pod.
@@ -1927,16 +1946,19 @@
   id: totrans-300
   prefs: []
   type: TYPE_NORMAL
+  zh: 正如我们在本章稍早的部分简要看到的，Podman使用两种不同的网络堆栈，具体取决于容器：无根或有根。
 - en: Even though the underlying mechanism is slightly different, depending on if
     you are using a rootless or a rootfull container, Podman's command-line options
     for exposing network ports are the same for both container types.
   id: totrans-301
   prefs: []
   type: TYPE_NORMAL
+  zh: 尽管底层机制略有不同，具体取决于你使用的是无根容器还是有根容器，Podman用于暴露网络端口的命令行选项对这两种容器类型是相同的。
 - en: Good to Know
   id: totrans-302
   prefs: []
   type: TYPE_NORMAL
+  zh: 好知道
 - en: Note that the example we are going to see in this section will be executed as
     a root user. This choice was necessary because the main objective of this section
     is to show you some of the firewall configurations that could be mandatory for
@@ -1944,27 +1966,32 @@
   id: totrans-303
   prefs: []
   type: TYPE_NORMAL
+  zh: 请注意，我们在本节中将要看到的示例将作为根用户执行。这是必要的，因为本节的主要目的是向你展示一些可能在暴露容器服务到外部时必需的防火墙配置。
 - en: Exposing a container starts with Port Publishing activities. We'll learn what
     this is in the next section.
   id: totrans-304
   prefs: []
   type: TYPE_NORMAL
+  zh: 暴露容器从端口发布活动开始。我们将在下一节学习这是什么。
 - en: Port Publishing
   id: totrans-305
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 端口发布
 - en: Port Publishing consists of instructing Podman to create a temporary mapping
     between the container's ports and some random or custom host's ports.
   id: totrans-306
   prefs: []
   type: TYPE_NORMAL
+  zh: 端口发布包括指示Podman在容器端口和某些随机或自定义主机端口之间创建临时映射。
 - en: 'The option to instruct Podman to publish a port is really simple – it consists
     of adding the `-p` or `--publish` option to the `run` command. Let''s see how
     it works:'
   id: totrans-307
   prefs: []
   type: TYPE_NORMAL
+  zh: 指示Podman发布端口的选项非常简单——它包括将`-p`或`--publish`选项添加到`run`命令中。让我们看看它是如何工作的：
 - en: '[PRE62]'
   id: totrans-308
   prefs: []
@@ -1976,16 +2003,19 @@
   id: totrans-309
   prefs: []
   type: TYPE_NORMAL
+  zh: 之前的选项将容器的端口或端口范围发布到主机。当我们为`hostPort`或`containerPort`指定范围时，两个范围中的数字必须相等。
 - en: We can even omit `ip`. In that case, the port will be bound on all the IPs of
     the underlying host. If we do not set the host port, the container's port will
     be randomly assigned a port on the host.
   id: totrans-310
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们甚至可以省略`ip`。在这种情况下，端口将绑定到底层主机的所有IP。如果我们没有设置主机端口，容器的端口将随机分配一个主机端口。
 - en: 'Let''s look at an example of the port publishing option:'
   id: totrans-311
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们看一个端口发布选项的示例：
 - en: '[PRE63]'
   id: totrans-312
   prefs: []
@@ -1998,10 +2028,12 @@
   id: totrans-313
   prefs: []
   type: TYPE_NORMAL
+  zh: 如你所见，我们告诉Podman从`httpd`基础镜像启动一个容器。然后，我们分配了一个伪终端（`-t`），并在分离模式（`-d`）下设置端口映射，将底层主机的端口`80`绑定到容器的端口`80`。
 - en: 'Now, we can use the `podman port` command to see the actual mapping:'
   id: totrans-314
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，我们可以使用`podman port`命令查看实际的映射：
 - en: '[PRE64]'
   id: totrans-315
   prefs: []
@@ -2013,6 +2045,7 @@
   id: totrans-316
   prefs: []
   type: TYPE_NORMAL
+  zh: 首先，我们请求了正在运行的容器列表，然后将正确的容器ID传递给`podman port`命令。我们可以这样检查映射是否正常工作：
 - en: '[PRE65]'
   id: totrans-317
   prefs: []
@@ -2023,6 +2056,7 @@
   id: totrans-318
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这里，我们从主机系统执行了`curl`命令，并且成功了——容器中运行的`httpd`进程刚好回应了我们。
 - en: 'If we have multiple ports and we do not care about their assignment on the
     underlying host system, we can easily leverage the`–P` or `--publish-all` option
     to publish all the ports that are exposed by the container image to random ports
@@ -2032,6 +2066,7 @@
   id: totrans-319
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果我们有多个端口，并且不关心它们在底层主机系统上的分配，我们可以轻松地利用`–P`或`--publish-all`选项，将容器镜像暴露的所有端口发布到主机接口上的随机端口。Podman会通过容器镜像的元数据查找暴露的端口。这些端口通常在Dockerfile或Containerfile中使用`EXPOSE`指令定义，如下所示：
 - en: '[PRE66]'
   id: totrans-320
   prefs: []
@@ -2042,16 +2077,19 @@
   id: totrans-321
   prefs: []
   type: TYPE_NORMAL
+  zh: 使用前面的关键字，我们可以指示容器引擎运行最终容器时暴露并使用哪些网络端口。
 - en: However, we can leverage an easy but insecure alternative, as shown in the next
     section.
   id: totrans-322
   prefs: []
   type: TYPE_NORMAL
+  zh: 然而，我们可以利用一种简单但不安全的替代方法，如下一节所示。
 - en: Attaching a host network
   id: totrans-323
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 附加主机网络
 - en: To expose a container service to the outside world, we can attach the whole
     host network to the running container. As you can imagine, this method could lead
     to the unauthorized use of host resources so, for this reason, it is not recommended
@@ -2059,11 +2097,13 @@
   id: totrans-324
   prefs: []
   type: TYPE_NORMAL
+  zh: 要将容器服务暴露给外界，我们可以将整个主机网络附加到运行中的容器。正如你所想，这种方法可能会导致未经授权使用主机资源，因此不建议使用，应该谨慎操作。
 - en: 'As we anticipated, attaching the host network to a running container is quite
     simple. Using the right Podman option, we can easily get rid of any network isolation:'
   id: totrans-325
   prefs: []
   type: TYPE_NORMAL
+  zh: 正如我们预期的那样，将主机网络附加到运行中的容器是相当简单的。通过使用正确的Podman选项，我们可以轻松地消除任何网络隔离：
 - en: '[PRE67]'
   id: totrans-326
   prefs: []
@@ -2074,11 +2114,13 @@
   id: totrans-327
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这里，我们使用了`--network`选项并指定了`host`值。这告诉Podman，我们希望让容器附加到主机网络。
 - en: 'After running the previous command, we can check that the running container
     is bound to the host system''s network interfaces since it can access all of them:'
   id: totrans-328
   prefs: []
   type: TYPE_NORMAL
+  zh: 在运行之前的命令后，我们可以检查运行中的容器是否已经绑定到主机系统的网络接口，因为它可以访问所有接口：
 - en: '[PRE68]'
   id: totrans-329
   prefs: []
@@ -2089,16 +2131,19 @@
   id: totrans-330
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这里，我们从主机系统执行了一个`curl`命令，并且它成功了——容器中运行的`httpd`进程向我们做出了响应。
 - en: The process of exposing containers outside the underlying host does not stop
     here. In the next section, we'll learn how to complete this job.
   id: totrans-331
   prefs: []
   type: TYPE_NORMAL
+  zh: 暴露容器到底层主机外部的过程并没有就此停止。在下一节中，我们将学习如何完成这项工作。
 - en: Host firewall configuration
   id: totrans-332
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 主机防火墙配置
 - en: Whether we choose to leverage Port Publishing or attach the host network to
     the container, the process of exposing containers outside the underlying host
     does not stop here – we have reached the base OS of our host machine. In most
@@ -2107,6 +2152,7 @@
   id: totrans-333
   prefs: []
   type: TYPE_NORMAL
+  zh: 无论我们选择利用端口发布（Port Publishing）还是将主机网络附加到容器，暴露容器到底层主机外部的过程并不会就此停止——我们已经达到了主机机器的基础操作系统。在大多数情况下，我们还需要允许传入的连接流入主机的底层机器，这将与系统防火墙进行交互。
 - en: 'The following example shows a non-comprehensive way to interact with the base
     OS firewall. If we''re using a Fedora operating system or any other Linux distribution
     that''s leveraging Firewalld as its firewall daemon manager, we can allow incoming
@@ -2114,6 +2160,7 @@
   id: totrans-334
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下示例展示了一种非详尽的方式来与基础操作系统防火墙进行交互。如果我们使用的是Fedora操作系统或其他任何使用Firewalld作为防火墙守护进程管理器的Linux发行版，我们可以通过运行以下命令来允许端口`80`上的传入连接：
 - en: '[PRE69]'
   id: totrans-335
   prefs: []
@@ -2125,10 +2172,12 @@
   id: totrans-336
   prefs: []
   type: TYPE_NORMAL
+  zh: 第一个命令编辑了实时系统规则，而第二个命令则以永久方式存储运行时规则，这些规则在系统重启或服务重启后仍然有效。
 - en: Good to Know
   id: totrans-337
   prefs: []
   type: TYPE_NORMAL
+  zh: 知识点提醒
 - en: Firewalld is a firewall service daemon that provides us with an easy and fast
     way to customize the system firewall. Firewalld is dynamic, which means that it
     can create, change, and delete the firewall rules without restarting the firewall
@@ -2136,17 +2185,20 @@
   id: totrans-338
   prefs: []
   type: TYPE_NORMAL
+  zh: Firewalld是一个防火墙服务守护进程，它为我们提供了一种简便而快速的方式来定制系统防火墙。Firewalld是动态的，这意味着它可以在不重启防火墙守护进程的情况下创建、修改和删除防火墙规则。
 - en: 'As we have seen, the process of exposing the container''s services is quite
     simple but should be performed with a bit of consciousness and attention: opening
     a network port to the outside world should always be done carefully.'
   id: totrans-339
   prefs: []
   type: TYPE_NORMAL
+  zh: 正如我们所看到的，暴露容器服务的过程相当简单，但应在一定的意识和注意下进行：将网络端口开放给外部时，必须小心谨慎。
 - en: Rootless container network behavior
   id: totrans-340
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 无根容器网络行为
 - en: As we saw in the previous sections, Podman relies on CNI plugins or Netavark
     for containers running as root and has the privileges to alter network configurations
     in the host network namespace. For rootless containers, Podman uses the `slirp4netns`
@@ -2157,18 +2209,22 @@
   id: totrans-341
   prefs: []
   type: TYPE_NORMAL
+  zh: 正如我们在前面的章节中看到的，Podman 依赖于 CNI 插件或 Netavark 来运行作为 root 的容器，并且有权限修改主机网络命名空间中的网络配置。对于无根容器，Podman
+    使用 `slirp4netns` 项目，该项目允许您在不需要 root 权限的情况下创建容器网络配置；网络接口是在无根网络命名空间中创建的，标准用户在该命名空间中拥有足够的权限。这种方法允许您透明且灵活地管理无根容器的网络。
 - en: In the previous sections, we saw how container network namespaces can be connected
     to a bridge using a veth pair. Being able to create a veth pair in the host network
     namespace requires root privileges that are not allowed for standard users.
   id: totrans-342
   prefs: []
   type: TYPE_NORMAL
+  zh: 在前面的章节中，我们看到了如何通过 veth 对将容器网络命名空间连接到一个桥接网络。能够在主机网络命名空间中创建 veth 对需要 root 权限，而标准用户是不允许拥有这些权限的。
 - en: In the simplest scenario, `slirp4netns` aims to overcome these privilege limitations
     by allowing a tap device to be created that's attached to a user-mode network
     namespace. This tap device is created in the rootless network namespace.
   id: totrans-343
   prefs: []
   type: TYPE_NORMAL
+  zh: 在最简单的场景下，`slirp4netns` 旨在通过允许创建一个连接到用户模式网络命名空间的 tap 设备来克服这些权限限制。这个 tap 设备是在无根（rootless）网络命名空间中创建的。
 - en: For every new rootless container, a new `slirp4netns` process is executed on
     the host. The process creates a network namespace for the container and a `tap0`
     device is created and configured with the `10.0.2.100/24` address (from the default
@@ -2178,11 +2234,15 @@
   id: totrans-344
   prefs: []
   type: TYPE_NORMAL
+  zh: 对于每一个新的无根容器，主机上都会执行一个新的 `slirp4netns` 进程。该进程为容器创建一个网络命名空间，并创建一个 `tap0` 设备，并将其配置为
+    `10.0.2.100/24` 地址（来自默认的 slirp4netns `10.0.2.0/24` 子网）。这防止了两个容器在同一网络中直接通信，因为会存在
+    IP 地址重叠的问题。
 - en: 'The following example demonstrates the network behavior of a rootless `busybox`
     container:'
   id: totrans-345
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下示例演示了一个无根 `busybox` 容器的网络行为：
 - en: '[PRE70]'
   id: totrans-346
   prefs: []
@@ -2193,6 +2253,7 @@
   id: totrans-347
   prefs: []
   type: TYPE_NORMAL
+  zh: 可以检查无根网络命名空间并找到相应的 `tap0` 设备：
 - en: '[PRE71]'
   id: totrans-348
   prefs: []
@@ -2203,6 +2264,7 @@
   id: totrans-349
   prefs: []
   type: TYPE_NORMAL
+  zh: 由于无根容器没有独立的 IP 地址，我们有两种方式让两个或多个容器相互通信：
 - en: The easiest way could be to put all the containers in a single Pod so that the
     containers can communicate using the localhost interface, without the need to
     open any ports.
@@ -2210,12 +2272,14 @@
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 最简单的方法可能是将所有容器放在同一个 Pod 中，这样容器就可以通过 localhost 接口进行通信，无需打开任何端口。
 - en: The second way is to attach the container to a custom network and have its interfaces
     managed in the rootless network namespace.
   id: totrans-351
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 第二种方法是将容器附加到一个自定义网络，并让它的接口在无根网络命名空间中进行管理。
 - en: If we want to keep all the containers independent, we could use the port mapping
     technique to publish all the necessary ports and then use those ports to let the
     containers communicate with each other.
@@ -2223,12 +2287,14 @@
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 如果我们希望保持所有容器独立，我们可以使用端口映射技术发布所有必要的端口，然后通过这些端口让容器之间进行通信。
 - en: 'Using a Podman 4 network backend, let''s quickly focus on the second scenario,
     where two pods are attached on a rootless network. First, we need to create the
     network and attach a couple of test containers:'
   id: totrans-353
   prefs: []
   type: TYPE_NORMAL
+  zh: 使用 Podman 4 网络后端，让我们快速关注第二种场景，其中两个 Pod 附加到一个无根网络。首先，我们需要创建网络并附加几个测试容器：
 - en: '[PRE72]'
   id: totrans-354
   prefs: []
@@ -2238,6 +2304,7 @@
   id: totrans-355
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们尝试从 `endpoint1` 容器 ping `endpoint2` 容器：
 - en: '[PRE73]'
   id: totrans-356
   prefs: []
@@ -2249,6 +2316,7 @@
   id: totrans-357
   prefs: []
   type: TYPE_NORMAL
+  zh: 这两个容器可以在公共网络上通信，并拥有不同的 IPv4 地址。为了验证这一点，我们可以检查无根容器的 `aardvark-dns` 配置内容：
 - en: '[PRE74]'
   id: totrans-358
   prefs: []
@@ -2261,6 +2329,7 @@
   id: totrans-359
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后，让我们展示自定义网络如何绕过`tap0`接口，并允许在rootless网络命名空间中创建专用的veth对和桥接。以下命令将显示`rootless-net`网络的Linux桥接和两个附加的veth对：
 - en: '[PRE75]'
   id: totrans-360
   prefs: []
@@ -2270,11 +2339,13 @@
   id: totrans-361
   prefs: []
   type: TYPE_NORMAL
+  zh: 重要提示
 - en: If you're running this code on a CNI network backend, use the `podman unshare
     –rootless-cni` command.
   id: totrans-362
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你在CNI网络后端运行此代码，请使用`podman unshare –rootless-cni`命令。
 - en: 'Another limitation of rootless containers is regarding the `ping` command.
     Usually, on Linux distributions, standard non-root users lack the `CAP_NET_RAW`
     security capability. This inhibits the execution of the `ping` command, which
@@ -2284,6 +2355,7 @@
   id: totrans-363
   prefs: []
   type: TYPE_NORMAL
+  zh: 根less容器的另一个限制与`ping`命令有关。通常，在Linux发行版中，标准的非root用户缺乏`CAP_NET_RAW`安全功能。这会阻止`ping`命令的执行，因为它需要发送/接收ICMP数据包。如果我们希望在rootless容器中使用`ping`命令，可以通过`sysctl`命令启用缺失的安全功能：
 - en: '[PRE76]'
   id: totrans-364
   prefs: []
@@ -2294,6 +2366,7 @@
   id: totrans-365
   prefs: []
   type: TYPE_NORMAL
+  zh: 请注意，这可能会允许任何在这些组中由用户执行的进程发送ping数据包。
 - en: Finally, while using rootless containers, we also need to consider that the
     Port Publishing technique can only be used for ports above `1024`. This is because,
     on Linux operating systems, all the ports below `1024` are privileged and cannot
@@ -2301,11 +2374,13 @@
   id: totrans-366
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后，在使用rootless容器时，我们还需要考虑到端口发布技术只能用于`1024`以上的端口。这是因为，在Linux操作系统中，所有`1024`以下的端口是特权端口，标准的非root用户无法使用。
 - en: Summary
   id: totrans-367
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 总结
 - en: In this chapter, we learned how container network isolation can be leveraged
     to allow network segregation for each container that's running through network
     namespaces. These activities seem complex but thankfully, with the help of a container
@@ -2316,54 +2391,65 @@
   id: totrans-368
   prefs: []
   type: TYPE_NORMAL
+  zh: 本章中，我们学习了如何利用容器网络隔离，通过网络命名空间为每个正在运行的容器提供网络隔离。这些操作看起来复杂，但幸运的是，在容器运行时的帮助下，这些步骤几乎是自动化的。我们学习了如何使用Podman管理容器网络，以及如何连接两个或更多容器。最后，我们学习了如何将容器的网络端口暴露到基础主机外部，以及在rootless容器网络中可能遇到的限制。
 - en: In the next chapter, we will discover the main differences between Docker and
     Podman. This will be useful for advanced users, but also for novice ones, to understand
     what we can expect by comparing these two container engines.
   id: totrans-369
   prefs: []
   type: TYPE_NORMAL
+  zh: 在下一章中，我们将发现Docker和Podman之间的主要区别。这对于高级用户非常有用，同时也有助于新手理解通过比较这两个容器引擎可以期待什么。
 - en: Further reading
   id: totrans-370
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 深入阅读
 - en: 'To learn more about the topics that were covered in this chapter, take a look
     at the following resources:'
   id: totrans-371
   prefs: []
   type: TYPE_NORMAL
+  zh: 想了解更多本章中涉及的主题，请查阅以下资源：
 - en: 'Container Network Interface: [https://github.com/containernetworking/cni](https://github.com/containernetworking/cni)'
   id: totrans-372
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 容器网络接口：[https://github.com/containernetworking/cni](https://github.com/containernetworking/cni)
 - en: 'The Netavark project on GitHub: [https://github.com/containers/netavark](https://github.com/containers/netavark)'
   id: totrans-373
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: GitHub上的Netavark项目：[https://github.com/containers/netavark](https://github.com/containers/netavark)
 - en: 'The `Aardvark-dns` project on GitHub: https://github.com/containers/aardvark-dns'
   id: totrans-374
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: GitHub上的`Aardvark-dns`项目：[https://github.com/containers/aardvark-dns](https://github.com/containers/aardvark-dns)
 - en: 'CNI reference plugins: https://www.cni.dev/plugins/current/'
   id: totrans-375
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: CNI参考插件： [https://www.cni.dev/plugins/current/](https://www.cni.dev/plugins/current/)
 - en: 'CNI third-party plugins: [https://github.com/containernetworking/cni#3rd-party-plugins](https://github.com/containernetworking/cni#3rd-party-plugins)'
   id: totrans-376
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: CNI第三方插件：[https://github.com/containernetworking/cni#3rd-party-plugins](https://github.com/containernetworking/cni#3rd-party-plugins)
 - en: 'Kubernetes Pod definition: [https://kubernetes.io/docs/concepts/workloads/pods/](https://kubernetes.io/docs/concepts/workloads/pods/)'
   id: totrans-377
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: Kubernetes Pod定义：[https://kubernetes.io/docs/concepts/workloads/pods/](https://kubernetes.io/docs/concepts/workloads/pods/)
 - en: 'The `Slirp4netns` project repository: [https://github.com/rootless-containers/slirp4netns](https://github.com/rootless-containers/slirp4netns)'
   id: totrans-378
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`Slirp4netns`项目仓库：[https://github.com/rootless-containers/slirp4netns](https://github.com/rootless-containers/slirp4netns)'

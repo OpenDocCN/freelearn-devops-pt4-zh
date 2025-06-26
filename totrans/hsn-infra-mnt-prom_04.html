@@ -1,0 +1,760 @@
+<html><head></head><body>
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Setting Up a Test Environment</h1>
+                </header>
+            
+            <article>
+                
+<p>The best way to learn is by doing. This chapter will help you quickly spin up an environment for testing so that you can safely experiment without worrying too much. It will provide several configuration examples and tips on how to get things running. This type of environment will also be used throughout this book in several different scenarios.</p>
+<p><span>In brief, the following topics will be covered in this chapter: </span></p>
+<ul>
+<li>Code organization</li>
+<li>Machine requirements</li>
+<li>Spinning up a new environment</li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Code organization</h1>
+                </header>
+            
+            <article>
+                
+<p>While the examples and code listings in this book can be used directly without any supporting material, a companion Git repository is also provided to help you with the setup process and the automation of test environments so that you can follow along easily.</p>
+<p>In this section, we're going to explore how that repository is organized, explain some choices that are made in terms of the automation of the test environments, and give some pointers on how to customize them:</p>
+<pre>.<br/>├── Makefile<br/>├── README.md<br/>├── cache/<br/>├── chapter03/<br/>├── ...<br/>├── chapter14/<br/>└── utils/</pre>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p>The root structure of the repository shown here should be fairly easy to understand:</p>
+<ul>
+<li>One directory per chapter that needs its own test environment (aptly named <kbd>chapter</kbd>, followed by the chapter number)</li>
+<li>A <kbd>cache</kbd> directory, which will hold downloaded packages so that rebuilding test environments becomes as fast as possible</li>
+<li>A <kbd>utils</kbd> directory, where default versions and parameters of the test environments can be found (and changed if wanted), along with some helper functions</li>
+</ul>
+<p>Next, we are going to drill down and have a closer look at each of these, like so:</p>
+<pre>.<br/>├── ...<br/>└── utils/<br/>    ├── defaults.sh<br/>    ├── helpers.sh<br/>    └── vagrant_defaults.rb</pre>
+<p>In the <kbd>utils</kbd> directory, the following files can be found:</p>
+<ul>
+<li><kbd>defaults.sh</kbd>: Here, the versions of each component in the Prometheus stack (such as Prometheus itself, along with exporters and Alertmanager, among others) that will be used in the test environments can be found.</li>
+<li><kbd>vagrant_defaults.rb</kbd>: This file controls a couple of tunable parameters for the virtual machines that are used to run the test environments, like the amount of RAM each virtual machine will have, which base image to use, and what the environment's internal network will look like.</li>
+<li><kbd>helpers.sh</kbd>: This is a shell library that's used by the provisioning scripts with some helper functions to manage the downloading and caching of archives:</li>
+</ul>
+<pre style="padding-left: 60px">.<br/>├── ...<br/>├── chapter03/<br/>│   ├── Vagrantfile<br/>│   ├── configs/<br/>│   └── provision/<br/>└── ...</pre>
+<p>While each test environment will differ in some ways between chapters, the basic structure will remain the same:</p>
+<ul>
+<li>A <kbd>Vagrantfile</kbd> to describe how many virtual machines are needed for the test environment, along with how to configure and provision them</li>
+<li>A <kbd>configs</kbd> directory to house configuration files that will be used in the provision step</li>
+<li>A <kbd>provision</kbd> directory with scripts to download, install, and configure each of the Prometheus components that are required for the current test environment</li>
+</ul>
+<p>We can see an example of this by looking at the tree structure for this chapter:</p>
+<pre>.<br/>├── ...<br/>├── chapter03/<br/>│   ├── Vagrantfile<br/>│   ├── configs/<br/>│   │   ├── alertmanager/<br/>│   │   ├── grafana/<br/>│   │   ├── node_exporter/<br/>│   │   └── prometheus/<br/>│   └── provision/<br/>│       ├── alertmanager.sh*<br/>│       ├── grafana.sh*<br/>│       ├── hosts.sh*<br/>│       ├── node_exporter.sh*<br/>│       └── prometheus.sh*<br/>└── ...</pre>
+<p>The <kbd>configs</kbd> directory has sub-directories for each of the components that's used in this chapter. The <kbd>provision</kbd> directory follows the same model, with an added <kbd>hosts.sh</kbd> shell script to automate the management of <kbd>/etc/hosts</kbd> file on the guests.</p>
+<p>By now, the question of <em>Why not just use configuration management?</em> might have risen in the minds of some. All the provisioning automation was done in a shell for a couple of reasons:</p>
+<ul>
+<li>This was a conscious effort to expose every detail, not abstract them away.</li>
+<li>Shell scripting is the lowest common denominator of automation in Unix-like systems.</li>
+<li>The purpose of this book is to focus on the inner workings of Prometheus, not the specific implementation of a given configuration management tool.</li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Machine requirements</h1>
+                </header>
+            
+            <article>
+                
+<p>The machine requirements for this setup can comfortably run on a modern laptop, as long it has CPU virtualization extensions enabled and its operating system is compatible with the software requirements. All the software requirements that are covered here were thought-out. We will be using free and open source software, so no extra cost should be necessary when you try out the test environments.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Hardware requirements</h1>
+                </header>
+            
+            <article>
+                
+<p>The minimal requirements for the host deploying the provided examples are as follows:</p>
+<ul>
+<li style="font-weight: 400">At least 2 CPU cores</li>
+<li style="font-weight: 400">At least 4 GB of memory</li>
+<li style="font-weight: 400">At least 20 GB of free disk space</li>
+</ul>
+<p>With these specifications, you should be able to spin up the test environment without encountering any issues.</p>
+<p>Regarding connectivity, the host machine should have internet access and the ability to resolve external DNS records. The provision scripts will have to download dependencies during their execution, though most of the dependencies will be cached locally to avoid being downloaded in every deployment.</p>
+<p>The default network for the example environment is <kbd>192.168.42.0/24</kbd>, and the following diagram illustrates the configuration you would get when running this chapter's example:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/326e5b7a-81c1-4e5e-8eda-b3893b98753c.png" style="width:25.67em;height:16.92em;"/></p>
+<div class="packt_figref CDPAlignCenter CDPAlign">Figure 3.1: Virtual network configuration</div>
+<div class="packt_tip"><span>When launching a test</span><span> environment, the subnet </span><kbd><span>192.168.42.0/24</span></kbd><span> will be used. Each environment belongs to a specific chapter, and should be destroyed before switching to a new one. If you encounter a conflict with your local address space, you can change the test environment subnet by editing the NETWORK option in the provided <kbd>./utils/vagrant_defaults.rb</kbd> file.</span></div>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Recommended software</h1>
+                </header>
+            
+            <article>
+                
+<p>The environment was tested using the following software, and so the standard disclaimer applies: although other versions within their respective major releases might work without additional changes, care should be taken when using versions that are different from the ones we've recommended:</p>
+<table border="1" style="border-collapse: collapse;width: 100%">
+<thead>
+<tr>
+<th style="width: 14%">Software</th>
+<th style="width: 17.1433%">Version</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="width: 14%">
+<p class="mce-root">VirtualBox</p>
+</td>
+<td style="width: 17.1433%">
+<p class="mce-root">6.0.4</p>
+</td>
+</tr>
+<tr>
+<td style="width: 14%">
+<p class="mce-root">Vagrant</p>
+</td>
+<td style="width: 17.1433%">
+<p class="mce-root">2.2.4</p>
+</td>
+</tr>
+<tr>
+<td style="width: 14%">
+<p class="mce-root">Minikube</p>
+</td>
+<td style="width: 17.1433%">
+<p class="mce-root">1.0.1</p>
+</td>
+</tr>
+<tr>
+<td style="width: 14%">kubectl</td>
+<td style="width: 17.1433%">
+<p class="mce-root">1.14.1</p>
+</td>
+</tr>
+</tbody>
+</table>
+<p> </p>
+<p class="mce-root">Regarding supported operating systems, all the tests were conducted using the following versions of Linux and macOS:</p>
+<ul>
+<li class="mce-root">Ubuntu 18.04 LTS (Bionic Beaver)</li>
+<li>macOS 10.14.3 (Mojave)</li>
+</ul>
+<p>Other operating systems/distributions might be able to run the test environments, although it's not ensured.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">VirtualBox</h1>
+                </header>
+            
+            <article>
+                
+<p>Oracle VirtualBox is a free and open source hypervisor, which runs on all major operating systems (macOS, Linux, and Windows). It allows you to not only launch virtual machine images, but also create virtual networks and mount host filesystem paths into the guests, among other features. This software requires hardware virtualization to be enabled.</p>
+<div class="packt_infobox">You can find all the installation files for VirtualBox at <a href="https://www.virtualbox.org/wiki/Downloads">https://www.virtualbox.org/wiki/Downloads </a></div>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Vagrant</h1>
+                </header>
+            
+            <article>
+                
+<p>HashiCorp Vagrant allows for the creation of portable environments. In the context of this book, it will become the interface with VirtualBox, allowing for the launch and configuration of virtual machines. In our examples, we chose to use Chef Bento as the virtual machine image, as recommended by <span>HashiCorp</span>.</p>
+<div class="packt_infobox">You can find all the installation files for Vagrant at <a href="https://www.vagrantup.com/downloads.html">https://www.vagrantup.com/downloads.html</a></div>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Minikube</h1>
+                </header>
+            
+            <article>
+                
+<p>Minikube is the easiest way to test Kubernetes locally. We will be using Minikube in conjunction with VirtualBox to guarantee that the examples in this book behave the same way across operating systems.</p>
+<div class="packt_infobox">You can find all the installation information for Minikube at <a href="https://kubernetes.io/docs/tasks/tools/install-minikube/#install-minikube">https://kubernetes.io/docs/tasks/tools/install-minikube/#install-minikube</a>.</div>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">kubectl</h1>
+                </header>
+            
+            <article>
+                
+<p>The client tool for interacting with the Kubernetes API is called <strong>kubectl</strong>, and is fundamental for some of the examples in this book.</p>
+<div class="packt_infobox">You can find all the installation information for kubectl at <a href="https://kubernetes.io/docs/tasks/tools/install-minikube/#install-kubectl">https://kubernetes.io/docs/tasks/tools/install-minikube/#install-kubectl</a>.</div>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Spinning up a new environment</h1>
+                </header>
+            
+            <article>
+                
+<p>After you have ensured that all the required software is available on your host, you may proceed with one or both of the following walkthroughs.</p>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Automated deployment walkthrough</h1>
+                </header>
+            
+            <article>
+                
+<p>This method will abstract all the deployment and configuration details, allowing you to have a fully running test environment with only a couple of commands. You'll still be able to connect to each of the guest instances and change configurations.</p>
+<p>The steps to spin up the environment are as follows:</p>
+<ol>
+<li>Clone this book's repository:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>git clone https://github.com/PacktPublishing/Hands-On-Infrastructure-Monitoring-with-Prometheus.git</strong></pre>
+<ol start="2">
+<li>Step into the newly created directory and chapter number:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>cd Hands-On-Infrastructure-Monitoring-with-Prometheus/chapter03</strong></pre>
+<ol start="3">
+<li>Spin up this chapter's test environment:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>vagrant up</strong></pre>
+<div class="packt_infobox">The first run will take a few minutes because the Vagrant image and some of the software dependencies will have to be downloaded. After this setup process, subsequent runs will be much faster since all those assets will be kept in the cache.</div>
+<ol start="4">
+<li>
+<p>Now, you can run <kbd>vagrant status</kbd>. You will be presented with the following output:</p>
+</li>
+</ol>
+<pre style="padding-left: 60px"><strong>Current machine states:</strong><br/><br/><strong>prometheus running (virtualbox)</strong><br/><strong>grafana running (virtualbox)</strong><br/><strong>alertmanager running (virtualbox)</strong><br/><br/><strong>This environment represents multiple VMs. The VMs are all listed</strong><br/><strong>above with their current state. For more information about a specific</strong><br/><strong>VM, run `vagrant status NAME`.</strong></pre>
+<p class="mce-root"/>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Prometheus</h1>
+                </header>
+            
+            <article>
+                
+<p>You can find the Prometheus HTTP endpoint at <kbd>http://192.168.42.10:9090/targets</kbd>:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/949b676e-24f7-4732-be42-a6f2f78522cf.png"/></p>
+<div class="CDPAlignCenter CDPAlign packt_figref">Figure 3.2: Prometheus HTTP endpoint <span>– s</span>howing all configured targets</div>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Grafana</h1>
+                </header>
+            
+            <article>
+                
+<p>You can find the Grafana HTTP endpoint at <kbd>http://192.168.42.11:3000</kbd>.</p>
+<p class="mce-root"/>
+<p>Grafana's default credentials are as follows:</p>
+<table border="1" style="border-collapse: collapse;width: 100%">
+<tbody>
+<tr>
+<td class="CDPAlignCenter CDPAlign" style="width: 170px"><strong>Username</strong></td>
+<td class="CDPAlignCenter CDPAlign" style="width: 169px"><strong>Password</strong></td>
+</tr>
+<tr>
+<td style="width: 170px"><kbd>admin</kbd></td>
+<td style="width: 169px"><kbd>admin</kbd></td>
+</tr>
+</tbody>
+</table>
+<p> </p>
+<p>You'll be greeted by two automatically provisioned dashboards. We'll have an entire chapter dedicated to Grafana and dashboards later in this book, in <a href="02331a85-bad1-4a4f-b56e-150b69b46edb.xhtml">Chapter 10</a>, <em>Discovering and Creating Grafana Dashboards</em>:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/509dc02d-bdad-4b95-b34a-5a64b0a83e46.png"/></p>
+<div class="packt_figref CDPAlignCenter CDPAlign">Figure 3.3: An automatically provisioned Grafana dashboard</div>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Alertmanager</h1>
+                </header>
+            
+            <article>
+                
+<p>You can find the Alertmanager HTTP endpoint at <kbd>http://192.168.42.12:9093</kbd>.</p>
+<p>We also configured an always-firing alert on Prometheus and a custom Alertmanager integration via webhook so that you can start to get a feel for how both are related. We'll go into much more detail on Alertmanager in a different chapter, but for now, you may look at the logs that the example alert generates in the code repository root at <kbd>./cache/alerting.log</kbd>:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/ac51788e-a403-430a-adfe-b3fdc06f5926.png" style="width:42.92em;height:28.00em;"/></p>
+<div class="CDPAlignCenter CDPAlign packt_figref">Figure 3.4: Alertmanager <span>– f</span>iring an example alert</div>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Cleanup</h1>
+                </header>
+            
+            <article>
+                
+<p>When you've finish testing, just make sure that's you're inside <kbd>chapter03</kbd> and execute the following:</p>
+<pre><strong>vagrant destroy -f</strong></pre>
+<p>Don't worry too much <span>–</span> you can easily spin up the environment again if you so desire.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Advanced deployment walkthrough</h1>
+                </header>
+            
+            <article>
+                
+<p>Using this method, the guest virtual machines will be spun up but no provision will take place, so you'll need to set up the environment yourself with a hands-on approach. We won't go into detailed explanations of the available configuration files and command-line arguments <span>– </span>those will be thoroughly explored in the following chapters. So, as a high-level overview, for each software component, we are going to do the following:</p>
+<ul>
+<li>Set up basic networking between the virtual machines in the environment</li>
+<li>Create an individual system user</li>
+<li>Download and install the software</li>
+<li>Create support files and directories</li>
+<li>Start the daemon</li>
+</ul>
+<p>To start, clone this book's repository:</p>
+<pre><strong>git clone https://github.com/PacktPublishing/Hands-On-Infrastructure-Monitoring-with-Prometheus.git</strong></pre>
+<p>Step into the newly created directory and chapter number and run Vagrant without provisioning the guest instances. This will leave you with just off-the-shelf virtual machines:</p>
+<pre><strong>cd Hands-On-Infrastructure-Monitoring-with-Prometheus/chapter03</strong><br/><strong><span>vagrant up --no-provision</span></strong></pre>
+<p>After all the guests have started, we will continue by configuring our instances one by one.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Prometheus</h1>
+                </header>
+            
+            <article>
+                
+<p>Perform the following steps:</p>
+<ol>
+<li>Log in to the Prometheus guest instance:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>vagrant ssh prometheus</strong></pre>
+<ol start="2">
+<li>Inside the guest instance, drop to the root:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>sudo -i</strong></pre>
+<ol start="3">
+<li>Add all the guests' addresses to the instance host's file:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>cat &lt;&lt;EOF &gt;/etc/hosts</strong><br/><strong>127.0.0.1       localhost</strong><br/><strong>192.168.42.10   prometheus.prom.inet    prometheus</strong><br/><strong>192.168.42.11   grafana.prom.inet       grafana</strong><br/><strong>192.168.42.12   alertmanager.prom.inet  alertmanager</strong><br/><br/><br/><strong># The following lines are desirable for IPv6 capable hosts</strong><br/><strong>::1     localhost ip6-localhost ip6-loopback</strong><br/><strong>ff02::1 ip6-allnodes</strong><br/><strong>ff02::2 ip6-allrouters</strong><br/><strong>EOF</strong></pre>
+<p> </p>
+<ol start="4">
+<li>Create a new system user:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>useradd --system prometheus</strong></pre>
+<ol start="5">
+<li>Go into <kbd>/tmp</kbd> and download the Prometheus archive:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>cd /tmp</strong><br/><strong>curl -sLO "https://github.com/prometheus/prometheus/releases/download/v2.9.2/prometheus-2.9.2.linux-amd64.tar.gz"</strong></pre>
+<ol start="6">
+<li>Uncompress the archive:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>tar zxvf prometheus-2.9.2.linux-amd64.tar.gz</strong></pre>
+<ol start="7">
+<li>Place every file in its correct location:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>install -m 0644 -D -t /usr/share/prometheus/consoles prometheus-2.9.2.linux-amd64/consoles/*</strong><br/><br/><strong>install -m 0644 -D -t /usr/share/prometheus/console_libraries prometheus-2.9.2.linux-amd64/console_libraries/*</strong><br/><br/><strong>install -m 0755 prometheus-2.9.2.linux-amd64/prometheus prometheus-2.9.2.linux-amd64/promtool /usr/bin/</strong><br/><br/><strong>install -d -o prometheus -g prometheus /var/lib/prometheus   </strong><br/><br/><strong>install -m 0644 -D /vagrant/chapter03/configs/prometheus/prometheus.yml /etc/prometheus/prometheus.yml</strong><br/><br/><strong>install -m 0644 -D /vagrant/chapter03/configs/prometheus/first_rules.yml /etc/prometheus/first_rules.yml</strong></pre>
+<p> </p>
+<ol start="8">
+<li>Add a <kbd>systemd</kbd> unit file for the Prometheus service:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>install -m 0644 /vagrant/chapter03/configs/prometheus/prometheus.service /etc/systemd/system/</strong><br/><br/><strong>systemctl<span> daemon-reload</span></strong></pre>
+<ol start="9">
+<li>Enable and start the Prometheus service:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>systemctl enable prometheus</strong><br/><strong>systemctl start prometheus</strong></pre>
+<p style="padding-left: 60px">You should now have the Prometheus HTTP endpoint available on your host.</p>
+<ol start="10">
+<li>Exit the root account and then the Vagrant user account:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>exit</strong><br/><br/><strong>exit</strong></pre>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Grafana</h1>
+                </header>
+            
+            <article>
+                
+<p>Perform the following steps:</p>
+<ol>
+<li>Log in to the Grafana guest instance:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>vagrant ssh grafana</strong></pre>
+<ol start="2">
+<li>Inside the guest instance, drop to the root:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>sudo -i</strong></pre>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<ol start="3">
+<li>Add all the guests' addresses to the instance host's file:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>cat &lt;&lt;EOF &gt;/etc/hosts</strong><br/><strong>127.0.0.1       localhost</strong><br/><strong>192.168.42.10   prometheus.prom.inet    prometheus</strong><br/><strong>192.168.42.11   grafana.prom.inet       grafana</strong><br/><strong>192.168.42.12   alertmanager.prom.inet  alertmanager</strong><br/><br/><br/><strong># The following lines are desirable for IPv6 capable hosts</strong><br/><strong>::1     localhost ip6-localhost ip6-loopback</strong><br/><strong>ff02::1 ip6-allnodes</strong><br/><strong>ff02::2 ip6-allrouters</strong><br/><strong>EOF</strong></pre>
+<ol start="4">
+<li>Go into <kbd>/tmp</kbd> and download the Grafana package:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>cd /tmp</strong><br/><strong>curl -sLO "https://dl.grafana.com/oss/release/grafana_6.1.6_amd64.deb"</strong></pre>
+<ol start="5">
+<li>Install the package and all dependencies:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>DEBIAN_FRONTEND=noninteractive apt-get install -y libfontconfig</strong><br/><br/><strong>dpkg -i "grafana_6.1.6_amd64.deb"</strong></pre>
+<ol start="6">
+<li>Place all the provided configurations on their correct location:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>rsync -ru /vagrant/chapter03/configs/grafana/{dashboards,provisioning} /etc/grafana/</strong></pre>
+<ol start="7">
+<li>Enable and start the Grafana service:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>systemctl daemon-reload</strong><br/><strong>systemctl enable grafana-server</strong><br/><strong>systemctl start grafana-server</strong></pre>
+<p style="padding-left: 60px">You should now have the Grafana HTTP endpoint available on your host.</p>
+<ol start="8">
+<li>Exit the root account and then the Vagrant user account:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>exit</strong><br/><br/><strong>exit</strong></pre>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Alertmanager</h1>
+                </header>
+            
+            <article>
+                
+<p>Perform the following steps:</p>
+<ol>
+<li>Log in to the Alertmanager guest instance:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>vagrant ssh alertmanager</strong></pre>
+<ol start="2">
+<li>Inside the guest instance, drop to the root:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>sudo -i</strong></pre>
+<ol start="3">
+<li>Add all the guests' addresses to the instance host's file:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>cat &lt;&lt;EOF &gt;/etc/hosts</strong><br/><strong>127.0.0.1       localhost</strong><br/><strong>192.168.42.10   prometheus.prom.inet    prometheus</strong><br/><strong>192.168.42.11   grafana.prom.inet       grafana</strong><br/><strong>192.168.42.12   alertmanager.prom.inet  alertmanager</strong><br/><br/><br/><strong># The following lines are desirable for IPv6 capable hosts</strong><br/><strong>::1     localhost ip6-localhost ip6-loopback</strong><br/><strong>ff02::1 ip6-allnodes</strong><br/><strong>ff02::2 ip6-allrouters</strong><br/><strong>EOF</strong></pre>
+<ol start="4">
+<li>Create a new system user:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>useradd --system alertmanager</strong></pre>
+<ol start="5">
+<li>Go into <kbd>/tmp</kbd> and download the Alertmanager archive:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>cd /tmp</strong><br/><strong>curl -sLO "https://github.com/prometheus/alertmanager/releases/download/v0.17.0/alertmanager-0.17.0.linux-amd64.tar.gz"</strong></pre>
+<ol start="6">
+<li>Uncompress the archive:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>tar zxvf alertmanager-0.17.0.linux-amd64.tar.gz</strong></pre>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<ol start="7">
+<li>Place every file in its correct location:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>install -m 0755 alertmanager-0.17.0.linux-amd64/{alertmanager,amtool} /vagrant/chapter03/configs/alertmanager/alertdump /usr/bin/</strong><br/><br/><strong>install -d -o alertmanager -g alertmanager /var/lib/alertmanager</strong><br/><br/><strong>install -m 0644 -D /vagrant/chapter03/configs/alertmanager/alertmanager.yml /etc/alertmanager/alertmanager.yml</strong></pre>
+<ol start="8">
+<li>Add a <kbd>systemd</kbd> unit file for the Alertmanager service:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>install -m 0644 /vagrant/chapter03/configs/alertmanager/alertmanager.service /etc/systemd/system/</strong><br/><br/><strong>systemctl daemon-reload</strong></pre>
+<ol start="9">
+<li>Enable and start the Alertmanager service:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>systemctl enable alertmanager</strong><br/><strong>systemctl start alertmanager</strong></pre>
+<p style="padding-left: 60px">You should now have the Alertmanager HTTP endpoint available on your host.</p>
+<ol start="10">
+<li>Exit the root account and then the Vagrant user account:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>exit</strong><br/><br/><strong>exit</strong></pre>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Node Exporter</h1>
+                </header>
+            
+            <article>
+                
+<p>To ensure that system-level metrics will be collected, Node Exporter must be installed in all three virtual machines. To log in to each virtual machine, use the commands that we explored in the previous sections:</p>
+<ol>
+<li>Inside the guest instance, drop to the root:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>sudo -i</strong></pre>
+<ol start="2">
+<li>Create a new system user:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>useradd --system node_exporter</strong></pre>
+<p class="mce-root"/>
+<ol start="3">
+<li>Go into <kbd>/tmp</kbd> and download the Node Exporter archive:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>cd /tmp</strong><br/><strong>curl -sLO "https://github.com/prometheus/node_exporter/releases/download/v0.17.0/node_exporter-0.17.0.linux-amd64.tar.gz"</strong></pre>
+<ol start="4">
+<li>Place every file in its correct location:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>tar zxvf "node_exporter-0.17.0.linux-amd64.tar.gz" -C /usr/bin --strip-components=1 --wildcards */node_exporter</strong></pre>
+<ol start="5">
+<li>Add a <kbd>systemd</kbd> unit file for the Node Exporter service:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>install -m 0644 /vagrant/chapter03/configs/node_exporter/node-exporter.service /etc/systemd/system/</strong><br/><br/><strong>systemctl daemon-reload</strong></pre>
+<ol start="6">
+<li>Enable and start the Node Exporter service:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>systemctl enable node-exporter</strong><br/><strong>systemctl start node-exporter</strong></pre>
+<ol start="7">
+<li>Exit the root account and then the Vagrant user account:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>exit</strong><br/><br/><strong>exit</strong></pre>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Validating your test environment</h1>
+                </header>
+            
+            <article>
+                
+<p>After running through these steps, you'll be able to validate your environment by using the following endpoints on your host machine:</p>
+<table border="1" style="border-collapse: collapse;width: 100%">
+<tbody>
+<tr>
+<td class="CDPAlignCenter CDPAlign" style="width: 34%"><strong>Service</strong></td>
+<td class="CDPAlignCenter CDPAlign" style="width: 32.3158%"><strong>Endpoint</strong></td>
+</tr>
+<tr>
+<td style="width: 34%">Prometheus</td>
+<td style="width: 32.3158%"><kbd>http://192.168.42.10:9090</kbd></td>
+</tr>
+<tr>
+<td style="width: 34%">Grafana</td>
+<td style="width: 32.3158%"><kbd>http://192.168.42.11:3000</kbd></td>
+</tr>
+<tr>
+<td style="width: 34%">Alertmanager</td>
+<td style="width: 32.3158%"><kbd>http://192.168.42.12:9093</kbd></td>
+</tr>
+</tbody>
+</table>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mceNonEditable"/>
+<p class="mceNonEditable"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Summary</h1>
+                </header>
+            
+            <article>
+                
+<p>With a test environment at your disposal, you can now inspect, change, and validate configurations without worrying about breaking things. Throughout this book, this approach to testing will be used extensively, because nothing beats experimenting when learning new skills.</p>
+<p>In the next chapter, we'll go over the fundamentals of Prometheus metrics. The test environment we just built will be helpful to demonstrate them.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Questions</h1>
+                </header>
+            
+            <article>
+                
+<ol>
+<li style="font-weight: 400">What are the recommended tools to set up a reproducible test environment?</li>
+<li style="font-weight: 400">Where can you change the default versions of the Prometheus components for the test environment?</li>
+<li style="font-weight: 400">What is the default subnet that's used on all examples?</li>
+<li style="font-weight: 400">At a high level, what are the steps to get a Prometheus instance up and running?</li>
+<li style="font-weight: 400">Node Exporter is installed on every guest instance. How can you quickly validate if all of them are exposing metrics correctly?</li>
+<li style="font-weight: 400">In our test environment, where can you find the alert log?</li>
+<li style="font-weight: 400">How can you create a clean test environment from scratch?</li>
+</ol>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Further reading</h1>
+                </header>
+            
+            <article>
+                
+<ul>
+<li style="font-weight: 400"><strong>Bash manual</strong>: <a href="https://www.gnu.org/software/bash/manual/html_node/index.html">https://www.gnu.org/software/bash/manual/html_node/index.html</a></li>
+<li style="font-weight: 400"><strong>Recommended Vagrant boxes</strong><span>:</span> <a href="https://www.vagrantup.com/docs/boxes.html">https://www.vagrantup.com/docs/boxes.html</a></li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    </body></html>

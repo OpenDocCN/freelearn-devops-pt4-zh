@@ -1,0 +1,289 @@
+<html><head></head><body>
+        <section>
+
+                            <header>
+                    <h1 class="header-title">An Overview of the Prometheus Ecosystem</h1>
+                </header>
+            
+            <article>
+                
+<p>With such a vast collection of components available for use, it can be daunting to choose the ones that are required to solve a given monitoring gap. In this chapter, we will go over the Prometheus ecosystem, which components perform what job, and understand how everything works together logically.</p>
+<p>Striving for simplicity and having a clear understanding of all the moving parts of a Prometheus stack is invaluable to keep things manageable and reliable.</p>
+<p>In brief, the following topics will be covered in this chapter: </p>
+<ul>
+<li>Metrics collection with Prometheus</li>
+<li>Exposing internal state with exporters</li>
+<li>Alert routing and management with Alertmanager</li>
+<li>Visualizing your data</li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Metrics collection with Prometheus</h1>
+                </header>
+            
+            <article>
+                
+<p>Prometheus is a time series-based, open source monitoring system. It collects data by sending HTTP requests to hosts and services on metrics endpoints, which it then makes available for analysis and alerting using a powerful query language.</p>
+<p>Even though Prometheus has graduated with the <strong>Cloud Native Computing Foundation</strong> (<strong>CNCF</strong>) by demonstrating stability, maturity, and solid governance, it is still evolving at a very rapid pace. At the time of writing, the current stable version of Prometheus is 2.9.2, and every component or feature that is going to be discussed will be based on this version. While there should be no major architectural changes within version 2, care should be taken when applying specific configuration that's been learned from this book to earlier or even later versions.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">High-level overview of the Prometheus architecture</h1>
+                </header>
+            
+            <article>
+                
+<p>The Prometheus ecosystem is composed of several components, each with its own responsibility and clearly defined scope. Prometheus itself is essential as it sits squarely in the middle of most interactions, but many components are in fact optional, depending on your monitoring needs.</p>
+<p>As we can see in the following diagram, the main components in the Prometheus ecosystem are as follows:</p>
+<ul>
+<li>The Prometheus server collects time series data, stores it, makes it available for querying, and sends alerts based on it.</li>
+<li>The Alertmanager receives alert triggers from Prometheus and handles routing and dispatching of alerts.</li>
+<li>The Pushgateway handles the exposition of metrics that have been pushed from short-lived jobs such as cron or batch jobs.</li>
+<li>Applications that support the Prometheus exposition format make internal state available through an HTTP endpoint.</li>
+<li>Community-driven exporters expose metrics from applications that do not support Prometheus natively.</li>
+<li>First-party and third-party dashboarding solutions provide a visualization of collected data.</li>
+</ul>
+<p class="mce-root"/>
+<p>Each one will be explored in depth later in this book:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/f52ac22e-763d-43fa-a8ad-d5f846effe39.png" style="width:37.42em;height:28.33em;"/></p>
+<div class="CDPAlignCenter CDPAlign packt_figref">Figure 2.1: High-level overview of the main components in the Prometheus ecosystem</div>
+<div class="packt_infobox"><span>The Prometheus server has its own internal processes, such as recording rules and service discovery, which are thoroughly explained in </span><a href="9aa1e3da-13cf-4051-845d-1d1c924ef47b.xhtml">Chapter 9</a>, <em>Defining Alerting and Recording Rules</em><span>, and</span><span> </span><a href="5360e790-3884-4eeb-aaa1-8aad21dc6c1e.xhtml">Chapter 12</a>, <em>Choosing the Right Service Discovery</em><span>, </span><span>respectively.</span></div>
+<p>Prometheus was originally created by Matt T. Proud and Julius Volz while working at SoundCloud. It was inspired by Google's Borgmon, which influenced a lot of its earlier design: scraping plain text from metrics endpoints; exporters as proxies for metrics collection; time series as multi-dimensional vectors, which can then be transformed and filtered; and the use of ruleset evaluations for recording and alerting, among other features.</p>
+<div class="packt_infobox">You might be tempted to try and make Prometheus fit into a push-based metrics collection model, but this is ill-advised. Prometheus' core design is around pull, so naturally, many assumptions break down when converting from push to pull. This will be further explained when we approach the Pushgateway.</div>
+<p class="mce-root"/>
+<p>A singular attribute of Prometheus is that it unabashedly does not try to do any type of clustering. By not relying on the network for coordination and storage (although remote write is possible, as we'll see by the end of this book), it makes a great argument for reliability and ease of use. It's trivial to just pick up the appropriate binary distribution of Prometheus and run it locally on your computer, and yet the same binary might be able to handle thousands of scrape targets and the ingestion of millions of samples per second on server hardware.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Exposing internal state with exporters</h1>
+                </header>
+            
+            <article>
+                
+<p>Not all applications are built with Prometheus-compatible instrumentation. Sometimes, no metrics are exposed at all. In these cases, we can rely on exporters. The following diagram shows how they work:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/4157b7b9-9713-4089-95bc-922807632f0b.png" style="width:30.08em;height:21.17em;"/></p>
+<div class="packt_figref CDPAlignCenter CDPAlign">Figure 2.2: A high-level overview of an exporter</div>
+<p>An exporter is nothing more than a piece of software that collects data from a service or application and exposes it via HTTP in the Prometheus format. Each exporter usually targets a specific service or application and as such, their deployment reflects this one-to-one synergy.</p>
+<p>Nowadays, you can find exporters for pretty much any service you need, and if a particular third-party service doesn't have an exporter available, it's quite simple to build your own.</p>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Exporter fundamentals</h1>
+                </header>
+            
+            <article>
+                
+<p>When the exporter starts, it binds to a configured port and exposes the internal state of whatever is being collected in an HTTP endpoint of your choosing (the default being <kbd>/metrics</kbd>). The instrumentation data is collected when an HTTP GET request is made to the configured endpoint. For example, node exporter, one of the most commonly used exporters, relies on a number of kernel statistics to present data such as disk I/O, CPU, memory, network, filesystem usage, and much, much more. Every single time that endpoint is scraped, the information is quickly gathered and exposed in a synchronous operation.</p>
+<div class="packt_infobox">The HTTP GET request that's made by the Prometheus server to the observed system for metric collection is called a <strong>scrape</strong>.</div>
+<p>If you are the one writing the service, the best option is to instrument the code directly using a Prometheus client library. There are official client libraries available for the following programming languages:</p>
+<ul>
+<li style="font-weight: 400">Go</li>
+<li style="font-weight: 400">Java/JVM</li>
+<li style="font-weight: 400">Python</li>
+<li style="font-weight: 400">Ruby</li>
+</ul>
+<p>There are community-driven client libraries for the following programming languages:</p>
+<ul>
+<li style="font-weight: 400">Bash</li>
+<li style="font-weight: 400">C++</li>
+<li style="font-weight: 400">Common Lisp</li>
+<li style="font-weight: 400">Elixir</li>
+<li style="font-weight: 400">Erlang</li>
+<li style="font-weight: 400">Haskell</li>
+<li style="font-weight: 400">Lua for NGINX</li>
+<li style="font-weight: 400">Lua for Tarantool</li>
+<li style="font-weight: 400">.NET</li>
+<li style="font-weight: 400">C#</li>
+<li style="font-weight: 400">Node.js</li>
+<li style="font-weight: 400">Perl</li>
+<li style="font-weight: 400">PHP</li>
+<li style="font-weight: 400">Rust</li>
+</ul>
+<p>Due to an ever-growing community around Prometheus, this list is constantly expanding.</p>
+<p>Usually, exporters are very light and the performance footprint is mostly negligible but, as always, there are exceptions for this rule, on which we will go into considerable detail later in this book.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Alert routing and management with Alertmanager</h1>
+                </header>
+            
+            <article>
+                
+<p>Alertmanager is the component from the Prometheus ecosystem that's responsible for the notifications that are triggered by the alerts that are generated from the Prometheus server. As such, its availability is of the essence and the design choices reflect this need. It's the only component that's truly conceived to work in a highly available cluster setup, and uses gossip as the communication protocol:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/ba795207-1d75-4eec-9a30-5b8229ed3ec3.png" style="width:31.67em;height:19.83em;"/></p>
+<div class="packt_figref CDPAlignCenter CDPAlign">Figure 2.3: A high-level overview of Alertmanager</div>
+<p>At a very high level, Alertmanager is a service that receives HTTP POST requests from Prometheus servers via its API, which it then deduplicates and acts on by following a predefined set of routes.</p>
+<p>Alertmanager also exposes a web interface to allow, for instance, the visualization and silencing of firing alerts or applying inhibition rules for them.</p>
+<p>One of the core design choices is to value delivery over deduplication. This means that if a network partition occurs between a cluster of Alertmanager instances, notifications will be sent from both sides of the partition.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Alerting routes</h1>
+                </header>
+            
+            <article>
+                
+<p>A route, in its essence, can be seen as a tree-like structure. If an incoming alert has a specific payload that triggers a particular route (branch), a pre-defined integration will be invoked.</p>
+<p>There are multiple out-of-the-box integrations available for the most common use cases, such as the following:</p>
+<ul>
+<li style="font-weight: 400">Email</li>
+<li style="font-weight: 400">Hipchat</li>
+<li style="font-weight: 400">PagerDuty</li>
+<li style="font-weight: 400">Slack</li>
+<li style="font-weight: 400">Opsgenie</li>
+<li style="font-weight: 400">VictorOps</li>
+<li style="font-weight: 400">WeChat</li>
+</ul>
+<p>There's also the webhook integration that issues an HTTP POST request with the JSON payload of the firing alert to an endpoint of your choosing, opening a world of possibilities for custom integrations.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Visualizing your data</h1>
+                </header>
+            
+            <article>
+                
+<p>Data visualization is one of the simplest ways to produce or consume information. Prometheus exposes a well-defined API, where PromQL queries can produce raw data for visualizations.</p>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p><span>Currently, the best external software for visualization is </span>Grafana,<span> which we will explain thoroughly in <a href="02331a85-bad1-4a4f-b56e-150b69b46edb.xhtml">Chapter 10</a>, <em>Discovering and Creating Grafana Dashboards</em>. The Grafana team has made its integration with Prometheus seamless, and the result is a delightful user experience.</span></p>
+<p>The Prometheus server also ships with two internal visualizations components:</p>
+<ul>
+<li style="font-weight: 400"><strong>Expression browser</strong>: Here, you can run PromQL directly to quickly query data and visualize it instantly:</li>
+</ul>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/dbe02ffd-3636-427d-98fb-05d6473f4aba.png"/></p>
+<div class="packt_figref CDPAlignCenter CDPAlign">Figure 2.4: The Prometheus expression browser interface</div>
+<ul>
+<li><strong>Consoles</strong>: These are web pages that are built using the Golang templating language and are served by the Prometheus server itself. This approach allows you to have pre-defined data visualization interfaces without you having to constantly type PromQL:</li>
+</ul>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/e481f288-10af-4749-bb39-6c138481a265.png"/></p>
+<div class="CDPAlignCenter CDPAlign packt_figref">Figure 2.5: The Prometheus console interface</div>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Summary</h1>
+                </header>
+            
+            <article>
+                
+<p>To better understand the Prometheus philosophy, it is essential to have an insight <span>–</span> even if it's at a high level—into the main components of the Prometheus ecosystem, from data collection via exporters to reliable alerting using Alertmanager, as well as the available visualization options. This is what we covered in this chapter.</p>
+<p>In the next chapter, we'll start building a test environment, so that all the concepts we've discussed so far can start to materialize.</p>
+<p class="mce-root"/>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Questions</h1>
+                </header>
+            
+            <article>
+                
+<ol>
+<li>What are the main components of the Prometheus ecosystem?</li>
+<li>Which components are essential and which are optional for a Prometheus deployment?</li>
+<li>Why are out-of-process exporters needed?</li>
+<li>When an HTTP GET request hits the metrics endpoint of an exporter, what ensues?</li>
+<li>What happens to a triggering alert in an Alertmanager cluster if a network partition occurs?</li>
+<li>You realize you need to integrate Alertmanager with a custom-made API. What would be your quickest option?</li>
+<li>What visualizations options are included in a standard Prometheus server installation?</li>
+</ol>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Further reading</h1>
+                </header>
+            
+            <article>
+                
+<ul>
+<li><strong>Prometheus overview</strong>: <a href="https://prometheus.io/docs/introduction/overview/">https://prometheus.io/docs/introduction/overview/</a></li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    </body></html>

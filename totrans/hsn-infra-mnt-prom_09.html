@@ -1,0 +1,1690 @@
+<html><head></head><body>
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Prometheus Query Language - PromQL</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">Prometheus offers a powerful and flexible query language in order to leverage its multi-dimensional data model that allows ad hoc aggregation and a combination of time series data. In this chapter, we'll introduce PromQL, its syntax, and semantics. Armed with the knowledge and features of this language, we'll be able to unlock the true potential of Prometheus.</p>
+<p class="mce-root">In brief, the following topics will be covered in this chapter:</p>
+<ul>
+<li>The test environment for this chapter</li>
+<li>Getting to know the basics of PromQL</li>
+<li>Common patterns and pitfalls</li>
+<li>Moving on to more complex queries</li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">The test environment for this chapter</h1>
+                </header>
+            
+            <article>
+                
+<p>In this chapter, we will be using a Kubernetes-based environment to generate all the metrics we need to test the PromQL examples that are covered in this chapter. Using the Prometheus Operator, the setup of this environment is quite simple; go through the following steps to get yourself up and running:</p>
+<ol>
+<li>To start the Kubernetes test environment, we first must ensure there's no instance of <kbd>minikube</kbd> running:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>minikube status</strong><br/><strong>minikube delete</strong></pre>
+<ol start="2">
+<li>Start a new <kbd>minikube</kbd> instance with the following specifications:</li>
+</ol>
+<pre style="padding-left: 60px">minikube start \<br/>  --cpus=2 \<br/>  --memory=3072 \<br/>  --kubernetes-version="v1.14.0" \<br/>  --vm-driver=virtualbox</pre>
+<p style="padding-left: 60px">When the previous command finishes, a new Kubernetes environment should be ready to be used.</p>
+<p style="padding-left: 60px">For our Kubernetes test environment, we'll be building upon the lessons we learned about in <a href="12e775c2-bee9-4ebe-ad73-2f9313eeeeee.xhtml">Chapter 5</a>, <em>Running a Prometheus Server</em>, and will employ the Prometheus Operator in our workflow. Since we've already covered the Prometheus Operator setup, we'll deploy all the required components without dwelling on each one of them.</p>
+<ol start="3">
+<li>Step into this chapter number, relative to the code repository root path:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>cd ./chapter07/</strong></pre>
+<ol start="4">
+<li>Deploy the Prometheus Operator and validate the successful deploy:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>kubectl apply -f ./provision/kubernetes/bootstrap/</strong><br/><strong>kubectl rollout status deployment/prometheus-operator -n monitoring</strong></pre>
+<ol start="5">
+<li>Wait a few seconds for the Prometheus Operator to be able to execute requests and deploy the Prometheus server:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>kubectl apply -f ./provision/kubernetes/prometheus/</strong><br/><strong>kubectl rollout status statefulset/prometheus-k8s -n monitoring</strong></pre>
+<p>So that we have a few metric providers, we'll be deploying some of the exporters we covered in <a href="51ddca07-f381-40f6-ae45-8b089ed918cd.xhtml">Chapter 6</a>, <em>Exporters and Integrations</em>, specifically the following:</p>
+<ul>
+<li>Node Exporter</li>
+<li>cAdvisor</li>
+<li>kube-state-metrics</li>
+</ul>
+<p>We'll also be deploying a type of <em>Hello World</em> application, <em>Hey</em>, that we introduced in <a href="12e775c2-bee9-4ebe-ad73-2f9313eeeeee.xhtml">Chapter 5</a>, <em>Running a Prometheus Server</em>, so that Prometheus gathers web application metrics as well.</p>
+<p>To ease the effort required to deploy all of the components and configurations, the following command abstracts all the steps needed, which we also went through in previous chapters:</p>
+<pre><strong>kubectl apply -f ./provision/kubernetes/services/</strong><br/><strong>kubectl get servicemonitors --all-namespaces</strong></pre>
+<p>After a moment, you should have Prometheus and all the services ready and available. The following instruction should open the Prometheus web interface in your default web browser:</p>
+<pre><strong>minikube service prometheus-service -n monitoring</strong></pre>
+<p class="mce-root">If you browse the <kbd>/targets</kbd> endpoint, you'll be presented with something similar to the following:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/7a882111-8d07-43a0-a237-d9404a1b740c.png" style="width:36.25em;height:29.75em;"/></p>
+<div class="packt_figref CDPAlignCenter CDPAlign">Figure 7.1: Prometheus /targets endpoint showing all the configured targets</div>
+<p>You can now follow along with the examples in this chapter using this newly created test environment.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Getting to know the basics of PromQL</h1>
+                </header>
+            
+            <article>
+                
+<p>Understanding the Prometheus Query Language is essential to be able to perform insightful dashboarding, capacity planning, and alerting. But for that, we need to begin by learning the basics. The following topics will cover the components that available to construct queries and look into how they behave together.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Selectors</h1>
+                </header>
+            
+            <article>
+                
+<p>Prometheus is designed to handle hundreds of thousands of time series. Each metric name can have several different time series, depending on the combination of labels; querying the right data can look difficult, or even downright perplexing, when similarly-named metrics from different jobs are mixed together. In Prometheus, a selector refers to a set of label matchers. The metric name is also included in this definition as, technically, its internal representation is also a label, albeit a special one: <kbd>__name__</kbd>. Each label name/value pair in a selector is called a label matcher, and multiple matchers can be used to further filter down the time series matched by the selector. Label matchers are enclosed in curly brackets. If no matcher is needed, the curly brackets can be omitted. Selectors can return instant or range vectors. Here's an example selector:</p>
+<pre>prometheus_build_info{version="2.9.2"}</pre>
+<p>This selector is equivalent to the following:</p>
+<pre>{__name__="prometheus_build_info", version="2.9.2"}</pre>
+<p>Let's now see how to label matchers work.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Label matchers</h1>
+                </header>
+            
+            <article>
+                
+<p>Matchers are employed to restrict a query search to a specific set of label values. We'll be using the <kbd>node_cpu_seconds_total</kbd> metric to exemplify the four available label matcher operators: <kbd>=</kbd>, <kbd>!=</kbd>, <kbd>=~</kbd>, and <kbd>!~</kbd>. Without any matching specification, this metric alone returns an instant vector with all the available time series containing the metric name,  as well as all combinations of the CPU core numbers (<kbd>cpu=”0”</kbd>, <kbd>cpu=”1”</kbd>) and CPU modes (<kbd>mode="idle"</kbd>, <kbd>mode="iowait"</kbd>, <kbd>mode="irq"</kbd>, <kbd>mode="nice"</kbd>, <kbd>mode="softirq"</kbd>, <kbd>mode="steal"</kbd>, <kbd>mode="user"</kbd>, <kbd>mode="system"</kbd>), which makes a grand total of 16 time series, as shown in the following screenshot:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/bf556780-70a2-419b-a597-67aa44511f97.png"/></p>
+<div class="packt_figref CDPAlignCenter CDPAlign">Figure 7.2: node_cpu_seconds_total query resulting in 16 time series being returned</div>
+<p>Now, let's use each of the four available label matchers (<kbd>=</kbd><span>, </span><kbd>!=</kbd><span>, </span><kbd>=~</kbd><span>, and </span><kbd>!~</kbd>) to restrict the query differently and analyze the produced results.</p>
+<p>Using <kbd>=</kbd>, we can perform an exact match on the label value. For instance, if we only match CPU core <kbd>0</kbd>, it will return an instant vector with half of the time series from the previous query:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/90f43aa4-f2ca-4c0e-904e-474d4f3ed1d7.png" style="width:45.83em;height:20.67em;"/></p>
+<div class="packt_figref CDPAlignCenter CDPAlign">Figure 7.3: Query node_cpu_seconds_total only on CPU core 0</div>
+<p>We can also negate a match to obtain all the remaining time series using the <kbd>!=</kbd> matcher. Once applied to our example, it will return the remaining eight time series only, as follows:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/21529ddd-f465-45fe-bac8-9f4e177d97f0.png" style="width:45.50em;height:20.58em;"/></p>
+<div class="packt_figref CDPAlignCenter CDPAlign">Figure 7.4: Query node_cpu_seconds<em>_total</em> for all time series except core 0</div>
+<p>When selecting time series, instead of relying solely on exact matches, it is also important to be able to apply regular expressions. Hence, <kbd>=~</kbd> and <kbd>!~</kbd> are PromQL matchers for this operation and they both accept RE2 type regex syntax. Keep in mind that the regular expressions are anchored when using these matchers. This means they need to match the full label value. You can unanchor an expression by adding <kbd>.*</kbd> at the beginning and end of the regex.  </p>
+<div class="packt_tip">The regular expression syntax that's accepted by RE2 can be found at: <a href="https://github.com/google/re2/wiki/Syntax">https://github.com/google/re2/wiki/Syntax</a>.</div>
+<p>Looking at our example, if we were only interested in two CPU modes, <kbd>mode="user"</kbd> and <kbd>mode="system"</kbd>, we could easily perform a query like the following, effectively selecting only the modes we require:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/b428a929-dcaf-43eb-a8d1-040690da14c2.png"/></p>
+<div class="packt_figref CDPAlignCenter CDPAlign">Figure 7.5: Query node_cpu_seconds_total only for mode="user" and mode="system"</div>
+<p>Considering that RE2 does not support negative lookahead, and similar to the negate matcher, Prometheus provides a way to negate the regex matcher, by using <kbd>!~</kbd>. This matcher excludes results that match the expression and allows all the remaining time series. Here's an example:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/4f35318a-d701-4cc9-ae3c-e1676169b106.png"/></p>
+<div class="packt_figref CDPAlignCenter CDPAlign">Figure 7.6: Query node_cpu_seconds_total for all time series except mode="user" and mode="system"</div>
+<p>Now that we have a good understanding on how label matchers work, let's have a look at instant vectors. </p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Instant vectors</h1>
+                </header>
+            
+            <article>
+                
+<p>Instant vector selectors are named as such because they return a list of samples, relative to the query evaluation time, for the time series that match them. This list is called an <strong>instant vector</strong>, as it's a result at a given instant. A sample is a data point of a time series, composed of a value and a timestamp. This timestamp, in most cases, reflects the time when the scrape occurred and that value was ingested, with the exception of metrics pushed to the Pushgateway, which, due to their nature, will never have timestamps. However, if functions are applied or operations are performed on the time series, the timestamp for the instant vector samples will reflect the query time and not the ingested time.</p>
+<p><span>The way instant vectors operate – by only returning the most recent samples relative to query time that match the selector -</span> means that Prometheus will not return time series that are considered stale (as we mentioned in <a href="12e775c2-bee9-4ebe-ad73-2f9313eeeeee.xhtml">Chapter 5</a>, <em>Running a Prometheus Server</em>). A stale marker (a special kind of sample that marks that time series as stale) is inserted when either the originating target disappears from the discovery mechanism, or if they are not present in the scrape after the last successful one where they existed. A time series with a stale marker as its last sample will not be returned when using instant vector selectors.</p>
+<p>Every example in the <em>Label Matchers</em><em> </em>section was an instant vector selector, and so every result was an instant vector.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Range vectors</h1>
+                </header>
+            
+            <article>
+                
+<p>A range vector selector is similar to an instant vector selector, but it returns a set of samples for a given time range, for each time series that matches it. Keep in mind that a timestamp of a given value might not be completely aligned with the scrape time for different targets since Prometheus spreads the scrapes across their defined intervals, reducing overlapping scrapes in the same instant.</p>
+<p>To define a range vector selector query, you have to set an instant vector selector and append a range using square brackets <kbd>[ ]</kbd>.</p>
+<p>The following table details the available time units for defining a range:</p>
+<table border="1" style="border-collapse: collapse;width: 56.1688%;border-color: #000000">
+<tbody>
+<tr>
+<td>
+<p><strong>Abbreviation</strong></p>
+</td>
+<td>
+<p><strong>Unit</strong></p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>s</kbd></p>
+</td>
+<td>
+<p>Seconds</p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>m</kbd></p>
+</td>
+<td>
+<p>Minutes</p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>h</kbd></p>
+</td>
+<td>
+<p>Hours</p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>d</kbd></p>
+</td>
+<td>
+<p>Days</p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>w</kbd></p>
+</td>
+<td>
+<p>Weeks</p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>y</kbd></p>
+</td>
+<td>
+<p>Years</p>
+</td>
+</tr>
+</tbody>
+</table>
+<p> </p>
+<p>Like durations, as explained in <a href="12e775c2-bee9-4ebe-ad73-2f9313eeeeee.xhtml">Chapter 5</a><em>, Running a Prometheus Server</em>, a time range is always an integer value with a single unit. For example, 1.5d and 1d12h are considered errors and should be represented as 36h. Durations ignore leap seconds and leap days: a week is always is always exactly 7 days long, and a year 365 days. </p>
+<p>Let's put this into practice. Using the <em>Hey</em> application as our case example, we're going to inspect the samples that were collected in the last two minutes for HTTP code <kbd>200</kbd>:</p>
+<pre>http_requests_total{code="200"}[2m]</pre>
+<p>Following is the output for the preceding code:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/8199bca8-6b57-4898-b6f4-58a7788d1404.png"/></p>
+<div class="packt_figref CDPAlignCenter CDPAlign">Figure 7.7: Two minutes of samples of the http_requests_total metric for the HTTP code 200</div>
+<p>As we can see in the preceding screenshot, there are four samples available (defined by the 30s scrape interval) for each instance of the <em>Hey</em> application that are returned by our range vector selector.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">The offset modifier</h1>
+                </header>
+            
+            <article>
+                
+<p>The <kbd>offset</kbd> modifier allows you to query data in the past. This means that we can offset the query time of an instant or range vector selector relative to the current time. It is applied on a per-selector basis, which means that offsetting one selector but not another effectively unlocks the ability to compare current behavior with past behavior for each of the matched time series. To use this modifier, we need to specify it right after the selector and add the offset time; for example:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/05dbe816-b363-4134-8daa-655d9bedde7c.png"/></p>
+<div class="packt_figref CDPAlignCenter CDPAlign">Figure 7.8: Two minutes of samples of the http_requests_total metric of the past hour for the HTTP code 200</div>
+<div class="packt_tip">Despite not being directly related to PromQL, it's important to be aware of the moment feature of the Prometheus expression browser. This feature changes the query moment as if we went back to a specific date and time. The main difference between the moment picker and using offset is that the former is absolute while the latter is relative time shifting.</div>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Subqueries</h1>
+                </header>
+            
+            <article>
+                
+<p>Before the introduction of the subquery selector in Prometheus 2.7.0, there wasn't a direct way to feed the output of functions that returned instant vectors to range vector functions. In order to do that, you would have recorded the expression that produced the desired instant vector as a new time series, also called a recording rule – which we'll go into in depth in <a href="9aa1e3da-13cf-4051-845d-1d1c924ef47b.xhtml">Chapter 9</a>, <em>Defining Alerting and Recording Rules<span> </span><span>– </span></em>waited for it to have enough data, and then used the appropriate range vector selector to feed the recorded series into the range vector function. The subquery selector simplifies this process by allowing the evaluation of functions that return instant vectors over time and return the result as a range vector, without needing to wait for recording rules to capture sufficient data. Subquery syntax is similar to range vectors, with the added detail of being able to specify the frequency in which samples should be captured, as we'll see soon.</p>
+<p>We'll be using the following query example to explain its syntax:</p>
+<pre>max_over_time(rate(http_requests_total{handler="/health", instance="172.17.0.9:8000"}[5m])[1h:1m])</pre>
+<p>Splitting the query into its components, we can see the following:</p>
+<table border="1" style="border-collapse: collapse;width: 100%">
+<tbody>
+<tr>
+<td>
+<p class="mce-root"><strong>Component</strong></p>
+</td>
+<td><strong>Description</strong></td>
+</tr>
+<tr>
+<td>
+<p class="mce-root"><kbd>rate(http_requests_total{handler="/health", instance="172.17.0.9:8000"}[5m])</kbd></p>
+</td>
+<td>The inner query to be run, which in this case is aggregating five minutes' worth of data into an instant vector.</td>
+</tr>
+<tr>
+<td><kbd>[1h</kbd></td>
+<td>Just like a range vector selector, this defines the size of the range relative to the query evaluation time.</td>
+</tr>
+<tr>
+<td><kbd>:1m]</kbd></td>
+<td>The resolution step to use. If not defined, it defaults to the global evaluation interval.</td>
+</tr>
+<tr>
+<td><kbd>max_over_time</kbd></td>
+<td>The subquery returns a range vector, which is now able to become the argument of this aggregation operation over time.</td>
+</tr>
+</tbody>
+</table>
+<p> </p>
+<p>This is a common use case, as it is good practice to expose counters wherever possible (with the obvious exception of things that are gauges by nature, such as current memory occupation) and then rate them to be resilient to failed scrapes, but most interesting functions take ranges of gauges.</p>
+<p>Subqueries are fairly expensive to evaluate, so it is strongly discouraged to use them for dashboarding, as recording rules would produce the same result given enough time. Similarly, they should not be used in recording rules for the same reason. Subqueries are best suited for exploratory querying, where it is not known in advance which aggregations are needed to be looked at over time.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Operators</h1>
+                </header>
+            
+            <article>
+                
+<p>PromQL allows the use of binary, vector matching, and aggregation operators. In the following sections, we'll go over each one, providing examples on how and when to use them.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Binary operators</h1>
+                </header>
+            
+            <article>
+                
+<p>Apart from instant and range vectors, Prometheus also supports values of the scalar type, which consist of single numbers without any dimensionality.</p>
+<p class="mce-root">In the following subsections, we will explore each of the binary operators: the arithmetic and the comparison operators.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Arithmetic</h1>
+                </header>
+            
+            <article>
+                
+<p>The arithmetic operators provide basic math between two operands.</p>
+<p class="mce-root">There are three available combinations of operands. The simplest is between two scalars, which will return a scalar after applying the chosen arithmetic operator. We can also combine an instant vector and a scalar, which will apply the chosen arithmetic operator between the scalar and each sample of the instant vector, effectively returning the same instant vector with updated samples. The last combination we can have is between two instant vectors. In this case, the arithmetic operator is applied between the vector from the left-hand side and the matching element from the right-hand side vector, while the metric name is dropped. If no match is present, those samples will not be part of the result. This case will be explained further in the <em>Vector matching</em> section.</p>
+<p>For reference, the available arithmetic operators are as follows:</p>
+<table border="1" style="border-collapse: collapse;width: 100%">
+<tbody>
+<tr>
+<td>
+<p><strong>Operator</strong></p>
+</td>
+<td>
+<p><strong>Description</strong></p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>+</kbd></p>
+</td>
+<td>
+<p>Addition</p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>-</kbd></p>
+</td>
+<td>
+<p>Subtraction</p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>*</kbd></p>
+</td>
+<td>
+<p>Multiplication</p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>/</kbd></p>
+</td>
+<td>
+<p>Division</p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>%</kbd></p>
+</td>
+<td>
+<p>Modulo</p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>^</kbd></p>
+</td>
+<td>
+<p>Power</p>
+</td>
+</tr>
+</tbody>
+</table>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Comparison</h1>
+                </header>
+            
+            <article>
+                
+<p>The comparison operators, as shown in the following table, are useful for filtering results:</p>
+<table border="1" style="border-collapse: collapse;width: 38.2743%">
+<tbody>
+<tr>
+<td>
+<p><strong>Operator</strong></p>
+</td>
+<td>
+<p><strong>Description</strong></p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>==</kbd></p>
+</td>
+<td>
+<p>Equal</p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>!=</kbd></p>
+</td>
+<td>
+<p>Not equal</p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>&gt;</kbd></p>
+</td>
+<td>
+<p>Greater than</p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>&lt;</kbd></p>
+</td>
+<td>
+<p>Less than</p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>&gt;=</kbd></p>
+</td>
+<td>
+<p>Greater or equal</p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>&lt;=</kbd></p>
+</td>
+<td>
+<p>Less or equal</p>
+</td>
+</tr>
+</tbody>
+</table>
+<p> </p>
+<p>Say, for example, we have the following instant vector:</p>
+<pre>process_open_fds{instance="172.17.0.10:8000", job="hey-service"} 8<br/>process_open_fds{instance="172.17.0.11:8000", job="hey-service"} 23</pre>
+<p>To that, we apply a comparison operator such as the following:</p>
+<pre>process_open_fds{job="hey-service"} &gt; 10</pre>
+<p>The result will be as follows:</p>
+<pre>process_open_fds{instance="172.17.0.11:8000", job="hey-service"} 23</pre>
+<p>This operation shows that we have effectively filtered the results of the instant vector, which is fundamental for alerting, as we'll discuss later, in <a href="9aa1e3da-13cf-4051-845d-1d1c924ef47b.xhtml">Chapter 9</a>, <em>Defining Alerting and Recording Rules</em>.</p>
+<p>Moreover, we can use the <kbd>bool</kbd> modifier to not only return all matched time series but also modify each returned sample to become 1 or 0, depending on whether the sample would be kept or dropped by the comparison operator.</p>
+<div class="packt_infobox">Using the bool modifier is the only way to compare scalars; for example, <kbd>42 == bool 42</kbd>.</div>
+<p>Therefore, we can apply the same query with the <kbd>bool</kbd> modifier to our previous example:</p>
+<pre>process_open_fds{job="hey-service"} &gt; bool 10</pre>
+<p>This would return the following:</p>
+<pre>process_open_fds{instance="172.17.0.10:8000", job="hey-service"} 0<br/>process_open_fds{instance="172.17.0.11:8000", job="hey-service"} 1</pre>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Vector matching</h1>
+                </header>
+            
+            <article>
+                
+<p>Vector matching, as the name implies, is an operation only available between vectors. So far, we have learned that when we have a scalar and an instant vector, the scalar gets applied to each sample of the instant vector. However, when we have two instant vectors, how can we match their samples? We'll be tackling this question in the following sub-sections.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">One-to-one</h1>
+                </header>
+            
+            <article>
+                
+<p>Since binary operators require two operands, as we <span>described</span> previously, when vectors of the same size and label set are located on each side of one operator, that is, one-to-one, samples with the exact same label/value pairs are matched together, while the metric name and all non-matching elements are dropped.</p>
+<p>Let's consider an example. We'll start by using the following instant vectors:</p>
+<pre>node_filesystem_avail_bytes{instance="172.17.0.13:9100", job="node-exporter-service", mountpoint="/Users"} 100397019136<br/>node_filesystem_avail_bytes{instance="172.17.0.13:9100", job="node-exporter-service", mountpoint="/data"} 14120038400<br/>node_filesystem_size_bytes{instance="172.17.0.13:9100", job="node-exporter-service", mountpoint="/Users"} 250685575168<br/>node_filesystem_size_bytes{instance="172.17.0.13:9100", job="node-exporter-service", mountpoint="/data"} 17293533184</pre>
+<p>We'll then apply the following operation:</p>
+<pre>node_filesystem_avail_bytes{} / node_filesystem_size_bytes{} * 100</pre>
+<p>This will return the resulting instant vector:</p>
+<pre>{instance="172.17.0.13:9100", job="node-exporter-service", mountpoint="/Users"} 40.0489813060515<br/>{instance="172.17.0.13:9100", job="node-exporter-service", mountpoint="/data"} 81.64923991971679</pre>
+<p>It might be useful to aggregate vectors with mismatching labels. In those situations, you can apply the <kbd>ignoring</kbd> keyword right after the binary operator to ignore the specified labels. Additionally, it is also possible to restrict which labels from both sides should be used in matching by using the <kbd>on</kbd> keyword after the binary operator.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Many-to-one and one-to-many</h1>
+                </header>
+            
+            <article>
+                
+<p>Occasionally, you are required to perform operations where the element of one side is matched with several elements on the other side of the operation. When this happens, you are required to provide Prometheus with the means to interpret such operations. If the higher cardinality is on the left-hand side of the operation, you can use the <kbd>group_left</kbd> modifier after either <kbd>on</kbd> or <kbd>ignoring</kbd>; if it's on the right-hand side, then <kbd>group_right</kbd> should be applied. The <kbd>group_left</kbd> operation is commonly used for its ability to copy labels over from the right side of the expression, as will be seen on some practical examples later in this chapter.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Logical operators</h1>
+                </header>
+            
+            <article>
+                
+<p>Logical operators are most easily understood as their set theory counterparts, as shown in the following table. These operators are the only ones in PromQL that work many-to-many. There are three logical operators that can be used between expressions:</p>
+<table border="1" style="border-collapse: collapse;width: 37.9425%">
+<tbody>
+<tr>
+<td>
+<p><strong>Operator</strong></p>
+</td>
+<td>
+<p><strong>Description</strong></p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>and</kbd></p>
+</td>
+<td>
+<p>Intersection</p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>or</kbd></p>
+</td>
+<td>
+<p>Union</p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>unless</kbd></p>
+</td>
+<td>
+<p>Complement</p>
+</td>
+</tr>
+</tbody>
+</table>
+<p> </p>
+<p>The <kbd>and</kbd> logical operator works by only returning the matches from the left-hand side if the expression on the right-hand side has results with matching label key/value pairs. All other time series from the left-hand side that do not have a match on the right-hand side are dropped. The resulting time series will keep the name from the left operand. This is why it is also called the <strong>intersection</strong> operator. The <kbd>and</kbd> operator is often used like an <kbd>if</kbd> statement: by using the expression on the right as the condition to return the one on the left.</p>
+<p>Using the following instant vector as an example, we'll validate the previous statement:</p>
+<pre>node_filesystem_avail_bytes{instance="172.17.0.13:9100", job="node-exporter-service", mountpoint="/Users"} 1003970<br/>node_filesystem_avail_bytes{instance="172.17.0.13:9100", job="node-exporter-service", mountpoint="/data"} 141200<br/>node_filesystem_size_bytes{instance="172.17.0.13:9100", job="node-exporter-service", mountpoint="/Users"} 2506855<br/>node_filesystem_size_bytes{instance="172.17.0.13:9100", job="node-exporter-service", mountpoint="/data"} 172935</pre>
+<p>We'll be applying the following expression:</p>
+<pre>node_filesystem_size_bytes and node_filesystem_size_bytes &lt; 200000</pre>
+<p>This will return the following:</p>
+<pre>node_filesystem_avail_bytes{instance="172.17.0.13:9100", job="node-exporter-service", mountpoint="/data"} 141200<br/>node_filesystem_size_bytes{instance="172.17.0.13:9100", job="node-exporter-service", mountpoint="/data"} 172935</pre>
+<p>The union logical operator, <kbd>or</kbd>, works by returning the elements from the left-hand side, except if there are no matches, it will return the elements from the right-hand side. Again, both sides need to have matching label names/values.</p>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p>We can reuse the previous data sample and apply the following expression:</p>
+<pre>node_filesystem_avail_bytes &gt; 200000 or node_filesystem_avail_bytes &lt; 2500000</pre>
+<p>The result will be as follows:</p>
+<pre>node_filesystem_avail_bytes{instance="172.17.0.13:9100", job="node-exporter-service", mountpoint="/Users"} 1003970</pre>
+<p>Finally, the <kbd>unless</kbd> logical operator will return the elements from the first expression that do not match the label name/value pairs from the second. In set theory, this is called a complement. Practically speaking, this operator works in the opposite way to <kbd>and</kbd>, which means it can also be used as an <kbd>if not</kbd> statement.</p>
+<p>Once again, we'll be using the same sample data that we used previously while applying the following expression:</p>
+<pre>node_filesystem_avail_bytes unless node_filesystem_avail_bytes &lt; 200000</pre>
+<p>This, in turn, provides us with the following result:</p>
+<pre>node_filesystem_avail_bytes{instance="172.17.0.13:9100", job="node-exporter-service", mountpoint="/Users"} 1003970<br/>node_filesystem_size_bytes{instance="172.17.0.13:9100", job="node-exporter-service", mountpoint="/Users"} 2506855</pre>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Aggregation operators</h1>
+                </header>
+            
+            <article>
+                
+<p>By employing aggregation operators, we can take an instant vector and aggregate its elements, resulting in a new instant vector, usually with fewer elements. Every aggregation of an instant vector such as this works in the ways that we described in the <em>Vertical aggregation</em> section of <a href="d571ee63-1941-40e0-a314-70030efe76ea.xhtml">Chapter 4</a><em>, Prometheus Metrics Fundamentals</em>.</p>
+<p>The available aggregation operators are as follows:</p>
+<table border="1" style="border-collapse: collapse;width: 100%">
+<tbody>
+<tr style="height: 32px">
+<td>
+<p><strong>Operator</strong></p>
+</td>
+<td>
+<p><strong>Description</strong></p>
+</td>
+<td>
+<p><strong>Requirements</strong></p>
+</td>
+</tr>
+<tr style="height: 32px">
+<td>
+<p><kbd>sum</kbd></p>
+</td>
+<td>
+<p>Sums the elements</p>
+</td>
+<td/>
+</tr>
+<tr style="height: 32px">
+<td>
+<p><kbd>min</kbd></p>
+</td>
+<td>
+<p>Selects the minimum element</p>
+</td>
+<td/>
+</tr>
+<tr style="height: 27.0625px">
+<td>
+<p><kbd>max</kbd></p>
+</td>
+<td>
+<p>Selects the maximum element</p>
+</td>
+<td/>
+</tr>
+<tr style="height: 32px">
+<td>
+<p><kbd>avg</kbd></p>
+</td>
+<td>
+<p>Calculates the average of the elements</p>
+</td>
+<td/>
+</tr>
+<tr style="height: 32px">
+<td>
+<p><kbd>stddev</kbd></p>
+</td>
+<td>
+<p>Calculates the standard deviation of the elements</p>
+</td>
+<td/>
+</tr>
+<tr style="height: 32px">
+<td>
+<p><kbd>stdvar</kbd></p>
+</td>
+<td>
+<p>Calculates the standard variance of the elements</p>
+</td>
+<td/>
+</tr>
+<tr style="height: 32px">
+<td>
+<p><kbd>count</kbd></p>
+</td>
+<td>
+<p>Counts the number of elements</p>
+</td>
+<td/>
+</tr>
+<tr style="height: 32px">
+<td>
+<p><kbd>count_values</kbd></p>
+</td>
+<td>
+<p>Counts the number of elements with the same value</p>
+</td>
+<td/>
+</tr>
+<tr style="height: 32px">
+<td>
+<p><kbd>bottomk</kbd></p>
+</td>
+<td>
+<p>The lower <kbd>k</kbd> elements by sample</p>
+</td>
+<td>
+<p>Requires the number of elements (<kbd>k</kbd>) as a scalar</p>
+</td>
+</tr>
+<tr style="height: 32px">
+<td>
+<p><kbd>topq</kbd></p>
+</td>
+<td>
+<p>The higher <kbd>k</kbd> elements by sample value</p>
+</td>
+<td>
+<p>Requires the number of elements (<kbd>k</kbd>) as a scalar</p>
+</td>
+</tr>
+<tr style="height: 32px">
+<td>
+<p><kbd>quantile</kbd></p>
+</td>
+<td>
+<p>Calculates the quantile of the elements</p>
+</td>
+<td>
+<p>Requires the quantile (0 ≤ φ ≤ 1) definition as a scalar</p>
+</td>
+</tr>
+</tbody>
+</table>
+<p> </p>
+<p>The operators that require a parameter (such as <kbd>count_values</kbd>, <kbd>bottomk</kbd>, <kbd>topk</kbd>, and <kbd>quantile</kbd>) need to specify it before the vector expression. There are two available modifiers to use in conjunction with aggregation operators that take a list of label names: <kbd>without</kbd> allows you to define which labels to aggregate away, effectively dropping those labels from the resulting vector, while <kbd>by</kbd> does exactly the opposite; that is, it allows you to specify which labels to keep from being aggregated. Only a single modifier can be used per aggregation operator. These modifiers will influence which dimensions will be aggregated by the operators.</p>
+<p>For example, let's say that we use some sample data from the following query:</p>
+<pre>rate(http_requests_total[5m])</pre>
+<p>This would generate something like the following snippet:</p>
+<p> </p>
+<pre>{code="200",endpoint="hey-port",handler="/",instance="172.17.0.10:8000",job="hey-service",method="get"} 5.891716069444445<br/><br/>{code="200",endpoint="hey-port",handler="/",instance="172.17.0.11:8000",job="hey-service",method="get"} 5.9669884444444445<br/><br/>{code="200",endpoint="hey-port",handler="/",instance="172.17.0.9:8000",job="hey-service",method="get"} 11.1336484826487<br/><br/>{code="200",endpoint="hey-port",handler="/health",instance="172.17.0.10:8000",job="hey-service",method="get"} 0.1<br/><br/>{code="200",endpoint="hey-port",handler="/health",instance="172.17.0.11:8000",job="hey-service",method="get"} 0.1<br/><br/>{code="200",endpoint="hey-port",handler="/health",instance="172.17.0.9:8000",job="hey-service",method="get"} 0.1000003703717421 </pre>
+<p>If we want to know the aggregate of all requests, we can apply the following expression:</p>
+<pre>sum(rate(http_requests_total[5m]))</pre>
+<p>This will return the following:</p>
+<pre>{} 23.292353366909335</pre>
+<p>Now, if we add the <kbd>by</kbd> operator, we can aggregate by the handler endpoint:</p>
+<pre>sum by (handler) (rate(http_requests_total[5m]))</pre>
+<p>This would, in turn, return the following:</p>
+<pre>{handler="/"} 22.99235299653759<br/>{handler="/health"} 0.3000003703717421</pre>
+<p>This simple example demonstrates how you can easily aggregate data.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Binary operator precedence</h1>
+                </header>
+            
+            <article>
+                
+<p>When a PromQL query is evaluated, the order in which binary operators are applied is dictated by the operator precedence. The following table shows the precedence order, from higher to lower:</p>
+<table border="1" style="border-collapse: collapse;width: 100%">
+<tbody>
+<tr>
+<td><strong>Precedence</strong></td>
+<td><strong>Operator</strong></td>
+<td><strong>Description</strong></td>
+</tr>
+<tr>
+<td>
+<p class="mce-root">1</p>
+</td>
+<td><kbd><span>^</span></kbd></td>
+<td><span>Evaluated right to left, for example, 1 ^ 2 ^ 3 is evaluated as 1 ^ (2 ^ 3)</span></td>
+</tr>
+<tr>
+<td>2</td>
+<td><span><kbd>*</kbd>, <kbd>/</kbd>, <kbd>%</kbd></span></td>
+<td><span>Evaluated left to right, for example, 1 / 2 * 3 is evaluated as (1 / 2) * 3</span></td>
+</tr>
+<tr>
+<td>3</td>
+<td><span><kbd>+</kbd>, <kbd>-</kbd></span></td>
+<td><span>Evaluated left to right</span></td>
+</tr>
+<tr>
+<td>4</td>
+<td><span><kbd>==</kbd>, <kbd>!=</kbd>, <kbd>&lt;=</kbd>, <kbd>&lt;</kbd>, <kbd>&gt;=</kbd>, <kbd>&gt;</kbd></span></td>
+<td><span>Evaluated left to right</span></td>
+</tr>
+<tr>
+<td>5</td>
+<td><span><kbd>and</kbd>, <kbd>unless</kbd></span></td>
+<td><span>Evaluated left to right</span></td>
+</tr>
+<tr>
+<td>6</td>
+<td><kbd><span>or</span></kbd></td>
+<td><span>Evaluated left to right</span></td>
+</tr>
+</tbody>
+</table>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Functions</h1>
+                </header>
+            
+            <article>
+                
+<p>PromQL has almost 50 different functions for a variety of use cases, such as math; sorting; counter, gauge and histogram manipulation; label transformations; aggregations over time; type conversions; and finally, date and time functions. In the following sections, we'll cover some of the most commonly used ones and provide examples on why they are so relevant.</p>
+<div class="packt_infobox">A comprehensive overview of all functions is available at <a href="https://prometheus.io/docs/prometheus/latest/querying/functions/">https://prometheus.io/docs/prometheus/latest/querying/functions/</a>.</div>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">absent()</h1>
+                </header>
+            
+            <article>
+                
+<p>The <kbd>absent()</kbd> function takes an instant vector as an argument and returns the following:</p>
+<ul>
+<li>An empty vector if the argument has results</li>
+<li>1-element vector with the sample value equal to 1, containing the labels from the specified argument in the case of non-conflicting equality matchers</li>
+</ul>
+<p>This function is quite useful for alerting on, as the name suggests, absent time series.</p>
+<p>For example, say that the instant vector exists and we execute the following expression:</p>
+<pre>absent(http_requests_total{method="get"})</pre>
+<p>This will return the following:</p>
+<pre>no data</pre>
+<p>Let's say we use an expression with a label matcher using a nonexistent label value, like in the following example:</p>
+<pre>absent(http_requests_total{method="nonexistent_dummy_label"})</pre>
+<p>This will produce an instant vector with the nonexistent label value:</p>
+<pre>{method="nonexistent_dummy_label"} 1</pre>
+<p>Let's apply <kbd>absent</kbd> to a nonexistent metric, as shown in this snippet:</p>
+<pre>absent(nonexistent_dummy_name)</pre>
+<p>This will translate into the following output:</p>
+<pre>{} 1</pre>
+<p>Finally, let's say we use <kbd>absent</kbd> on a nonexistent metric and a nonexistent label/value pair, as shown in the following snippet:</p>
+<pre>absent(nonexistent_dummy_name{method="nonexistent_dummy_label"})</pre>
+<p>The result can be seen in the following snippet:</p>
+<pre>{method="nonexistent_dummy_label"} 1</pre>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">label_join() and label_replace()</h1>
+                </header>
+            
+            <article>
+                
+<p>These functions are used to manipulate labels—they allow you to join labels to other ones, extract parts of label values, and even drop labels (though that particular operation is easier and more ergonomic to do with standard aggregation operators). In both functions, if the defined target label is a new one, it will get added to the label set; if it's an existing label, it will get replaced.</p>
+<p>When using <kbd>label_join</kbd>, you're required to provide an instant vector, define a resulting label, identify the separator of the resulting concatenation, and establish the labels to join, as exemplified in the following syntax:</p>
+<pre>label_join(&lt;vector&gt;, &lt;resulting_label&gt;, &lt;separator&gt;, source_label1, source_labelN)</pre>
+<p>For example, say that we use the following sample data:</p>
+<pre>http_requests_total{code="200",endpoint="hey-port", <strong>handler="/"</strong>,<strong>instance="172.17.0.10:8000"</strong>,job="hey-service",method="get"} 1366<br/>http_requests_total{code="200",endpoint="hey-port", <strong>handler="/health"</strong>,<strong>instance="172.17.0.10:8000"</strong>,job="hey-service",method="get"} 942</pre>
+<p>We then apply the following expression:</p>
+<pre>label_join(http_requests_total{instance="172.17.0.10:8000"}, "url", "", "instance", "handler")</pre>
+<p>We end up with the following instant vector:</p>
+<pre>http_requests_total{code="200",endpoint="hey-port", handler="/",instance="172.17.0.10:8000",job="hey-service", method="get",<strong>url="172.17.0.10:8000/"</strong>} 1366<br/>http_requests_total{code="200",endpoint="hey-port", handler="/health",instance="172.17.0.10:8000",job="hey-service", method="get",<strong>url="172.17.0.10:8000/health"</strong>} 942</pre>
+<p>When you need to arbitrarily manipulate labels, <kbd>label_replace</kbd> is the function to use. The way it works is by applying a regular expression to the value of a chosen source label and storing the matched capture groups on the destination label. Both source and destination can be the same label, effectively replacing its value. This sounds complex, but it really isn't; let's have a look at the syntax of <kbd>label_replace</kbd>:</p>
+<pre>label_replace(&lt;vector&gt;, &lt;destination_label&gt;, &lt;regex_match_result&gt;, &lt;source_label&gt;, &lt;regex&gt;)</pre>
+<p>Say that we take the preceding sample data and apply the following expression:</p>
+<pre>label_replace(http_requests_total{instance="172.17.0.10:8000"}, "port", "$1", "instance", ".*:<strong>(.*)</strong>")</pre>
+<p>The result will then be the matching elements with the new label, called <strong>port</strong>:</p>
+<pre>http_requests_total{code="200",endpoint="hey-port",handler="/", instance="172.17.0.10:8000", job="hey-service",method="get",<strong>port="8000"</strong>} 1366<br/>http_requests_total{code="200",endpoint="hey-port",handler="/health", instance="172.17.0.10:8000", job="hey-service",method="get",<strong>port="8000"</strong>} 942</pre>
+<p>When using <kbd>label_replace</kbd>, if the regular expression doesn't match the label value, the originating time series will be returned unchanged.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">predict_linear()</h1>
+                </header>
+            
+            <article>
+                
+<p>This function receives a range vector and a scalar time value as arguments. It extrapolates the value of each matched time series from the query evaluation time to the specified number of seconds in the future, given the trend in the data from the range vector. It uses linear regression to achieve such a prediction, which means there is no complex algorithmic forecasting happening in the background. It should only be used with gauges.</p>
+<p>We'll apply the following expression, which employs <kbd>predict_linear</kbd> using a range of one hour of data, and extrapolate the sample value four hours in the future (60 (seconds) * 60 (minutes) * 4):</p>
+<pre>predict_linear(node_filesystem_free_bytes{mountpoint="/data"}[1h], 60 * 60 * 4)</pre>
+<pre>{device="/dev/sda1", endpoint="node-exporter",fstype="ext4",instance="10.0.2.15:9100", job="node-exporter-service",mountpoint="/data", namespace="monitoring", pod="node-exporter-r88r6", service="node-exporter-service"} 15578514805.533087</pre>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">rate() and irate()</h1>
+                </header>
+            
+            <article>
+                
+<p>These two functions allow you to calculate the rate of increase of the given counters. Both automatically adjust for counter resets and take a range vector as an argument.</p>
+<p>While the <kbd>rate()</kbd> function provides the per second <em>average rate of change</em> over the specified interval by using the first and last values in the range scaled to fit the range window, the <kbd>irate()</kbd> function uses the last two values in the range for the calculation, which produces the instant rate of change.</p>
+<p>It's important to understand in what scenarios the usage of one is more suitable than the other. For example, when creating visualizations such as dashboards, we might want to increase the awareness of possible spikes; <kbd>irate</kbd> fits this criteria. Note that as <kbd>irate()</kbd> uses the last two values in a range, it is sensible to step downsampling, and so it can only be used when fully zoomed in. When building alerting expressions, we are more interested in obtaining smoother trends, so that spurious spikes don't reset the <kbd>for</kbd> timer (as we'll see in <a href="9aa1e3da-13cf-4051-845d-1d1c924ef47b.xhtml">Chapter 9</a>, <em>Defining Alerting and Recording Rules</em>); in this case, <kbd>rate</kbd> is the more appropriate function to apply. Always ensure there are at least four samples in the range vector so that <kbd>rate()</kbd> can work reliably.</p>
+<p>To show the differences between these two functions, the following screenshot illustrate the same metric, at the same timeframe, one using <kbd>rate()</kbd> and the other using <kbd>irate()</kbd>:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/3599e048-112a-4092-8ced-a4cdeed41835.png" style="width:45.00em;height:23.08em;"/></p>
+<div class="packt_figref CDPAlignCenter CDPAlign">Figure 7.9: rate() of node_network_receive_bytes_total with 1m range</div>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/29508fe3-2742-40b8-bc04-1dd2544b8c26.png" style="width:46.17em;height:23.58em;"/></p>
+<div class="CDPAlignCenter CDPAlign packt_figref">Figure 7.10: irate() of node_network_receive_bytes_total with 1m range</div>
+<p>As we can see, <kbd>irate</kbd> is a lot more sensitive to variations in the underlying counters, while <kbd>rate</kbd> generally produces more smoothed-out values. </p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">histogram_quantile()</h1>
+                </header>
+            
+            <article>
+                
+<p>This function takes a float, which defines the required quantile (0 ≤ φ ≤ 1), and an instant vector of the gauge type as arguments. Each time series must have a <kbd>le</kbd> label (which means less than or equal to) to represent the upper bound of a bucket. This function also expects one of the selected time series to have a bucket named such as <kbd>+Inf</kbd>, which works as the catch-all, the last bucket of the cumulative histogram. Since histograms that are generated by Prometheus client libraries use counters for each bucket, <kbd>rate()</kbd> needs to be applied to convert them into gauges for this function to do its work. The time that's range selected for the range vector will then correspond to the window for the quantile calculation. Although rare, some histograms produced by third-party software might not use counters for their buckets, so they can be used directly in <kbd>histogram_quantile</kbd> as long as they fulfil the label requirements.</p>
+<p>For example, lets execute the following expression:</p>
+<pre>histogram_quantile(0.75, sum(rate(prometheus_http_request_duration_seconds_bucket[5m])) by (handler, le)) &gt; 0</pre>
+<p>We'll be presented with a result similar to the following:</p>
+<pre>{handler="/"} 0.07500000000000001<br/>{handler="/api/v1/label/:name/values"} 0.07500000000000001<br/>{handler="/static/*filepath"} 0.07500000000000001<br/>{handler="/-/healthy"} 0.07500000000000001<br/>{handler="/api/v1/query"} 0.07500000000000001<br/>{handler="/graph"} 0.07500000000000001<br/>{handler="/-/ready"} 0.07500000000000001<br/>{handler="/targets"} 0.7028607713983935<br/>{handler="/metrics"} 0.07500000000000001</pre>
+<p>This provides an example of the output of an internal Prometheus histogram.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">sort() and sort_desc()</h1>
+                </header>
+            
+            <article>
+                
+<p>As their names suggest, <kbd>sort</kbd> receives a vector and sorts it in ascending order by the sample values, while <kbd>sort_desc</kbd> does the same function but in descending order.</p>
+<div class="packt_tip">The <kbd>topk</kbd> and <kbd>bottomk</kbd> aggregation operators sort their results by default.</div>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">vector()</h1>
+                </header>
+            
+            <article>
+                
+<p>The <kbd>vector()</kbd> function receives a scalar value as a parameter and returns a vector with no labels with the value of the specified scalar argument.</p>
+<p>For example, query the following expression:</p>
+<pre>vector(42)</pre>
+<p>It will return the following:</p>
+<pre>{} 42</pre>
+<p>This is normally used as a way of ensuring an expression always has at least one result, by combining a vector expression with it, like in the following code:</p>
+<pre>http_requests_total{handler="/"} or vector(0)</pre>
+<p>Since the <kbd>or</kbd> operator returns both sides, a sample with the value 0 will always be present.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Aggregation operations over time</h1>
+                </header>
+            
+            <article>
+                
+<p>The aggregation operations we discussed earlier are always applied to instant vectors. When we need to perform those aggregations on range vectors, PromQL provides the <kbd>*_over_time</kbd> family of functions, which work as described in the <em>Horizontal aggregation</em> section of <a href="d571ee63-1941-40e0-a314-70030efe76ea.xhtml">Chapter 4</a>, <em>Prometheus Metrics Fundamentals</em>. All of them take a range vector and output an instant vector. Following is the description of the operations:</p>
+<table border="1" style="border-collapse: collapse;width: 100%">
+<tbody>
+<tr>
+<td>
+<p><strong>Operation</strong></p>
+</td>
+<td>
+<p><strong>Description</strong></p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>avg_over_time()</kbd></p>
+</td>
+<td>
+<p>Average value of all samples in the range.</p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>count_over_time()</kbd></p>
+</td>
+<td>
+<p>Count of all samples in the range.</p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>max_over_time()</kbd></p>
+</td>
+<td>
+<p>Maximum value of all samples in the range.</p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>min_over_time()</kbd></p>
+</td>
+<td>
+<p>Minimum value of all samples in the range.</p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>quantile_over_time()</kbd></p>
+</td>
+<td>
+<p>The quantile of all samples in the range. It requires two arguments, the definition of the desired quantile, φ, as a scalar, where 0 ≤ φ ≤ 1, as a first argument and then a range-vector.</p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>stddev_over_time()</kbd></p>
+</td>
+<td>
+<p>The standard deviation of the sample's value in the range.</p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>stdvar_over_time()</kbd></p>
+</td>
+<td>
+<p>The standard variance of the sample's value in the range.</p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd><span>sum_over_time()</span></kbd></p>
+</td>
+<td>
+<p>The sum of all sample values in the range.</p>
+</td>
+</tr>
+</tbody>
+</table>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Time functions</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root"><span>Prometheus supplies a number of functions to help manipulating time data. These are useful for a couple of scenarios, such as checking how long ago was a process or batch job last seen, only triggering alerts at certain times, or not triggering them at all on certain days. Every time function in Prometheus assumes Universal Coordinated Time (UTC).</span></p>
+<p class="mce-root"><span>The <kbd>time</kbd> function returns an instant vector with the current time in the UNIX epoch format (commonly known as a UNIX timestamp): the number of seconds that have elapsed since January 1st, 1970 UTC.</span></p>
+<p class="mce-root"><span>The </span><kbd>timestamp</kbd><span> function returns an instant vector with the UNIX timestamps of the samples returned by the supplied selector. </span></p>
+<p>The <kbd>minute</kbd>, <kbd>hour</kbd>, <kbd>month</kbd> and <kbd>year</kbd> functions all work the same way: they receive an instant vector with one or more timestamps, and return an instant vector with the corresponding time component they represent. These functions' default input is the <kbd>time</kbd> function so, if they're used without an argument, they will return the current minute, hour, month or year, respectively.</p>
+<p>The <kbd>days_in_month</kbd> function receives an instant vector with timestamps as argument and returns the number of days in the month for each of those timestamps. As with the previous functions, the default input argument is the <kbd>time</kbd> function. The result will obviously range from 28 to 31.</p>
+<p>Lastly, and similarly to the previous function, the <kbd>day_of_week</kbd> and <kbd>day_of_month</kbd> functions expect an instant vector with timestamps as input and returns the corresponding day of the week (Sunday as 0, Monday as 1, and so on) and day of the month (from 1 to 31), respectively. The default input is the <kbd>time</kbd> function.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Info and enum</h1>
+                </header>
+            
+            <article>
+                
+<p>There are two metric types yet to be mentioned, info and enum. They are quite recent, but the convenience they bring is very much appreciated. Metrics of the type info have their names end with <kbd>_info</kbd> and are regular gauges with one possible value, 1. This special kind of metric was designed to be a place where labels whose values might change over time are stored, such as versions (for example, exporter version, language version, and kernel version), assigned roles, or VM metadata information; if those labels were to be exported in every time series, were they to change, a break in continuity would happen as the metric identity (the combination of the metric name and label set) would also change. This would also pollute the labels of all the time series that were affected, since these new labels would be present in every metric. To use this type of metric, we need to combine it with the metrics we wish to augment by using the multiplication operator—since the info metric value is <kbd>1</kbd>, the multiplication won't change the value of the other metric—and the <kbd>group_left</kbd>/<kbd>group_right</kbd> modifiers allow us to enrich of the resulting vector with the labels we might require.</p>
+<p>Here's an example of a query using an info metric:</p>
+<pre>node_uname_info{instance=”10.0.2.15:9100”}</pre>
+<p>We can see the previous query result in the following snippet:</p>
+<pre>node_uname_info{domainname="(none)",endpoint="node-exporter", instance="10.0.2.15:9100",job="node-exporter-service",machine="x86_64", namespace="monitoring",nodename="minikube",pod="node-exporter-r88r6", release="4.15.0",service="node-exporter-service",sysname="Linux", version="#1 SMP Fri Dec 21 23:51:58 UTC 2018"} 1</pre>
+<p>The enum metric type is also a gauge, just like info. Its objective is to provide a way to expose anything that might need state tracking, such as the current state of a state machine. The most common use case for this type of metric is exposing the state of daemons (start, starting, stop, stopping, failed, and so on). This tracking is done by maintaining state information on a label, appropriately named state, and setting the metric value to <kbd>1</kbd> for the current state and 0 otherwise.</p>
+<p class="mce-root">Here's an example of an instant vector selector query using an enum metric:</p>
+<pre>node_systemd_unit_state{name="kubelet.service"}</pre>
+<p>The previous query results in the following snippet:</p>
+<pre>node_systemd_unit_state{endpoint="node-exporter",instance="10.0.2.15:9100",job="node-exporter-service",name="kubelet.service", namespace="monitoring",pod="node-exporter-jx2c2", <strong>state="activating"</strong>} 0<br/>node_systemd_unit_state{endpoint="node-exporter",instance="10.0.2.15:9100",job="node-exporter-service",name="kubelet.service", namespace="monitoring",pod="node-exporter-jx2c2", <strong>state="active"</strong>} 1<br/>node_systemd_unit_state{endpoint="node-exporter",instance="10.0.2.15:9100",job="node-exporter-service",name="kubelet.service", namespace="monitoring",pod="node-exporter-jx2c2", <strong>state="deactivating"</strong>} 0<br/>node_systemd_unit_state{endpoint="node-exporter",instance="10.0.2.15:9100",job="node-exporter-service",name="kubelet.service", namespace="monitoring",pod="node-exporter-jx2c2", <strong>state="failed"</strong>} 0<br/>node_systemd_unit_state{endpoint="node-exporter",instance="10.0.2.15:9100",job="node-exporter-service",name="kubelet.service", namespace="monitoring",pod="node-exporter-jx2c2"", <strong>state="inactive"</strong>} 0</pre>
+<p>Now that we know the basics of PromQL, let's dive into some common patterns and avoidable pitfalls when writing expressions.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Common patterns and pitfalls</h1>
+                </header>
+            
+            <article>
+                
+<p><span><span><span>With such a powerful language at your disposal, it's easy to become overwhelmed with so many options. In the following sections, we'll provide some common patterns and pitfalls to ensure the intended use of PromQL for each situation described, and in this way, further enforcing the knowledge that we have provided you with so far. </span></span></span></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Patterns</h1>
+                </header>
+            
+            <article>
+                
+<p>While the power and flexibility of PromQL allows for a world of possibilities in terms of information extraction, there are a few query patterns that make a set of common problems much easier to understand and help increase the level of insight into the monitored services. In the following topics, we'll be covering a few of our favorites, in the hope they become as useful for you as they currently are for us.</p>
+<p class="mce-root"/>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Service-level indicators</h1>
+                </header>
+            
+            <article>
+                
+<p>In <a href="4214ddff-8289-4dc6-b0ef-240510a22192.xhtml">Chapter 1</a>, <em>Monitoring Fundamentals</em>, we introduced the notion of <em>What to measure</em>, discussing <em>Google's Four Golden Signals</em>, as well as the USE and RED methodologies. Building upon that knowledge, we can start to define <strong>service-level indicators</strong> (<strong>SLIs</strong>), which reflect a given service's performance and availability. Constructing queries to generate SLIs is a common pattern of PromQL usage and one of the most useful.</p>
+<p>Let's look at an example of an SLI: the typical definition of one is the number of good events over the number of valid events; in this case, we want to understand whether the percentage of requests being served <span>by Prometheus </span>is at or below 100 ms, which makes it a latency SLI. First we need to gather information about how many requests are being served under that threshold; thankfully, we can rely on an already available histogram-typed metric called <kbd>prometheus_http_request_duration_seconds_bucket</kbd>. As we already know, this type of metric has buckets represented by the <kbd>le</kbd> label (less or equal), so we just match the elements under 100 ms (0.1 s), like so:</p>
+<pre>prometheus_http_request_duration_seconds_bucket{le="0.1"} </pre>
+<p>While ratios are typically the base unit in these type of calculations, for this example, we want a percentage, and so we must divide the matched elements by the total number of requests made (<kbd>prometheus_http_request_duration_seconds_count</kbd>) and multiply that result by 100. These two instant vectors can't to be divided directly due to the mismatch of the <kbd>le</kbd> label, so we must ignore it, as follows:</p>
+<pre>prometheus_http_request_duration_seconds_bucket{le="0.1"} / ignoring (le) prometheus_http_request_duration_seconds_count * 100</pre>
+<p>This gives us an instant vector with information per endpoint and per instance, setting the sample value to the percentage of requests answered below 100 ms since the service started on each instance (remember that <kbd>_bucket</kbd> is a counter). That's a good start, but not quite what we're after, as we want the SLI for the service as a whole, not for each instance or for each endpoint. It's also more useful to calculate it on a rolling window instead of averaging an indeterminate amount of data; as more data is collected, the average becomes smoother and harder to move. So, to fix these issues, we need to rate the counters over a time window to get a fixed rolling average, and then aggregate away instances and endpoints using <kbd>sum()</kbd>. This way, we don't need to ignore the <kbd>le</kbd> label either, as it is also discarded during aggregation. Let's put it all together:</p>
+<p> </p>
+<pre>sum by (job, namespace, service) (<br/>  rate(prometheus_http_request_duration_seconds_bucket{le="0.1"}[5m])<br/>) / <br/>sum by (job, namespace, service) (<br/>  rate(prometheus_http_request_duration_seconds_count[5m])<br/>) * 100</pre>
+<p>Building a <strong>service-level objective</strong> (<strong>SLO</strong>) for our service now becomes trivial as we are just required to specify the percentage we're aiming to achieve using a comparison operator. This makes for an excellent condition to be defined as an alert.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Percentiles</h1>
+                </header>
+            
+            <article>
+                
+<p>We just learned how to extract the percentage of requests being served under a given latency, but what if we need to understand the latency of a given percentile of requests?</p>
+<p class="mce-root">To obtain, for example, the 95th percentile, we can use the <kbd>histogram_quantile</kbd> function by defining the quantile (in this case, <kbd>0.95</kbd>), and then feed it the query expression that represents the set of data we're interested in—the average rate of increase for each of the buckets in the request duration histogram during a rolling time window. If we want the global latency of the service, instead of per instance/pod/handler, we need to apply the <kbd>sum()</kbd> aggregation:</p>
+<pre>histogram_quantile(0.95, sum without (instance, pod, handler) (rate(prometheus_http_request_duration_seconds_bucket[5m])))</pre>
+<p>This expression will produce a value that represents that 95% of requests will be at or under said value.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">The health of scrape jobs</h1>
+                </header>
+            
+            <article>
+                
+<p>For each defined scrape job, Prometheus will produce an automatic metric named <kbd>up</kbd>, which reflects the health of the job in question – 1 for a successful scrape and 0 for a failed one. We can use this metric to quickly visualize the current health state of the entire infrastructure of exporters and/or applications being scraped.</p>
+<p>Let's get an overview of all the successful jobs being scraped:</p>
+<pre>sum by (job) (up)</pre>
+<pre>{job="hey-service"} 3<br/>{job="cadvisor-service"} 1<br/>{job="kube-state-metrics"} 2<br/>{job="node-exporter-service"} 1<br/>{job="prometheus-service"} 2</pre>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Pitfalls</h1>
+                </header>
+            
+            <article>
+                
+<p>The power and flexibility of PromQL can enable some impressive slicing and dicing of time series data, but can also be a source of frustration, unexpected results, and even severe performance issues. While recent releases of Prometheus have been steadily introducing features to address some of these pitfalls, understanding these issues can help you get the most out of PromQL, while saving you time and computing resources.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Choosing the right functions for the data type</h1>
+                </header>
+            
+            <article>
+                
+<p>The most common pitfall when starting out with PromQL is not choosing the right function for the data type (such as counters, gauges, or histograms) or vector type. Even though this information is pointed out in the Prometheus documentation, there can still be some confusion as there are conceptually similar named functions and aggregators: <kbd>rate</kbd> and <kbd>deriv</kbd>, <kbd>increase</kbd>; <kbd>delta</kbd>, <kbd>quantile</kbd>; <kbd>histogram_quantile</kbd>, <kbd>sum</kbd> and <kbd>sum_over_time</kbd>, among others. Fortunately, in cases where there is a mismatch of vector types, the expression evaluation will fail and let you know what is wrong; for a mismatch in data types, such as providing a counter to a function that expects a gauge, the expression might evaluate successfully but return incorrect or deceptive results.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Sum-of-rates versus rate-of-sums</h1>
+                </header>
+            
+            <article>
+                
+<p>The previous point might seem obvious, but when the complexity of the queries built starts to increase, it's easy to make mistakes. A common example of this is trying to rate a sum of counters instead of summing rates. The <kbd>rate</kbd> function expects a counter, but a sum of counters is actually a gauge, as it can go down when one of the counters resets; this would translate into seemingly random spikes when graphed, because <kbd>rate</kbd> would consider any decrease a counter reset, but the total sum of the other counters would be considered a huge delta between zero and the current value. In the following diagram, we can see this in action: two counters (<strong>G1</strong>, <strong>G2</strong>), one of which had a reset (<strong>G2</strong>); <strong>G3</strong> shows the expected aggregate result that's produced by summing the rate of each counter; <strong>G4</strong> shows what the sum of counters 1 and 2 looks like; <strong>G5</strong> represents how the rate function would interpret <strong>G4</strong> as a counter (the sudden increase being the difference between 0 and the point where the decrease happened); and finally, <strong>G6</strong> shows what rating the sum of counters would look like, with the erroneous spike appearing where <strong>G2</strong>'s counter reset happened:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/9a1a2ab8-d685-4ab1-8c23-f87a6af1a15d.png"/></p>
+<div class="CDPAlignCenter CDPAlign packt_figref">Figure 7.11: Approximation of what rate of sums and sum of rates look like</div>
+<p>An example of how to properly do this in PromQL might be:</p>
+<pre>sum(rate(http_requests_total[5m]))</pre>
+<p>Making this mistake was a bit harder in past versions of Prometheus, because to give <kbd>rate</kbd> a range vector of sums, we would either need a recording rule or a manual sum of range vectors. Unfortunately, as of Prometheus 2.7.0, it is now possible to ask for the sum of counters over a time window, effectively creating a range vector from that result. This is an error and should not be done. So, in short, always apply aggregations after taking rates, never the other way around.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Having enough data to work with</h1>
+                </header>
+            
+            <article>
+                
+<p>The rate group of functions (<kbd>rate</kbd>, <kbd>irate</kbd>, <kbd>increase</kbd>, <kbd>deriv</kbd>, <kbd>delta</kbd>, and <kbd>idelta</kbd>) need at least two samples in the supplied range vector to work properly. This means that time ranges that are close to <kbd>scrape_interval</kbd> might fail to produce the desired results as a single failed scrape or window alignment issues (scrapes don't happen at exact intervals and might be delayed) will make the range contain only one sample. It is therefore recommended to use 4 (or more) times the <kbd>scrape_interval</kbd> to make sure that enough samples are returned for the calculation to work. Following diagram shows failed scrape changing the trend of samples for a given range:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/0920208d-3f3a-4d42-b37d-60e62297884e.png"/></p>
+<div class="CDPAlignCenter CDPAlign packt_figref">Figure 7.12: A failed scrape changing the trend of samples for a given range</div>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Unexpected results when using increase</h1>
+                </header>
+            
+            <article>
+                
+<p>On a related subject, a common point of confusion is why functions such as <kbd>increase</kbd> and <kbd>delta</kbd> produce non-integer results. This point is briefly explained in the documentation, but is worth expanding upon. Since Prometheus collects data on a regular basis (defined in the <kbd>scrape_interval</kbd> configuration), when a query asks for a range of samples, the window limits for that range usually don't neatly align with the timestamps of the returned data. These functions extrapolate what the result would be like if the data points matched the time window. They do this by calculating the precise result with the samples provided, and then multiplying that result by the ratio of the time window over the interval between the first and last data point, effectively scaling the result to the requested range.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Not using enough matchers to select a time series</h1>
+                </header>
+            
+            <article>
+                
+<p>Another common pitfall when writing PromQL expressions, whether for dashboarding or alerting, is not using enough matchers to make sure that the returned samples are from the expected time series. It is considered an anti-pattern in the Prometheus community to namespace metric names to applications when the metric in question is not specific to that particular software, and even if it is, there might be cases where naming collisions occur; this is why it is good practice to scope selectors so that <kbd>job</kbd> is always explicitly selected when trying to extract information about a particular software. As an example, we can look at the <kbd>go_goroutines</kbd> metric, which is collected by the first-party Prometheus Go client library: as a sizeable chunk of the Prometheus ecosystem is written in Go and uses this client library for instrumentation, it is usual for this metric to be present in many scrape jobs. This means that, if we were to investigate the aggregate go-routine behavior of a particular software, we would get incorrect results if the selectors that were used weren't sufficiently narrow for the instances we were interested in.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Losing statistical significance</h1>
+                </header>
+            
+            <article>
+                
+<p>A mistake not specifically related to PromQL, but easy to make due to the flexibility of the language, is to apply transformations to aggregate values, thus losing their statistical significance. As an example, you might be tempted to average pre-computed quantiles in summaries from a group of instances to get a feel for the cluster, but they can't be further manipulated from a statistical standpoint – the result from that operation would not resemble the corresponding quantiles of the cluster as a whole. This, however, can be done with histograms, since buckets from each instance can be summed cluster-wide before calculating the approximate quantile. Another common example of this is averaging averages.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Knowing what to expect when constructing complex queries</h1>
+                </header>
+            
+            <article>
+                
+<p>An interesting detail to be mindful of when using PromQL is that, when using comparison operators between vectors, the returned result will be from the left-hand side of the comparison. This means that, when doing comparisons between a current value and a threshold, you should do them in that order (for example,  <kbd>current_value &lt; threshold</kbd>) as you probably want the returned value to be the current value and not the threshold:</p>
+<pre>node_filesystem_avail_bytes &lt; node_filesystem_size_bytes * 0.2</pre>
+<p>Furthermore, when chaining different comparisons using <kbd>and</kbd>, the result will still be the left-hand side from the first comparison. The following example returns the percentage of space left in a filesystem, which is under 20%, and is predicted to be full within 4 hours given the fill rate of the last 6 hours. Note that it's not in read-only mode:</p>
+<pre>node_filesystem_avail_bytes/node_filesystem_size_bytes * 100 &lt; 20<br/>and<br/>predict_linear(node_filesystem_avail_bytes[6h], 4*60*60) &lt;= 0<br/>and<br/>node_filesystem_readonly == 0</pre>
+<p>Switching the first comparison with the second would produce the same number of results, but would also present the predicted bytes available 4 hours from now. This result would be less useful as knowing exactly the amount of negative bytes predicted just conveys the fact that they will be 0 in reality. Both expressions would be viable for alerting, though, as the resulting value of the expression is not sent in the alert notification.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">The query of death</h1>
+                </header>
+            
+            <article>
+                
+<p>Lastly, care should be taken when crafting queries with overly broad selectors and memory-intensive aggregations. While Prometheus has default checks and bounds implemented to avoid unlimited memory usage (as discussed in <a href="12e775c2-bee9-4ebe-ad73-2f9313eeeeee.xhtml">Chapter 5</a>, <em>Running a Prometheus Server</em>), it is still possible to run up against a memory limit that is not large enough—either a container limit or even the actual system RAM, which would make the OS unceremoniously terminate the Prometheus server. Compounding the problem, pinpointing which queries are using the most resources is hard, especially in environments where you have little control over what queries are sent to the server; there is no slow query log functionality built in as making it work would involve some trade-offs that would impact performance and manageability. In practice, though, constant improvements to capping resource utilization (especially on the memory front) have made it much harder for this particular issue to happen in well-dimensioned environments.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Moving on to more complex queries</h1>
+                </header>
+            
+            <article>
+                
+<p>With the information that's provided so far, we can move on to more complex queries, understand how they are built, and what to expect from them. In the following sections, we'll go over some intricate scenarios that demand the use of PromQL to explore and solidify the concepts we've covered so far.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">In which node is Node Exporter running?</h1>
+                </header>
+            
+            <article>
+                
+<p>This scenario is designed to assist your understanding of concepts such as <kbd>info</kbd> metrics and the <kbd>group_left</kbd> modifier.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Scenario rationale</h1>
+                </header>
+            
+            <article>
+                
+<p>When running on Kubernetes, you might need to troubleshoot a Node Exporter pod, and for that you're required to know on which host it's running. Node Exporter metrics see the pod and not the host, so you don't have the hostname available in the metrics that produced. In this scenario, we are required to add the missing information to metrics that didn't have that label originally. <span>Another alternative to this scenario would be to make the required information available in the instance labels via relabeling.</span></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">PromQL approach</h1>
+                </header>
+            
+            <article>
+                
+<p>The following query allows us to augment the <kbd>node_exporter_build_info</kbd> metric with yet another label, called <kbd>nodename</kbd>, which has information regarding the hostname running your Node Exporter pod.</p>
+<p>In this example, we have the following instant vector:</p>
+<pre>node_exporter_build_info</pre>
+<p>This produces the following result:</p>
+<pre>node_exporter_build_info{branch="HEAD",endpoint="node-exporter",goversion="go1.11.2", instance="10.0.2.15:9100",job="node-exporter-service",namespace="monitoring", pod="node-exporter-r88r6",revision="f6f6194a436b9a63d0439abc585c76b19a206b21", service="node-exporter-service",version="0.17.0"} 1</pre>
+<p>We also have <kbd>node_uname_info</kbd>, which has the <kbd>nodename</kbd> label:</p>
+<pre>node_uname_info</pre>
+<p>This translates into the following code:</p>
+<pre>node_uname_info{domainname="(none)",endpoint="node-exporter", instance="10.0.2.15:9100",job="node-exporter-service",machine="x86_64", namespace="monitoring",<strong>nodename="minikube"</strong>,pod="node-exporter-r88r6", release="4.15.0",service="node-exporter-service",sysname="Linux", version="#1 SMP Fri Dec 21 23:51:58 UTC 2018"} 1</pre>
+<p>With the help of an info metric, as we described previously, we'll use the following expression to add the <kbd>nodename</kbd> label from the <kbd>node_uname_info</kbd> info type metric to the <kbd>node_exporter_build_info</kbd> metric using <kbd>group_left</kbd>:</p>
+<pre>node_exporter_build_info * on (pod, namespace) group_left (nodename) node_uname_info</pre>
+<p>The result can be inspected in the following snippet:</p>
+<pre><br/>{branch="HEAD",endpoint="node-exporter",goversion="go1.11.2", instance="10.0.2.15:9100",job="node-exporter-service",namespace="monitoring", <strong>nodename="minikube"</strong>,pod="node-exporter-r88r6", revision="f6f6194a436b9a63d0439abc585c76b19a206b21", service="node-exporter-service",version="0.17.0"} 1</pre>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Comparing CPU usage across different versions</h1>
+                </header>
+            
+            <article>
+                
+<p>This scenario is similar to the previous one, but takes it a step further by combining metrics from different sources and making them all work together.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Scenario rationale</h1>
+                </header>
+            
+            <article>
+                
+<p>You might want to observe how different software versions behave in terms of throughput or resource usage. This might be easier to analyze by graphing the patterns before and after the upgrade in clear terms. In this specific example, we are going to look at container CPU usage for <kbd>node_exporter</kbd> before and after an upgrade.</p>
+<p><span>Keep in mind a couple of considerations: for the sake of this example, <kbd>node_exporter</kbd> is running as a container, which is ill-advised in a real-world scenario. Furthermore, we’ll be using <kbd>container_cpu_usage_seconds_total</kbd> from cAdvisor instead of <kbd>process_cpu_seconds_total</kbd>, which is collected directly from natively instrumented applications, so that this method can be applied to any kind of containerized process, consolidating the use of cAdvisor metrics along the way.</span></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">PromQL approach</h1>
+                </header>
+            
+            <article>
+                
+<p>The <kbd>container_cpu_usage_seconds_total</kbd> metric gives us the amount of CPU seconds spent running each container, and comes from the <kbd>cadvisor</kbd> exporter. The <kbd>node_exporter</kbd> version can be found in the <kbd>node_exporter_build_info</kbd> metric. To make things a bit harder, since the container metrics come from <kbd>cadvisor</kbd>, the container and pod registered in those metrics are the <kbd>cadvisor</kbd> ones and not from the target pods; however, we can find the original container names and pod names in the <kbd>container_label_io_kubernetes_container_name</kbd> and <kbd>container_label_io_kubernetes_pod_name</kbd> labels, respectively.</p>
+<p>The first thing we need to do is get the average number of CPU seconds per second each pod is using on a rolling window of one minute:</p>
+<pre>sum by (container_label_io_kubernetes_<strong>pod_name</strong>) (<br/>rate(container_cpu_usage_seconds_total{container_label_io_kubernetes_<strong>container_name</strong>="<strong>node-exporter</strong>"}[<strong>1m</strong>])</pre>
+<p>Next, we need to create a new label in <kbd>node_exporter_build_info</kbd> so that matching works as intended. For this use case, we can use either <kbd>label_join</kbd> or <kbd>label_replace</kbd>, as we're just reading one label and writing its contents verbatim in another:</p>
+<pre>label_join(node_exporter_build_info, "container_label_io_kubernetes_pod_name", "", "pod")</pre>
+<p>Alternatively, we can use the following code:</p>
+<pre>label_replace(node_exporter_build_info, "container_label_io_kubernetes_pod_name", "$1", "pod", "(.+)")</pre>
+<p>Finally, we just need to match both metrics through their common label, <kbd>container_label_io_kubernetes_pod_name</kbd>, by using <kbd>on()</kbd> and then ask for the version label to be joined to the CPU expression's label set by using <kbd>group_left()</kbd>. Let's put that all together:</p>
+<pre>sum by (container_label_io_kubernetes_pod_name) (<br/>rate(container_cpu_usage_seconds_total{container_label_io_kubernetes_container_name="node-exporter"}[1m])<br/>) <br/>* on (<strong>container_label_io_kubernetes_pod_name</strong>) <br/> group_left (<strong>version</strong>)<br/> label_replace(node_exporter_build_info, "container_label_io_kubernetes_pod_name", "$1", "pod", "(.+)")</pre>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/f0716997-1497-4298-a144-62225620c708.png"/></p>
+<div class="packt_figref CDPAlignCenter CDPAlign">Figure 7.13: Node exporter version upgrade impact on CPU usage </div>
+<p>All of this might seem complex at first but after you try out these concepts for yourself they quickly become much easier to understand, apply and to reason about. </p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Summary</h1>
+                </header>
+            
+            <article>
+                
+<p>In this chapter, we learned about the basics of PromQL, from selectors to functions, covering concepts such as binary operators, vector matching, and aggregations. Going through the common patterns and pitfalls, we were introduced to how this language allows much more than simple querying and how it has become an essential infrastructure tool, helping with the design and management of SLIs and SLOs. We also demonstrated several scenarios where PromQL shines, and how seemingly complex queries are not that complex after all.</p>
+<p class="mce-root">In the next chapter, <a href="19357d8c-dfcf-4497-ae80-4761f6633d14.xhtml">Chapter 8</a>, <em>Troubleshooting and Validation</em>, we'll delve into how to validate a healthy Prometheus setup and learn how to troubleshoot issues quickly, ensuring the stability of the monitoring stack.</p>
+<p class="mce-root"/>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Questions</h1>
+                </header>
+            
+            <article>
+                
+<ol>
+<li>What are the six available comparison operators in PromQL?</li>
+<li>When should a <kbd>group_right</kbd> modifier be used instead of a <kbd>group_left</kbd> one?</li>
+<li>Why shouldn't you use the <kbd>sort()</kbd> function when applying the <kbd>topk</kbd> aggregation operator?</li>
+<li>What is the major difference between <kbd>rate()</kbd> and <kbd>irate()</kbd>?</li>
+<li>Which type of metric has an <kbd>_info</kbd> suffix and what is its purpose?</li>
+<li>Should you sum and then rate or rate and then sum?</li>
+<li>How can you get the average CPU usage for the last five minutes in a percentage?</li>
+</ol>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Further reading</h1>
+                </header>
+            
+            <article>
+                
+<ul>
+<li><strong>Querying Prometheus</strong>: <a href="https://prometheus.io/docs/prometheus/latest/querying/basics/">https://prometheus.io/docs/prometheus/latest/querying/basics/</a></li>
+<li><strong>SRE Book - Service Level Objectives</strong>: <a href="https://landing.google.com/sre/sre-book/chapters/service-level-objectives/">https://landing.google.com/sre/sre-book/chapters/service-level-objectives/</a></li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    </body></html>

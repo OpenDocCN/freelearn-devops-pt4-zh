@@ -1,0 +1,439 @@
+<html><head></head><body>
+        <section>
+
+                            <header>
+                    <h1 class="header-title">The Release and Configure Phase</h1>
+                </header>
+            
+            <article>
+                
+<p>In this chapter, we will take automation one step further than before. We will start by showing you how to deploy your code to a staging environment after testing and ultimately to production. This is a basic concept in the DevOps transition. We will finish this chapter by explaining about Auto DevOps, a way to fully automate the deployment to a Kubernetes cluster with integrated testing, security scanning, and even performance tests. This is considered the optimal DevOps path by GitLab.</p>
+<p>In this chapter, we will cover the following topics:</p>
+<ul>
+<li class="mce-root"><span>Continuous Deployment with deployment to Amazon Web Services</span></li>
+<li>Auto DevOps with the use of a Kubernetes cluster in Google Cloud</li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Technical requirements</h1>
+                </header>
+            
+            <article>
+                
+<p><span>To follow along with the instructions in this chapter, please download this book's GitHub repository, along with the examples, at <a href="https://github.com/PacktPublishing/Mastering-GitLab-12/tree/master/Chapter11" target="_blank">https://github.com/PacktPublishing/Mastering-GitLab-12/tree/master/Chapter11</a></span><span>.</span></p>
+<p>Here, in the <kbd>Chapter11</kbd> directory, you will find two applications <span><span>that </span></span>are used for the examples in this chapter.</p>
+<p>To run certain automation scripts, you need an <strong>Amazon Web Services</strong> (<strong>AWS</strong>) account, which can be created here: <a href="https://aws.amazon.com/free/">https://aws.amazon.com/free/</a>.</p>
+<p>For the instructions on how to create a cluster on the <strong>Google Kubernetes Engine</strong> (<strong>GKE</strong>), you also need a Google account that you can use with Google Cloud, which you can create here: <a href="https://cloud.google.com/products/search/apply/">https://cloud.google.com/products/search/apply/</a>.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Continuous Deployment</h1>
+                </header>
+            
+            <article>
+                
+<p>Continuous Deployment, as explained in <a href="806c9f1d-24fc-477e-93ef-d0ea1de66530.xhtml">Chapter 9</a>, <em>GitLab Vision <span>–</span> The Whole Toolchain in One Application</em>, is an extension of Continuous Integration, aiming at minimizing cycle time; that is, the time it takes to produce one new line of code by a development team and it being deployed in the production environment. We will demonstrate this practice by deploying the <kbd>eventmanager</kbd> Ruby code to Amazon Elastic Beanstalk, a service for deploying and scaling web applications and services that have been developed with a multitude of languages on different platforms.</p>
+<p><span>There is also the option to create Ruby environments running a Puma web server. </span>Let's log in to the AWS web console (<a href="https://console.aws.amazon.com/console/">https://console.aws.amazon.com/console/</a>) and click on the <span class="packt_screen">Services</span> tab. We can use the search option to find something within the huge range of services that are available within the Amazon Cloud:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/faf4a6f9-e1d3-4e98-904e-dc661368092e.png"/></p>
+<p>Type <kbd>beanstalk</kbd> into the <span class="packt_screen">Find Services</span> widget and click the link it finds. Choose to create a new environment:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/5358dd47-4595-4974-b3dc-810a4c63e7a3.png" style="width:57.75em;height:33.17em;"/></p>
+<p>The environment will deploy. When it's finished, you can view it in the dashboard:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/1749b501-c546-4b3e-86dd-75cee607b849.png" style="width:68.42em;height:32.75em;"/></p>
+<p>We are going to use CI/CD for our Continuous Deployment strategy. First, we will create a <kbd>.gitlab-ci.yml</kbd> file with different stages (staging and production). The first part of this file will define the variables to be used in the different stages. Here, we will define a <kbd>S3_BUCKET_NAME</kbd>, which will be used to copy a deployment package to, a <kbd>REGION</kbd> to specify where the service will be hosted, and finally an <kbd>APPNAME</kbd>, which corresponds to the app name in Amazon Beanstalk:</p>
+<pre> variables:<br/>    S3_BUCKET_NAME: "elasticbeanstalk-eu-west-1-513361393569"<br/>    REGION: "eu-west-1"<br/>    APPNAME: "eventmanager"</pre>
+<p>We need to run our tests before we can advance to the next stage. In the following code, on the second line, we specify a Docker image with Ruby installed to run our tests. In the script section, run the default <kbd>rspec</kbd> tests:</p>
+<pre> test:<br/>    image: ruby:latest<br/>    stage: test<br/>    script: "bundle install;rspec"</pre>
+<p>This step will use the dpl tool (<a href="https://github.com/travis-ci/dpl">https://github.com/travis-ci/dpl</a>) to interface with Amazon Beanstalk and deploy to the staging environment:</p>
+<pre>  deploy_staging:<br/>    stage: deploy<br/>    script:<br/>      - echo "Deploy to staging server"<br/>    image: ruby:latest<br/>    environment:<br/>     name: staging<br/>     url: http://staging.gbnfcg9st9.eu-west-1.elasticbeanstalk.com<br/>    script:<br/>     - echo "Deploying to staging"<br/>     - gem install dpl<br/>     - dpl --provider=elasticbeanstalk --access-key-id=$AWS_ACCESS_KEY_ID --secret-access-key=$AWS_SECRET_ACCESS_KEY --app=$APPNAME --env=$CI_ENVIRONMENT_NAME --region=$REGION 13  --bucket_name=$S3_BUCKET_NAME<br/>    only:<br/>    - cd</pre>
+<p>As you can see, we also need to get AWS credentials from somewhere (<kbd>$AWS_ACCESS</kbd> variables). We can define these variables in the CI/CD environment variables section of the settings of the <kbd>eventmanager</kbd> project. Now, we will use a feature called <em>multiproject pipelines</em>, which has been available since GitLab 11.8. We are going to define a <em>bridge job</em>, which will run the default pipeline in the <kbd>eventmanager-documentation</kbd> project:</p>
+<pre>deploy_documentation:<br/>   stage: deploy<br/>   variables:<br/>     ENVIRONMENT: staging<br/>   trigger: marketing/eventmanager-documentation</pre>
+<p>We also want to deploy to production. We created a separate Beanstalk instance for that with an environment named <kbd>production</kbd>. But what if we want the last step to remain a manual one? Then we need to define a control structure with <kbd>when:manual</kbd>, which means that the step has to be manually initiated: </p>
+<pre>  deploy to production:<br/>     stage: deploy<br/>     environment: production<br/>     when: manual<br/>     image: ruby:latest<br/>     script:<br/>      - echo "Deploying to production"<br/>      - gem install dpl<br/>      - dpl --provider=elasticbeanstalk --access-key-id=$AWS_ACCESS_KEY_ID --secret-access-key=$AWS_SECRET_ACCESS_KEY --app=$APPNAME --env=$CI_ENVIRONMENT_NAME --region=$REGION 10  --bucket_name=$S3_BUCKET_NAME<br/>    only:<br/>    - cd</pre>
+<p>If you save this <kbd>.gitlab-ci.yml</kbd> file (and commit and push it), it will start a deployment. If you click on the pipeline, you will get an overview of the jobs:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/c100a590-fab5-4919-9049-62a4bdbc93e9.png" style="width:37.50em;height:13.25em;"/></p>
+<p>In the preceding screenshot, you can see the stages. First, there's the test stages, which run the <kbd>rspec</kbd> tests. The <kbd>deploy_documentation</kbd> job triggers a downstream pipeline (<kbd>eventmanager-documentation</kbd>). Simultaneously, the deployment to the staging area starts. Let's click on the job that starts:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/cb94d538-4415-44ba-a1d2-01f8eb66974d.png" style="width:43.58em;height:21.75em;"/></p>
+<p>By looking at the log file of the deployment to the staging area, you will find the following code:</p>
+<pre>Running with gitlab-runner 11.9.2 (fa86510e)<br/>   on Computer1 8REjeNy3<br/> Using Docker executor with image ruby:latest ...<br/> Pulling docker image ruby:latest ...<br/> Using docker image sha256:f39c31795d257be1b6344eefdc324180a90ffb9b82a52d171982703dd26f549c for ruby:latest ...<br/> Running on runner-8REjeNy3-project-3-concurrent-0 via Joosts-iMac-Pro.fritz.box...<br/> Reinitialized existing Git repository in /builds/it/eventmanager/.git/<br/> Clean repository<br/> Fetching changes...<br/> fatal: remote origin already exists.<br/> Checking out 2dbf81c9 as cd...<br/> ...<br/> Skipping Git submodules setup<br/> $ echo "Deploying to staging"<br/> Deploying to staging</pre>
+<p>The container installs the dpl dependency:</p>
+<pre><strong>$ gem install dpl</strong><br/><strong> Successfully installed dpl-1.10.8</strong><br/><strong> 1 gem installed</strong></pre>
+<p>It then runs the deployment:</p>
+<pre><strong>dpl --provider=elasticbeanstalk --access-key-id=$AWS_ACCESS_KEY_ID --secret-access-key=$AWS_SECRET_ACCESS_KEY --app=$APPNAME --env=$CI_ENVIRONMENT_NAME --region=$REGION --bucket_name=$S3_BUCKET_NAME</strong></pre>
+<p>The dpl tool only runs if the Git repository is clean:</p>
+<pre>Preparing deploy<br/> Cleaning up git repository with `git stash --all`. If you need build artifacts for deployment, set `deploy.skip_cleanup: true`. See https://docs.travis-ci.com/user/deployment#Uploading-Files-and-skip_cleanup.<br/> No local changes to save<br/> Deploying application<br/> No stash found.<br/> Job succeeded</pre>
+<p>There is no feedback about the upload except for the message stating that the application has been deployed. You can verify this deployment by visiting the URL that is mentioned in the Beanstalk environment that was created with the AWS console.</p>
+<p>You can manually trigger the deploy job to production from the diagram, which is where we saw the play button.</p>
+<p>In GitLab, you can go to <span class="packt_screen">Operations</span> | <span class="packt_screen">Environments</span> | <span class="packt_screen">Production</span> to view the deployments. You can also roll back to an earlier release:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/7fa416e6-7849-4011-9515-4afcaf847cc7.png"/></p>
+<p>In this section, we have showed you how to implement a deployment pipeline using Gitlab CI and GitLab runners. You can create them just by using shell scripts and make them as elaborate as you want by using multiproject pipelines and advanced syntax.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Auto DevOps</h1>
+                </header>
+            
+            <article>
+                
+<p>By default, Auto DevOps is turned on for every project. It is essentially a very elaborate <kbd>.gitlab-ci.yml</kbd> file, which outlines the entire DevOps pipeline from the creating phase onward. </p>
+<p>It fits in the GitLab vision of providing one application to collaborate on the entire DevOps life cycle of an application.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Configuring Auto DevOps</h1>
+                </header>
+            
+            <article>
+                
+<p>As we mentioned earlier, Auto DevOps is enabled by default for every project, but if you want to disable it or configure it differently, you need to go into the settings, which you can find by going to <span class="packt_screen">Settings</span> | <span class="packt_screen">CI/CD</span> | <span class="packt_screen">Auto DevOps</span>:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/f9560e05-8d55-41e1-9ae1-db3570741f5f.png" style="width:61.92em;height:26.25em;"/></p>
+<p>As you can see, you need to configure a Kubernetes cluster to make this all work.</p>
+<p>Another setting you can manage here is the deployment strategy. The default setting is that the pipeline deploys up to production. This might not be the strategy you want for your enterprise. You can use an incremental rollout as well.</p>
+<p>You should also note that a deployment pipelines is fully automated until the last step, which is production. You can choose to leave that as a manual step.</p>
+<p>To control the individual steps in the pipeline, you can view the <span class="packt_screen">Operations</span> menu on the left-hand side. The following is a screenshot of <span>the available operations:</span></p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/d5eed0fb-a4ac-4acb-9adb-c9872bdecba0.png" style="width:8.42em;height:17.08em;"/></p>
+<p>When the first piece of code is pushed to the repository, an Auto DevOps pipeline is created. For the <kbd>eventmanager</kbd> project, this looks as follows:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/5e387bb4-4a8d-47e7-92b1-9440757ac14f.png" style="width:52.92em;height:22.67em;"/></p>
+<p>Let's evaluate each step of the Auto DevOps pipeline from the preceding screenshot.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Build step</h1>
+                </header>
+            
+            <article>
+                
+<p>The main idea is that, in the build phase, you prepare your code to run in a packaged way <span>– </span>in a Docker container that you built using a Dockerfile <span>– </span>via Heroku build packs.</p>
+<p>For the <kbd>eventmanager</kbd> app, <kbd>user1</kbd> created the following Dockerfile:</p>
+<pre>  FROM ruby:2<br/>   COPY . /var/www/ruby<br/>   WORKDIR /var/www/ruby<br/>   RUN bundle install<br/>   CMD ["ruby","eventmanager.rb"]<br/>   EXPOSE 5000/tcp</pre>
+<p>As you can see from the first line of the preceding code, it pulls a basic Ruby-enabled Debian Linux image. It copies all the source code to a directory and goes there. Then, a bundle install is run, which installs all the Ruby dependencies that are needed. Finally, it starts the <kbd>eventmanager</kbd> app using the CMD command and exposes port <kbd>5000</kbd> to the outside world. It has to expose port <kbd>5000</kbd> because the default Helm chart that is used to deploy to Kubernetes assumes this port to run the application. It will be wired to port <kbd>80</kbd> or <kbd>443</kbd> after deployment.</p>
+<p>The following code is for the log when the build phase is started:</p>
+<pre>Running with gitlab-runner 11.8.0 (4745a6f3)<br/>   on runner-gitlab-runner-7fd79f558b-2wx96 _drEv8rS<br/> Using Kubernetes namespace: gitlab-managed-apps<br/> Using Kubernetes executor with image registry.gitlab.com/gitlab-org/cluster-integration/auto-build-image/master:stable ...<br/> Waiting for pod gitlab-managed-apps/runner-drev8rs-project-3-concurrent-0fvjtb to be running, status is Pending<br/> ...</pre>
+<p>It runs the Kubernetes executor and waits for a pod to be available.</p>
+<p>When that happens, the build script is run. First, a login to the GitLab registry for this project is attempted (we need to push the build there afterwards):</p>
+<pre><strong>$ /build/build.sh</strong><br/><strong> Logging to GitLab Container Registry with CI credentials...</strong><br/><strong> WARNING! Using --password via the CLI is insecure. Use --password-stdin.</strong><br/><strong> Login Succeeded</strong><br/><strong> ...</strong></pre>
+<p>Then, the build of the Docker image will start:</p>
+<pre><strong>Building Dockerfile-based application...</strong><br/><strong> Sending build context to Docker daemon  113.7kB</strong><br/> <br/><strong> Step 1/6 : FROM ruby:2-alpine</strong><br/><strong> 2-alpine: Pulling from library/ruby</strong><br/><strong> ...</strong></pre>
+<p>The built container image is pushed to the Docker registry for the <kbd>eventmanager</kbd> project:</p>
+<pre><strong>Successfully built 5bd173d74f67</strong><br/><strong> Successfully tagged </strong><br/><strong>...</strong><br/><strong> Job succeeded</strong></pre>
+<p>When the Docker container image is stored in the registry, the subsequent phases will use the image and pull it. This concludes the build step. The next step is to run the code quality scan.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Code quality scan</h1>
+                </header>
+            
+            <article>
+                
+<p>In this phase of the pipeline, a GitLab runner is used to scan your code for quality. You can find more information and an example of this in <a href="1eceee2e-41d6-41cc-95eb-3d225f25f3fa.xhtml">Chapter 10</a>, <em>Create Your Product, Verifying It, and Packaging It</em>.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Container scanning</h1>
+                </header>
+            
+            <article>
+                
+<p>The next phase is still a part of the test stage. In this stage, a container instance is instantiated from your image and is scanned for vulnerabilities using clair (<a href="https://github.com/coreos/clair">https://github.com/coreos/clair</a>).</p>
+<p>It will log in to the <kbd>eventmanager</kbd> Docker registry:</p>
+<pre><strong>Running with gitlab-runner 11.8.0 (4745a6f3)</strong><br/><strong>...</strong><br/><strong> $ container_scanning</strong><br/><strong> Logging to GitLab Container Registry with CI credentials...</strong><br/><strong> ...</strong></pre>
+<p class="mce-root"/>
+<p>Then, it will try to get a container with the scan tool in it:</p>
+<pre><strong>Unable to find image 'arminc/clair-db:latest' locally</strong><br/><strong> latest: Pulling from arminc/clair-db</strong><br/><strong> ...</strong></pre>
+<p>When the container is running, it will start the scan:</p>
+<pre><strong> 2019/04/28 14:08:08 [0;32m[INFO] &gt;</strong><strong> </strong><strong>Start clair-scanner</strong><br/><strong> 2019/04/28 14:08:37 [0;32m[INFO] &gt; Server listening on port 9279</strong><br/><strong> 2019/04/28 14:08:37 [0;32m[INFO] &gt;</strong><strong> </strong><strong>Analyzing 9cab74319993fe94abc345fa8933c789f4482b9644f9cb1d9758d31575ed1367</strong><br/><strong>-----------------------------------------------------------+</strong><br/><strong> | STATUS | CVE SEVERITY | PACKAGE NAME | PACKAGE VERSION | CVE DESCRIPTION |</strong><br/><strong> | Unapproved | High CVE-2018-6551 | glibc | 2.24-11+deb9u4 | The malloc implementation in the GNU C Library (aka |</strong><br/><strong>...</strong></pre>
+<p>The default Ruby images uses a Debian image, which apparently has a lot of open vulnerabilities.</p>
+<p>If you switch the basic image your Dockerfile uses to <kbd>ruby:2-alpine</kbd>, you will have a more basic Linux container, which should not give all of these errors. You will have to restart the pipeline (click retry in the list):</p>
+<pre><strong>Waiting for clair daemon to start</strong><br/><strong>...</strong><br/><strong>contains NO unapproved vulnerabilities</strong></pre>
+<p>When no vulnerabilities are found, the report is uploaded as an artifact and the job will succeed:</p>
+<pre><strong>Uploading artifacts...</strong><br/><strong> gl-container-scanning-report.json: found 1 matching files</strong><br/><strong> ..</strong><br/><strong> Job succeeded</strong></pre>
+<p>The created Docker image is now scanned for known vulnerabilities. When you want to whitelist anything that's found, you can add them to a file called <kbd>clair-whitelist.yml</kbd> and add it to your repository.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Dependency scanning</h1>
+                </header>
+            
+            <article>
+                
+<p>This part of the pipeline scans your code for known security vulnerabilities in dependencies of your software. An example would be if you rely on third-party libraries that have known security issues. This will be explained in detail in the next chapter.</p>
+<p>When this scan is complete, you will know whether the dependencies you use in your code are safe or not. It is also useful to know which licenses are used by dependencies because this can have a lot of consequences. We will explain this in the next section.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">License management</h1>
+                </header>
+            
+            <article>
+                
+<p>An issue that's often overlooked by organizations is how to manage your <strong>intellectual property rights</strong> (<strong>IP</strong>). There are different open source licenses around; for example, there ones that are classified as <em>permissive</em> such as X11, Apache, and the BSD licenses. You also have the <em>copyleft</em> kind, such as the GPL, which are more restrictive and could make you share your <span>derivative</span> works. By using the license scanner, you ensure that you're not using dependencies that have a negative impact on your intellectual property rights.</p>
+<p>You will see the following output when the jobs runs:</p>
+<pre><strong>Running with gitlab-runner 11.8.0 (4745a6f3)</strong><br/><strong>   on runner-gitlab-runner-7fd79f558b-2wx96 _drEv8rS</strong><br/><strong> Using Kubernetes namespace: gitlab-managed-apps</strong><br/><strong> Using Kubernetes executor with image registry.gitlab.com/gitlab-org/security-products/license-management:$CI_SERVER_VERSION_MAJOR-$CI_SERVER_VERSION_MINOR-stable ...</strong></pre>
+<p>This scan is run from a container, but that runs code and parses your project:</p>
+<pre><strong>$ license_management</strong><br/><strong> mesg: ttyname failed: Inappropriate ioctl for device</strong><br/><strong> Added development to the ignored groups</strong><br/><strong> Added test to the ignored groups</strong><br/><strong> Fetching gem metadata from https://rubygems.org/.........</strong></pre>
+<p>This will analyze and upload a report artifact:</p>
+<pre><strong>Running license_finder  in /it/eventmanager</strong><br/><strong> LicenseFinder::Bundler: is active</strong><br/><strong> Uploading artifacts...</strong><br/><strong> gl-license-management-report.json: found 1 matching files</strong><br/><strong> Uploading artifacts to coordinator... ok            id=478 responseStatus=201 Created token=HjYg-s1y</strong><br/><strong> Job succeeded</strong></pre>
+<p>The result is also viewable from the merge request widget.</p>
+<p>As you can see, the inclusion of a license check in the pipeline can be very useful. Is it better to know as early as possible whether you are using dependencies that affect the way you can distribute your software. In the same parallel step of the pipeline, static security tests are conducted.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Static application security testing (sast)</h1>
+                </header>
+            
+            <article>
+                
+<p>This part of the pipeline scans your code for known security issues, and is known as a static application security test. This will be explained in more detail in the next chapter. The final parallel step in the test stage is running the actual tests that are defined by your code.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">The final test step</h1>
+                </header>
+            
+            <article>
+                
+<p>In this pipeline, a specific container is started that clones the source code:</p>
+<pre><strong>Running with gitlab-runner 11.8.0 (4745a6f3)</strong><br/><strong>   on runner-gitlab-runner-7fd79f558b-2wx96 _drEv8rS</strong><br/><strong> Using Kubernetes namespace: gitlab-managed-apps</strong><br/><strong> Using Kubernetes executor with image gliderlabs/herokuish:latest ...</strong></pre>
+<p>It will try to detect the language that's used. In our case, it finds a Ruby application, which is correct:</p>
+<pre><strong>$ setup_test_db</strong><br/><strong> $ cp -R . /tmp/app</strong><br/><strong> $ /bin/herokuish buildpack test</strong><br/><strong> -----&gt; Ruby app detected</strong><br/><strong> -----&gt; Setting up Test for Ruby/Rack</strong><br/><strong> -----&gt; Using Ruby version: ruby-2.5.3</strong><br/><strong> -----&gt; Installing dependencies using bundler 1.15.2</strong></pre>
+<p>After installing the necessary dependencies, it will run the rake test task:</p>
+<pre><strong>-----&gt; Running test: bundle exec rspec</strong><br/><strong> ...</strong><br/><strong> Finished in 0.03197 seconds (files took 0.22688 seconds to load)</strong><br/><strong> 3 examples, 0 failures</strong></pre>
+<p>In our case, no errors were detected. You can check which tests are run in your <kbd>tests</kbd> folder.</p>
+<p>Of course, the tests that are run are written by yourself, so you determine how much value they have. When they are finished, the next stage is to deploy to production, which is covered in the next section.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Production</h1>
+                </header>
+            
+            <article>
+                
+<p>The default Auto DevOps pipeline will deploy your code to production after it finishes the test stage. Various environment variables are available that you can set that will control the autoscaling of your replica pods. The heavy lifting in this phase is performed by the auto-deploy-app Helm chart. You can also provide your own chart by adding it to a <kbd>.chart</kbd> directory in your project or by setting <kbd>AUTO_DEVOPS_CHART</kbd> combined with the <kbd>AUTO_DEVOPS_CHART_REPOSITORY</kbd> environment variable with the URL to your custom chart. It will create several things:</p>
+<ul>
+<li>A deploy token</li>
+<li>A Prometheus monitoring instance that's wired for your application</li>
+</ul>
+<p>Let's run the following code through the log file:</p>
+<pre><strong>Running with gitlab-runner 11.8.0 (4745a6f3)</strong><br/><strong>   on runner-gitlab-runner-7fd79f558b-2wx96 _drEv8rS</strong><br/><strong> Using Kubernetes namespace: gitlab-managed-apps</strong><br/><strong> Using Kubernetes executor with image alpine:latest ...</strong></pre>
+<p>This checks the artifacts of the previous jobs and performs a check on the Kubernetes domain. It will install dependencies for minimal Helm execution:</p>
+<pre><strong>Checking out 08222854 as master...</strong><br/><strong> Skipping Git submodules setup</strong><br/><strong> Downloading artifacts for code_quality (477)...</strong><br/><strong> Downloading artifacts from coordinator... ok        id=477 responseStatus=200 OK token=zxQGxCFW</strong><br/><strong> Downloading artifacts for license_management (478)...</strong><br/><strong> Downloading artifacts from coordinator... ok        id=478 responseStatus=200 OK token=HjYg-s1y</strong><br/><strong> Downloading artifacts for container_scanning (481)...</strong><br/><strong> Downloading artifacts from coordinator... ok        id=481 responseStatus=200 OK token=hErz9aWj</strong><br/><strong> $ # Auto DevOps variables and functions # collapsed multi-line command</strong><br/><strong> $ check_kube_domain</strong><br/><strong> $ install_dependencies</strong></pre>
+<p>The next step is to download the required chart (auto-deploy-app chart or custom):</p>
+<pre><strong>$ download_chart</strong></pre>
+<p>Next, we need to ensure that a namespace is defined (which is usually the Kubernetes cluster name you used):</p>
+<pre><strong>$ ensure_namespace</strong></pre>
+<p>Now, it's time to initialize tiller (the Helm server):</p>
+<pre><strong> initialize_tiller</strong></pre>
+<p>Here, a secret to access the registry is created:</p>
+<pre><strong> create_secret</strong></pre>
+<p>Finally, the deployment can start:</p>
+<pre><strong> $ deploy secret "production-secret" </strong><br/><strong>deleted secret/production-secret replaced </strong><br/><strong>Deploying new release... </strong><br/><strong>Release "production" has been upgraded. </strong><br/><strong>Happy Helming! ...</strong></pre>
+<p>After the deployment, you will see feedback about the URL where the application is running. The name is created by appending the namespace to the project name and the domain wildcard where the cluster is running:</p>
+<pre><strong>NOTES:</strong><br/><strong> Application should be accessible at: http://it-eventmanager.kubernetes.joustie.nl</strong><br/><strong> Waiting for deployment "production" rollout to finish: 0 of 1 updated replicas are available...</strong><br/><strong> deployment "production" successfully rolled out</strong><br/><strong> $ delete canary</strong><br/><strong> $ delete rollout</strong><br/><strong> $ persist_environment_url</strong><br/><strong> Uploading artifacts...</strong><br/><strong> environment_url.txt: found 1 matching files       </strong><br/><strong> Uploading artifacts to coordinator... ok            id=482 responseStatus=201 Created token=koT8yujj</strong><br/><strong> Job succeeded</strong></pre>
+<p>If you have configured <kbd>kubectl</kbd> to use the context of your GKE cluster, on the command line, you can verify whether your deployments took place:</p>
+<pre><strong>Joosts-iMac-Pro:Part3 joostevertse$ kubectl get pods --all-namespaces</strong></pre>
+<p>The list of pods should show you the pods that were started:</p>
+<pre><strong>NAME                                                     READY   STATUS    RESTARTS   AGE</strong><br/><strong> eventmanager        production-6b9db68f6f-hrwzv                              1/1     Running   0          11h</strong><br/><strong> eventmanager        production-postgres-5b5cf56747-xngbk                     1/1     Running   0          11h</strong></pre>
+<p>By default, a <kbd>postgres</kbd> instance is started as well, and you can fine-tune your installation to use it if you need it. You can find more information about that here: <a href="https://docs.gitlab.com/ee/topics/autodevops/#postgresql-database-support">https://docs.gitlab.com/ee/topics/autodevops/#postgresql-database-support</a>. There are also other pods in the list, and they are all part of the deployment:</p>
+<pre><strong>certmanager-cert-manager-6c8cd9f9bf-8kbf8                1/1     Running   0          11h</strong><br/><strong> ingress-nginx-ingress-controller-ff666c548-n2s84         1/1     Running   0          11h</strong><br/><strong> ingress-nginx-ingress-default-backend-677b99f864-bnk8c   1/1     Running   0          11h</strong><br/><strong> runner-gitlab-runner-7fd79f558b-2wx96                    1/1     Running   0          11h</strong><br/><strong> tiller-deploy-6586b57bcb-t6zql                           1/1     Running   0          11h</strong></pre>
+<p>The <kbd>eventmanager</kbd> application can be viewed by going to <kbd>http://it-eventmanager.kubernetes.joustie.nl</kbd>: </p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/79bf9d2c-f4fb-4833-b84c-bb9677233993.png" style="width:34.92em;height:5.17em;"/></p>
+<p>Now, we have a running application that is being tested and monitored. The next and final step is to run a performance check on the production environment. Again, we can use our Kubernetes cluster to spawn a test container for it and run performance tests on it, which is the subject of the next section.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Performance</h1>
+                </header>
+            
+            <article>
+                
+<p>In the log file for the performance job, you can see that Kubernetes is again used to spawn an instance to use:</p>
+<pre><strong>Running with gitlab-runner 11.8.0 (4745a6f3)</strong><br/><strong>   on runner-gitlab-runner-7fd79f558b-2wx96 _drEv8rS</strong><br/><strong> Using Kubernetes namespace: gitlab-managed-apps</strong></pre>
+<p>The job connects to <a href="https://about.gitlab.com/">GitLab.com</a> and verifies the version of the image it should pull. It uses the <kbd>sitespeed.io</kbd> container to do this (<a href="https://hub.docker.com/r/sitespeedio/sitespeed.io/">https://hub.docker.com/r/sitespeedio/sitespeed.io/</a>):</p>
+<pre><strong>$ performance</strong><br/><strong> Connecting to gitlab.com (35.231.145.151:443)</strong><br/><strong> index.js             100% |********************************|  1614  0:00:00 ETA</strong><br/> <br/><strong> Unable to find image 'sitespeedio/sitespeed.io:6.3.1' locally</strong><br/><strong> 6.3.1: Pulling from sitespeedio/sitespeed.io</strong><br/><strong> ...</strong></pre>
+<p>Inside the container, it tries to measure browser performance with Chrome and Firefox:</p>
+<pre><strong>Google Chrome 63.0.3239.132</strong><br/><strong> Mozilla Firefox 54.0.1</strong><br/><strong> [2019-04-25 21:42:41] INFO: Versions OS: linux 4.14.91+ nodejs: v8.9.4 sitespeed.io: 6.3.1 browsertime: 2.1.4 coach: 1.2.0</strong></pre>
+<p>It will do a subsequent number of runs:</p>
+<pre><strong>[2019-04-25 21:42:41] INFO: Starting chrome for analysing http://it-eventmanager.kubernetes.joustie.nl 3 time(s)</strong><br/><strong> [2019-04-25 21:42:41] INFO: Testing url http://it-eventmanager.kubernetes.joustie.nl run 1</strong><br/><strong> [2019-04-25 21:42:51] INFO: Testing url http://it-eventmanager.kubernetes.joustie.nl run 2</strong><br/><strong> [2019-04-25 21:43:00] INFO: Testing url http://it-eventmanager.kubernetes.joustie.nl run 3</strong><br/><strong> [2019-04-25 21:43:09] INFO: 2 requests, 586 bytes, backEndTime: 39ms (±1.87ms), firstPaint: 119ms (±2.43ms), firstVisualChange: 0ms (±0.00ms), DOMContentLoaded: 103ms (±3.06ms), Load: 104ms (±3.06ms), speedIndex: 0 (±0.00), visualComplete85: 0ms (±0.00ms), lastVisualChange: 0ms (±0.00ms), rumSpeedIndex: 119 (±2.25) (3 runs)</strong><br/><strong> [2019-04-25 21:43:13] INFO: HTML stored in /sitespeed.io/sitespeed-results</strong><br/> [2019-04-25 21:43:13] INFO: Finished analyzing http://it-eventmanager.kubernetes.joustie.nl<br/><strong> ...</strong></pre>
+<p>The results will be saved as a HTML report artifact, as well as a JSON file:</p>
+<pre><strong>Uploading artifacts...</strong><br/><strong> performance.json: found 1 matching files          </strong><br/><strong> sitespeed-results/: found 64 matching files       </strong><br/><strong> Uploading artifacts to coordinator... ok            id=483 responseStatus=201 Created token=w-R8qzFw</strong><br/><strong> Job succeeded</strong></pre>
+<p>The following code is a part of the JSON file:</p>
+<pre>[<br/>     {<br/>         "subject": "/",<br/>         "metrics": [<br/>             {<br/>                 "name": "Transfer Size (KB)",<br/>                 "value": "0.6",<br/>                 "desiredSize": "smaller"<br/>  ...</pre>
+<p>A nice HTML report is available too, which is part of the artifacts.</p>
+<p>Auto DevOps is a very handy concept. It can give you a complete pipeline if your application stays close to standards and is not very complex. If you need more customization, you can use the template and fine-tune it to your needs.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Summary</h1>
+                </header>
+            
+            <article>
+                
+<p>This chapter demonstrated the potential of GitLab and the role it plays in the operations phase of a software product. You can develop your solution, test it, and eventually run it in an environment. Along the way, you can automate as much as possible. If you use the Auto DevOps feature, you will reach the full potential of the DevOps concept, which is currently a sought-after skill.</p>
+<p>In the next chapter, we will look at the monitor and secure phases, which are the final phases in the DevOps pipeline.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Questions</h1>
+                </header>
+            
+            <article>
+                
+<ol>
+<li>In which file do you define your deployments?</li>
+<li>What is the dpl tool?</li>
+<li>What is the GitLab vision for Auto DevOps?</li>
+<li>Where are the build artifacts stored at the end of the build phase (using Dockerfile)?</li>
+<li>What is the name of the container scanner that's used in Auto DevOps?</li>
+<li>What is the name of the deployment Helm chart that's used in Auto DevOps?</li>
+<li>How many pods are deployed for a production deploy?</li>
+<li>What is the name of the performance container?</li>
+</ol>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Further reading</h1>
+                </header>
+            
+            <article>
+                
+<ul>
+<li><em>Advanced Infrastructure Penetration Testing</em> by Chiheb Chebbi: <a href="https://www.packtpub.com/networking-and-servers/advanced-infrastructure-penetration-testing">https://www.packtpub.com/networking-and-servers/advanced-infrastructure-penetration-testing</a></li>
+<li><em>Learn Docker - Fundamentals of Docker 18.x</em> by Gabriel N. Schenker: <a href="https://www.packtpub.com/in/networking-and-servers/learn-docker-fundamentals-docker-18x">https://www.packtpub.com/in/networking-and-servers/learn-docker-fundamentals-docker-18x</a></li>
+<li><em>AWS Automation Cookbook </em>by Nikit Swaraj: <a href="https://www.packtpub.com/virtualization-and-cloud/aws-automation-cookbook">https://www.packtpub.com/virtualization-and-cloud/aws-automation-cookbook</a></li>
+<li><em>Hands-On Kubernetes on Azure</em> by Gunther Lenz and Shivakumar Gopalakrishnan: <a href="https://www.packtpub.com/virtualization-and-cloud/hands-kubernetes-azure">https://www.packtpub.com/virtualization-and-cloud/hands-kubernetes-azure</a></li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    </body></html>

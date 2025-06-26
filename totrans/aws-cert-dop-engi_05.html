@@ -1,0 +1,356 @@
+<html><head></head><body><div id="sbo-rt-content"><div id="_idContainer067">
+			<p><a id="_idTextAnchor109"/></p>
+			<h1 id="_idParaDest-108"><a id="_idTextAnchor110"/>Chapter 4: Amazon S3 Blob Storage</h1>
+			<p>Amazon S3 is one of the core tenants of Amazon Web Services. However, in the context of being a DevOps professional, there are certain nuances about the service that you must not only familiarize yourself with but also become comfortable with implementing.</p>
+			<p>Amazon's <strong class="bold">Simple Storage Service</strong> (<strong class="bold">S3</strong>) is the entry point for many users and companies looking to get into the cloud. Some of the main features it provides are being highly available, exceedingly durable, extremely performant, and easily managed, along with the ability to be thoroughly secure. One of the major features of S3 is its eleven 9's of durability (99.999999999%), which means that it doesn't lose objects or data. Once you upload an object, before it returns the 200 success status, that object must be copied to multiple systems in multiple Availability Zones to prevent data loss in an array of scenarios.</p>
+			<p>In this chapter, we're going to cover the following main topics:</p>
+			<ul>
+				<li>S3 concepts</li>
+				<li>Using lifecycle policies in S3</li>
+				<li>Using S3 events to trigger other AWS services </li>
+				<li>S3 access logs</li>
+				<li>S3 endpoints</li>
+			</ul>
+			<h1 id="_idParaDest-109"><a id="_idTextAnchor111"/>S3 concepts</h1>
+			<p>Before we <a id="_idIndexMarker425"/>dive into S3, let's at least briefly talk about the three distinct types of cloud storage:</p>
+			<ul>
+				<li><strong class="bold">Object storage</strong> – Data is saved <a id="_idIndexMarker426"/>as an object and is bundled with the associated metadata of that object.</li>
+				<li><strong class="bold">File storage</strong> – Data is <a id="_idIndexMarker427"/>stored as a single piece of information in a folder structure.</li>
+				<li><strong class="bold">Block storage</strong> – Data and <a id="_idIndexMarker428"/>files are separated into blocks. Each of these blocks is then stored as a separate piece of data.</li>
+			</ul>
+			<p>S3 is an object storage service, and although it seems to have a folder structure, this is really just the metadata that is tagged to the object in key/value pairs so that the data can be categorized more efficiently. </p>
+			<p>Once an S3 bucket has been created, then not only is it ready for data, but it is also at that <a id="_idIndexMarker429"/>point almost infinitely scalable. There are also a number of helper services that AWS has created to assist you <a id="_idIndexMarker430"/>in moving data into S3. These range from streaming solutions such as Amazon Kinesis to <strong class="bold">SSH File Transfer Protocol</strong> (<strong class="bold">SFTP</strong>) alternatives such as AWS SFTP, and even bulk data load services such as AWS Snowball and Snowball Edge: </p>
+			<div>
+				<div id="_idContainer047" class="IMG---Figure">
+					<img src="Images/Figure_4.1_B17405.jpg" alt="Figure 4.1 – S3 options for data transfer&#13;&#10;" width="444" height="229"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure<a id="_idTextAnchor112"/> 4.1 – S3 options for data transfer</p>
+			<p>By default, AWS accounts are allowed to provision up to one hundred S3 buckets. This is a soft limit, and if you need more buckets this can be raised by placing a service limit increase ticket.</p>
+			<h2 id="_idParaDest-110"><a id="_idTextAnchor113"/>Interacting with S3</h2>
+			<p>Users have a few ways to interact with S3, starting with the AWS console. This will show <a id="_idIndexMarker431"/>you a graphical listing of your buckets and display your objects in a folder-like format based on the object tags that you have given the different objects.</p>
+			<p>As you become more comfortable with S3 and its capabilities, you might find that the console requires more than one click to perform simple tasks such as deleting a file, and this is where the CLI and knowing its commands can become your ally.</p>
+			<p>In the AWS CLI, there <a id="_idIndexMarker432"/>are a few base commands that you can use to interact with S3:</p>
+			<ul>
+				<li>There is the base <strong class="source-inline">aws s3</strong> command – this command gives you the ability to perform nine basic operations, such as creating a bucket, listing buckets or their contents, and even creating a pre-signed URL for access to a bucket.</li>
+				<li>There is the <strong class="source-inline">aws s3api</strong> command – this command provides a different set of secondary commands for the items in the base <strong class="source-inline">s3</strong> command. </li>
+				<li>The <strong class="source-inline">aws s3control</strong> command allows you granular access to the S3 control plane.</li>
+				<li>And finally, there is the <strong class="source-inline">aws s3outposts</strong> command – this command provides access to S3 on AWS Outposts. </li>
+			</ul>
+			<h2 id="_idParaDest-111"><a id="_idTextAnchor114"/>S3 naming guidelines </h2>
+			<p>Every S3 <a id="_idIndexMarker433"/>bucket name across all of AWS must be unique, not just in your account.</p>
+			<p>When you create your bucket, there are a few rules that you must follow in order for the name to be compliant with S3:</p>
+			<ul>
+				<li>A bucket name must be at least 3 but no longer than 63 characters long.</li>
+				<li>Bucket names can only be made up of numbers, lowercase letters, dots (.), and hyphens (-).</li>
+				<li>A bucket name must start and end with either a number or a letter.</li>
+				<li>Bucket names cannot start with the name <strong class="source-inline">xn–</strong>.</li>
+				<li>A bucket name may not be formatted like an IP address (such as <strong class="source-inline">192.168.2.1</strong>).</li>
+			</ul>
+			<p>It's also <a id="_idIndexMarker434"/>Amazon's recommendation that you do not use dots (.) in your bucket names unless you are using the S3 bucket for static web hosting. </p>
+			<h3>Bucket names for enterprises</h3>
+			<p>The preceding rules are the minimum guidelines for naming S3 buckets. As you move into <a id="_idIndexMarker435"/>the real world, most large organizations that are already in the AWS cloud have a bucket naming scheme. Some small and medium firms still do not have organizational standards relating to how to name their S3 buckets, but this can be a mistake.</p>
+			<p>S3 buckets are very easy to create, not only for developers but for almost anyone that has access to the service. The issue arises when you start to find buckets that are named like <strong class="source-inline">mytest-bucket123</strong>. Once again, this comes back to those initial principles of trying to figure out things like who the owner of this data is and whether it needs to be replicated for safekeeping or can be safely deleted.</p>
+			<p>As you move to an enterprise naming scheme, you and your organization need to come to a consensus regarding a uniform naming standard for the buckets in the accounts for which you are responsible:</p>
+			<div>
+				<div id="_idContainer048" class="IMG---Figure">
+					<img src="Images/Figure_4.2_B17405.jpg" alt="Figure 4.2 – Enterprise bucket naming example&#13;&#10;" width="467" height="268"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 4.2 – Enterprise bucket naming example</p>
+			<p>Using an abbreviated schema such as <strong class="source-inline">&lt;region&gt;-&lt;environment&gt;-&lt;department&gt;-&lt;product&gt;-&lt;identifier&gt;</strong> creates a unique name for each bucket that still stays within AWS naming standards.</p>
+			<p>This helps to quickly identify who owns each bucket and allows teams and account <a id="_idIndexMarker436"/>managers to sort and search through resources quickly and easily, not only identifying who created the buckets by the product or project they belong to. This is shown in <em class="italic">Figure 4.2</em> and with the bucket named <strong class="source-inline">oh-d-devops-pip-cont1</strong>. This is bucket name is shorthand for <strong class="source-inline">ohio-development-devops-pipeline-containers</strong>.</p>
+			<h3>Creating an S3 bucket</h3>
+			<p>If you want <a id="_idIndexMarker437"/>to back up your instance either for point-in-time recovery purposes or to use in a launch configuration with autoscaling, then you need to create an AMI image:</p>
+			<ol>
+				<li>Launch an <strong class="source-inline">EC2</strong> instance.</li>
+				<li>We need to have an instance to back up and create the AMI:<p class="source-code"><strong class="bold">$ aws s3 MB s3://devopspro-beyond –region us-east-2</strong></p><p class="callout-heading">Note</p><p class="callout">You will need to use a different bucket name than the one shown in this example. You can name your bucket anything you like as long as you stick to the S3 naming guidelines.</p></li>
+				<li>If it was successful, then you should see the following output: <p class="source-code"><strong class="bold">make_bucket: devopspro-beyond</strong></p><p>You now have a bucket we can work with. If you wanted to see the bucket in the command line, we could list it with the following command:</p><p class="source-code"><strong class="bold">$ aws s3 ls</strong></p><p>This bucket <a id="_idIndexMarker438"/>that we just created is now ready to hold files, media, logs, or whatever you'd like to store in it at this point.</p></li>
+			</ol>
+			<h2 id="_idParaDest-112"><a id="_idTextAnchor115"/>Moving data to S3</h2>
+			<p>At this point, we have now created at least one bucket. As we go through later exercises, you'll <a id="_idIndexMarker439"/>notice that some of the AWS services create buckets <a id="_idIndexMarker440"/>in your account, such as <strong class="bold">CloudFormation</strong>.</p>
+			<p>If we were <a id="_idIndexMarker441"/>simply trying to move items one at a time or a folder at a time, then we could use the AWS Management Console or the CLI using the <strong class="source-inline">aws s3 copy</strong> command.</p>
+			<p>If we had a server that was generating logs, and we wanted to put those logs into an S3 bucket for either storage, backup, analysis, or a combination of those options, then we could use the <strong class="source-inline">aws s3 sync</strong> command. The <strong class="source-inline">s3 sync</strong> command will sync all objects in the stated folder with the specified bucked in S3. This works extremely well in concert with a <strong class="source-inline">cron</strong> or cron-like job for enacting the command on a schedule.</p>
+			<p>When trying to move a whole server or data center, it can be time-consuming to try and <a id="_idIndexMarker442"/>push all the files and objects across the wire. This is where the <strong class="bold">Snowball</strong> family of services comes into play. A <strong class="bold">Snowball Edge Storage Optimized</strong> (<strong class="bold">SESO</strong>) allows secure transport of your data with up to 80 TB of usable hard disk drive storage, which, after being uploaded <a id="_idIndexMarker443"/>to the device and shipped <a id="_idIndexMarker444"/>to AWS, is then offloaded to an S3 bucket that you designate.</p>
+			<h3>S3 inventory</h3>
+			<p>Using the list command to see the different objects in your bucket is helpful until you start <a id="_idIndexMarker445"/>to have tens of thousands to millions of objects in your buckets. At that point, it can be helpful to have a more powerful tool at your disposal. <strong class="bold">S3 inventory</strong> was created for just this purpose. The S3 inventory tool creates a report, which is then delivered to another bucket and provides information about your objects on items such as the following:</p>
+			<ul>
+				<li>Creation date</li>
+				<li>Storage class</li>
+				<li>Encryption status</li>
+				<li>Replication status</li>
+				<li>Object size</li>
+			</ul>
+			<p>You have <a id="_idIndexMarker446"/>the option to encrypt the reports either with SSE-S3 or with a <strong class="bold">Key Management Service</strong> (<strong class="bold">KMS</strong>) key of your choosing.</p>
+			<p>Once the reports have been delivered, then you can use tools such as Amazon Athena to query the reports using Standard SQL, looking for trends or anomalies.</p>
+			<p>S3 inventory does come with a small cost to generate the reports (less than .003 cents per million objects); however, it should not be assumed that the tool comes with the S3 service for free.</p>
+			<h2 id="_idParaDest-113"><a id="_idTextAnchor116"/>S3 storage tiers</h2>
+			<p>The Amazon S3 service has a collection of different storage tiers that can serve different <a id="_idIndexMarker447"/>needs as well as different cost structures. The default storage tier is the standard storage tier, although this is not always the correct choice for storing your data, especially if your organization is looking for long-term storage and/or cost savings.</p>
+			<p>You can create lifecycle policies to move your objects from one storage tier to another or even be deleted if the object is unneeded after a set period of time.</p>
+			<h3>S3 Standard</h3>
+			<p>Once you initially set up a bucket, by default, without specifying any other storage tier, it will be in the S3 Standard tier. This is a highly available general access storage <a id="_idIndexMarker448"/>policy that provides millisecond access to objects when requesting their retrieval. Although this is the costliest of <a id="_idIndexMarker449"/>all the storage tiers, S3 Standard storage is extremely inexpensive when compared to other types of storage services like file and block storage. </p>
+			<p>Key points to <a id="_idIndexMarker450"/>re<a id="_idTextAnchor117"/>member about S3 Standard:</p>
+			<ul>
+				<li>The Standard tier provides high throughput and low latency and performance for object uploads and downloads.</li>
+				<li>If no other storage tier is indicated, then Standard is the default storage class.</li>
+				<li>Crafted for 99.99% availability during a given year.</li>
+				<li>Ideal for objects that need frequent access.</li>
+				<li>Ideal for use cases such as data lakes, cloud-native applications, websites, and content distribution.</li>
+			</ul>
+			<h3>S3 Intelligent-Tiering</h3>
+			<p>There are times when you might think that the algorithm that Amazon has derived to move your objects to the different tiers of storage may be more efficient <a id="_idIndexMarker451"/>than any you may be able to come up with. This is a perfect case of when to choose S3 Intelligent-Tiering. With Intelligent-Tiering, AWS will move your objects automatically between the frequently <a id="_idIndexMarker452"/>accessed tiers and the infrequently accessed tiers based on your usage and then charge you accordingly.</p>
+			<p>Key points <a id="_idIndexMarker453"/>to remember about S3 Intelligent-Tiering are as follows:</p>
+			<ul>
+				<li>Designed to optimize storage costs by automatically moving objects to the most cost-effective storage tier.</li>
+				<li>Designed for longer storage of at least 30 days (minimum 30-day charge) and Intelligent-Tiering takes 30 days to start to figure out access patterns.</li>
+				<li>It stores objects in two access tiers and optimizes that storage based on frequently and infrequently accessed objects.</li>
+				<li>There is no performance impact, and there are no additional fees when Intelligent-Tiering moves objects between tiers.</li>
+				<li>Crafted for 99.99% availability during a given year.</li>
+				<li>Optimized for data lakes and other datasets where the access patterns are unknown.</li>
+			</ul>
+			<h3>S3 Standard Infrequent Access (S3 Standard-IA)</h3>
+			<p>If <a id="_idIndexMarker454"/>you have <a id="_idIndexMarker455"/>data that you don't access frequently but still need to be able to retrieve it in real time, Standard-IA is an option to consider. There are some points that need to be considered when thinking about this storage option, such as the files need to be stored for a minimum of 30 days before deletion (or be charged for the 30 days), along with having a minimum file size of 128 KB.</p>
+			<p>Key points <a id="_idIndexMarker456"/>to remember about S3 Standard-IA are as follows:</p>
+			<ul>
+				<li>Designed for files over 128 KB (smaller files will be charged as if they were 128 KB).</li>
+				<li>Designed for longer storage of at least 30 days (minimum 30-day charge).</li>
+				<li>There is a higher GET, PUT, COPY, POST, LIST, and SELECT charge than Standard but a lower storage cost, so it is designed for infrequent access, as the name states.</li>
+				<li>Objects are available to access in real time with no delays.</li>
+				<li>Crafted for 99.99% availability during a given year.</li>
+				<li>Copies of data are stored in multiple Availability Zones.</li>
+			</ul>
+			<h3>S3 One Zone Infrequent Access (S3 One Zone-IA)</h3>
+			<p>S3 One Zone-IA has many of the features of Standard-IA but at a lower price because <a id="_idIndexMarker457"/>the data is <a id="_idIndexMarker458"/>being stored in only one availability zone instead of a minimum of three. This is not a good option for critical data but can present large cost savings for files that are infrequently accessed and can be re-created if necessary.</p>
+			<p>Key points <a id="_idIndexMarker459"/>to remember about S3 One Zone-IA are as follows:</p>
+			<ul>
+				<li>Ideal for data that can be re-created or object replicas when setting <em class="italic">cross-region replication</em>.</li>
+				<li>Designed for longer storage of at least 30 days (minimum 30-day charge).</li>
+				<li>Objects are available for real-time access.</li>
+				<li>Crafted for 99.95% availability during a given year.</li>
+				<li>Data <a id="_idIndexMarker460"/>is subject to loss stemming from data center outages caused by disasters such as floods or earthquakes.</li>
+			</ul>
+			<h3>S3 Glacier</h3>
+			<p>The S3 Glacier storage tier provides you an option for a low-cost, durable storage archive with low fees for data retrieval. Unlike the Glacier service from AWS, there <a id="_idIndexMarker461"/>is no need to wait for days for your objects to <a id="_idIndexMarker462"/>appear back in your S3 bucket. S3 Glacier has 3 tiers of retrieval speeds. The first is an expedited tier that can bring your objects back in just 1-5 minutes. The second is the standard retrieval tier, which restores objects in 3-5 hours, and the third is the bulk tier, which takes around 12 hours to restore objects to your bucket.</p>
+			<p>Key points <a id="_idIndexMarker463"/>to remember about S3 Glacier are as follows:</p>
+			<ul>
+				<li>Designed for longer storage of at least 90 days (minimum charge of 90 days).</li>
+				<li> Crafted for 99.9% availability during a given year.</li>
+				<li>Objects <a id="_idIndexMarker464"/>can be locked via the <strong class="bold">VAULT LOCK</strong> feature.</li>
+				<li>Glacier retrieval times can be configured from minutes to hours.</li>
+				<li>Appropriate for low-cost data archival on infrequently accessed objects, especially for compliance purposes.</li>
+			</ul>
+			<h3>S3 Glacier Deep Archive</h3>
+			<p>Like the <a id="_idIndexMarker465"/>Glacier service, if you have <a id="_idIndexMarker466"/>items that are rarely retrieved but need to be retained, then Glacier Deep Archive can be a practical solution to your storage problems. Often, there are cases such as moving from a tape backup system to a digital tape backup system where you would only be retrieving <a id="_idIndexMarker467"/>the data once or twice per year and could withstand waiting 12 hours for data retrieval. These controls come with <a id="_idIndexMarker468"/>deep savings because storage in Glacier Deep Archive costs only $1 per TB per month.</p>
+			<p>Key points <a id="_idIndexMarker469"/>to remember about S3 Glacier Deep Archive are as follows:</p>
+			<ul>
+				<li>Designed for long-term digital storage that may be accessed once or twice during a given year</li>
+				<li>Crafted for 99.9% availability during a given year</li>
+				<li>Designed for longer storage of at least 180 days (minimum 180-day charge)</li>
+				<li>An alternative to on-premises tape libraries<p class="callout-heading">Note</p><p class="callout">S3 Glacier and S3 Glacier Deep Archive are storage classes within S3 and, as such, the object stays within the S3 service. </p></li>
+			</ul>
+			<h2 id="_idParaDest-114"><a id="_idTextAnchor118"/>Using lifecycle policies in S3</h2>
+			<p>As we <a id="_idIndexMarker470"/>just talked about the different storage classes available with S3, not all data that you store in S3 needs to be in the standard tier at all times, as shown here:</p>
+			<div>
+				<div id="_idContainer049" class="IMG---Figure">
+					<img src="Images/Figure_4.3_B17405.jpg" alt="Figure 4.3 – An example S3 lifecycle policy&#13;&#10;" width="777" height="174"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 4.3 – An example S3 lifecycle policy</p>
+			<p>Depending <a id="_idIndexMarker471"/>on how long you need to access your data on a regular basis, you can move your objects to different tiers using object lifecycles.</p>
+			<h3>Creating a lifecycle policy</h3>
+			<p>The <a id="_idIndexMarker472"/>following exercise will use the AWS console and the bucket we created previously in this chapter:</p>
+			<ol>
+				<li value="1">Log in to the AWS console (in the account in which you created the S3 bucket earlier in this chapter). Make sure you have logged into the account with a user that has S3 full access rights.</li>
+				<li>Navigate to the S3 page (<a href="https://s3.console.aws.amazon.com/">https://s3.console.aws.amazon.com/</a>).</li>
+				<li>If you have more than one S3 bucket, click on the bucket that you made in the previous exercise.<p>This bucket should currently have no objects and no current lifecycle policy associated with it.</p></li>
+				<li>Once you're on the bucket's main page, click on the <strong class="bold">Management</strong> tab on the main screen.<p>This will bring the <strong class="bold">Lifecycle rules</strong> section to the middle of the main screen. It should have a <strong class="bold">(0)</strong> right after the <strong class="bold">Lifecycle rules</strong>, meaning that there are no <strong class="bold">Lifecycle rules</strong> currently associated with this bucket: </p><div id="_idContainer050" class="IMG---Figure"><img src="Images/Figure_4.4_B17405.jpg" alt="Figure 4.4 – S3 lifecycle rules via the Management tab&#13;&#10;" width="1051" height="500"/></div><p class="figure-caption">Figure 4.4 – S3 lifecycle rules via the Management tab</p></li>
+				<li>Now we can click on the button in the <strong class="bold">Lifecycle Rules</strong> section labeled <strong class="bold">Create lifecycle rule</strong>. This will bring us to the area where we can start to create our own lifecycle rules.<p>We are <a id="_idIndexMarker473"/>going to create a rule that deletes objects in our bucket after one day. We could create multiple rules that follow the path in <em class="italic">Fi</em><em class="italic">gure 4.2</em>, but if you remember the key points of the Infrequent Access storage tier, any object that isn't kept for at least 30 days will be charged for 30 days of storage. Rather than have those charges when testing out how to create lifecycle rules, we will just create a rule that will delete the objects after a certain period of time instead.</p></li>
+				<li>Call the rule <strong class="source-inline">devopspro-1day-delete</strong>.</li>
+				<li>Under the rule scope, click the option that says <strong class="bold">This rule applies to all objects in the bucket</strong>.</li>
+				<li>Click the box that appears saying <strong class="bold">I acknowledge this rule will apply to all objects in the bucket</strong>:<div id="_idContainer051" class="IMG---Figure"><img src="Images/Figure_4.5_B17405.jpg" alt="Figure 4.5 – Configuring the lifecycle rule&#13;&#10;" width="1197" height="614"/></div><p class="figure-caption">Figure 4.5 – Configuring the lifecycle rule</p></li>
+				<li>Under the <strong class="bold">Lifecycle rule actions</strong>, check the box that is labeled <strong class="bold">Expire current versions of objects</strong>.</li>
+				<li>When <a id="_idIndexMarker474"/>the <strong class="bold">Expire current version of objects</strong> box appears set the number of days after object creation to <strong class="source-inline">1</strong>.</li>
+				<li>Click on <strong class="bold">Create rule</strong> at the bottom of the page:</li>
+			</ol>
+			<div>
+				<div id="_idContainer052" class="IMG---Figure">
+					<img src="Images/Figure_4.6_B17405.jpg" alt="Figure 4.6 – Create rule button &#13;&#10;" width="182" height="49"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 4.6 – Create rule button </p>
+			<p>We have now created our lifecycle rule and, in order to test it out, we need to upload a file into the bucket and then wait for a day so that we can see it be automatically deleted.</p>
+			<h1 id="_idParaDest-115"><a id="_idTextAnchor119"/>S3 endpoints</h1>
+			<p>Prior to the creation of S3 endpoints, all data being accessed from S3 traversed the public internet. If you had private information that you were passing from a private S3 bucket <a id="_idIndexMarker475"/>to a resource in a private subnet in your <strong class="bold">Virtual Private Cloud</strong> (<strong class="bold">VPC</strong>), then not only did this pose some security risks, but it also required <a id="_idIndexMarker476"/>some extra networking to allow the resources in the private subnet to talk to the internet so that the S3 buckets that you wanted to access could be uploaded to and downloaded from.</p>
+			<p>If we have resources in a private subnet of a VPC that do not have a public route to the internet via a NAT instance or a NAT gateway, then we would not be able to access items in our S3 buckets without setting up that NAT instance, or we can make a more secure connection by using an S3 endpoint.</p>
+			<p>An S3 endpoint, which is a gateway endpoint, allows us to add an entry to the route table of our <strong class="bold">VPC</strong>. By adding this endpoint, we can now bypass the public internet with both our public and private instances and protect the privacy of our data being passed along the route. This is a much more secure solution for transporting your data from EC2 instances and other services residing within your VPC than using the public route.</p>
+			<h1 id="_idParaDest-116"><a id="_idTextAnchor120"/>S3 access control</h1>
+			<p>Once you have data and objects uploaded into your bucket, unless you have a bucket with <a id="_idIndexMarker477"/>public access, then you might want to restrict who can access the objects within the bucket. Starting small, you may just allow the default access controls to whoever has authorization into the account. They may access the data in any non-public bucket. As you move to most corporate environments, there will be segments of data that will need to be cordoned off from one business unit to another. One product team would most likely have no need to access the data stored by another data team. Along those same lines, data being stored by the financial and business departments will probably need to restrict any technology members from accessing and possibly deleting the data.</p>
+			<p>This is where the access controls of S3 come into play. There are two main methods for implementing access controls: using S3 bucket policies on who and what can access the individual objects themselves and then by using IAM controls to limit users, groups, and resources that can access the buckets individually, or <a id="_idIndexMarker478"/>by using controls such as tags in an <strong class="bold">attribute-based control model</strong>.</p>
+			<p>It's generally <a id="_idIndexMarker479"/>a good idea to pick one method of access or the other and not try to mix the two since this can lead to some very frustrating sessions of trying to troubleshoot permission issues:</p>
+			<div>
+				<div id="_idContainer053" class="IMG---Figure">
+					<img src="Images/Figure_4.7_B17405.jpg" alt="Figure 4.7 – S3 resource versus user-based policies&#13;&#10;" width="467" height="412"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 4.7 – S3 resource versus user-based policies</p>
+			<p>You should also know that you must explicitly make an S3 bucket public as all S3 buckets are private by default and block public access.</p>
+			<h2 id="_idParaDest-117"><a id="_idTextAnchor121"/>Resource-based policies</h2>
+			<p>If you <a id="_idIndexMarker480"/>and your organization prefer to <a id="_idIndexMarker481"/>restrict at the object level, then you can use <strong class="bold">Access Control Lists</strong> (<strong class="bold">ACLs</strong>) either <a id="_idIndexMarker482"/>at the bucket access level or at the object access level.</p>
+			<h2 id="_idParaDest-118"><a id="_idTextAnchor122"/>User-based policies</h2>
+			<p>Many, on the other hand, would rather control access to their S3 buckets with IAM policies. This <a id="_idIndexMarker483"/>allows you to control <a id="_idIndexMarker484"/>entitlement from the bucket and folder level, along with the ability to construct more complex conditions in the IAM policy based on a tag, <strong class="source-inline">VPC-id</strong>, <strong class="source-inline">source-IP</strong> address, and other factors.</p>
+			<h2 id="_idParaDest-119"><a id="_idTextAnchor123"/>Cross-account access</h2>
+			<p>If you need <a id="_idIndexMarker485"/>a user or resource in one account to be able to access the objects in another account, then you can set up a cross-account access role as we did in the IAM exercise in <a href="B17405_03_Final_JM_ePub.xhtml#_idTextAnchor083"><em class="italic">Chapter 3</em></a>, <em class="italic">Identity and Access Management and Working with Secrets in AWS</em>.</p>
+			<h1 id="_idParaDest-120"><a id="_idTextAnchor124"/>S3 access logs </h1>
+			<p>When storing different objects in S3, especially those that are to be downloaded by various <a id="_idIndexMarker486"/>users and groups, you might want to know who is accessing the different files, when, and from what location.</p>
+			<p>Users can capture all the access logs and records of who is accessing various objects in a bucket via a simple setting in S3. You cannot store the logs in the same bucket as the items that you are tracking, so you need to either create an entirely new bucket expressly for the purpose of capturing the logs or designate a previously created bucket in your current account to hold the logs.</p>
+			<p>Logs are not pushed to that bucket in real time as items are accessed, as would be the case for logs on a web server. Amazon pushes the logs in batches in a best-effort approach.</p>
+			<p>If you don't want to set up an entirely different bucket to capture these logs, and if you have <strong class="bold">CloudTrail logs</strong> turned on for the account, then you can gather IAM user information on S3 API calls.</p>
+			<h1 id="_idParaDest-121"><a id="_idTextAnchor125"/>Encryption options with S3</h1>
+			<p>S3 allows encryption at rest for the objects it stores. The default option when you store <a id="_idIndexMarker487"/>an object is to store it unencrypted. If you are working in any kind of environment that requires compliance, then you will most likely need to encrypt the objects you are storing.</p>
+			<p>If you have decided that your objects stored in S3 need to be encrypted, then you do have options. You can choose between <em class="italic">server-side encryption</em> and <em class="italic">client-side encryption</em>. There are some key questions to ask before making this decision:</p>
+			<ul>
+				<li>Do you need to manage the encryption key?</li>
+				<li>Where is the encryption key going to be stored?</li>
+				<li>Who is going to do the encryption and decryption of the data?</li>
+			</ul>
+			<h2 id="_idParaDest-122"><a id="_idTextAnchor126"/>Server-side encryption</h2>
+			<p>AWS has <a id="_idIndexMarker488"/>made the process of encrypting <a id="_idIndexMarker489"/>your objects and data in S3 storage easy with their server-side encryption options:</p>
+			<ul>
+				<li><strong class="source-inline">SSE-S3</strong>: Using the <strong class="source-inline">SSE-S3</strong> option allows you to use the AWS S3 master key to encrypt your objects and data. This allows your data to be stored encrypted at rest without a lot of management or extra configuration on your or your team's part in the setup. You simply upload your objects to the S3 bucket of your choice, and then once they are received successfully, the S3 service handles the encryption of those objects. By the same token, when an object is requested by a service or user, and as long as that service or user has the proper authorization to access the object, then the S3 service decrypts the requested object.</li>
+				<li><strong class="source-inline">SSE-K:MS</strong>: Integrating the <strong class="bold">Key Management Service</strong> (<strong class="bold">KMS</strong>) into server-side <a id="_idIndexMarker490"/>encryption adds a small cost, but a <a id="_idIndexMarker491"/>few more features and benefits over just using <a id="_idIndexMarker492"/>the default encryption key provided with the S3 service. You now have another layer of granular control of the customer keys and of which IAM entities are allowed to access that key. KMS also provides an audit trail of who has accessed the key. And one of the main features is that you have the control to rotate the key if needed. </li>
+			</ul>
+			<h2 id="_idParaDest-123"><a id="_idTextAnchor127"/>Client-side encryption</h2>
+			<p>When choosing client-side encryption, the full responsibility for encrypting and decrypting <a id="_idIndexMarker493"/>falls on you the client. This method involves encrypting the objects before they reach S3. You are also <a id="_idIndexMarker494"/>responsible for any master/child key management along with key rotation. Client-side encryption is a good choice if your organization needs total control of both the master keys and the encryption algorithm used.</p>
+			<p>We are going to take a deep dive into the protection of data in flight and at rest in <a href="B17405_19_Final_JM_ePub.xhtml#_idTextAnchor447"><em class="italic">Chapter 19</em></a>, <em class="italic">Protecting Data in Flight and at Rest</em>.</p>
+			<h1 id="_idParaDest-124"><a id="_idTextAnchor128"/>Using S3 events to trigger other AWS services</h1>
+			<p>The S3 service <a id="_idIndexMarker495"/>can notify other services <a id="_idIndexMarker496"/>when certain things happen to objects in a bucket. Two of the most common scenarios are if an object was uploaded or if an object was deleted from a particular bucket. The S3 bucket can then notify one of three other AWS services of what has happened and the bucket where the event occurred. The three services that allow S3 event notifications <a id="_idIndexMarker497"/>are as follows:</p>
+			<ul>
+				<li>AWS <strong class="bold">Lambda</strong></li>
+				<li>Amazon <strong class="bold">Simple Queue Service</strong> (<strong class="bold">SQS</strong>) </li>
+				<li>Amazon <strong class="bold">Simple Notification Service </strong>(<strong class="bold">SNS</strong>)</li>
+			</ul>
+			<p>You can <a id="_idIndexMarker498"/>arrange for notifications to be issued to SQS or SNS when a new object is added to the bucket or overridden. Notifications <a id="_idIndexMarker499"/>can also be delivered to AWS Lambda <a id="_idIndexMarker500"/>for processing by a Lambda function: </p>
+			<div>
+				<div id="_idContainer054" class="IMG---Figure">
+					<img src="Images/Figure_4.8_B17405.jpg" alt="Figure 4.8 – S3 Event Flow&#13;&#10;" width="538" height="345"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 4.8 – S3 Event Flow</p>
+			<p>Let's think <a id="_idIndexMarker501"/>about this and how we would <a id="_idIndexMarker502"/>use this from a DevOps perspective. AWS Lambda is an extremely powerful tool that we will explore in detail in <a href="B17405_12_Final_JM_ePub.xhtml#_idTextAnchor307"><em class="italic">Chapter 12</em></a>, <em class="italic">Lambda Deployments and Versioning</em>, and it can be used to invoke almost any other AWS service. In our current scenario, we could have a customer who is using the AWS SFTP service to upload a file to an Amazon S3 bucket. That bucket could trigger a bucket event to AWS Lambda. The Lambda function could then kick off an AWS Pipeline build that would process the file, which, on passing or failing, sends a notification to the development team of a new build available for deployment.</p>
+			<p class="callout-heading">Note</p>
+			<p class="callout">In order to use S3 events, you must grant the S3 principle the necessary permissions in order to use the requested services. This includes the permission to publish to SNS queues or SQS topics, as well as the ability to invoke Lambda.</p>
+			<h3>Triggering an S3 event</h3>
+			<p>We will go through the exercise of using our previously created bucket to add an event trigger <a id="_idIndexMarker503"/>whenever an object is uploaded to the bucket. This event will be something simple to start with: an email notification to ourselves. In order to send that email, we will need to create an SNS topic and then subscribe to that topic with our email. Then we can go back to our bucket and add the bucket event configuration so that whenever an object is uploaded, it will send us a notification.</p>
+			<p>Now that we know that we have to set up an SNS topic, let's use our CLI to create that topic and subscribe so we can get the emails once something has been uploaded to our bucket:</p>
+			<ol>
+				<li value="1">Open up your terminal and type the following commands so we can create the topic:<p class="source-code"><strong class="bold"> $aws sns create-topic --name s3-event</strong></p><p>If the topic is created successfully, then it should return something like this:</p><p class="source-code"><strong class="bold">{</strong></p><p class="source-code"><strong class="bold">    "TopicArn": "arn:aws:sns:us-east-2:470066103307:s3-event"</strong></p><p class="source-code"><strong class="bold">}</strong></p></li>
+				<li>Now that we have our topic, we need to subscribe using our email address:<p class="source-code"><strong class="bold">$ aws sns subscribe \</strong></p><p class="source-code"><strong class="bold">    --topic-arn arn:aws:sns:us-east-2:470066103307:s3-event \</strong></p><p class="source-code"><strong class="bold">    --protocol email \</strong></p><p class="source-code"><strong class="bold">    --notification-endpoint devopsproandbeyond@gmail.com</strong></p><p>This should return a JSON statement telling you that the subscription is pending:</p><p class="source-code"><strong class="bold">{</strong></p><p class="source-code"><strong class="bold">    "SubscriptionArn": "pending confirmation"</strong></p><p class="source-code"><strong class="bold">}</strong></p></li>
+				<li>Now we need to go to our email account and find the email that the SNS service has just sent, and then click on the link that says <strong class="bold">Confirm Subscription</strong>.<p>Now let's log into our account and go to our S3 bucket so that we can configure the <strong class="bold">Event Notifications</strong>.</p></li>
+				<li>The final <a id="_idIndexMarker504"/>step for our SNS topic to be ready is to add an IAM role that allows it to receive the notification events from the S3 bucket.<p>We will use the following policy and then need to fill in the following values before saving them to a file:</p><ul><li><strong class="bold">Account Number</strong></li><li><strong class="bold">Region</strong></li><li><strong class="bold">Bucket name</strong></li></ul><p>We will create the following policy and then add this to the topic in the <strong class="bold">Access</strong> section once we log into the AWS console:</p><p class="source-code"><strong class="bold">{</strong></p><p class="source-code"><strong class="bold">  "Version": "2012-10-17",</strong></p><p class="source-code"><strong class="bold">  "Id": "s3-event-sns-ID",</strong></p><p class="source-code"><strong class="bold">  "Statement": [</strong></p><p class="source-code"><strong class="bold">    {</strong></p><p class="source-code"><strong class="bold">      "Sid": "s3-publish-ID",</strong></p><p class="source-code"><strong class="bold">      "Effect": "Allow",</strong></p><p class="source-code"><strong class="bold">      "Principal": {</strong></p><p class="source-code"><strong class="bold">        "Service": "s3.amazonaws.com"</strong></p><p class="source-code"><strong class="bold">      },</strong></p><p class="source-code"><strong class="bold">      "Action": "SNS:Publish",</strong></p><p class="source-code"><strong class="bold">      "Resource": "arn:aws:sns:region:account-num:sns-topic",</strong></p><p class="source-code"><strong class="bold">      "Condition": {</strong></p><p class="source-code"><strong class="bold">        "StringEquals": {</strong></p><p class="source-code"><strong class="bold">          "aws:SourceAccount": "account-num"</strong></p><p class="source-code"><strong class="bold">        },</strong></p><p class="source-code"><strong class="bold">        "ArnLike": {</strong></p><p class="source-code"><strong class="bold">          "aws:SourceArn": "arn:aws:s3:::bucket-name"</strong></p><p class="source-code"><strong class="bold">        }</strong></p><p class="source-code"><strong class="bold">      }</strong></p><p class="source-code"><strong class="bold">    }</strong></p><p class="source-code"><strong class="bold">  ]</strong></p><p class="source-code"><strong class="bold">}</strong></p></li>
+				<li>Let's now log into our AWS account and go to the SNS service so we can update our <a id="_idIndexMarker505"/>access policy. This way, the SNS topic has the correct permissions to interact with the S3 event notification.</li>
+				<li>Once on the SNS service, choose <strong class="bold">Topics</strong>.</li>
+				<li>In the <strong class="bold">Topics</strong> menu, you should see the topic we created via <strong class="bold">CLI – s3events</strong>. Click on the topic name so we can get to the configuration.</li>
+				<li>Once inside the topic, we need to press the <strong class="bold">Edit</strong> button near the top-right of the main page:<div id="_idContainer055" class="IMG---Figure"><img src="Images/Figure_4.9_B17405.jpg" alt="Figure 4.9 – Edit button near the top of the page&#13;&#10;" width="154" height="77"/></div><p class="figure-caption">Figure 4.9 – Edit button near the top of the page</p></li>
+				<li>Now find the <strong class="bold">Access Policy</strong> box and click on the arrow to expand. We will cut and paste the <strong class="source-inline">JSON</strong> policy we made earlier into this section. Once you have replaced the previous value with the new access policy, click the orange <strong class="bold">Save changes</strong> button at the bottom of the page.</li>
+				<li>Now we can go to the S3 console (<a href="https://s3.console.aws.amazon.com/">https://s3.console.aws.amazon.com/</a>).</li>
+				<li>Find the bucket that you made previously in this chapter (ours was named <strong class="source-inline">devopspro-beyond</strong>). If you haven't made a bucket already, you could choose any bucket you have in your account or create a new bucket quickly. Click on that bucket name so that you are brought to the main bucket page.</li>
+				<li>Once you <a id="_idIndexMarker506"/>are on the main bucket page, then click the <strong class="bold">Properties</strong> menu item in the horizontal menu in the main window frame:<div id="_idContainer056" class="IMG---Figure"><img src="Images/Figure_4.10_B17405.jpg" alt="Figure 4.10 – S3 horizontal menu with Properties highlighted&#13;&#10;" width="1216" height="117"/></div><p class="figure-caption">Figure 4.10 – S3 horizontal menu with Properties highlighted</p></li>
+				<li>Now scroll down the screen until you find the panel named <strong class="bold">Event Notifications</strong>:<div id="_idContainer057" class="IMG---Figure"><img src="Images/Figure_4.11_B17405.jpg" alt="Figure 4.11 – S3 Event notifications with no created notifications&#13;&#10;" width="1006" height="290"/></div><p class="figure-caption">Figure 4.11 – S3 Event notifications with no created notifications</p></li>
+				<li>Now click on the <strong class="bold">Create event notification</strong> button.</li>
+				<li>Use the following configurations for our S3 event test:<ul><li><strong class="bold">Event Name</strong> – <strong class="source-inline">S3 Test</strong></li><li><strong class="bold">Prefix</strong> – <em class="italic">[leave blank]</em></li><li><strong class="bold">Suffix</strong> - <strong class="source-inline">.txt</strong></li><li><strong class="bold">Event Types</strong> – Check the box labeled <strong class="bold">Put</strong>:</li></ul></li>
+			</ol>
+			<div>
+				<div id="_idContainer058" class="IMG---Figure">
+					<img src="Images/Figure_4.12_B17405.jpg" alt="Figure 4.12 – Configuring an S3 event notification&#13;&#10;" width="876" height="893"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 4.12 – Configuring an S3 event notification</p>
+			<ol>
+				<li value="16">Scroll down <a id="_idIndexMarker507"/>to the bottom of the page where you see <strong class="bold">Destination</strong>.</li>
+				<li>Choose the radio button that is next to <strong class="bold">SNS Topic</strong>, then from the drop-down menu, select the <strong class="bold">SNS Topic</strong> that we just created (<strong class="source-inline">s3-event</strong>):<div id="_idContainer059" class="IMG---Figure"><img src="Images/Figure_4.13_B17405.jpg" alt="Figure 4.13 – Choosing the destination for our S3 event notification&#13;&#10;" width="1148" height="958"/></div><p class="figure-caption">Figure 4.13 – Choosing the destination for our S3 event notification</p></li>
+				<li>Click the orange <strong class="bold">Save changes</strong> button.</li>
+				<li>It's now <a id="_idIndexMarker508"/>time to upload a text file and test that we receive an email notification.</li>
+				<li>All we need to test is any text file (remember we configured the event to only be configured on <strong class="source-inline">.txt</strong> files and no other types of files). We will use the CLI to upload our file:<p class="source-code"><strong class="bold">$aws s3 cp test.txt s3://devopspro-beyond/test.txt</strong></p><p>If you uploaded your file successfully, then you should see this output:</p><p class="source-code"><strong class="bold">upload: ./test.txt to s3://devopspro-beyond/test.txt</strong></p></li>
+				<li>Once the file is uploaded, you should receive an email notification at the email address you used to subscribe to the SNS topic.</li>
+			</ol>
+			<p>Now that we have seen how we can trigger operations on other services, such as <strong class="bold">Lambda</strong>, <strong class="bold">SNS</strong>, and <strong class="bold">SQS</strong>, we can think about how this would be of use to us in the real world. In the case of SNS, you may have a client who has an account and would like to <a id="_idIndexMarker509"/>be notified whenever one of their clients uploads one or more files to their personal S3 bucket so they can review the files. In the case of Lambda, you may be receiving invoices from another department and need to extract out the data before storing it into one or more data stores, and by using S3 events this can all happen automatically once the file is uploaded to the bucket. </p>
+			<p>In the next section, we will look at S3 Batch operations and see how, with the help of a manifest file, we can process a few or a few thousand files at once using just the S3 service.</p>
+			<h1 id="_idParaDest-125"><a id="_idTextAnchor129"/>S3 Batch operations</h1>
+			<p>Having a good tagging strategy is part of recommended AWS account hygiene. Just like other initiatives, many of these strategies evolve over time. There may come a time <a id="_idIndexMarker510"/>when you or your organization feels the need to change some of the mandatory tags on the objects in your current set of S3 buckets. If you have been running in AWS for any period of time then there are most likely too many objects to re-tag by hand and so you are left trying to devise a solution. This is where the power of AWS <strong class="bold">S3 Batch operations</strong> can come into play. It can perform batch operations on files and buckets with ease.</p>
+			<p>S3 Batch operations allow you to do more than just modify tags. The following operations can be performed with S3 Batch operations:</p>
+			<ul>
+				<li>Modify objects and metadata properties.</li>
+				<li>Copy objects between S3 buckets.</li>
+				<li>Replace object tag sets.</li>
+				<li>Modify access controls to sensitive data.</li>
+				<li>Restore archive objects from Glacier.</li>
+				<li>Invoke AWS Lambda functions.</li>
+			</ul>
+			<p>Once the job has been created, then it goes through a series of statutes before it either reaches <a id="_idIndexMarker511"/>the completed or failed state. The following table describes the different statuses available to an Amazon S3 Batch job:</p>
+			<div>
+				<div id="_idContainer060" class="IMG---Figure">
+					<img src="Images/011.jpg" alt="" width="1355" height="1096"/>
+				</div>
+			</div>
+			<h1 id="_idParaDest-126"><a id="_idTextAnchor130"/>S3 Batch hands on-example</h1>
+			<p>To test out the power of S3 Batch, we are going to take 75 files, upload them to <a id="_idIndexMarker512"/>our bucket, and then use AWS Batch to add a tag to each of the files almost instantly. </p>
+			<p class="callout-heading">Note</p>
+			<p class="callout">If you don't want to re-create all the files for this exercise, then simply go to the GitHub repository for this book; there are 75 small files available in <a href="B17405_04_Final_JM_ePub.xhtml#_idTextAnchor110"><em class="italic">Chapter 4</em></a>, <em class="italic">Amazon S3 Blob Storage</em>, in the batch subfolder.</p>
+			<p class="callout">Also, since all the files have the <strong class="source-inline">.txt</strong> extension, you may want to turn off the S3 event notification or unsubscribe from the topic before uploading all of the exercise files to the S3 bucket.</p>
+			<p>We will now use a hands-on example with S3 Batch to update the tags on a number of files at once. If you have a mandatory tagging strategy in place and files are missing some of those tags, then this can be an efficient way of managing those changes rather than trying to either write a custom script to perform the task or changing the tags on the files manually:</p>
+			<ol>
+				<li value="1">Before we start, in order for the job to be able to execute, we need to ensure that we have an IAM role. Let's first log in to the AWS Management Console and navigate to the IAM service.</li>
+				<li>Create a role for an AWS service, choose <strong class="bold">S3</strong>, and then at the very bottom of the page, choose <strong class="bold">S3 Batch Operations</strong>:<div id="_idContainer061" class="IMG---Figure"><img src="Images/Figure_4.14_B17405.jpg" alt="Figure 4.14 – Selecting the use case for S3 permissions in IAM&#13;&#10;" width="538" height="216"/></div><p class="figure-caption">Figure 4.14 – Selecting the use case for S3 permissions in IAM</p></li>
+				<li>Click on the blue button labeled <strong class="bold">Next: Permissions</strong>.</li>
+				<li>When you get to policy, click on the <strong class="bold">Create Policy</strong> button. This will open up a new tab <a id="_idIndexMarker513"/>in your browser. Instead of a prebuild policy, click on the <strong class="bold">JSON </strong>button and then cut and paste the <strong class="source-inline">JSON</strong> code from GitHub named <strong class="source-inline">S3_batch_IAM.json</strong>. You will need to replace the name of your S3 bucket in all the places where it asks for variables. (The variable names are notated as <strong class="source-inline">&lt;&lt;TargetResource&gt;&gt;</strong>, <strong class="source-inline">&lt;&lt;ManifestBucket&gt;&gt;</strong>, and <strong class="source-inline">&lt;&lt;ResourceBucket&gt;&gt;</strong>.) Unless you are storing the manifests and reports in different buckets, then just replace the same bucket name in each value. When you are done, you can click the blue button labeled <strong class="bold">Next: Tags</strong>. There is no need for any tags at this moment, so just click the blue button labeled <strong class="bold">Next: Review</strong>.</li>
+				<li>Now we can name and save our role; a good descriptive name is something like <strong class="source-inline">S3-Batch-Tagging-Role</strong>. Add the description if you desire and then click the blue <strong class="bold">Create Policy</strong> button.</li>
+				<li>Go back to the other tab where we were creating the role and search for the policy we just created, named <strong class="bold">S3-Batch-Tagging-Role</strong>. If it doesn't appear on the first search, you may need to click the refresh icon at the top right of the search bar. Click the box next to the policy and then click the blue button at the bottom of the page labeled <strong class="bold">Next: Tags</strong>. Once again, there is no need for any tags for clicking through to the <strong class="bold">Next: Review</strong>. We can name this role <strong class="source-inline">S3-Batch-Tagging</strong>. Once this role has been created, we need to take a note of the ARN so that we can use it in our <strong class="source-inline">batch</strong> command later.</li>
+				<li>Download the 75<strong class="source-inline">.txt</strong> files from the GitHub directory (or create your own set of files) into a single directory so that they can be uploaded into the S3 bucket you created earlier.</li>
+				<li>Next, we will use the <strong class="source-inline">s3 sync</strong> command to quickly move the files from our local directory:<p class="source-code"><strong class="bold">$aws s3 sync . s3://devopspro-beyond</strong></p></li>
+				<li>We will also need to download the manifest (<strong class="source-inline">.csv</strong> file) from the GitHub repository <a id="_idIndexMarker514"/>in order to start our batch job. In the manifest, you will need to replace the current bucket name, <strong class="source-inline">devopspro-beyond</strong>, with the bucket name where you have uploaded your objects. Once you have changed those values, make sure that you upload the manifest to the S3 bucket, as S3 Batch needs to read the manifest from an S3 location when using a <strong class="source-inline">CSV</strong> file and not from a locally sourced file.</li>
+				<li>The final report also needs a <em class="italic">folder</em> in our bucket to reside in. We will use the <strong class="source-inline">s3 cp</strong> command to move a file into the new folder and have it ready to receive the final report:<p class="source-code"><strong class="bold">$aws s3 cp manifest.csv s3://devopspro-beyond/final-reports/manifest.csv</strong></p></li>
+				<li>Now that our objects and manifest have been uploaded, we can go back to the AWS management console and start the batch job. Going back to the browser window where you had previously made your IAM role, navigate to the <strong class="bold">S3 service</strong>.</li>
+				<li>On the left-hand menu, click on <strong class="bold">Batch Operations</strong>:<div id="_idContainer062" class="IMG---Figure"><img src="Images/Figure_4.15_B17405.jpg" alt="Figure 4.15 – Batch Operations menu item&#13;&#10;" width="246" height="50"/></div><p class="figure-caption"> </p><p class="figure-caption">Figure 4.15 – Batch Operations menu item</p></li>
+				<li>Click on the orange button on the right-hand side that is labeled <strong class="bold">Create Job</strong>.</li>
+				<li>On the <a id="_idIndexMarker515"/>Manifest page, select the radio button that says <strong class="bold">CSV</strong>. For the <strong class="bold">Manifest object</strong> field, click <strong class="bold">Browse S3</strong> and find the <strong class="source-inline">manifest.csv</strong> file in your S3 bucket. The manifest ETag will populate automatically:<div id="_idContainer063" class="IMG---Figure"><img src="Images/Figure_4.16_B17405.jpg" alt="Figure 4.16 – The manifest information for S3 Batch&#13;&#10;" width="932" height="580"/></div><p class="figure-caption">Figure 4.16 – The manifest information for S3 Batch</p></li>
+				<li>Click the orange <strong class="bold">Next</strong> button at the bottom of the page. </li>
+				<li>Under <strong class="bold">Operation</strong>, choose the radio button next to <strong class="bold">Replace All tags</strong>.</li>
+				<li>This will make another set of options appear. For the <strong class="bold">Key</strong>, enter <strong class="source-inline">TAG</strong>, and for the <strong class="bold">Value</strong>, enter <strong class="source-inline">Chapter4</strong>. Once you have done this, click on the orange <strong class="bold">Next</strong> button:<div id="_idContainer064" class="IMG---Figure"><img src="Images/Figure_4.17_B17405.jpg" alt="Figure 4.17 – Adding the key and value for what to change&#13;&#10;" width="545" height="99"/></div><p class="figure-caption">Figure 4.17 – Adding the key and value for what to change</p></li>
+				<li>For the completion report, browse to the <strong class="source-inline">final-reports</strong> folder that we created earlier by uploading a copy of the <strong class="source-inline">manifest</strong> file via the CLI:<div id="_idContainer065" class="IMG---Figure"><img src="Images/Figure_4.18_B17405.jpg" alt="Figure 4.18 – Choosing the destination for the S3 Batch reports&#13;&#10;" width="965" height="126"/></div><p class="figure-caption">Figure 4.18 – Choosing the destination for the S3 Batch reports</p></li>
+				<li>Under <a id="_idIndexMarker516"/>permission, choose from the existing IAM roles and then, in the drop-down box, select the <strong class="bold">S3-Batch-Tagging-Role</strong> that you created at the beginning of this exercise. Click on the orange <strong class="bold">Next</strong> button at the bottom of the page.</li>
+				<li>On the review page, scroll all the way to the bottom and click on the orange <strong class="bold">Create job</strong> button.</li>
+				<li>Once you have created the job you will now be brought back to the S3 batch main screen. It may take a minute or two for the job to finish being created, but once it has, you can select the radio button to the left and then click on the button labeled <strong class="bold">Run job</strong>. This will start processing all the tags on the files in your manifest.</li>
+				<li>We can now go back to the AWS Management Console and navigate to our S3 bucket so we can look at our files to see if the <strong class="bold">Delete</strong> tag has been added.<p class="callout-heading">Note</p><p class="callout">The manifest that has been uploaded in the GitHub repository has the S3 example bucket name. You will need to change the bucket name on the manifest for the S3 bucket that you have created before uploading and running your batch job.</p></li>
+			</ol>
+			<h1 id="_idParaDest-127"><a id="_idTextAnchor131"/>S3 replication</h1>
+			<p>Even with its high durability guarantees, there are numerous cases where you need to <a id="_idIndexMarker517"/>devise a plan to protect your data in case of regional outage or loss. You might even want to copy your original data, which is restricted by access policies, somewhere else so that another team can access that data. This is where <strong class="bold">S3 replication</strong> comes into play. It gives you the ability to asynchronously copy your data to another bucket. There are two versions of S3 replication available:</p>
+			<ul>
+				<li><strong class="bold">Cross-Region Replication</strong> (<strong class="bold">CRR</strong>): This is where the objects in the bucket <a id="_idIndexMarker518"/>are replicated into a separate bucket that has been created in a different region than the primary region in which the original bucket was created.</li>
+				<li><strong class="bold">Single Region Replication</strong> (<strong class="bold">SRR</strong>): In SRR, objects are <a id="_idIndexMarker519"/>still replicated to a new separate bucket from the originating bucket, but both buckets are in the same geographical region.</li>
+			</ul>
+			<h1 id="_idParaDest-128"><a id="_idTextAnchor132"/>S3 versioning</h1>
+			<p>In the S3 service, you <a id="_idIndexMarker520"/>can keep track of how files change over time using the versioning feature. While this feature does add additional cost, it is especially useful as a way to help restore deleted objects.</p>
+			<p>Once you enable versioning, each object in that S3 bucket gets a value for the version ID. If you haven't enabled versioning on the bucket, then the version id for the objects in the bucket is set to null:</p>
+			<div>
+				<div id="_idContainer066" class="IMG---Figure">
+					<img src="Images/Figure_4.19_B17405.jpg" alt="Figure 4.19 – An S3 bucket with versioning enabled showing version ids &#13;&#10;" width="495" height="307"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 4.19 – An S3 bucket with versioning enabled showing version ids </p>
+			<p>Once you upload <a id="_idIndexMarker521"/>a subsequent version of the object with versioning turned on, Amazon produces a new version id for the new version of the object and then places that newer version of the object in the bucket.</p>
+			<h1 id="_idParaDest-129"><a id="_idTextAnchor133"/>Summary</h1>
+			<p>In this chapter, we covered the AWS S3 service and many of its features. We examined not only the basics of creating buckets and how buckets are secured with the different types of access policies but also how you can encrypt your data at rest using different encryption methods from AWS. We also saw how to trigger workflows using bucket events to do things such as kick off our DevOps pipeline. Now that we have a firm understanding of object storage, we will move on to the serverless NoSQL database DynamoDB.</p>
+			<h1 id="_idParaDest-130"><a id="_idTextAnchor134"/>Review questions</h1>
+			<ol>
+				<li value="1">You have a department in your company that needs an S3 bucket configured where the objects are accessed on a weekly basis and need to be both durable and reliable. Which S3 storage class should you use to configure the bucket?</li>
+				<li>You have five departments in your organization. Three of the departments are product teams, one is the accounting department, and one is the HR department. The accounting department has decided to migrate their files to S3 from the data center in order to save costs. How can you be sure that only members of the accounting department have access to the accounting files and no one else?</li>
+				<li>A healthcare company is preparing for an internal audit. They need to make sure that all of their files stored in S3 have been encrypted and that the keys are rotated no less than once per year. The company has been in business for over 15 years and has recently (in the last 5 years) made a digital push to move the majority of its files onto the cloud. This has resulted in over 1.5 million documents, including billing records, patient information, business information, and other documents being stored. What is the most effective way to check for this continually?</li>
+			</ol>
+			<h1 id="_idParaDest-131"><a id="_idTextAnchor135"/>Review answers</h1>
+			<ol>
+				<li value="1">S3 Standard.</li>
+				<li>Make sure that an IAM group has been created just for members of the accounting department. Create an IAM (user-based) policy that allows members of the accounting group to have full permissions on the accounting bucket. You could go a step further and create a policy boundary that explicitly denies access to the accounting bucket and place that on all other groups.</li>
+				<li>Create an S3 inventory report. Use AWS Athena to query for files that are not encrypted.</li>
+			</ol>
+		</div>
+	</div></body></html>

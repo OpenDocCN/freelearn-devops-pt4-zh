@@ -1,0 +1,605 @@
+<html><head></head><body>
+		<div id="_idContainer027">
+			<h1 id="_idParaDest-116"><em class="italic"><a id="_idTextAnchor116"/>Chapter 6</em>: Meet Buildah – Building Containers from Scratch</h1>
+			<p>The great appeal of containers is that they allow us to package applications inside immutable images that can be deployed on systems and run seamlessly. In this chapter, we will learn how to create images using different techniques and tools. This includes learning how an image build works under the hood and how to create images from scratch.</p>
+			<p>In this chapter, we're going to cover the following main topics:</p>
+			<ul>
+				<li>Basic image building with Podman</li>
+				<li>Meet Buildah, Podman's companion tool for builds</li>
+				<li>Preparing our environment</li>
+				<li>Choosing our build strategy</li>
+				<li>Building images from scratch</li>
+				<li>Building images from a Dockerfile</li>
+			</ul>
+			<h1 id="_idParaDest-117"><a id="_idTextAnchor117"/>Technical requirements</h1>
+			<p>Before proceeding with this chapter, a machine with a working Podman installation is required. As stated in <a href="B17908_03_epub.xhtml#_idTextAnchor068"><em class="italic">Chapter 3</em></a>, <em class="italic">Running the First Container</em>, all the examples in the book are executed on a Fedora 34 system or later but can be reproduced on the reader's choice of OS. </p>
+			<p>A good understanding of the topics covered in <a href="B17908_04_epub.xhtml#_idTextAnchor083"><em class="italic">Chapter 4</em></a>, <em class="italic">Managing Running Containers</em>, is useful to easily grasp concepts regarding <strong class="bold">Open Container Initiative</strong> (<strong class="bold">OCI</strong>) images.</p>
+			<h1 id="_idParaDest-118"><a id="_idTextAnchor118"/>Basic image building with Podman</h1>
+			<p>A container's OCI image is a set of immutable layers stacked together with a copy-on-write logic. When <a id="_idIndexMarker568"/>an image is <a id="_idIndexMarker569"/>built, all the layers are created in a precise order and then pushed to the container registry, which stores our layers as tar-based archives along with additional image metadata.</p>
+			<p>As we learned in the <em class="italic">OCI Images</em> section of <a href="B17908_02_epub.xhtml#_idTextAnchor044"><em class="italic">Chapter 2</em></a>, <em class="italic">Comparing Podman and Docker</em>, these manifests are necessary to correctly reassemble the image layers (the image manifest and the image index) and to pass runtime configurations to the container engine (the image configuration). </p>
+			<p>Before proceeding with the basic examples of image builds with Podman, we need to understand how image builds generally work to grasp the simple but very smart key concepts that lay beneath.</p>
+			<h2 id="_idParaDest-119"><a id="_idTextAnchor119"/>Builds under the hood</h2>
+			<p>Container images can be built in different ways, but the most common approach, probably one of the keys to the huge success of containers, is based on Dockerfiles.</p>
+			<p>A <strong class="bold">Dockerfile</strong>, as the name suggests, is the main configuration file for Docker builds and is a plain list of actions to <a id="_idIndexMarker570"/>be executed in the build process.</p>
+			<p>Over time, Dockerfiles became a standard in OCI image builds and today are adopted in many use cases.</p>
+			<p class="callout-heading">Important Note</p>
+			<p class="callout">To standardize and remove the association with the brand, Containerfiles were also introduced; they have the very same syntax as Dockerfiles and are supported natively by Podman. In this book, we will <a id="_idIndexMarker571"/>use the two terms <em class="italic">Dockerfile</em> and <em class="italic">Containerfile</em> interchangeably. </p>
+			<p>We will learn in detail Dockerfiles' syntax in the next subsection. For now, let's just focus on a concept – a Dockerfile is a set of build instructions that the build tool executes sequentially. Let's look at this example:</p>
+			<p class="source-code">FROM docker.io/library/fedora</p>
+			<p class="source-code">RUN dnf install -y httpd &amp;&amp; dnf clean all -y </p>
+			<p class="source-code">COPY index.html /var/www/html</p>
+			<p class="source-code">CMD ["/usr/sbin/httpd", "-DFOREGROUND"]</p>
+			<p>This basic example of a Dockerfile holds only four instructions: </p>
+			<ul>
+				<li>The <strong class="source-inline">FROM</strong> instruction, which defines the base image that will be used</li>
+				<li>The <strong class="source-inline">RUN</strong> instruction, which <a id="_idIndexMarker572"/>executes some actions during the build (in this example, installing <a id="_idIndexMarker573"/>packages with the <strong class="source-inline">dnf</strong> package manager)</li>
+				<li>The <strong class="source-inline">COPY</strong> instruction, which copies files or directories from the build working directory to the image</li>
+				<li>The <strong class="source-inline">CMD</strong> instruction, which defines the command to be executed when the container starts</li>
+			</ul>
+			<p>When the <strong class="source-inline">RUN</strong> and the <strong class="source-inline">COPY</strong> actions of the example are executed, new layers that hold the changes are cached in intermediate layers, represented by temporary containers. This is a native feature in Docker that has the advantage of reusing cached layers on further builds when no changes are requested on a specific layer. All the intermediate containers will produce read-only layers merged by the overlay graph driver.</p>
+			<p>Users don't need to manually manage the cached layers – the engine automatically implements the necessary actions by creating the temporary containers, executing the actions defined by the Dockerfile instructions, and then committing. By repeating the same logic for all the necessary instructions, Podman creates a new image with additional layers on top of the ones of the base image.</p>
+			<p>It is possible to squash the image layers into a single one to avoid a negative impact on the overlay's performances. Podman offers the same features and lets you choose between caching intermediate layers or not.</p>
+			<p>Not all Dockerfile instructions change the filesystem, and only the ones that do it will create a new image layer; all the other instructions, such as the <strong class="source-inline">CMD</strong> instruction in the preceding example, produce an empty layer with metadata only and no changes in the overlay filesystem.</p>
+			<p>In general, the only instructions that create new layers by effectively changing the filesystem are the <strong class="source-inline">RUN</strong>, <strong class="source-inline">COPY</strong>, and <strong class="source-inline">ADD</strong> instructions. All the other instructions in a Dockerfile or Containerfile just create temporary intermediate images and do not impact the final image filesystem.</p>
+			<p>This is also a good reason to keep the number of Dockerfile <strong class="source-inline">RUN</strong>, <strong class="source-inline">COPY</strong>, and <strong class="source-inline">ADD</strong> instructions limited, since having images cluttered with too many layers is not a good pattern and impacts the graph driver performances.</p>
+			<p>We can inspect an image's history and the actions that have been applied to every layer. The following example <a id="_idIndexMarker574"/>shows an excerpt of the output from the <strong class="source-inline">podman inspect</strong> command, with <a id="_idIndexMarker575"/>the target image being a potential one created from the previous sample Dockerfile:</p>
+			<p class="source-code"><strong class="bold">$ podman inspect myhttpd</strong></p>
+			<p class="source-code">[...omitted output]</p>
+			<p class="source-code">        "History": [</p>
+			<p class="source-code">            {</p>
+			<p class="source-code">                "created": "2021-04-01T17:59:37.09884046Z",</p>
+			<p class="source-code">                "created_by": "/bin/sh -c #(nop)  LABEL maintainer=Clement Verna \u003ccverna@fedoraproject.org\u003e",</p>
+			<p class="source-code">                "empty_layer": true</p>
+			<p class="source-code">            },</p>
+			<p class="source-code">            {</p>
+			<p class="source-code">                "created": "2021-04-01T18:00:19.741002882Z",</p>
+			<p class="source-code">                "created_by": "/bin/sh -c #(nop)  ENV DISTTAG=f34container FGC=f34 FBR=f34",</p>
+			<p class="source-code">                "empty_layer": true</p>
+			<p class="source-code">            },</p>
+			<p class="source-code">            {</p>
+			<p class="source-code">                "created": "2021-07-23T11:16:05.060688497Z",</p>
+			<p class="source-code">                "created_by": "/bin/sh -c #(nop) ADD file:85d7 f2d8e4f31d81b27b8e18dfc5687b5dabfaafdb2408a3059e120e4c15307b in / "</p>
+			<p class="source-code">            },</p>
+			<p class="source-code">            {</p>
+			<p class="source-code">                "created": "2021-07-23T11:16:05.833115975Z",</p>
+			<p class="source-code">                "created_by": "/bin/sh -c #(nop)  CMD [\"/bin/bash\"]",</p>
+			<p class="source-code">                "empty_layer": true</p>
+			<p class="source-code">            },</p>
+			<p class="source-code">            <strong class="bold">{</strong></p>
+			<p class="source-code"><strong class="bold">                "created": "2021-10-24T21:27:18.783034844Z",</strong></p>
+			<p class="source-code"><strong class="bold">                "created_by": "/bin/sh -c dnf install -y httpd \u0026\u0026 dnf clean all -y  ",</strong></p>
+			<p class="source-code"><strong class="bold">                "comment": "FROM docker.io/library/fedora:latest"</strong></p>
+			<p class="source-code"><strong class="bold">            },</strong></p>
+			<p class="source-code"><strong class="bold">            {</strong></p>
+			<p class="source-code"><strong class="bold">                "created": "2021-10-24T21:27:21.095937071Z",</strong></p>
+			<p class="source-code"><strong class="bold">                "created_by": "/bin/sh -c #(nop) COPY file: 78c6e1dcd6f819581b54094fd38a3fd8f170a2cb768101e533c964e 04aacab2e in /var/www/html "</strong></p>
+			<p class="source-code"><strong class="bold">            },</strong></p>
+			<p class="source-code"><strong class="bold">            {</strong></p>
+			<p class="source-code"><strong class="bold">                "created": "2021-10-24T21:27:21.182063974Z",</strong></p>
+			<p class="source-code"><strong class="bold">                "created_by": "/bin/sh -c #(nop) CMD [\"/usr/sbin/httpd\", \"-DFOREGROUND\"]",</strong></p>
+			<p class="source-code"><strong class="bold">                "empty_layer": true</strong></p>
+			<p class="source-code"><strong class="bold">            }</strong></p>
+			<p class="source-code">        ]</p>
+			<p class="source-code">[...omitted output]</p>
+			<p>Looking at the last three items <a id="_idIndexMarker576"/>of the image history, we can note the exact instructions defined in <a id="_idIndexMarker577"/>the Dockerfile, including the last CMD instruction that does not create any new layer but instead metadata that will persist in the image config. </p>
+			<p>With this deeper awareness of the image build logic in mind, let's now explore the most common Dockerfile instructions before proceeding with the Podman build examples.</p>
+			<h2 id="_idParaDest-120"><a id="_idTextAnchor120"/>Dockerfile and Containerfile instructions</h2>
+			<p>As stated before, Dockerfiles and Containerfiles share the same syntax. The instruction in those files should be <a id="_idIndexMarker578"/>seen as (and truly are) commands passed to the <a id="_idIndexMarker579"/>container engine or build tool. This subsection provides an overview of the most frequently used instructions.</p>
+			<p>All Dockerfile/Containerfile instructions follow the same pattern:</p>
+			<p class="source-code"># Comment</p>
+			<p class="source-code">INSTRUCTION arguments</p>
+			<p>The following list provides a non-exhaustive list of the most common instructions:</p>
+			<ul>
+				<li><strong class="bold">FROM</strong>: This is the first instruction of a build stage and defines the base image used as the starting point of the build. It follows the <strong class="source-inline">FROM &lt;image&gt;[:&lt;tag&gt;]</strong> syntax to identify the correct image to use.</li>
+				<li><strong class="bold">RUN</strong>: This instruction tells the engine to execute the commands passed as arguments inside a temporary container. It follows the <strong class="source-inline">RUN &lt;command&gt;</strong> syntax. The invoked binary or script must exist in the base image or a previous layer.</li>
+			</ul>
+			<p>As stated before, the <strong class="source-inline">RUN</strong> instruction creates a new image layer; therefore, it is a frequent practice to concatenate commands into the same <strong class="source-inline">RUN</strong> instruction to avoid cluttering too many layers. </p>
+			<p>This example compacts three commands inside the same <strong class="source-inline">RUN</strong> instruction:</p>
+			<p class="source-code">RUN dnf upgrade -y &amp;&amp; \</p>
+			<p class="source-code">     dnf install httpd -y &amp;&amp; \</p>
+			<p class="source-code">     dnf clean all -y</p>
+			<ul>
+				<li><strong class="bold">COPY</strong>: This instruction copies files and folders from the build working directory to the build sandbox. Copied resources are persisted in the final image. It follows the <strong class="source-inline">COPY &lt;src&gt;… &lt;dest&gt;</strong> syntax, and it has a very useful option that lets us define the destination user and group instead of manually changing ownership later – <strong class="source-inline">--chown=&lt;user&gt;:&lt;group&gt;</strong>.</li>
+				<li><strong class="bold">ADD</strong>: This instruction copies files, folders, and remote URLs to the build destination target. It follows <a id="_idIndexMarker580"/>the <strong class="source-inline">ADD &lt;src&gt;… &lt;dest&gt;</strong> syntax. This <a id="_idIndexMarker581"/>instruction also supports the automatic extraction of tar files from a source directly into the target path.</li>
+				<li><strong class="bold">ENTRYPOINT</strong>: The executed command in the container. It receives arguments from the command line (in the form of <strong class="source-inline">podman run &lt;image&gt; &lt;arguments&gt;</strong>) or from the <strong class="source-inline">CMD</strong> instruction. </li>
+			</ul>
+			<p>An <strong class="source-inline">ENTRYPOINT</strong> image cannot be overridden by command-line arguments. The supported forms are the following: </p>
+			<ul>
+				<li><strong class="source-inline">ENTRYPOINT ["command", "param1", "paramN"]</strong> (also known as the <em class="italic">exec</em> form)</li>
+				<li><strong class="source-inline">ENTRYPOINT command param1 paramN</strong> (the <em class="italic">shell</em> form)</li>
+			</ul>
+			<p>If not set, its default value is <strong class="source-inline">bash -c</strong>. When set to the default value, commands are passed as an argument to the <strong class="source-inline">bash</strong> process. For example, if a <strong class="source-inline">ps aux</strong> command is passed as an argument at runtime or in a CMD instruction, the container will execute <strong class="source-inline">bash -c "ps aux"</strong>.</p>
+			<p>A frequent practice is to replace <a id="_idIndexMarker582"/>the default <strong class="source-inline">ENTRYPOINT</strong> command <a id="_idIndexMarker583"/>with a custom <strong class="bold">script</strong> that behaves in the same way and offers more granular control of the runtime execution.</p>
+			<ul>
+				<li><strong class="bold">CMD</strong>: The default argument(s) passed to the <strong class="source-inline">ENTRYPOINT</strong> instruction. It can be a full command or a set of plain arguments to be passed to a custom script or binary set as <strong class="source-inline">ENTRYPOINT</strong>. It supported forms are the following:<ul><li><strong class="source-inline">CMD ["command", "param1", "paramN"]</strong> (the <em class="italic">exec</em> form)</li><li><strong class="source-inline">CMD ["param1, "paramN"]</strong> (the <em class="italic">parameter</em> form, used to pass arguments to a custom <strong class="source-inline">ENTRYPOINT</strong>)</li><li><strong class="source-inline">CMD command param1 paramN</strong> (the <em class="italic">shell</em> form) </li></ul></li>
+				<li><strong class="bold">LABEL</strong>: This instruction is used to apply custom labels to the image. Labels are used as metadata at build time or runtime. It follows the <strong class="source-inline">LABEL &lt;key1&gt;=&lt;value1&gt; … &lt;keyN&gt;=&lt;valueN&gt;</strong> syntax.</li>
+				<li><strong class="bold">EXPOSE</strong>: This sets metadata about listening ports exposed by the processes running in the container. It supports the <strong class="source-inline">EXPOSE &lt;port&gt;/&lt;protocol&gt;</strong> format.</li>
+				<li><strong class="bold">ENV</strong>: This configures environment variables that will be available to the next build commands and at runtime when the container is executed. This instruction supports the <strong class="source-inline">ENV &lt;key1&gt;=&lt;value1&gt;… &lt;keyN&gt;=&lt;valueN&gt;</strong> format. </li>
+			</ul>
+			<p>Environment variables can also be set inside a <strong class="source-inline">RUN</strong> instruction with a scope limited to the instruction itself.</p>
+			<ul>
+				<li><strong class="bold">VOLUME</strong>: This sets a volume that will be created at runtime during container execution. The volume will be automatically mapped by Podman inside the default volume storage directory. The supported formats are the following:<ul><li><strong class="source-inline">VOLUME ["/path/to/dir"]</strong></li><li><strong class="source-inline">VOLUME /path/to/dir</strong> </li></ul></li>
+			</ul>
+			<p>See also the <em class="italic">Attaching host storage to a container</em> section in <a href="B17908_05_epub.xhtml#_idTextAnchor101"><em class="italic">Chapter 5</em></a>, <em class="italic">Implementing Storage for the Containers' Data</em>, for more details about volumes.</p>
+			<ul>
+				<li><strong class="bold">USER</strong>: This instruction defines <a id="_idIndexMarker584"/>the username and user group for <a id="_idIndexMarker585"/>the next <strong class="source-inline">RUN</strong>, <strong class="source-inline">CMD</strong>, and <strong class="source-inline">ENTRYPOINT</strong> instructions. The <strong class="source-inline">GID</strong> value is not mandatory. </li>
+			</ul>
+			<p>The supported formats are the following:</p>
+			<ul>
+				<li><strong class="source-inline">USER &lt;username&gt;:[&lt;groupname&gt;]</strong></li>
+				<li><strong class="source-inline">USER &lt;UID&gt;:[&lt;GID&gt;]</strong></li>
+			</ul>
+			<ul>
+				<li><strong class="bold">WORKDIR</strong>: This sets the working directory during the build process. This value is retained during container execution. It supports the <strong class="source-inline">WORKDIR /path/to/workdir</strong> format.</li>
+				<li><strong class="bold">ONBUILD</strong>: This instruction defines a trigger command to be executed once an image build has been completed. In this way, the image can be used as a parent for a new build by calling it with the <strong class="source-inline">FROM</strong> instruction. Its purpose is to allow the execution of some final command on a child container image. </li>
+			</ul>
+			<p>The supported formats are the following:</p>
+			<ul>
+				<li><strong class="source-inline">ONBUILD ADD . /opt/app</strong></li>
+				<li><strong class="source-inline">ONBUILD RUN /opt/bin/custom-build /opt/app/src</strong></li>
+			</ul>
+			<p>Now that we have learned the most common instructions, let's dive into our first build examples with Podman.</p>
+			<h2 id="_idParaDest-121"><a id="_idTextAnchor121"/>Running builds with Podman </h2>
+			<p>Good news – Podman provides the same build commands and syntax as Docker. If you are switching from <a id="_idIndexMarker586"/>Docker, there will be no learning curve to start building <a id="_idIndexMarker587"/>your images with it. Under the hood, there is a notable advantage in choosing Podman as a build tool – Podman can build containers in rootless mode, using a fork/exec model. </p>
+			<p>This is a step forward compared to Docker builds, where communication with the daemon listening on the Unix socket is necessary to run the build. </p>
+			<p>Let's start by running a simple build based on the <strong class="source-inline">httpd</strong> Dockerfile illustrated in the first <em class="italic">Builds under the hood subsection</em>. We will use the following <strong class="source-inline">podman build</strong> command:</p>
+			<p class="source-code"><strong class="bold">$ podman build -t myhttpd .</strong></p>
+			<p class="source-code">STEP 1/4: FROM docker.io/library/fedora</p>
+			<p class="source-code">STEP 2/4: RUN dnf install -y httpd &amp;&amp; dnf clean all -y  </p>
+			<p class="source-code">[...omitted output]</p>
+			<p class="source-code">--&gt; 50a981094eb</p>
+			<p class="source-code">STEP 3/4: COPY index.html /var/www/html</p>
+			<p class="source-code">--&gt; 73f8702c5e0</p>
+			<p class="source-code">STEP 4/4: CMD ["/usr/sbin/httpd", "-DFOREGROUND"]</p>
+			<p class="source-code">COMMIT myhttpd</p>
+			<p class="source-code">--&gt; e773bfee6f2</p>
+			<p class="source-code">Successfully tagged localhost/myhttpd:latest e773bfee6f289012b37285a9e559bc44962de3aeed001455231b5a8f2721b8f9</p>
+			<p>In the preceding example, the output of the <strong class="source-inline">dnf install</strong> command was omitted for the sake of clarity and space.</p>
+			<p>The command runs the instructions sequentially and persists the intermediate layers until the final image is committed and tagged. The build steps are numbered (<strong class="source-inline">1/4</strong> to <strong class="source-inline">4/4</strong>) and some of them (<strong class="source-inline">RUN</strong> and <strong class="source-inline">COPY</strong> here) produce non-empty layers, forming part of the image lowerDirs.</p>
+			<p>The first <strong class="source-inline">FROM</strong> instruction defines the base image, which is pulled automatically if not present in the host. </p>
+			<p>The second instruction is <strong class="source-inline">RUN</strong>, which executes the <strong class="source-inline">dnf</strong> command to install the httpd package and clean up the system upon completion. Under the hood, this line is executed as <strong class="source-inline">"bash –c 'dnf install -y httpd &amp;&amp; dnf clean all –y'"</strong>.</p>
+			<p>The third <strong class="source-inline">COPY</strong> instruction simply copies the <strong class="source-inline">index.html</strong> file in the default httpd document root.</p>
+			<p>Finally, the fourth step <a id="_idIndexMarker588"/>defines the default container <strong class="source-inline">CMD</strong> instruction. Since <a id="_idIndexMarker589"/>no <strong class="source-inline">ENTRYPOINT</strong> instructions were set, this will translate into the following command: </p>
+			<p><strong class="source-inline">"bash -c '/usr/sbin/httpd -DFOREGROUND'"</strong></p>
+			<p>The next example is a custom Dockerfile/Containerfile where a custom web server is built:</p>
+			<p class="source-code">FROM docker.io/library/fedora</p>
+			<p class="source-code"># Install required packages</p>
+			<p class="source-code">RUN set -euo pipefail; \</p>
+			<p class="source-code">    dnf upgrade -y; \</p>
+			<p class="source-code">    dnf install httpd -y; \</p>
+			<p class="source-code">    dnf clean all -y; \</p>
+			<p class="source-code">    rm -rf /var/cache/dnf/*</p>
+			<p class="source-code"># Custom webserver configs for rootless execution</p>
+			<p class="source-code">RUN set -euo pipefail; \</p>
+			<p class="source-code">    sed -i 's|Listen 80|Listen 8080|' \</p>
+			<p class="source-code">           /etc/httpd/conf/httpd.conf; \</p>
+			<p class="source-code">    sed -i 's|ErrorLog "logs/error_log"|ErrorLog /dev/stderr|' \</p>
+			<p class="source-code">           /etc/httpd/conf/httpd.conf; \</p>
+			<p class="source-code">    sed -i 's|CustomLog "logs/access_log" combined|CustomLog /dev/stdout combined|' \</p>
+			<p class="source-code">           /etc/httpd/conf/httpd.conf; \</p>
+			<p class="source-code">    chown 1001 /var/run/httpd</p>
+			<p class="source-code">                     </p>
+			<p class="source-code"># Copy web content</p>
+			<p class="source-code">COPY index.html /var/www/html</p>
+			<p class="source-code"># Define content volume</p>
+			<p class="source-code">VOLUME /var/www/html</p>
+			<p class="source-code"># Copy container entrypoint.sh script</p>
+			<p class="source-code">COPY entrypoint.sh /entrypoint.sh</p>
+			<p class="source-code"># Declare exposed ports</p>
+			<p class="source-code">EXPOSE 8080 </p>
+			<p class="source-code"># Declare default user</p>
+			<p class="source-code">USER 1001</p>
+			<p class="source-code">ENTRYPOINT ["/entrypoint.sh"]</p>
+			<p class="source-code">CMD ["httpd"]</p>
+			<p>This example was designed for the purpose of this book to illustrate some peculiar elements:</p>
+			<ul>
+				<li>Packages installed with <a id="_idIndexMarker590"/>a package manager should be kept at <a id="_idIndexMarker591"/>a minimum. After installing the <strong class="source-inline">httpd</strong> package, necessary to run the web server, the cache is cleaned to save layer space. </li>
+				<li>Multiple commands can be grouped together in a single <strong class="source-inline">RUN</strong> instruction. However, we don't want to continue the build if a single command fails. To provide a failsafe shell execution, the <strong class="source-inline">set -euo pipefail</strong> command was prepended. Also, to improve readability, the single commands were split into more lines using the <strong class="source-inline">\</strong> character, which can work as a line break or escape character.</li>
+				<li>To avoid running the isolated processes as the root user, a series of workarounds were implemented in order to have the httpd process running as the generic <strong class="source-inline">1001</strong> user. Those workarounds included updating files permissions and group <a id="_idIndexMarker592"/>ownership on specific directories that are expected <a id="_idIndexMarker593"/>to be accessed by non-root users. This is a security best practice that reduces the attack surface of the container.</li>
+				<li>A common pattern in containers is the redirections of application logs to the container's <strong class="source-inline">stdout</strong> and <strong class="source-inline">stderr</strong>. The common httpd log streams have been modified for this purpose using regular expressions against the <strong class="source-inline">/etc/httpd/conf/httpd.conf</strong> file.</li>
+				<li>The web server ports are declared as exposed with the <strong class="source-inline">EXPOSE</strong> instruction.</li>
+				<li>The <strong class="source-inline">CMD</strong> instruction is a simple <strong class="source-inline">httpd</strong> command without any other argument. This was done to illustrate how the <strong class="source-inline">ENTRYPOINT</strong> can interact with the CMD arguments.</li>
+			</ul>
+			<p>The container <strong class="source-inline">ENTRYPOINT</strong> instruction is modified with a custom script that brings more flexibility to the way the <strong class="source-inline">CMD</strong> instruction is managed. The <strong class="source-inline">entrypoint.sh</strong> file tests whether the container is executed as root and checks the first <strong class="source-inline">CMD</strong> argument – if the argument is <strong class="source-inline">httpd</strong>, it executes the <strong class="source-inline">httpd -DFOREGROUND</strong> command; otherwise, it lets you execute any other command (a shell, for example). The following code is the content of the <strong class="source-inline">entrypoint.sh</strong> script:</p>
+			<p class="source-code">#!/bin/sh</p>
+			<p class="source-code">set -euo pipefail</p>
+			<p class="source-code">if [ $UID != 0 ]; then</p>
+			<p class="source-code">    echo "Running as user $UID"</p>
+			<p class="source-code">fi</p>
+			<p class="source-code">if [ "$1" == "httpd" ]; then</p>
+			<p class="source-code">    echo "Starting custom httpd server"</p>
+			<p class="source-code">    exec $1 -DFOREGROUND</p>
+			<p class="source-code">else</p>
+			<p class="source-code">    echo "Starting container with custom arguments"</p>
+			<p class="source-code">    exec "$@"</p>
+			<p class="source-code">fi</p>
+			<p>Let's now build the image with the <strong class="source-inline">podman build</strong> command:</p>
+			<p class="source-code">$ podman build –t myhttpd .</p>
+			<p>The newly built image will be available in the local host cache:</p>
+			<p class="source-code">$ podman images | grep myhttpd</p>
+			<p class="source-code">localhost/myhttpd latest 6dc90348520c 2 minutes ago   248 MB</p>
+			<p>After building, we can <strong class="bold">tag</strong> the image with the target registry name. The following example tags the image applying the <strong class="source-inline">v1.0</strong> tag and the latest tag:</p>
+			<p class="source-code">$ podman tag localhost/myhttpd quay.io/&lt;username&gt;/myhttpd:v1.0</p>
+			<p>After tagging, the image will be ready to be pushed to the remote registry. We will cover the interaction with registries in greater detail in <a href="B17908_09_epub.xhtml#_idTextAnchor167"><em class="italic">Chapter 9</em></a>, <em class="italic">Pushing Images to a Container Registry</em>.</p>
+			<p>The example image <a id="_idIndexMarker594"/>will be composed of five layers, including the base Fedora <a id="_idIndexMarker595"/>image layer. We can verify the number of layers by running the <strong class="source-inline">podman inspect</strong> command against the new image:</p>
+			<p class="source-code"><strong class="bold">$ podman inspect myhttpd --format '{{ .RootFS.Layers }}'</strong></p>
+			<p class="source-code">[sha256:b6d0e02fe431db7d64d996f3dbf903153152a8f8b857cb4829 ab3c4a3e484a72</p>
+			<p class="source-code">sha256:f41274a78d9917b0412d99c8b698b0094aa0de74ec8995c88e5 dbf1131494912</p>
+			<p class="source-code">sha256:e57dde895085c50ea57db021bffce776ee33253b4b8cb0fe909b bbac45af0e8c</p>
+			<p class="source-code">sha256:9989ee85603f534e7648c74c75aaca5981186b787d26e0cae0bc 7ee9eb54d40d</p>
+			<p class="source-code">sha256:ca402716d23bd39f52d040a39d3aee242bf235f626258958b889 b40cdec88b43]</p>
+			<p>It is possible to squash the current build layers into a single layer using the <strong class="source-inline">--layers=false</strong> option. The <a id="_idIndexMarker596"/>resulting image will have only two layers – the base <a id="_idIndexMarker597"/>Fedora layer and the squashed one. The following example rebuilds the image without caching the intermediate layers:</p>
+			<p class="source-code">$ podman build -t myhttpd --layers=false .</p>
+			<p>Let's inspect the output image again:</p>
+			<p class="source-code"><strong class="bold">$ podman inspect myhttpd --format '{{ .RootFS.Layers }}'</strong></p>
+			<p class="source-code">[sha256:b6d0e02fe431db7d64d996f3dbf903153152a8f8b857cb 4829ab3c4a3e484a72</p>
+			<p class="source-code">sha256:6c279ab14837b30af9360bf337c7f9b967676a61831eee9 1012fa67083f5dcf1]</p>
+			<p>This time, the final image has the two expected layers only.</p>
+			<p>Reducing the number of layers can be useful to keep the image minimal in terms of overlays. The downside of this approach is that we will have to rebuild the whole image for every configuration change without taking advantage of cached layers.</p>
+			<p>In terms of isolation, Podman can safely build images in rootless mode. Indeed, this is considered a value since there should be no need to run builds with a privileged user such as root. If rootful builds are necessary, they are fully functional and supported. The following example runs a build as the root user:</p>
+			<p class="source-code"># podman build -t myhttpd .</p>
+			<p>The resulting image will be available only in the system image cache and its layers stored under <strong class="source-inline">/var/lib/containers/storage/</strong>. </p>
+			<p>The flexible nature of Podman builds is strongly related to its companion tool, <strong class="bold">Buildah</strong>, a specialized tool to <a id="_idIndexMarker598"/>build OCI images that provides greater flexibility <a id="_idIndexMarker599"/>in builds. In the next section, we will describe Buildah's features and how it manages image builds.</p>
+			<h1 id="_idParaDest-122"><a id="_idTextAnchor122"/>Meet Buildah, Podman's companion tool for builds</h1>
+			<p>Podman does an excellent job in plain builds with Dockerfiles/Containerfiles and helps teams to preserve their <a id="_idIndexMarker600"/>previously implemented build pipelines without the need for new investments.</p>
+			<p>However, when it comes to more specialized build tasks, or when users need more control on the build workflow, with the option of including scripting logic, the Dockerfile/Containerfile approach shows its limitations. Communities struggled to find alternative building approaches that can overcome the rigid, workflow-based logic of Dockerfiles/Containerfiles.</p>
+			<p>The same community that develops Podman brought to life the Buildah (pronounced <em class="italic">build-ah</em>) project, a tool to manage OCI builds with support for multiple building strategies. Images created with Buildah are fully portable and compatible with Docker, and all engines are compliant with the OCI image and runtime specs.</p>
+			<p>Buildah is an open source project released under the Apache 2.0 license. Sources are available on GitHub at the following URL: <a href="https://github.com/containers/buildah">https://github.com/containers/buildah</a>.</p>
+			<p>Buildah is complementary to Podman, which borrows its build logic by vendoring its libraries to implement basic build functionalities against Dockerfiles and Containerfiles. The final Podman binary, which is compiled in Go as a statically linked single file, embeds Buildah packages to manage the build steps.</p>
+			<p>Buildah uses the <em class="italic">containers/image</em> project (<a href="https://github.com/containers/image">https://github.com/containers/image</a>) to manage an image's life <a id="_idIndexMarker601"/>cycle and its interaction with <a id="_idIndexMarker602"/>registries, and the <em class="italic">containers/storage</em> project (<a href="https://github.com/containers/storage">https://github.com/containers/storage</a>) to manage images and containers' filesystem layers.</p>
+			<p>The advanced build strategy of Buildah is based on the parallel support for traditional Dockerfile/Containerfile-based builds, and for builds driven by native Buildah commands that replicate the Dockerfile instructions. </p>
+			<p>By replicating Dockerfile instructions in standard commands, Buildah becomes a scriptable tool that can be interpolated with custom logic and native shell constructs such as conditionals, loops, or environment variables. For example, the <strong class="source-inline">RUN</strong> instruction in a Dockerfile can be replaced with a <strong class="source-inline">buildah run</strong> command.</p>
+			<p>If teams need to preserve the build logic implemented in previous Dockerfiles, Buildah offers the <strong class="source-inline">buildah build</strong> (or its alias, <strong class="source-inline">buildah bud</strong>) command, which builds the image reading from the provided Dockerfile/Containerfile.</p>
+			<p>Buildah can smoothly run in rootless mode to build images; this is a valuable, highly demanded feature from <a id="_idIndexMarker603"/>a security point of view. No Unix sockets are necessary to run a build. At the beginning of this chapter, we explained how builds are always based on containers; Buildah is not exempt from this behavior, and all its builds are executed inside working containers, starting on top of the base image.</p>
+			<p>The following list provides a <a id="_idIndexMarker604"/>non-exhaustive description of the most frequently used commands in Buildah:</p>
+			<ul>
+				<li><strong class="bold">buildah from</strong>: Initializes a new working container on top of a base image. It accepts the <strong class="source-inline">buildah from [options] &lt;image&gt;</strong> syntax. An example of this command is <strong class="source-inline">$ buildah from fedora</strong>.</li>
+				<li><strong class="bold">buildah run</strong>: This is equivalent to the <strong class="source-inline">RUN</strong> instruction of a Dockerfile; it runs a command inside a working container. This command accepts the <strong class="source-inline">buildah run [options] [--] &lt;container&gt; &lt;command&gt;</strong> syntax. The <strong class="source-inline">--</strong> (double dash) option is necessary to separate potential options from the effective container command. An example of this command is <strong class="source-inline">buildah run &lt;containerID&gt; -- dnf install -y nginx</strong>.</li>
+				<li><strong class="bold">buildah config</strong>: This command configures image metadata. It accepts the <strong class="source-inline">buildah config [options] &lt;container&gt;</strong> format. The options available for this command are associated with the various Dockerfile instructions that do not modify filesystem layers but set some container metadata – for instance, the setup of the <strong class="source-inline">entrypoint</strong> container. An example of this command is <strong class="source-inline">buildah config --entrypoint/entrypoint.sh &lt;containerID&gt;</strong>.</li>
+				<li><strong class="bold">buildah add</strong>: This is equivalent to the <strong class="source-inline">ADD</strong> instruction of the Dockerfile; it adds files, directories, and even URLs to the container. It supports the <strong class="source-inline">buildah add [options] &lt;container&gt; &lt;src&gt; [[src …] &lt;dst&gt;</strong> syntax and allows you to copy multiple files in one single command. An example of this command is <strong class="source-inline">buildah add &lt;containerID&gt; index.php /var/www.html</strong>.</li>
+				<li><strong class="bold">buildah copy</strong>: This is the same as the Dockerfile <strong class="source-inline">COPY</strong> instruction; it adds files, URLs, and directories to the container. It supports the <strong class="source-inline">buildah copy [options] &lt;container&gt; &lt;src&gt; [[src …] &lt;dst&gt;</strong> syntax. An example of this command is <strong class="source-inline">buildah copy &lt;containerID&gt; entrypoint.sh /</strong>.</li>
+				<li><strong class="bold">buildah commit</strong>: This commits a final image out of a working container. This command is usually the last <a id="_idIndexMarker605"/>executed one. It supports the <strong class="source-inline">buildah copy [options] &lt;container&gt; &lt;image_name&gt;</strong> syntax. The container image created from this command can be later tagged and pushed to a registry. An example of this command is <strong class="source-inline">buildah commit &lt;containerID&gt; &lt;myhttpd&gt;</strong>.</li>
+				<li><strong class="bold">buildah build</strong>: The equivalent command of the classic Podman build. This command takes Dockerfiles <a id="_idIndexMarker606"/>or Containerfiles as arguments, along with the build directory path. It accepts the <strong class="source-inline">buildah build [options] [context]</strong> syntax and the <strong class="source-inline">buildah bud</strong> command alias. An example of this command is <strong class="source-inline">buildah build –t &lt;imageName&gt; .</strong>.</li>
+				<li><strong class="bold">buildah containers</strong>: This lists the active working container involved in Buildah builds, along with the base image used as starting point. Equivalent commands are <strong class="source-inline">buildah ls</strong> and <strong class="source-inline">buildah ps</strong>. The supported syntax is <strong class="source-inline">buildah containers [options]</strong>. An example of this command is <strong class="source-inline">buildah containers</strong>.</li>
+				<li><strong class="bold">buildah rm</strong>: This is used to remove working containers. The <strong class="source-inline">buildah delete</strong> command is equivalent. The supported syntax is <strong class="source-inline">buildah rm &lt;container&gt;</strong>. This command has only one option, the <strong class="source-inline">–all, -a</strong> option, to remove all the working containers. An example of this command is <strong class="source-inline">buildah rm &lt;containerID&gt;</strong>.</li>
+				<li><strong class="bold">buildah mount</strong>: This command can be used to mount a working container root filesystem. The accepted syntax is <strong class="source-inline">buildah mount [containerID … ]</strong>. When no argument is <a id="_idIndexMarker607"/>passed, the command only shows the currently <a id="_idIndexMarker608"/>mounted containers. An example of this command is <strong class="source-inline">buildahmount&lt;containerID&gt;</strong>.</li>
+				<li><strong class="bold">buildah images</strong>: This lists all the available images in the local host cache. The accepted syntax is <strong class="source-inline">buildah images [options] [image]</strong>. Custom output formats such as JSON are available. An example of this command is <strong class="source-inline">buildah images --json</strong>.</li>
+				<li><strong class="bold">buildah tag</strong>: This applies a custom name and tags to an image in the local store. The syntax follows the <strong class="source-inline">buildah tag &lt;name&gt; &lt;new-name&gt;</strong> format. An example of this command is <strong class="source-inline">buildah tag myapp quay.io/packt/myapp:latest</strong>.</li>
+				<li><strong class="bold">buildah push</strong>: This pushes a local image to a remote private or public register, or local directories in Docker or OCI format. This command offers greater flexibility when compared to equivalents in Podman or Docker. The command syntax is <strong class="source-inline">buildah push [options] &lt;image&gt; [destination]</strong>. Examples of this command include <strong class="source-inline">buildah push quay.io/packt/myapp:latest</strong>,<strong class="source-inline"> buildah push &lt;imageID&gt; docker://&lt;URL&gt;/repository:tag</strong>, and <strong class="source-inline">buildah push &lt;imageID&gt; oci:&lt;/path/to/dir&gt;:image:tag</strong>.</li>
+				<li><strong class="bold">buildah pull</strong>: This pulls an image from a registry, an OCI archive, or directory. Syntax includes <strong class="source-inline">buildah pull [options] &lt;image&gt;</strong>. Examples of this command include <strong class="source-inline">buildah pull &lt;imageName&gt;</strong>, <strong class="source-inline">buildah pull docker://&lt;URL&gt;/repository:tag</strong>, and <strong class="source-inline">buildah pull dir:&lt;/path/to/dir&gt;</strong>.</li>
+			</ul>
+			<p>All the commands described previously have their corresponding <strong class="source-inline">man</strong> page, with the <strong class="source-inline">man buildah-&lt;command&gt;</strong> pattern. For example, to read documentation details about the <strong class="source-inline">buildah run</strong> command, just type <strong class="source-inline">man buildah-run</strong> on the terminal.</p>
+			<p>The next example shows basic <a id="_idIndexMarker609"/>Buildah capabilities. A Fedora base image is customized to run an httpd process:</p>
+			<p class="source-code">$ container=$(buildah from fedora)</p>
+			<p class="source-code">$ buildah run $container -- dnf install -y httpd; dnf clean all </p>
+			<p class="source-code">$ buildah config --cmd "httpd -DFOREGROUND" $container</p>
+			<p class="source-code">$ buildah config --port 80 $container</p>
+			<p class="source-code">$ buildah commit $container myhttpd</p>
+			<p class="source-code">$ buildah tag myhttpd registry.example.com/myhttpd:v0.0.1</p>
+			<p>The preceding commands will produce an OCI-compliant, portable image with the same features of an image built from a Dockerfile, all in a few lines that can be included in a simple script.</p>
+			<p>We will now focus on the first command:</p>
+			<p class="source-code">$ container=$(buildah from fedora)</p>
+			<p>The <strong class="source-inline">buildah from</strong> command pulls a Fedora image from one of the allowed registries and spins up a working container from it, returning the container name. Instead of simply having it printed on standard output, we will capture the name with shell expansion syntax. From now on, we can pass the <strong class="source-inline">$container</strong> variable, which holds the name of the generated container, to the subsequent commands. Therefore, the build commands will be executed inside this working container. This is quite a common pattern and is especially useful to automate Buildah commands in scripts. </p>
+			<p class="callout-heading">Important Note</p>
+			<p class="callout">There is a subtle difference between the concept of container in Buildah and Podman. Both adopt the same technology to create containers, but Buildah containers are short-lived entities that are created to be modified and committed, while Podman containers are supposed to run long-living workloads. </p>
+			<p>The flexible and embeddable nature of this approach is remarkable – Buildah commands can be included anywhere, and users can choose between a fully automated build process and a more interactive one.</p>
+			<p>For example, Buildah <a id="_idIndexMarker610"/>can be easily integrated with <strong class="bold">Ansible</strong>, the open source automation engine, to provide automated builds using native connection plugins that enable communication with working containers.</p>
+			<p>You can choose to <a id="_idIndexMarker611"/>include Buildah inside a CI pipeline (such as <strong class="bold">Jenkins</strong>, <strong class="bold">Tekton</strong>, or <strong class="bold">GitLab CI/CD</strong>) to gain <a id="_idIndexMarker612"/>full control of the build and integration <a id="_idIndexMarker613"/>tasks.</p>
+			<p>Buildah is also <a id="_idIndexMarker614"/>included in larger projects of the cloud-native community, such as the <strong class="bold">Shipwright</strong> project (<a href="https://github.com/shipwright-io/build">https://github.com/shipwright-io/build</a>). </p>
+			<p>Shipwright is an extensible build framework for Kubernetes that provides the flexibility of customizing image builds <a id="_idIndexMarker615"/>using custom resource definitions and different build tools. Buildah is one of the available solutions that you can choose when designing your build processes with it.</p>
+			<p>We will see more detailed and richer examples in the next subsections. Now that we have seen an overview of Buildah's capabilities and use cases, let's dive into the installation and environment preparation steps. </p>
+			<h1 id="_idParaDest-123"><a id="_idTextAnchor123"/>Preparing our environment</h1>
+			<p>Buildah is available on different distributions and can be installed using the respective package managers. This section <a id="_idIndexMarker616"/>provides a non-exhaustive list of installation examples on the major distributions. For the sake of clarity, it is important to reiterate that the book lab environments were all based on Fedora 34:</p>
+			<ul>
+				<li><strong class="bold">Fedora</strong>: To install Buildah on Fedora, run the following <strong class="source-inline">dnf</strong> command:<p class="source-code">$ sudo dnf -y install buildah</p></li>
+				<li><strong class="bold">Debian</strong>: To install Buildah on Debian Bullseye or later, run the following <strong class="source-inline">apt-get</strong> commands:<p class="source-code">$ sudo apt-get update</p><p class="source-code">$ sudo apt-get -y install buildah</p></li>
+				<li><strong class="bold">CentOS</strong>: To install Buildah on CentOS, run the following <strong class="source-inline">yum</strong> command:<p class="source-code">$ sudo yum install -y buildah</p></li>
+				<li><strong class="bold">RHEL8</strong>: To install Buildah on RHEL8, run the following <strong class="source-inline">yum module</strong> commands:<p class="source-code">$ sudo yum module enable -y container-tools:1.0</p><p class="source-code">$ sudo yum module install -y buildah</p></li>
+				<li><strong class="bold">RHEL7</strong>: To install Buildah on RHEL7, enable the <strong class="source-inline">rhel-7-server-extras-rpms</strong> repository and install with <strong class="source-inline">yum</strong>:<p class="source-code">$ sudo subscription-manager repos --enable=rhel-7-server-extras-rpms</p><p class="source-code">$ sudo yum -y install buildah</p></li>
+				<li><strong class="bold">Arch Linux</strong>: To install Buildah on Arch Linux, run the following <strong class="source-inline">pacman</strong> command:<p class="source-code">$ sudo pacman –S buildah</p></li>
+				<li><strong class="bold">Ubuntu</strong>: To install Buildah <a id="_idIndexMarker617"/>on Ubuntu 20.10 or later, run the following <strong class="source-inline">apt-get</strong> commands:<p class="source-code">$ sudo apt-get -y update</p><p class="source-code">$ sudo apt-get -y install buildah</p></li>
+				<li><strong class="bold">Gentoo</strong>: To install Buildah on Gentoo, run the following <strong class="source-inline">emerge</strong> command:<p class="source-code">$ sudo emerge app-emulation/libpod</p></li>
+				<li><strong class="bold">Build from source</strong>: Buildah can also be built from the source. For the purpose of this book, we will keep the focus on simple deployment methods, but if you're curious, you will find the following guide useful to try out your own builds: <a href="https://github.com/containers/buildah/blob/main/install.md#building-from-scratch">https://github.com/containers/buildah/blob/main/install.md#building-from-scratch</a>.</li>
+			</ul>
+			<p>Finally, Buildah can be <a id="_idIndexMarker618"/>deployed as a container, and builds can be executed inside it with a nested approach. This process will be covered in greater detail in <a href="B17908_07_epub.xhtml#_idTextAnchor134"><em class="italic">Chapter 7</em></a>, <em class="italic">Integrating with Existing Application Build Processes</em>.</p>
+			<p>After installing Buildah to our host, we can move on to verifying our installation.</p>
+			<h2 id="_idParaDest-124"><a id="_idTextAnchor124"/>Verifying the installation</h2>
+			<p>After installing Buildah, we <a id="_idIndexMarker619"/>can now run some basic test commands to verify the installation.</p>
+			<p>To see all the available images in the host local store, use the following commands:</p>
+			<p class="source-code">$ buildah images</p>
+			<p class="source-code"># buildah images</p>
+			<p>The image list will be the same as the one printed by the <strong class="source-inline">podman images</strong> command since they share the same local store. </p>
+			<p>Also note that the two commands are executed as an unprivileged user and as root, pointing respectively to the user rootless local store and the system-wide local store.</p>
+			<p>We can run a simple test build to verify the installation. This is a good chance to test a basic build script whose only purpose is to verify whether Buildah is able to fully run a complete build.</p>
+			<p>For the purpose of this book (and for fun), we have created the following simple test script that creates a minimal Python 3 image:</p>
+			<p class="source-code">#!/bin/bash</p>
+			<p class="source-code">BASE_IMAGE=alpine</p>
+			<p class="source-code">TARGET_IMAGE=python3-minimal</p>
+			<p class="source-code">if [ $UID != 0 ]; then</p>
+			<p class="source-code">    echo "### Running build test as unprivileged user"</p>
+			<p class="source-code">else</p>
+			<p class="source-code">    echo "### Running build test as root"</p>
+			<p class="source-code">fi</p>
+			<p class="source-code">echo "### Testing container creation"</p>
+			<p class="source-code">container=$(buildah from $BASE_IMAGE)</p>
+			<p class="source-code">if [ $? -ne 0 ]; then</p>
+			<p class="source-code">    echo "Error initializing working container"</p>
+			<p class="source-code">fi</p>
+			<p class="source-code">echo "### Testing run command"</p>
+			<p class="source-code">buildah run $container apk add --update python3 py3-pip</p>
+			<p class="source-code">if [ $? -ne 0 ]; then</p>
+			<p class="source-code">    echo "Error on run build action"</p>
+			<p class="source-code">fi</p>
+			<p class="source-code">echo "### Testing image commit"</p>
+			<p class="source-code">buildah commit $container $TARGET_IMAGE</p>
+			<p class="source-code">if [ $? -ne 0 ]; then</p>
+			<p class="source-code">    echo "Error committing final image"</p>
+			<p class="source-code">fi</p>
+			<p class="source-code">echo "### Removing working container"</p>
+			<p class="source-code">buildah rm $container</p>
+			<p class="source-code">if [ $? -ne 0 ]; then</p>
+			<p class="source-code">    echo "Error removing working container"</p>
+			<p class="source-code">fi</p>
+			<p class="source-code">echo "### Build test completed successfully!"</p>
+			<p class="source-code">exit 0</p>
+			<p>The same test script can be executed by a non-privileged user and by root.</p>
+			<p>We can verify the <a id="_idIndexMarker620"/>newly built image by running a simple container that executes a Python shell:</p>
+			<p class="source-code"><strong class="bold">$ podman run -it python3-minimal /usr/bin/python3</strong></p>
+			<p class="source-code">Python 3.9.5 (default, May 12 2021, 20:44:22) </p>
+			<p class="source-code">[GCC 10.3.1 20210424] on linux</p>
+			<p class="source-code">Type "help", "copyright", "credits" or "license" for more information.</p>
+			<p class="source-code">&gt;&gt;&gt;</p>
+			<p>After successfully testing our new Buildah installation, let's inspect the main configuration files used by Buildah.</p>
+			<h2 id="_idParaDest-125"><a id="_idTextAnchor125"/>Buildah configuration files</h2>
+			<p>The main Buildah configuration files are the same ones used by Podman. They can be leveraged to customize <a id="_idIndexMarker621"/>the behavior of the working containers executed in builds. </p>
+			<p>On Fedora, these config files are installed by the <strong class="source-inline">containers-common</strong> package, and we already covered them in the <em class="italic">Prepare your environment</em> section in <a href="B17908_03_epub.xhtml#_idTextAnchor068"><em class="italic">Chapter 3</em></a>, <em class="italic">Running the First Container</em>.</p>
+			<p>The main config files used by Buildah are as follows:</p>
+			<ul>
+				<li><strong class="source-inline">/usr/share/containers/mounts.conf</strong>: This config file defines the files and directories that are automatically mounted inside a Buildah working container.</li>
+				<li><strong class="source-inline">/etc/containers/registries.conf</strong>: This config file has the role of managing registries allowed to be accessed for image searches, pulls, and pushes.</li>
+				<li><strong class="source-inline">/usr/share/containers/policy.json</strong>: This JSON config file defines image signature verification behavior.</li>
+				<li><strong class="source-inline">/usr/share/containers/seccomp.json</strong>: This JSON config file defines the allowed and prohibited syscalls to a containerized process.</li>
+			</ul>
+			<p>In this section, we have <a id="_idIndexMarker622"/>learned how to prepare the host environment to run Buildah. In the next section, we are going to identify the possible build strategies that can be implemented with Buildah.</p>
+			<h1 id="_idParaDest-126"><a id="_idTextAnchor126"/>Choosing our build strategy</h1>
+			<p>There are basically three <a id="_idIndexMarker623"/>types of build strategies that we can use with Buildah: </p>
+			<ul>
+				<li>Building a container image starting from an existing base image</li>
+				<li>Building a container image starting from scratch</li>
+				<li>Building a container image starting from a Dockerfile</li>
+			</ul>
+			<p>We have already provided an example of the build strategy from an existing base image in the <em class="italic">Meet Buildah, Podman's companion</em> section. Since this strategy is pretty similar from a workflow point of view to building from scratch, we will focus our practical examples on the last one, which provides great flexibility to create a small footprint and secure images.</p>
+			<p>Before going through the various technical details in the next section, let's start exploring all these strategies at a high level.</p>
+			<p>Even though we can find a lot of prebuilt container images available on the most popular public container registries, sometimes we might not be able to find a particular configuration, setup, or bundle of tools and services for our containers; that is why container image creation becomes a really important step that we need to practice. </p>
+			<p>Also, security <a id="_idIndexMarker624"/>constraints often require us to implement images with reduced attack surfaces, and therefore, DevOps teams must know how to customize every step of the build process to achieve this result.</p>
+			<p>With this awareness in mind, let's start with the first build strategy.</p>
+			<h2 id="_idParaDest-127"><a id="_idTextAnchor127"/>Building a container image starting from an existing base image</h2>
+			<p>Let's imagine finding a well-done prebuilt container image for our favorite application server that our <a id="_idIndexMarker625"/>company is widely using. All the <a id="_idIndexMarker626"/>configurations for this container image are okay, and we can attach storage to the right mount points to persist the data and so on, but sooner or later, we may realize that some particular tools that we use for troubleshooting are missing in the container image, or that some libraries are missing that should be included! </p>
+			<p>In another scenario, we could be happy with the prebuilt image but still need to add custom contents to it – for example, the customer application.</p>
+			<p>What would be the solution in those cases?</p>
+			<p>In this first use case, we can extend the existing container image, adding stuff and editing the existing files to suit our purposes. In the previous basic examples, Fedora and Alpine images were customized to serve different purposes. Those images were generic OS filesystems with no specific purpose, but the same concept can be applied to a more complex image. </p>
+			<p>In the second use case, we can customize an image – for example, the default library Httpd. We can install PHP modules and then add our application's PHP files, producing a new image with our custom contents already built in.</p>
+			<p>We will see in the next sections how we can extend an existing container image. </p>
+			<p>Let's move on to the second strategy.</p>
+			<h2 id="_idParaDest-128"><a id="_idTextAnchor128"/>Building a container image starting from scratch</h2>
+			<p>The previous <a id="_idIndexMarker627"/>strategy would be enough <a id="_idIndexMarker628"/>for many common situations, where we can find a prebuilt image to start working with, but sometimes it may be that the particular use case, application, or service that we want to containerize is not so common or widely used. </p>
+			<p>Imagine having a custom legacy application that requires some old libraries and tools that are no longer <a id="_idIndexMarker629"/>included on the latest Linux <a id="_idIndexMarker630"/>distribution or that may have been replaced by more recent ones. In this scenario, you might need to start from an empty container image and add piece by piece all the necessary stuff for your legacy application. </p>
+			<p>We have learned in this chapter that, actually, we will always start from a sort of initial container image, so this strategy and the previous one are pretty much the same.</p>
+			<p>Let's move on to the third and final strategy.</p>
+			<h2 id="_idParaDest-129"><a id="_idTextAnchor129"/>Building a container image starting from a Dockerfile</h2>
+			<p>In <a href="B17908_01_epub.xhtml#_idTextAnchor015"><em class="italic">Chapter 1</em></a>, <em class="italic">Introduction to Container Technology</em>, we talked about container technology history and how Docker gained momentum in that context. Podman was born as an alternative <a id="_idIndexMarker631"/>evolution project of <a id="_idIndexMarker632"/>the great concepts that Docker helped to develop until now. One of the great innovations that Docker created in its own project history is, for sure, the Dockerfile.</p>
+			<p>Looking into this strategy at a high level, we can affirm that even when using a Dockerfile, we will arrive at one of the previous build strategies. The reality is not far away from the latest assumption we made, because Buildah under the hood will parse the Dockerfile, and it will build the container that we briefly introduced for previous build strategies.</p>
+			<p>So, in summary, are there any differences or advantages we need to consider when choosing our default build strategy? Obviously, there is no ultimate answer to this question. First of all, we should always look into the container communities, searching for some prebuilt image that could help our <em class="italic">build</em> process; on the other hand, we can always fall back on the <em class="italic">build from scratch</em> process. Last but not least, we can consider Dockerfile for easily distributing and sharing our build steps with our development group or the wider container communities.</p>
+			<p>This ends up our quick high-level introduction; we can now move on to the practical examples!</p>
+			<h1 id="_idParaDest-130"><a id="_idTextAnchor130"/>Building images from scratch</h1>
+			<p>Before going into the <a id="_idIndexMarker633"/>details of this section and learning how to build a container image from scratch, let's make some tests to verify that the installed Buildah is working properly.</p>
+			<p>First of all, let's check whether our Buildah image cache is empty:</p>
+			<p class="source-code"># buildah images</p>
+			<p class="source-code">REPOSITORY   TAG   IMAGE ID   CREATED   SIZE</p>
+			<p class="source-code"># buildah containers -a</p>
+			<p class="source-code">CONTAINER ID  BUILDER  IMAGE ID     IMAGE NAME                       CONTAINER NAME</p>
+			<p class="callout-heading">Important Note </p>
+			<p class="callout">Podman and Buildah share the same container storage; for this reason, if you previously ran any other example shown in this chapter or book, you will find that your container storage cache is not that empty!</p>
+			<p>As we learned in the previous section, we can leverage the fact that Buildah will output the name of the just-created working container to easily store it in an environment variable and use it once needed. Let's create a brand-new container from scratch:</p>
+			<p class="source-code"># buildah from scratch</p>
+			<p class="source-code"># buildah images</p>
+			<p class="source-code">REPOSITORY   TAG   IMAGE ID   CREATED   SIZE</p>
+			<p class="source-code"># buildah containers</p>
+			<p class="source-code">CONTAINER ID  BUILDER  IMAGE ID     IMAGE NAME                       CONTAINER NAME</p>
+			<p class="source-code">af69b9547db9     *                  scratch                          working-container</p>
+			<p>As you can see, we used the special <strong class="source-inline">from scratch</strong> keywords that are telling Buildah to create an empty container with no data inside it. If we run the <strong class="source-inline">buildah images</strong> command, we will note that this special image is not listed. </p>
+			<p>Let's check whether the container really is empty:</p>
+			<p class="source-code"># buildah run working-container bash</p>
+			<p class="source-code">2021-10-26T20:15:49.000397390Z: executable file 'bash' not found in $PATH: No such file or directory</p>
+			<p class="source-code">error running container: error from crun creating container for [bash]: : exit status 1</p>
+			<p class="source-code">error while running runtime: exit status 1</p>
+			<p>No executable was <a id="_idIndexMarker634"/>found in our empty container – what a surprise! The reason is that the working container has been created on an empty filesystem.</p>
+			<p>Let's see how we can easily fill this empty container. In the following example, we will interact directly with the underlying storage, using the package manager of our host system to install the binaries and the libraries needed for running a <strong class="source-inline">bash</strong> shell in our container image.</p>
+			<p>First of all, let's instruct Buildah to mount the container storage and check where it resides:</p>
+			<p class="source-code"># buildah mount working-container</p>
+			<p class="source-code">/var/lib/containers/storage/overlay/b5034cc80252b6f4af2155f 9e0a2a7e65b77dadec7217bd2442084b1f4449c1a/merged</p>
+			<p class="callout-heading">Good to Know</p>
+			<p class="callout">If you start the build in rootless mode, Buildah will run the mount in a different namespace, and for this reason, the mounted volume might not be accessible from the host when using a driver different than vfs. </p>
+			<p>Great! Now that we have found it, we can leverage the host package manager to install all the needed packages in this <strong class="source-inline">root</strong> folder, which will be the <strong class="source-inline">root</strong> path of our container image:</p>
+			<p class="source-code"># scratchmount=$(buildah mount working-container)</p>
+			<p class="source-code"># dnf install --installroot $scratchmount --releasever 34 bash coreutils --setopt install_weak_deps=false -y</p>
+			<p class="callout-heading">Important Note</p>
+			<p class="callout">If you are running the previous command on a Fedora release different than version 34, (for example, version 35), then you need to import the GPG public keys of Fedora 34 or use the  <strong class="source-inline">--nogpgcheck</strong> option.</p>
+			<p>First of all, we will save the very long directory path in an environment variable and then execute the <strong class="source-inline">dnf</strong> package manager, passing the just-obtained directory path as the install root directory, setting the <a id="_idIndexMarker635"/>release version of our Fedora OS, specifying the packages that we want to install (<strong class="source-inline">bash</strong> and <strong class="source-inline">coreutils</strong>), and finally, disabling weak dependency, accepting all the changes to the system.</p>
+			<p>The command should end up with a <strong class="source-inline">Complete!</strong> statement; once done, let's try again with the same command that we saw failing earlier in this section:</p>
+			<p class="source-code"># buildah run working-container bash</p>
+			<p class="source-code">bash-5.1# cat /etc/fedora-release</p>
+			<p class="source-code">Fedora release 34 (Thirty Four)</p>
+			<p>It worked! We just installed a Bash shell in our empty container. Let's see now how to finish our image creation with some other configuration steps. First of all, we need to add to our final container image a command to be run once it is up and running. For this reason, we will create a Bash script file with some basic commands:</p>
+			<p class="source-code"># cat command.sh </p>
+			<p class="source-code">#!/bin/bash</p>
+			<p class="source-code">cat /etc/fedora-release</p>
+			<p class="source-code">/usr/bin/date</p>
+			<p>We have created a Bash script file that prints the Fedora release  of the container and the system date. The file must have execute permissions before being copied:</p>
+			<p class="source-code"># chmod +x command.sh</p>
+			<p>Now that we have filled up our underlying container storage with all the needed base packages, we can unmount the <strong class="source-inline">working-container</strong> storage and use the <strong class="source-inline">buildah copy</strong> command to inject files from the host to the container:</p>
+			<p class="source-code"># buildah unmount working-container</p>
+			<p class="source-code">af69b9547db93a7dc09b96a39bf5f7bc614a7ebd29435205d358e09ac 99857bc</p>
+			<p class="source-code"># buildah copy working-container ./command.sh /usr/bin</p>
+			<p class="source-code">659a229354bdef3f9104208d5812c51a77b2377afa5ac819e3c3a1a2887eb9f7</p>
+			<p>The <strong class="source-inline">buildah copy</strong> command gives us the ability to work with the underlying storage without worrying about <a id="_idIndexMarker636"/>mounting it or handling it under the hood.</p>
+			<p>We are now ready to complete our container image by adding some metadata to it:</p>
+			<p class="source-code"># buildah config --cmd /usr/bin/command.sh working-container</p>
+			<p class="source-code"># buildah config --created-by "podman book example" working-container</p>
+			<p class="source-code"># buildah config --label name=fedora-date working-container</p>
+			<p>We started with the <strong class="source-inline">cmd</strong> option, and after that, we added some descriptive metadata. We can finally commit our <strong class="source-inline">working-container</strong> into an image!</p>
+			<p class="source-code"><strong class="bold"># buildah commit working-container fedora-date</strong></p>
+			<p class="source-code">Getting image source signatures</p>
+			<p class="source-code">Copying blob 939ac17066d4 done  </p>
+			<p class="source-code">Copying config e24a2fafde done  </p>
+			<p class="source-code">Writing manifest to image destination</p>
+			<p class="source-code">Storing signatures</p>
+			<p class="source-code">e24a2fafdeb5658992dcea9903f0640631ac444271ed716d7f749eea7a651487</p>
+			<p>Let's clean up the environment and check the available container images into the host:</p>
+			<p class="source-code"># buildah rm working-container</p>
+			<p class="source-code">af69b9547db93a7dc09b96a39bf5f7bc614a7ebd29435205d358e09ac99857bc</p>
+			<p>We can now <a id="_idIndexMarker637"/>inspect the details of the just-created container image:</p>
+			<p class="source-code"><strong class="bold"># podman images</strong></p>
+			<p class="source-code">REPOSITORY             TAG         IMAGE ID      CREATED             SIZE</p>
+			<p class="source-code">localhost/fedora-date  latest      e24a2fafdeb5  About a minute ago  366 MB</p>
+			<p class="source-code"># podman inspect localhost/fedora-date:latest</p>
+			<p class="source-code">[...omitted output]        "Labels": {</p>
+			<p class="source-code">            "io.buildah.version": "1.23.1",</p>
+			<p class="source-code">            "name": "fedora-date"</p>
+			<p class="source-code">        },</p>
+			<p class="source-code">        "Annotations": {</p>
+			<p class="source-code">            "org.opencontainers.image.base.digest": "",</p>
+			<p class="source-code">            "org.opencontainers.image.base.name": ""</p>
+			<p class="source-code">        },</p>
+			<p class="source-code">        "ManifestType": "application/vnd.oci.image.manifest.v1+json",</p>
+			<p class="source-code">        "User": "",</p>
+			<p class="source-code">        "History": [</p>
+			<p class="source-code">            {</p>
+			<p class="source-code">                "created": "2021-10-26T21:16:48.777712056Z",</p>
+			<p class="source-code">                "created_by": "podman book example"</p>
+			<p class="source-code">            }</p>
+			<p class="source-code">        ],</p>
+			<p class="source-code">        "NamesHistory": [</p>
+			<p class="source-code">            "localhost/fedora-date:latest"</p>
+			<p class="source-code">        ]</p>
+			<p class="source-code">    }</p>
+			<p class="source-code">]</p>
+			<p>As we can see from the previous output, the container image has a lot of metadata that can tell us many details. Some <a id="_idIndexMarker638"/>of them we set through the previous commands, such as the <strong class="source-inline">created_by</strong>, <strong class="source-inline">name</strong>, and <strong class="source-inline">Cmd</strong> tags; the other tags are populated automatically by Buildah.</p>
+			<p>Finally, let's run our brand-new container image with Podman!</p>
+			<p class="source-code"><strong class="bold"># podman run -ti localhost/fedora-date:latest </strong></p>
+			<p class="source-code">Fedora release 34 (Thirty Four)</p>
+			<p class="source-code">Tue Oct 26 21:18:29 UTC 2021</p>
+			<p>This ends our journey in creating a container image from scratch. As we saw, this is not a typical method for creating a container image; in many scenarios and for various use cases, it can be enough to start with an OS base image, such as <strong class="source-inline">from fedora</strong> or <strong class="source-inline">from alpine</strong>, and then add the required packages, using the respective package managers available in those images.</p>
+			<p class="callout-heading">Good to Know</p>
+			<p class="callout">Some Linux distributions also provide base container images in a <strong class="bold">minimal</strong> flavor (for example, <strong class="bold">fedora-minimal</strong>) that reduce the number of packages installed, as well as the size of the target <a id="_idIndexMarker639"/>container image. For more <a id="_idIndexMarker640"/>information, refer to <a href="https://www.docker.com/">https://www.docker.com/</a> and <a href="https://quay.io/">https://quay.io/</a>!</p>
+			<p>Let's now inspect how to build images from Dockerfiles with Buildah.</p>
+			<h1 id="_idParaDest-131"><a id="_idTextAnchor131"/>Building images from a Dockerfile</h1>
+			<p>As we described earlier in this chapter, the Dockerfile can be an easy option to create and share the build <a id="_idIndexMarker641"/>steps for creating a container image, and for this reason, it is really easy to find a lot of source Dockerfiles on the net.</p>
+			<p>The first step of this activity is to build a simple Dockerfile to work with. Let's create a Dockerfile for creating a containerized web server:</p>
+			<p class="source-code"># mkdir webserver</p>
+			<p class="source-code"># cd webserver/</p>
+			<p class="source-code">[webserver]# vi Dockerfile </p>
+			<p class="source-code">[webserver]# cat Dockerfile</p>
+			<p class="source-code"># Start from latest fedora container base image</p>
+			<p class="source-code">FROM fedora:latest</p>
+			<p class="source-code">MAINTAINER podman-book  # this should be an email</p>
+			<p class="source-code"># Update the container base image</p>
+			<p class="source-code">RUN echo "Updating all fedora packages"; dnf -y update; dnf -y clean all</p>
+			<p class="source-code"># Install the httpd package</p>
+			<p class="source-code">RUN echo "Installing httpd"; dnf -y install httpd</p>
+			<p class="source-code"># Expose the http port 80</p>
+			<p class="source-code">EXPOSE 80</p>
+			<p class="source-code"># Set the default command to run once the container will be started</p>
+			<p class="source-code">CMD ["/usr/sbin/httpd", "-DFOREGROUND"]</p>
+			<p>Looking at the previous output, we first created a new directory, and inside, we created a text file named <strong class="source-inline">Dockerfile</strong>. After that, we inserted the various keywords and steps commonly used <a id="_idIndexMarker642"/>in the definition of a brand-new Dockerfile; every step and keyword has a dedicated description comment on top, so the file should be easy to read.</p>
+			<p>Just to recap, these are the steps contained in our brand-new Dockerfile:</p>
+			<ol>
+				<li>Start from the latest Fedora container base image.</li>
+				<li>Update all the packages for the container base image.</li>
+				<li>Install the <strong class="source-inline">httpd</strong> package.</li>
+				<li>Expose HTTP port <strong class="source-inline">80</strong>.</li>
+				<li>Set the default command to run once the container is started.</li>
+			</ol>
+			<p>As seen previously in this chapter, Buildah provides a dedicated <strong class="source-inline">buildah build</strong> command to start a build from a Dockerfile. </p>
+			<p>Let's see how it works:</p>
+			<p class="source-code">[webserver]# buildah build -f Dockerfile -t myhttpdservice .</p>
+			<p class="source-code">STEP 1/6: FROM fedora:latest</p>
+			<p class="source-code">Resolved "fedora" as an alias (/etc/containers/registries.conf.d/000-shortnames.conf)</p>
+			<p class="source-code">Trying to pull registry.fedoraproject.org/fedora:latest...</p>
+			<p class="source-code">Getting image source signatures</p>
+			<p class="source-code">Copying blob 944c4b241113 done  </p>
+			<p class="source-code">Copying config 191682d672 done  </p>
+			<p class="source-code">Writing manifest to image destination</p>
+			<p class="source-code">Storing signatures</p>
+			<p class="source-code">STEP 2/6: MAINTAINER podman-book  # this should be an email</p>
+			<p class="source-code">STEP 3/6: RUN echo "Updating all fedora packages"; dnf -y update; dnf -y clean all</p>
+			<p class="source-code">Updating all fedora packages</p>
+			<p class="source-code">Fedora 34 - x86_64                               16 MB/s |  74 MB     00:04  </p>
+			<p class="source-code">...</p>
+			<p class="source-code">STEP 4/6: RUN echo "Installing httpd"; dnf -y install httpd</p>
+			<p class="source-code">Installing httpd</p>
+			<p class="source-code">Fedora 34 - x86_64                               20 MB/s |  74 MB     00:03    </p>
+			<p class="source-code">...</p>
+			<p class="source-code">STEP 5/6: EXPOSE 80</p>
+			<p class="source-code">STEP 6/6: CMD ["/usr/sbin/httpd", "-DFOREGROUND"]</p>
+			<p class="source-code">COMMIT myhttpdservice</p>
+			<p class="source-code">Getting image source signatures</p>
+			<p class="source-code">Copying blob 7500ce202ad6 skipped: already exists  </p>
+			<p class="source-code">Copying blob 51b52d291273 done  </p>
+			<p class="source-code">Copying config 14a2226710 done  </p>
+			<p class="source-code">Writing manifest to image destination</p>
+			<p class="source-code">Storing signatures</p>
+			<p class="source-code">--&gt; 14a2226710e</p>
+			<p class="source-code">Successfully tagged localhost/myhttpdservice:latest</p>
+			<p class="source-code">14a2226710e7e18d2e4b6478e09a9f55e60e0666dd8243322402ecf6fd1eaa0d</p>
+			<p>As we can see from <a id="_idIndexMarker643"/>the previous output, we pass the following options to the <strong class="source-inline">buildah build</strong> command:</p>
+			<ul>
+				<li><strong class="source-inline">-f</strong>: To define the name of the Dockerfile. The default filename is <strong class="source-inline">Dockerfile</strong>, so in our case, we can omit this option because we named the file as the default one.</li>
+				<li><strong class="source-inline">-t</strong>: To define the name and the tag of the image we are building. In our case, we are only defining the name. The image will be tagged <strong class="source-inline">latest</strong> by default.</li>
+				<li>Finally, as the last option, we need to set the directory where Buildah needs to work and search for the Dockerfile. In our case, we are passing the current <strong class="source-inline">.</strong> directory.</li>
+			</ul>
+			<p>Of course, these are not the only options that Buildah gives us to configure the build; we will see some of them later in this section.</p>
+			<p>Coming back to the command we just executed, as we can see from the output, all the steps defined in the <a id="_idIndexMarker644"/>Dockerfile have been executed in the exact written order and printed with a given fractional number to show the intermediate steps against the total number. In total, six steps were executed.</p>
+			<p>We can check the result of our command by listing the images with the <strong class="source-inline">buildah images</strong> command:</p>
+			<p class="source-code"><strong class="bold">[webserver]# buildah images</strong></p>
+			<p class="source-code">REPOSITORY                                  TAG      IMAGE ID       CREATED          SIZE</p>
+			<p class="source-code">localhost/myhttpdservice                    latest   14a2226710e7   2 minutes ago   497 MB</p>
+			<p>As we can see, our container image has just been created with the <strong class="source-inline">latest</strong> tag; let's try to run it:</p>
+			<p class="source-code"># podman run -d localhost/myhttpdservice:latest</p>
+			<p class="source-code">133584ab526faaf7af958da590e14dd533256b60c10f08acba6c1209ca05a885</p>
+			<p class="source-code"># podman logs 133584ab526faaf7af958da590e14dd533256b60c10f08acba6c1209ca05a885</p>
+			<p class="source-code">AH00558: httpd: Could not reliably determine the server's fully qualified domain name, using 10.88.0.4. Set the 'ServerName' directive globally to suppress this message</p>
+			<p class="source-code"># curl 10.88.0.4</p>
+			<p class="source-code">&lt;!doctype html&gt;</p>
+			<p class="source-code">&lt;html&gt;</p>
+			<p class="source-code">  &lt;head&gt;</p>
+			<p class="source-code">    &lt;meta charset='utf-8'&gt;</p>
+			<p class="source-code">    &lt;meta name='viewport' content='width=device-width, initial-scale=1'&gt;</p>
+			<p class="source-code">    &lt;title&gt;Test Page for the HTTP Server on Fedora&lt;/title&gt;</p>
+			<p class="source-code">    &lt;style type="text/css"&gt;</p>
+			<p class="source-code">...</p>
+			<p>Looking at the output, we just ran our container in detached mode; after that, we inspected the logs to find out the IP address that we need to pass as an argument for the <strong class="source-inline">curl</strong> test command.</p>
+			<p>We just run the container as the root user on our workstation, and the container just received an <a id="_idIndexMarker645"/>internal IP address on Podman's container network interface. We can check that the IP address is part of that network by running the following commands:</p>
+			<p class="source-code"><strong class="bold"># ip a show dev cni-podman0</strong></p>
+			<p class="source-code">14: cni-podman0: &lt;BROADCAST,MULTICAST,UP,LOWER_UP&gt; mtu 1500 qdisc noqueue state UP group default qlen 1000</p>
+			<p class="source-code">    link/ether c6:bc:ba:7c:d3:0c brd ff:ff:ff:ff:ff:ff</p>
+			<p class="source-code">    inet 10.88.0.1/16 brd 10.88.255.255 scope global cni-podman0</p>
+			<p class="source-code">       valid_lft forever preferred_lft forever</p>
+			<p class="source-code">    inet6 fe80::c4bc:baff:fe7c:d30c/64 scope link </p>
+			<p class="source-code">       valid_lft forever preferred_lft forever</p>
+			<p>As we can see, the container's IP address was taken from the network reported in the previous <strong class="source-inline">10.88.0.1/16</strong> output.</p>
+			<p>As we anticipated, the <strong class="source-inline">buildah build</strong> command has a lot of other options that can be useful while developing and creating brand-new container images. Let's explore one of them that is worth mentioning – <strong class="source-inline">--layers</strong>. </p>
+			<p>We already learned how to use this option with Podman earlier in this chapter. Starting from version 1.2 of Buildah, the development team added this great option that gives us the ability to enable <a id="_idIndexMarker646"/>or disable the layers' caching mechanism. The default configuration sets the <strong class="source-inline">--layers</strong> option to <em class="italic">false</em>, which means that Buildah will not keep intermediate layers, resulting in a build that squashes all the changes in a single layer.</p>
+			<p>It is also possible to set the management of the layers with an environment variable – for example, to enable layer caching, run <strong class="source-inline">export BUILDAH_LAYERS=true</strong>.</p>
+			<p>Obviously, the downside of this option is that the retained layers actually use storage space on the system host, but on the other hand, we can save computational power if we need to rebuild a given image, changing only the latest layers and without rebuilding the whole image!</p>
+			<h1 id="_idParaDest-132"><a id="_idTextAnchor132"/>Summary</h1>
+			<p>In this chapter, we explored a fundamental topic of container management – their creation. This step is mandatory if we want to customize, keep updated, and manage our container infrastructure correctly. We learned that Podman is often partnered with another tool called Buildah that can help us in the process of container image building. This tool has a lot of options, like Podman, and shares a lot of them with it (storage included!). Finally, we went through the different strategies that Buildah offers us to build new container images, and one of them is actually inherited by the Docker ecosystem – the Dockerfile.</p>
+			<p>This chapter is only an introduction to the topic of container image building; we will discover more advanced techniques in the next chapter!</p>
+			<h1 id="_idParaDest-133"><a id="_idTextAnchor133"/>Further reading</h1>
+			<ul>
+				<li>Buildah project tutorials: <a href="https://github.com/containers/buildah/tree/main/docs/tutorials">https://github.com/containers/buildah/tree/main/docs/tutorials</a></li>
+				<li>How to use Podman inside of a container: <a href="https://www.redhat.com/sysadmin/podman-inside-container">https://www.redhat.com/sysadmin/podman-inside-container</a></li>
+				<li>How to build tiny container images: <a href="https://www.redhat.com/sysadmin/tiny-containers">https://www.redhat.com/sysadmin/tiny-containers</a></li>
+			</ul>
+		</div>
+	</body></html>

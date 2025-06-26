@@ -1,0 +1,330 @@
+<html><head></head><body>
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Distributed Computation with Ceph RADOS Classes</h1>
+                </header>
+            
+            <article>
+                
+<p>An often-overlooked feature of Ceph is the ability to load custom code directly into OSD, which can then be executed from within a librados application. This allows you to take advantage of the large distributed scale of Ceph to not only provide high-performance scale-out storage, but also to distribute computational tasks over OSDs to achieve mass parallel computing. This ability is realized by dynamically loading in RADOS classes to each OSD.</p>
+<p>In this chapter, we will cover the following topics:</p>
+<ul>
+<li>Example applications and the benefits of using RADOS classes</li>
+<li>Writing a simple RADOS class in Lua</li>
+<li>Writing a RADOS class that simulates distributed computing</li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Example applications and the benefits of using RADOS classes</h1>
+                </header>
+            
+            <article>
+                
+<p>As mentioned earlier, with RADOS classes, code is executed directly inside the OSD code base and so can harness the combined power of all of the OSD nodes. With a typical client application approach, where the client would have to read the object from the Ceph cluster, run computations on it, and then write it back, there is a large amount of round-trip overhead. Using RADOS classes dramatically reduces the amount of round trips to and from OSDs, and also the available compute power is much higher than that single client could provide. Offloading operations directly to the OSDs therefore enables a single client to dramatically increase its processing rate.</p>
+<p>A simple example of where RADOS classes could be used is where you need to calculate a hash of every object in a RADOS pool and store each object's hash as an attribute. Having a client perform this would highlight the bottlenecks and extra latency introduced by having the client perform these operations remotely from the cluster. With a RADOS class that contains the required code to read the object, calculate the hash, and store it as an attribute, all that the client would need to do is send the command to OSD to execute the RADOS class.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Writing a simple RADOS class in Lua</h1>
+                </header>
+            
+            <article>
+                
+<p>One of the default RADOS classes in Ceph from the Kraken release onward is one that can run Lua scripts. The Lua script is dynamically passed to the Lua RADOS object class, which then executes the contents of the script. The scripts are typically passed in a JSON-formatted string to the object class. Although this brings advantages over the traditional RADOS object classes, which need to be compiled before they can be used, it also limits the complexity of what the Lua scripts can accomplish. As such, thought should be given as to what method is appropriate for the task you wish to accomplish.</p>
+<p>The following Python code example demonstrates how to create and pass a Lua script to be executed on an OSD. The Lua script reads the contents of the specified object and returns the string of text back in uppercase—all processing is done on the remote OSD, which holds the object; the original object contents are never sent to the client.</p>
+<p>Place the following into a file named <kbd>rados_lua.py</kbd>:</p>
+<pre>import rados, json, sys<br/><br/>try: #Read ceph.conf config file to obtain monitors<br/>  cluster = rados.Rados(conffile='/etc/ceph/ceph.conf')<br/>except:<br/>  print "Error reading Ceph configuration"<br/>  exit(1)<br/><br/>try: #Connect to the Ceph cluster<br/>  cluster.connect()<br/>except:<br/>  print "Error connecting to Ceph Cluster"<br/>  exit(1)<br/><br/>try: #Open specified RADOS pool<br/>  ioctx = cluster.open_ioctx("rbd")<br/>except:<br/>  print "Error opening pool"<br/>  cluster.shutdown()<br/>  exit(1)<br/><br/>cmd = {<br/>  "script": """<br/>      function upper(input, output)<br/>        size = objclass.stat()<br/>        data = objclass.read(0, size)<br/>        upper_str = string.upper(data:str())<br/>        output:append(upper_str)<br/>      end<br/>      objclass.register(upper)<br/>  """,<br/>  "handler": "upper",<br/>}<br/><br/>ret, data = ioctx.execute(str(sys.argv[1]), 'lua', 'eval_json', json.dumps(cmd))<br/>print data[:ret]<br/><br/>ioctx.close() #Close connection to pool<br/>cluster.shutdown() #Close connection to Ceph</pre>
+<p>Let's now create a test object with all lowercase characters:</p>
+<pre><strong>    echo this string was in lowercase | sudo rados -p rbd put LowerObject –</strong></pre>
+<p>The Lua object class, by default, is not allowed to be called by OSDs; we need to add the following to all the OSDs in their <kbd>ceph.conf</kbd>:</p>
+<pre>[osd]<br/>osd class load list = *<br/>osd class default list = *</pre>
+<p>And now, run our Python librados application:</p>
+<pre><strong>    sudo python rados_lua.py LowerObject</strong></pre>
+<p>The preceding command gives the following output:</p>
+<div class="CDPAlignCenter CDPAlign"><img src="assets/a0adf336-56bf-4d42-ba72-f1ff32e6d768.png" style="width:37.25em;height:3.83em;"/></div>
+<p>You should see that the text from our object has been converted all into uppercase. You can see from the Python code earlier that we are not doing any of the conversion in the local Python code and it's all being done remotely on OSD.</p>
+<p class="mce-root"/>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Writing a RADOS class that simulates distributed computing</h1>
+                </header>
+            
+            <article>
+                
+<p>As mentioned in the example given earlier, although using the Lua object class reduces the complexity to use RADOS object classes, there is a limit to what you can currently achieve. In order to write a class that is capable of performing more advanced processing, we need to fall back to writing the class in C. We will then need to compile the new class in the Ceph source.</p>
+<p>To demonstrate this, we will write a new RADOS object class that will calculate the MD5 hash of the specified object and then store it as an attribute of the object. This process will be repeated 1,000 times to simulate a busy environment and also to make the runtime easier to measure. We will then compare the operating speed of doing this via the object class versus calculating the MD5 hash on the client. Although this is still a fairly basic task, it will allow us to produce a controlled repeatable scenario and to compare the speed of completing a task client-side, versus doing it directly on the OSD via a RADOS class. It will also serve as a good foundation to enable understanding on how to build more advanced applications.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Preparing the build environment</h1>
+                </header>
+            
+            <article>
+                
+<p>Use the following command to clone the Ceph Git repository:</p>
+<pre><strong>    git clone https://github.com/ceph/ceph.git</strong></pre>
+<p>The preceding command will give the following output:</p>
+<div class="CDPAlignCenter CDPAlign"><img src="assets/69d09e92-d82c-46e7-b97d-43171512d2b1.png" style="width:57.42em;height:10.67em;"/></div>
+<p>Once we have cloned the Ceph Git repository, we need to edit the <kbd>CMakeLists.txt</kbd> file and add in a section for our new class that we are going to write.</p>
+<p>Edit the following file in the source tree:</p>
+<pre><strong>    ~/ceph/src/cls/CMakeLists.txt</strong></pre>
+<p>Also, place the following in the file:</p>
+<pre># cls_md5<br/>set(cls_md5_srcs md5/cls_md5.cc)<br/>add_library(cls_md5 SHARED ${cls_md5_srcs})<br/>set_target_properties(cls_md5 PROPERTIES<br/>  VERSION "1.0.0"<br/>  SOVERSION "1"<br/>  INSTALL_RPATH "")<br/>install(TARGETS cls_md5 DESTINATION ${cls_dir})<br/>target_link_libraries(cls_md5 crypto)<br/>list(APPEND cls_embedded_srcs ${cls_md5_srcs})</pre>
+<p>Once the <kbd>cmakelist.txt</kbd> file is updated, we can get <kbd>cmake</kbd> to make the build environment by running the following command:</p>
+<pre><strong>    do_cmake.sh</strong></pre>
+<p>The preceding command will give the following output:</p>
+<div class="CDPAlignCenter CDPAlign"><img src="assets/10128218-376d-47c2-abc9-edbf69ae4819.png" style="width:42.25em;height:9.75em;"/></div>
+<p>This will create a <kbd>build</kbd> directory in the source tree.</p>
+<p>In order for us to build the RADOS class, we need to install the required packages that contain the <kbd>make</kbd> command:</p>
+<pre><strong>    sudo apt-get install build-essentials</strong></pre>
+<p>There is also an <kbd>install-deps.sh</kbd> file in the Ceph source tree, which will install the remaining packages required when run.</p>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">RADOS classes</h1>
+                </header>
+            
+            <article>
+                
+<p>The following code sample is a RADOS class which, when executed, reads the object, calculates the MD5 hash, and then writes it as an attribute to the object without any client involvement. Each time this class is called, it repeats this operation 1,000 times locally to OSD and only notifies the client at the end of this processing. We have the following steps to perform:</p>
+<ol>
+<li>Create the directory for our new RADOS class:</li>
+</ol>
+<pre><strong>       mkdir ~/ceph/src/cls/md5</strong></pre>
+<ol start="2">
+<li>Create the C++ source file:</li>
+</ol>
+<pre><strong>       ~/ceph/src/cls/md5/cls_md5.cc</strong></pre>
+<ol start="3">
+<li>Place the following code in it:</li>
+</ol>
+<pre><strong>       #include "objclass/objclass.h"</strong><br/><strong>       #include &lt;openssl/md5.h&gt;</strong><br/><br/><strong>       CLS_VER(1,0)</strong><br/><strong>       CLS_NAME(md5)</strong><br/><br/><strong>       cls_handle_t h_class;</strong><br/><strong>       cls_method_handle_t h_calc_md5;</strong><br/><br/><strong>       static int calc_md5(cls_method_context_t hctx, bufferlist *in,</strong><br/><strong>       bufferlist *out)</strong><br/><strong>       {</strong><br/><strong>         char md5string[33];</strong><br/><br/><strong>         for(int i = 0; i &lt; 1000; ++i)</strong><br/><strong>         {</strong><br/><strong>           size_t size;</strong><br/><strong>           int ret = cls_cxx_stat(hctx, &amp;size, NULL);</strong><br/><strong>           if (ret &lt; 0)</strong><br/><strong>             return ret;</strong><br/><br/><strong>           bufferlist data;</strong><br/><strong>           ret = cls_cxx_read(hctx, 0, size, &amp;data);</strong><br/><strong>           if (ret &lt; 0)</strong><br/><strong>             return ret;</strong><br/><strong>           unsigned char md5out[16];</strong><br/><strong>           MD5((unsigned char*)data.c_str(), data.length(), md5out);</strong><br/><strong>           for(int i = 0; i &lt; 16; ++i)</strong><br/><strong>             sprintf(&amp;md5string[i*2], "%02x", (unsigned int)md5out[i]);</strong><br/><strong>           CLS_LOG(0,"Loop:%d - %s",i,md5string);</strong><br/><strong>           bufferlist attrbl;</strong><br/><strong>           attrbl.append(md5string);</strong><br/><strong>           ret = cls_cxx_setxattr(hctx, "MD5", &amp;attrbl);</strong><br/><strong>           if (ret &lt; 0)</strong><br/><strong>           {</strong><br/><strong>             CLS_LOG(0, "Error setting attribute");</strong><br/><strong>             return ret;</strong><br/><strong>           }</strong><br/><strong>         }</strong><br/><strong>         out-&gt;append((const char*)md5string, sizeof(md5string));</strong><br/><strong>         return 0;</strong><br/><strong>       }</strong><br/><br/><strong>       void __cls_init()</strong><br/><strong>       {</strong><br/><strong>         CLS_LOG(0, "loading cls_md5");</strong><br/><strong>         cls_register("md5", &amp;h_class);</strong><br/><strong>         cls_register_cxx_method(h_class, "calc_md5", CLS_METHOD_RD | </strong><br/><strong>         CLS_METHOD_WR, calc_md5, &amp;h_calc_md5)</strong><br/><strong>       }</strong></pre>
+<ol start="4">
+<li>Change into the <kbd>build</kbd> directory created previously and create our new RADOS class using <kbd>make</kbd>:</li>
+</ol>
+<pre><strong>       cd ~/ceph/build</strong><br/><strong>       make cls_md5</strong></pre>
+<p style="padding-left: 60px">The preceding commands will give the following output:</p>
+<div class="CDPAlignCenter CDPAlign"><img src="assets/097bb01b-db8d-47b9-b498-9f685877d95c.png" style="width:54.75em;height:5.25em;"/></div>
+<ol start="5">
+<li>Copy our new class to the OSDs in our cluster:</li>
+</ol>
+<pre><strong>       sudo scp vagrant@ansible:/home/vagrant/ceph/build/lib/libcls_md5.so*<br/>       /usr/lib/rados-classes/</strong></pre>
+<p class="mce-root"/>
+<p style="padding-left: 60px">The preceding command will give the following output:</p>
+<div class="CDPAlignCenter CDPAlign"><img src="assets/65c7d0ca-a32d-4bb6-8239-bb1956684a1c.png" style="width:59.50em;height:4.83em;"/></div>
+<p style="padding-left: 60px">Also, restart the OSD for it to load the class. You will now see in the Ceph OSD log that it is loading our new class:</p>
+<div class="CDPAlignCenter CDPAlign"><img src="assets/c9fb391a-ee0e-46f1-a28f-74491e44a1b6.png" style="width:61.58em;height:16.58em;"/></div>
+<p style="padding-left: 60px">This needs to be repeated for all OSD nodes in the cluster.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Client librados applications</h1>
+                </header>
+            
+            <article>
+                
+<p>As mentioned earlier, we will use two librados applications, one to calculate the MD5 hash directly on the client, and another to call our RADOS class and have it calculate the MD5 hash. The applications both need to be run from the monitor nodes in the test cluster, but can be compiled on any node and copied across if desired. For the purpose of this example, we will compile the applications directly on the monitor nodes.</p>
+<p>Before we start, let's make sure that the build environment is present on the monitor node:</p>
+<pre><strong>    apt-get install build-essential librados-dev</strong></pre>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Calculating MD5 on the client</h1>
+                </header>
+            
+            <article>
+                
+<p>The following code sample is the librados client-side application, which will read the object from the OSD, calculate the MD5 hash of the object on the client, and write it back as an attribute to the object. This is doing the calculation and storage in the same way as the RADOS class, with the only difference being the location of the processing.</p>
+<p class="mce-root"/>
+<p>Create a new file named <kbd>rados_md5.cc</kbd> and incorporate the following in it:</p>
+<pre>#include &lt;cctype&gt;<br/>#include &lt;rados/librados.hpp&gt;<br/>#include &lt;iostream&gt;<br/>#include &lt;string&gt;<br/>#include &lt;openssl/md5.h&gt;<br/><br/>void exit_func(int ret);<br/><br/>librados::Rados rados;<br/><br/>int main(int argc, const char **argv)<br/>{<br/>  int ret = 0;<br/><br/>  // Define variables<br/>  const char *pool_name = "rbd";<br/>  std::string object_name("LowerObject");<br/>  librados::IoCtx io_ctx;<br/><br/>  // Create the Rados object and initialize it<br/> {<br/>    ret = rados.init("admin"); // Use the default client.admin keyring<br/>    if (ret &lt; 0) {<br/>      std::cerr &lt;&lt; "Failed to initialize rados! error " &lt;&lt; ret &lt;&lt;<br/>      std::endl;<br/>      ret = EXIT_FAILURE;<br/>    }<br/>  }<br/><br/>  // Read the ceph config file in its default location<br/>  ret = rados.conf_read_file("/etc/ceph/ceph.conf");<br/>  if (ret &lt; 0) {<br/>    std::cerr &lt;&lt; "Failed to parse config file "<br/>              &lt;&lt; "! Error" &lt;&lt; ret &lt;&lt; std::endl;<br/>    ret = EXIT_FAILURE;<br/>  }<br/><br/>  // Connect to the Ceph cluster<br/>  ret = rados.connect();<br/>  if (ret &lt; 0) {<br/>    std::cerr &lt;&lt; "Failed to connect to cluster! Error " &lt;&lt; ret &lt;&lt;<br/>    std::endl;<br/>    ret = EXIT_FAILURE;<br/>  } else {<br/>    std::cout &lt;&lt; "Connected to the Ceph cluster" &lt;&lt; std::endl;<br/>  }<br/><br/>  // Create connection to the Rados pool<br/>  ret = rados.ioctx_create(pool_name, io_ctx);<br/>  if (ret &lt; 0) {<br/>    std::cerr &lt;&lt; "Failed to connect to pool! Error: " &lt;&lt; ret &lt;&lt;<br/>    std::endl;<br/>    ret = EXIT_FAILURE;<br/>  } else {<br/>    std::cout &lt;&lt; "Connected to pool: " &lt;&lt; pool_name &lt;&lt; std::endl;<br/>  }<br/>  for(int i = 0; i &lt; 1000; ++i)<br/>  {<br/>    size_t size;<br/>    int ret = io_ctx.stat(object_name, &amp;size, NULL);<br/>    if (ret &lt; 0)<br/>      return ret;<br/><br/>    librados::bufferlist data;<br/>    ret = io_ctx.read(object_name, data, size, 0);<br/>    if (ret &lt; 0)<br/>      return ret;<br/>    unsigned char md5out[16];<br/>    MD5((unsigned char*)data.c_str(), data.length(), md5out);<br/>    char md5string[33];<br/>    for(int i = 0; i &lt; 16; ++i)<br/>      sprintf(&amp;md5string[i*2], "%02x", (unsigned int)md5out[i]);<br/>    librados::bufferlist attrbl;<br/>    attrbl.append(md5string);<br/>    ret = io_ctx.setxattr(object_name, "MD5", attrbl);<br/>    if (ret &lt; 0)<br/>    {<br/>      exit_func(1);<br/>    }<br/>  }<br/>  exit_func(0);<br/>}<br/><br/>void exit_func(int ret)<br/>{<br/>  // Clean up and exit<br/>  rados.shutdown();<br/>  exit(ret);<br/>}</pre>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Calculating MD5 on the OSD via the RADOS class</h1>
+                </header>
+            
+            <article>
+                
+<p>Finally, the last code sample is the librados application, which instructs OSD to calculate the MD5 hash locally without transferring any data to or from the client. You will note that the code given later has no librados read or write statements and relies purely on the <kbd>exec</kbd> function to trigger the MD5 hash creation.</p>
+<p>Create a new file named <kbd>rados_class_md5.cc</kbd> and place the following in it:</p>
+<pre>#include &lt;cctype&gt;<br/>#include &lt;rados/librados.hpp&gt;<br/>#include &lt;iostream&gt;<br/>#include &lt;string&gt;<br/><br/>void exit_func(int ret);<br/><br/>librados::Rados rados;<br/><br/>int main(int argc, const char **argv)<br/>{<br/> int ret = 0;<br/><br/> // Define variables<br/> const char *pool_name = "rbd";<br/> std::string object_name("LowerObject");<br/> librados::IoCtx io_ctx;<br/> // Create the Rados object and initialize it<br/> {<br/> ret = rados.init("admin"); // Use the default client.admin keyring<br/> if (ret &lt; 0) {<br/> std::cerr &lt;&lt; "Failed to initialize rados! error " &lt;&lt; ret &lt;&lt;<br/> std::endl;<br/> ret = EXIT_FAILURE;<br/> }<br/> }<br/><br/> // Read the ceph config file in its default location<br/> ret = rados.conf_read_file("/etc/ceph/ceph.conf");<br/> if (ret &lt; 0) {<br/> std::cerr &lt;&lt; "Failed to parse config file "<br/> &lt;&lt; "! Error" &lt;&lt; ret &lt;&lt; std::endl;<br/> ret = EXIT_FAILURE;<br/> }<br/><br/> // Connect to the Ceph cluster<br/> ret = rados.connect();<br/> if (ret &lt; 0) {<br/> std::cerr &lt;&lt; "Failed to connect to cluster! Error " &lt;&lt; ret &lt;&lt;<br/> std::endl;<br/> ret = EXIT_FAILURE;<br/> } else {<br/> std::cout &lt;&lt; "Connected to the Ceph cluster" &lt;&lt; std::endl;<br/> }<br/><br/> // Create connection to the Rados pool<br/> ret = rados.ioctx_create(pool_name, io_ctx);<br/> if (ret &lt; 0) {<br/> std::cerr &lt;&lt; "Failed to connect to pool! Error: " &lt;&lt; ret &lt;&lt;<br/> std::endl;<br/> ret = EXIT_FAILURE;<br/> } else {<br/> std::cout &lt;&lt; "Connected to pool: " &lt;&lt; pool_name &lt;&lt;<br/> std::endl;<br/> }<br/> librados::bufferlist in, out;<br/> io_ctx.exec(object_name, "md5", "calc_md5", in, out);<br/> exit_func(0);<br/><br/>}<br/>void exit_func(int ret)<br/>{<br/> // Clean up and exit<br/> rados.shutdown();<br/> exit(ret);<br/>}</pre>
+<p>We can now compile both applications:</p>
+<div class="CDPAlignCenter CDPAlign"><img src="assets/27f1e01a-244f-4c54-a5c4-4383f2cdc6fc.png" style="width:59.25em;height:2.92em;"/></div>
+<p>If the applications compile successfully, there will be no output.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Testing</h1>
+                </header>
+            
+            <article>
+                
+<p>We will run the two librados applications using the standard Linux <kbd>time</kbd> utility to measure how long each run takes:</p>
+<pre><strong>    time sudo ./rados_md5</strong></pre>
+<p class="mce-root"/>
+<p><span>The preceding command will give the following output:</span></p>
+<div class="CDPAlignCenter CDPAlign"><img src="assets/968838b3-03ba-4f0f-b610-621c8175d5c2.png" style="width:29.42em;height:10.33em;"/></div>
+<p>Let's make sure that the attribute was actually created:</p>
+<pre><strong>    sudo rados -p rbd getxattr LowerObject MD5</strong></pre>
+<p><span>The preceding command will give the following output:</span></p>
+<div class="CDPAlignCenter CDPAlign"><img src="assets/4a84172d-0064-43f6-b64b-67c89c384e8e.png" style="width:62.67em;height:3.08em;"/></div>
+<p>Let's delete the object attribute, so we can be certain that the RADOS class correctly creates it when it runs:</p>
+<pre><strong>    sudo rados -p rbd rmxattr LowerObject MD5</strong></pre>
+<p>And now, run the application that performs the MD5 calculation via the RADOS class:</p>
+<pre><strong>    time sudo ./rados_class_md5</strong></pre>
+<p><span>The preceding command will give the following output:</span></p>
+<div class="CDPAlignCenter CDPAlign"><img src="assets/9e10f780-bbd9-42de-a0b8-cc195c17b215.png" style="width:31.92em;height:10.00em;"/></div>
+<p>As you can see, using the RADOS class method is a lot faster, in fact, almost two orders of magnitude faster.</p>
+<p>However, let's also confirm that the attribute was created and that the code ran 1,000 times:</p>
+<pre><strong>    sudo rados -p rbd getxattr LowerObject MD5</strong></pre>
+<p><span>The preceding command will give the following output:</span></p>
+<div class="CDPAlignCenter CDPAlign"><img src="assets/b22b796d-d358-49ba-a020-6338bcdfbb2d.png" style="width:41.83em;height:3.42em;"/></div>
+<p>Due to the logging we inserted in the RADOS class, we can also check the OSD logs to confirm that the RADOS class did indeed run 1,000 times:</p>
+<div class="CDPAlignCenter CDPAlign"><img src="assets/57ba3987-a567-471d-b4ac-8d4ef88a5e9f.png" style="width:60.33em;height:17.00em;"/></div>
+<p class="mce-root"/>
+<p>When repeating small tasks, the overhead of communication between the client and OSDs really adds up. By moving processing directly to OSD, we can eliminate this.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">RADOS class caveats</h1>
+                </header>
+            
+            <article>
+                
+<p>Although we have seen the power that can be harnessed using Ceph's RADOS classes, it's important to note that this is achieved by calling your own customized code from deep inside OSDs. As a consequence, great care needs to be taken that your RADOS class is bug free. A RADOS class has the ability to modify any data on your Ceph cluster, and so accidental data corruption is easily possible. It is also possible for the RADOS class to crash the OSD process. If the class is used in large-scale cluster operations, this has the ability to affect all OSDs in the cluster, so great care should be taken to ensure that error handling is done properly to avoid errors.</p>
+<p class="mce-root"/>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Summary</h1>
+                </header>
+            
+            <article>
+                
+<p>You should now have an understanding of what RADOS classes are and how they can be used to speed up processing by moving tasks directly to OSD. From building simple classes via Lua to developing classes in the Ceph source tree via C++, you should now have the knowledge to build a RADOS class for whatever problem you are trying to solve. By building on this concept, there is nothing stopping you from creating a larger application that can take advantage of the scale-out nature of a Ceph cluster to provide large amounts of storage and compute resources.</p>
+<p>In the next chapter, we will use some examples to explore the importance of monitoring in Ceph.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Questions</h1>
+                </header>
+            
+            <article>
+                
+<ol>
+<li>What Ceph component are RADOS classes executed in?</li>
+<li>What languages can RADOS classes be written in?</li>
+<li>What advantages do RADOS classes bring?</li>
+<li>What disadvantages do RADOS classes bring?</li>
+</ol>
+
+
+            </article>
+
+            
+        </section>
+    </body></html>

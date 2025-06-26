@@ -1,0 +1,838 @@
+<html><head></head><body>
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Tuning Ceph</h1>
+                </header>
+            
+            <article>
+                
+<p>While the default configuration of Linux and Ceph will likely provide reasonable performance due to many years of research and tweaking by developers, it is likely that a Ceph administrator may want to try to squeeze more performance out of the hardware. By tuning both the operating system and Ceph, performance gains may be realized. In <a href="0f4119df-b421-4349-86c8-b68444743f8a.xhtml">Chapter 1</a>, <em>Planning for Ceph</em>, you learned about how to choose hardware for a Ceph cluster; now, let's learn how to make the most of it.</p>
+<p>In this chapter, you will learn about the following topics:</p>
+<ul>
+<li>Latency and why it matters</li>
+<li>The importance of being able to observe the results of your tuning</li>
+<li>Key tuning options that you should look at</li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Latency</h1>
+                </header>
+            
+            <article>
+                
+<p class="NormalPACKT">When running benchmarks to test the performance of a Ceph cluster, you are ultimately measuring the result of latency. All other forms of benchmarking metrics, including IOPS, MBps, or even higher-level application metrics, are derived from the latency of that request.</p>
+<p class="NormalPACKT">IOPS are the number of I/O requests done in a second; the latency of each request directly effects the possible IOPS and can be calculated using this formula:</p>
+<div class="CDPAlignCenter CDPAlign"><img src="assets/f5fd78a4-b1c7-40f5-b8d5-12584e9ad356.png" style="width:12.50em;height:2.75em;"/></div>
+<p>An average latency of 2 milliseconds per request will result in roughly 500 IOPS, assuming each request is submitted in a synchronous fashion:</p>
+<p class="CDPAlignCenter CDPAlign"><em>1/0.002 = 500</em></p>
+<p>MBps is simply the number of IOPS multiplied by the I/O size:</p>
+<p class="CDPAlignCenter CDPAlign"><em>500 IOPS * 64 KB = 32,000 KBps</em></p>
+<p>When you are carrying out benchmarks, you are actually measuring the end result of a latency. Therefore, any tuning that you are carrying out should be done to reduce end-to-end latency for each I/O request.</p>
+<p>Before moving on to learning how to benchmark various components of your Ceph cluster and the various tuning options available, we first need to understand the various sources of latency from a typical I/O request. Once we can break down each source of latency into its own category, it will be possible to perform benchmarking on each one so that we can reliably track both negative and positive tuning outcomes at each stage.</p>
+<p>The following diagram shows an example Ceph write request with the main sources of latency:</p>
+<div class="CDPAlignCenter CDPAlign"><img src="assets/19cd3ca9-1804-4e22-be90-1e22d540bfd2.png"/></div>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Client to Primary OSD</h1>
+                </header>
+            
+            <article>
+                
+<p>Starting with the client, we can see that, on average, there is probably around 100 microseconds of latency for it to talk to the primary OSD. With 1 G networking, this latency figure could be nearer to 1 millisecond. We can confirm this figure by either using <kbd>ping</kbd> or <kbd>iperf</kbd> to measure the round-trip delay between two nodes.</p>
+<p>From the previous formula, we can see that with 1 G networking, even if there were no other sources of latency, the maximum synchronous write IOPS would be around 1,000.</p>
+<p>Although the client introduces some latency of its own, it is minimal compared to the other sources, and so it is not included in the diagram.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Primary OSD to Replica OSD(s)</h1>
+                </header>
+            
+            <article>
+                
+<p>Next, the OSD that runs the Ceph code introduces latency as it processes the request. It is hard to put an exact figure on this, but it is affected by the speed of the CPU. A faster CPU with a higher frequency will run through the code path faster, reducing latency. Early on in this book, the primary OSD would send the request to the other two OSDs in the replica set. These are both processed in parallel so that there is minimal increase in latency going from 2x to 3x replicas, assuming the backend disks can cope with the load.</p>
+<p>There is also an extra network hop between the primary and the replicated OSDs, which introduces latency into each request.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Primary OSD to Client</h1>
+                </header>
+            
+            <article>
+                
+<p>Once the primary OSD has committed the request to its journal and has had an acknowledgement back from all the replica OSDs that they have also done so, it can then send an acknowledgment back to the client and submit the next I/O request.</p>
+<p>Regarding the journal, depending on the type of media being used, the commit latency can vary. NVMe SSDs will tend to service requests in the 10-20 microseconds range, whereas SATA/SAS-based SSDs will typical service requests in the 50-100 <span>microseconds</span> range. NVMe devices also tend to have a more consistent latency profile with an increase in the queue depth, making them ideal for cases where multiple disks might use a single SSD as the same journal. Way ahead are the hard drives that are measured in tens of milliseconds, although they are fairly consistent in terms of latency as the I/O size increases.</p>
+<p>It should be obvious that for small, high-performance workloads, hard drive latency would dominate the total latency figures, and so, SSDs, preferably NVMe, should be used for it.</p>
+<p>Overall, in a well-designed and well-tuned Ceph cluster, all of these parts combined should allow an average write 4 KB request to be serviced in around 500-750 microseconds.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Benchmarking</h1>
+                </header>
+            
+            <article>
+                
+<p class="NormalPACKT"><strong>Benchmarking</strong> is an important tool to quickly be able to see the effects of your tuning efforts and to determine the limits of what your cluster is capable of. However, it's important that your benchmarks reflect the type of workload that you would be running normally on your Ceph cluster. It is pointless to tune your Ceph cluster to excel in large-block sequential reads and writes if your final intention is to run highly-latency sensitive <strong>Online Transaction Processing</strong> (<strong>OLTP</strong>) databases on it. If possible, you should try to include some benchmarks that actually use the same software as your real-life workload. Again, in the example of the OLTP database, look to see whether there are benchmarks for your database software, which will give the most accurate results.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Benchmarking tools</h1>
+                </header>
+            
+            <article>
+                
+<p>The following list of tools is the recommended set of tools to get you started with benchmarking:</p>
+<ul>
+<li><strong>Fio</strong>: Fio,<span> the flexible I/O testing tool, allows</span> you <span>to simulate a variety of complex I/O patterns through</span> its <span>extensive configuration options. It has plugins for both local block devices and RBD, meaning that you can test RBDs from your Ceph cluster either directly or by mounting them via the Linux RBD kernel driver.</span></li>
+<li><strong>Sysbench</strong>: Sysbench <span>has a MySQL OLTP test suite</span> that <span>simulates</span> an <span>OLTP application.</span></li>
+<li><strong>Ping</strong>: Don't underestimate <span>the humble</span> ping <span>tool; along with being able</span> to <span>diagnose many network problems, its round-trip time is helpful in determining the latency of a network link.</span></li>
+<li><strong>iPerf</strong>: iPerf <span>allows you to conduct a</span> series <span>of network tests</span> to <span>determine the bandwidth between two servers.</span></li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Network benchmarking</h1>
+                </header>
+            
+            <article>
+                
+<p>There are a number of areas that we need to benchmark on the network to be able to understand any limitation and make sure there are no misconfigurations.</p>
+<p>A standard Ethernet frame is 1,500 bytes, while a <strong>jumbo frame</strong> is typically 9,000 bytes. This increased frame size reduces the overheads for sending data. If you have configured your network with a jumbo frame, the first thing to check is that they are configured correctly across all your servers and networking devices. If jumbo frames are configured incorrectly, Ceph will exhibit strange, random behavior that is very hard to trace; therefore, it is essential that jumbo frames are configured correctly and confirmed to be working before deploying Ceph over the top of your network.</p>
+<p class="NormalPACKT">To confirm whether jumbo frames are working correctly, you can use <kbd>ping</kbd> to send large packets with the <strong>don't fragment</strong> flag set:</p>
+<pre class="CommandLineEndPACKT"><strong>    ping -M do -s 8972 &lt;destination IP&gt;<br/></strong></pre>
+<p>This command should be run across all your nodes to make sure they can ping each other using jumbo frames. If it fails, investigate the issue and resolve it before deploying Ceph.</p>
+<p>The next test to undertake is to measure the round-trip time, also with the ping tool. Using the packet size parameter again but with the don't fragment flag, it is possible to test the round-trip time of certain packet sizes up to 64 KB, which is the maximum IP packet size.</p>
+<p>Here are some example readings between two hosts on a <strong>10GBase-T</strong> network:</p>
+<ul>
+<li>32 B = 85 microseconds</li>
+<li>4 KB = 112 <span>microseconds</span></li>
+<li>16 KB = 158 <span>microseconds</span></li>
+<li>64 KB = 248 <span>microseconds</span></li>
+</ul>
+<p>As you can see, larger packet sizes impact the round-trip time; this is one reason why larger I/O sizes will see a decrease in IOPS in Ceph.</p>
+<p>Finally, let's test the bandwidth between two hosts to determine whether we get the expected performance.</p>
+<p>Run <kbd>iperf -s</kbd> on the server that will run the iPerf server role:</p>
+<div class="CDPAlignCenter CDPAlign"><img class="aligncenter size-full wp-image-189 image-border" src="assets/4d070ce1-8ae2-4abd-8372-106808543485.png" style="width:43.92em;height:4.75em;"/></div>
+<p>Then, run the <kbd>iperf -c &lt;address of iperf server&gt;</kbd> command:</p>
+<div class="CDPAlignCenter CDPAlign"><img class="aligncenter size-full wp-image-190 image-border" src="assets/daaba4d2-f02a-49d7-89c2-5f65a17c2187.png" style="width:48.33em;height:7.92em;"/></div>
+<p>In this example, the two hosts are connected via a 10 G network and obtain near the maximum theoretical throughput. If you do not see the correct throughput, an investigation into the network, including host configuration, needs to be done.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Disk benchmarking</h1>
+                </header>
+            
+            <article>
+                
+<p class="NormalPACKT">It is a good idea to understand the underlying performance of the hard disks and SSDs in your Ceph cluster, as this will enable you to predict the overall performance of your Ceph cluster. To benchmark the disks in your cluster, the fio tool will be used.</p>
+<div class="packt_tip">
+<p>Use fio carefully if you're operating in write mode. If you specify a block device, fio will happily write over any data that exists on that disk.</p>
+</div>
+<p class="NormalPACKT">Fio is a complex tool with many configuration options. For the purpose of this chapter, we will concentrate on using it to perform basic read and write benchmarks:</p>
+<ol>
+<li>Install the fio tool on a Ceph OSD node:</li>
+</ol>
+<pre><strong>       apt-get install fio</strong></pre>
+<p style="padding-left: 60px">The preceding command gives the following output:</p>
+<div class="CDPAlignCenter CDPAlign"><img class="aligncenter size-full wp-image-191 image-border" src="assets/6bc4ebec-f7eb-4ac6-857c-0075659ca86f.png" style="width:51.67em;height:13.50em;"/></div>
+<ol start="2">
+<li>Create a new file and place the following fio configuration into it:</li>
+</ol>
+<pre><strong>       [global]<br/></strong><strong>       ioengine=libaio<br/></strong><strong>       randrepeat=0<br/></strong><strong>       invalidate=0<br/></strong><strong>       rw=randwrite<br/></strong><strong>       bs=4k<br/></strong><strong>       direct=1<br/></strong><strong>       time_based=1<br/></strong><strong>       runtime=30<br/></strong><strong>       numjobs=1<br/></strong><strong>       iodepth=1<br/></strong><strong>       filename=/test.fio<br/></strong><strong>       size=1G</strong></pre>
+<p>The previous fio configuration will run a single-threaded 4 KB random write test for 30 seconds. It will create a 1G <kbd>test.fio</kbd> file in the root of the filesystem. If you wish to target a block device directly, simply set the filename to the block device. However note that with the preceding warning, fio will overwrite any data on that block device.</p>
+<p>Notice that the job is set to use direction, so the page cache will not accelerate any I/O operations.</p>
+<p>To run the fio job, simply call <kbd>fio</kbd> with the name of the file to which you saved the previous configuration:</p>
+<pre><strong>    fio &lt;filename&gt;<br/></strong></pre>
+<p>The preceding command gives the following output:</p>
+<div class="CDPAlignCenter CDPAlign"><img class="aligncenter size-full wp-image-192 image-border" src="assets/89a59553-d4de-4a05-9d45-e95acf0c2bff.png" style="width:56.25em;height:27.17em;"/></div>
+<p class="NormalPACKT">Once the job is done, fio will produce an output similar to what's shown in the previous screenshot. You can see that the fio job runs 39 IOPS and 162 MBps on an average, and that the average latency was 25 milliseconds.</p>
+<p class="NormalPACKT">There is also a breakdown of latency percentiles, which can be useful for understanding the spread of the request latency.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">RADOS benchmarking</h1>
+                </header>
+            
+            <article>
+                
+<p class="NormalPACKT">The next step is to benchmark the RADOS layer. This will give you a combined figure, including the performance of the disks, networking—along with the overheads of the Ceph code—and extra replicated copies of data.</p>
+<p class="NormalPACKT">The <span>R</span><span>ADOS</span> command-line tool has a built-in benchmarking command, which by default initiates 16 threads, all writing 4 MB objects. To run the <span>R</span><span>ADOS</span> benchmark, run the following command:</p>
+<pre class="CommandLineEndPACKT"><strong>    rados -p rbd bench 10 write</strong></pre>
+<p class="NormalPACKT">This will run the write benchmark for 10 seconds:</p>
+<div class="NormalPACKT CDPAlignCenter CDPAlign"><img class="aligncenter size-full wp-image-193 image-border" src="assets/672192f0-a7a5-452c-975e-36c69e8ba536.png" style="width:49.92em;height:28.08em;"/></div>
+<p class="NormalPACKT">In the previous example, it can be seen that the cluster was able to sustain a write bandwidth of around 480 MBps. The output also gives you latency and other useful figures. Notice that at the end of the test, it deletes the objects that were created as part of the benchmark automatically. If you wish to use the <span>R</span><span>ADOS</span> tool to carry out read benchmarks, you need to specify the <kbd>--no-cleanup</kbd> option to leave the objects in place, and then run the benchmark again with the benchmark type specified as <kbd>seq</kbd> instead of <kbd>write</kbd>. You will manually need to clear the bench objects afterward.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">RBD benchmarking</h1>
+                </header>
+            
+            <article>
+                
+<p class="NormalPACKT">Finally, we will test the performance of RBDs using our favorite tool, fio. This will test the entire software and hardware stack, and the results will be very close to what clients would expect to observe. By configuring fio to emulate certain client applications, we can also get a feel for the expected performance of these applications.</p>
+<p class="NormalPACKT">To test the performance of an RBD, we will use the fio RBD engine, which allows fio to talk directly to the RBD image. Create a new fio configuration and place the following into it:</p>
+<pre>[global]<br/>ioengine=rbd<br/>randrepeat=0<br/>clientname=admin<br/>pool=rbd<br/>rbdname=test<br/>invalidate=0<br/>rw=write<br/>bs=1M<br/>direct=1<br/>time_based=1<br/>runtime=30<br/>numjobs=1<br/>iodepth=1</pre>
+<p>You can see that, unlike the disk benchmarking configuration, instead of using the <kbd>libaio</kbd> engine, this configuration file now uses the <kbd>rbd</kbd> engine. When using the <kbd>rbd</kbd> engine, you also need to specify the RADOS pool and the <kbd>cephx</kbd> user. Finally, instead of specifying a filename or block device, you simply need to specify an RBD image that exists in the RADOS pool that you configured.</p>
+<p>Then, run the fio job to test the performance of your RBD:</p>
+<div class="CDPAlignCenter CDPAlign"><img class="aligncenter size-full wp-image-194 image-border" src="assets/44af914a-1fba-4077-a0ac-ebfc30b6b656.png" style="width:53.75em;height:26.33em;"/></div>
+<p>As can be seen in the preceding output, the fio tool is using the RBD engine directly, bypassing the requirement for an RBD to be mounted to the Linux operating system before it can be tested. </p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Recommended tunings</h1>
+                </header>
+            
+            <article>
+                
+<p>Tuning your Ceph cluster will enable you to get the best performance and the most benefits from your hardware. In this section, we will look at recommended Ceph tuning options.<br/>
+It's<span> important to understand that by tuning, all you are doing is reducing bottlenecks. If you manage to reduce enough bottlenecks in one area, the bottleneck will simply shift to another area. You will always have a bottleneck somewhere, and eventually, you will reach a point where you are simply over the limit of what a particular hardware can provide. Therefore, the goal should be to reduce bottlenecks in the software and operating system to unlock the entire potential of your hardware.</span></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">CPU</h1>
+                </header>
+            
+            <article>
+                
+<p>As Ceph is software-defined for storage, its performance is heavily affected by the speed of the CPUs in the OSD nodes. Faster CPUs mean that the Ceph code can run faster and will spend less time processing each I/O request. The result is a lower latency per I/O, which, if the underlying storage can cope, will reduce the CPU as a bottleneck and give a higher overall performance. <a href="0f4119df-b421-4349-86c8-b68444743f8a.xhtml">Chapter 1</a>, <em>Planning for Ceph</em>, stated a preference for high Ghz processors rather than high core count, for performance reasons; however, there are additional concerns with high-core-count CPUs when they are over-specified for the job.</p>
+<p>To understand these concerns, we will need to cover a brief history on CPU design. During the early 2000s, CPUs were all single-core designs, which ran constantly at the same frequency and didn't support many low-power modes. As they moved to higher frequencies and core counts started, it became apparent that not every core would be able to run at its maximum frequency all the time. The amount of heat generated from the CPU package was simply too great. Fast forward to today, and this still holds true: there is no such thing as a 4 GHz 20-core CPU; it would simply generate too much heat to be feasible.</p>
+<p>However, the clever people who designed CPUs came up with a solution, which allowed each core to run at a different frequency and also allowed them to power themselves down into deep sleep states. Both approaches lowered the power and cooling requirements of the CPU down to single-digit watts.</p>
+<p>The CPUs have much lower clock speeds, but with the ability for a certain total number of cores to engage turbo mode, higher GHz are possible. There is normally a gradual decrease in the top turbo frequency as the number of active cores increases to keep the heat output below a certain threshold. If a low-threaded process is started, the CPU wakes up a couple of cores and speeds them up to a much higher frequency to get better single-threaded performance. In Intel CPUs, the different frequency levels are called <strong>P-states</strong> and sleep levels are called <strong>C-states</strong>.</p>
+<p>This all sounds like the perfect package: a CPU that, when idle, consumes hardly any power, and yet when needed, it can turbo boost a handful of cores to achieve high clock speed. Unfortunately, there is no such thing as a free lunch. There are some overheads with this approach that have a detrimental effect on the latency of sensitive applications, with Ceph being one of them.</p>
+<p>There are two main problems with this approach that impact the latency of sensitive applications, the first being that it takes time for a core to wake up from a sleep state. The deeper the sleep, the longer it takes to wake up. The core has to reinitialize certain <span><span>internal </span>components</span> before it is ready to be used. Here is a list from an Intel E3-1200v5 CPU; older CPUs may fare slightly worse:</p>
+<ul>
+<li>POLL = 0 <span>microsecond</span></li>
+<li>C1-SKL = 2 microseconds</li>
+<li>C1E-SKL = 10 <span>microseconds</span></li>
+<li>C3-SKL = 70 <span>microseconds</span></li>
+<li>C6-SKL = 85 <span>microseconds</span></li>
+<li>C7s-SKL = 124 <span>microseconds</span></li>
+<li>C8-SKL = 200 <span><span>microseconds</span></span></li>
+</ul>
+<p class="NormalPACKT">We can see that in the worst case, it may take a core up to 200 microseconds to wake up from its deepest sleep. When you consider that a single Ceph I/O may require several threads across several nodes to wake up a CPU core, these exit latencies can start to really add up. While P-states that effect the core frequency don't impact performance quite as much as the C-state exit latencies, the core's frequency doesn't immediately increase in a speed to maximum as soon as its in use. This means that under low utilization, the CPU cores may only be operating at a low GHz. This leads us to the second problem, which lies with the Linux scheduler.</p>
+<p class="NormalPACKT">Linux is aware of what core is active and which C-state and P-state each core is running at. It can fully control each core's behavior. Unfortunately, Linux's scheduler doesn't take any of this information into account; instead, it prefers to try to balance threads across cores evenly. This means that at low utilization, all the CPU cores will spend the bulk on their time in their lowest C-state and will operate at a low frequency. During a low utilization, this can impact the latency for small I/Os by 4-5x, which is a significant impact.</p>
+<p class="NormalPACKT">Until Linux has a power-aware scheduler that will take into account which cores are already active and schedules threads on them to reduce latency, the best approach is to force the CPU to only sleep down to a certain C-state and force it to run at the highest frequency all the time. This does increase the power draw, but in the newest models of CPU, this has somewhat been reduced. For this reason, it should be clear why it is recommended to size your CPU to your workload. Running a 40-core server at a high C-state and high frequency will consume a lot of power.</p>
+<p class="NormalPACKT">To force Linux to only drop-down to the C1 C-state, add this to your GRUB configuration:</p>
+<pre class="CommandLineEndPACKT"><strong>    intel_idle.max_cstate=1<br/></strong></pre>
+<p class="NormalPACKT">Some Linux distributions have a performance mode where this runs the CPUs at a maximum frequency. However, the manual way to achieve this is to echo values via <kbd>sysfs</kbd>. Sticking the following in <kbd>/etc/rc.local</kbd> will set all your cores to run at their maximum frequency on the boot:</p>
+<pre class="CommandLineEndPACKT"><strong>    /sys/devices/system/cpu/intel_pstate/min_perf_pct</strong></pre>
+<p class="NormalPACKT">After you restart your OSD node, these changes should be in effect. Confirm this by running these commands:</p>
+<pre><strong>    sudo cpupower monitor</strong></pre>
+<p class="NormalPACKT">As mentioned earlier in this chapter, before making these changes, run a reference benchmark, and then do it again afterward so that you can understand the gains made by this change.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">BlueStore</h1>
+                </header>
+            
+            <article>
+                
+<p>The latest versions of Ceph contain an auto-tuning functionality for BlueStore OSDs. The auto-tuning works by analyzing the cache utilization of the OSDs and adjusting the caching thresholds for the OSD, RocksDB, and data caches, depending on the current hit rate. It also limits the sum of these caches to try to limit the total OSD memory usage to the limit set by the <span><kbd>osd_memory_target</kbd> variable, which is set to 4 GB by default.</span></p>
+<p>Obviously, if you have less RAM in the Ceph node and therefore it unable to provide 4 GB for each OSD, this figure would need to be reduced to avoid the node running out of memory. However, if the Ceph node has sufficient memory, it would be recommended to increase the <span><kbd>osd_memory_target</kbd> variable to allow Ceph to make as much use of the installed memory as possible. Once enough RAM has been assigned to the OSD and RocksDB, any additional RAM will be used as a data cache and will help to service the top-percentile read IOs much more effectively. The current auto-tuning algorithm is fairly slow and takes a while to ramp up, so at least 24-48 hours should be given to see the full effect of a change to the <kbd>osd_memory_target</kbd> variable.</span></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">WAL deferred writes</h1>
+                </header>
+            
+            <article>
+                
+<p>BlueStore can journal writes in the RocksDB WAL and flush them at a later date, allowing for write coalescing and ordering. This can bring large performance improvements for clusters that use spinning disks with flash-based devices for RocksDB.</p>
+<p>By default, if the OSD <span>is identified as a spinning HDD, </span>writes less or equal to 32 KB are written into the WAL of the OSD and are then acknowledged and sent back to the client. This is controlled by the <kbd>bluestore_prefer_deferred_size_hdd</kbd><span> variable; this value can be adjusted if it is determined that your workload would benefit from also deferring larger writes via the WAL to achieve lower latency and higher IOPS. Thought should also be given to the write load of the flash device holding the WAL, both for bandwidth and endurance reasons.</span></p>
+<p>The BlueStore configuration also limits how many writes can be queued up before the OSD is forced to flush them down to the disk; this can be controlled via the <kbd><span>bluestore_deferred_batch_ops</span></kbd><span> variable and is set by default to <kbd>64</kbd>. Increasing this value may increase total throughput, but also runs the risk of the HDD spending large amounts of time being saturated and raising the average latency.</span></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Filestore</h1>
+                </header>
+            
+            <article>
+                
+<p>In nearly all cases, BlueStore outperforms filestore and solves several limitations, and therefore it is recommended that your cluster be upgraded to BlueStore. However, for completeness, the following are the items you can tune to improve the performance of filestore, should your cluster still be running it.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">VFS cache pressure</h1>
+                </header>
+            
+            <article>
+                
+<p class="NormalPACKT">As the name suggests, the filestore object store works by storing <span>R</span><span>ADOS</span> objects as files on a standard Linux filesystem. In most cases, this will be XFS. As each object is stored as a file, there will likely be hundreds of thousands, if not millions, of files per disk. A Ceph cluster is composed of 8 TB disks and is used for an RBD workload. Assuming that the RBD is made up of the standard 4 MB objects, there would be nearly 2,000,000 objects per disk.</p>
+<p class="NormalPACKT">When an application asks Linux to read or write to a file on a filesystem, it needs to know where that file actually exists on the disk. To find this location, it needs to follow the structure of directory entries and inodes. Each one of these lookups will require disk access if it's not already cached in memory. This can lead to poor performance in some cases if the Ceph objects, which are required to be read or written to, haven't been accessed in a while and are hence not cached. This penalty is a lot higher in spinning disk clusters as opposed to SSD-based clusters, due to the impact of the random reads.</p>
+<p class="NormalPACKT">By default, Linux favors the caching of data in the page cache versus the caching of inodes and directory entries. In many cases in Ceph, this is the opposite of what you want to happen. Luckily, there is a tuneable kernel that allows you to tell Linux to prefer directory entries and inodes over page caches; this can be controlled with the following <kbd>sysctl</kbd> setting:</p>
+<pre class="CommandLineEndPACKT"><strong>    vm.vfs_cache_pressure</strong></pre>
+<p class="NormalPACKT">Where a lower number sets a preference to cache inodes and directory entries, do not set this to zero. A zero setting tells the kernel not to flush old entries, even in the event of a low-memory condition, and can have adverse effects. A value of <kbd>1</kbd> is recommended.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">WBThrottle and/or nr_requests</h1>
+                </header>
+            
+            <article>
+                
+<p>Filestore uses buffered I/O to write; this brings a number of advantages if the filestore journal is on a faster media. Client requests are acknowledged as soon as they are written to the journal, and are then flushed to the data disk at a later date by the standard writeback functionality in Linux. This allows the spinning-disk OSDs to provide write latency similar to SSDs when writing in small bursts. The delayed writeback also allows the kernel to rearrange I/O requests to the disk to hopefully either coalesce them, or allow the disk heads to take a more optimal path across the platters. The end effect is that you can squeeze some more I/O out of each disk than what would be possible with a direct or sync I/O.</p>
+<p class="mce-root"/>
+<p>However, the problem occurs when the amount of incoming writes to the Ceph cluster outstrips the capabilities of the underlying disks. In this scenario, the number of pending I/Os waiting to be written on disk can increase uncontrollably, and the resulting queue of I/Os can saturate the disk and Ceph queues. Read requests are particularly poorly effected, as they get stuck behind potentially thousands of write requests, which may take several seconds to flush to the disk.</p>
+<p>To combat this problem, Ceph has a writeback throttle mechanism built into filestore called <strong>WBThrottle</strong>. It is designed to limit the amount of writeback I/Os that can queue up and start the flushing process earlier than what would be naturally triggered by the kernel. Unfortunately, testing has shown that the defaults may still not curtail the behavior that can reduce the impact on the read latency.</p>
+<p>Tuning can alter this behavior to reduce the write queue lengths and allow reads not to get too impacted. However, there is a trade-off; by reducing the maximum number of writes allowed to be queued up, you can reduce the kernel's opportunity to maximize the efficiency of reordering the requests. Some thought needs to be given to what is important for your given use case, workloads, and tune to match it.</p>
+<p>To control the writeback queue depth, you can either reduce the maximum amount of outstanding I/Os using Ceph's WBThrottle settings, or lower the maximum outstanding requests at the block layer in the kernel. Both can effectively control the same behavior, and it's really a preference of how you want to implement the configuration.</p>
+<p>It should also be noted that the operation priorities in Ceph are more effective with a shorter queue at the disk level. By shortening the queue at the disk, the main queuing location moves up into Ceph, where it has more control over what I/O has priority. Consider the following example:</p>
+<pre><strong>echo 8 &gt; /sys/block/sda/queue/nr_requests</strong></pre>
+<p class="NormalPACKT">With the release of the Linux 4.10 kernel, a new feature was introduced, which deprioritizes writeback I/O; this greatly reduces the impact of write-starvation with Ceph and is worth investigating if running the 4.10 kernel is feasible.</p>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Throttling filestore queues</h1>
+                </header>
+            
+            <article>
+                
+<p>In the default configuration, when a disk becomes saturated, its disk queue will gradually fill up. Then, the filestore queue will start to fill up. Until this point, I/O would have been accepted as fast as the journal could accept it. As soon as the filestore queue fills up and/or the WBThrottle kicks in, I/O will suddenly be stopped until the queues fall back below the thresholds. This behavior will lead to large spikes and, most likely, periods of low performance, where other client requests will experience high latency.</p>
+<p>To reduce the spikiness of filestore when the disks become saturated, there are some additional configuration options that can be set to gradually throttle back operations as the filestore queue fills up, instead of bouncing around the hard limit.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">filestore_queue_low_threshhold</h1>
+                </header>
+            
+            <article>
+                
+<p>This is expressed as a percentage between 0.0 and 1.0. Below this threshold, no throttling is performed.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">filestore_queue_high_threshhold</h1>
+                </header>
+            
+            <article>
+                
+<p>This is expressed as a percentage between 0.0 and 1.0. Between the low and high threshold, throttling is carried out by introducing a per-I/O delay, which is linearly increased from 0 to <kbd>filestore_queue_high_delay_multiple/filestore_expected_throughput_ops</kbd>.</p>
+<p>From the high threshold to the maximum, it will throttle at the rate determined by <kbd>filestore_queue_max_delay_multiple/filestore_expected_throughput_ops</kbd>.</p>
+<p>Both of these throttle rates use the configured one, which is the expected throughput of the disk to calculate the correct delay to introduce. The <kbd>delay_multiple</kbd> variables are there to allow an increase of this delay if the queue goes over the high threshold.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">filestore_expected_throughput_ops</h1>
+                </header>
+            
+            <article>
+                
+<p>This should be set to the expected IOPS's performance of the underlying disk where the OSD is running.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">filestore_queue_high_delay_multiple</h1>
+                </header>
+            
+            <article>
+                
+<p>Between the low and high thresholds, this multiple is used to calculate the correct amount of delay to introduce.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">filestore_queue_max_delay_multiple</h1>
+                </header>
+            
+            <article>
+                
+<p>Above the maximum queue size, this multiplier is used to calculate an even greater delay to hopefully stop the queue from ever filling up.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Splitting PGs</h1>
+                </header>
+            
+            <article>
+                
+<p>A filesystem has a limit on the number of files that can be stored in a directory before performance starts to degrade when asked to list the contents:</p>
+<ul>
+<li>As Ceph is storing millions of objects per disk—which are just files. It splits the files across a nested directory structure to limit the number of files placed in each directory.</li>
+<li>As the number of objects in the cluster increases, so does the number of files per directory.</li>
+<li>When the number of files in these directories exceeds these limits, Ceph splits the directory into further subdirectories and migrates the objects to them.</li>
+</ul>
+<p>This operation can have a significant performance penalty when it occurs. Furthermore, XFS tries to place its files in the same directory close together on the disk. When PG splitting occurs, fragmentation of the XFS filesystem can occur, leading to further performance degradation.</p>
+<p>By default, Ceph will split a PG when it contains 320 objects. An 8 TB disk in a Ceph cluster configured with the recommended number of PGs per OSD will likely have over 5,000 objects per PG. This PG would have gone through several PG split operations in its lifetime, resulting in a deeper and more complex directory structure.</p>
+<p>As mentioned in the <em>VFS cache pressure</em> section, to avoid costly dentry lookups, the kernel tries to cache them. The result of PG splitting means that there is a higher number of directories to cache, and there may not be enough memory to cache them all, leading to poorer performance.</p>
+<p>A common approach to this problem is to increase the allowed number of files in each directory by setting the OSD configuration options, as follows:</p>
+<pre><strong>filestore_split_multiple<br/></strong></pre>
+<p>Also, use the following setting:</p>
+<pre><strong>filestore_merge_threshold</strong></pre>
+<p class="CDPAlignLeft CDPAlign">With the following formula, <span>you can set at what threshold Ceph will split a PG:</span></p>
+<div class="CDPAlignCenter CDPAlign"><img class="aligncenter size-full wp-image-195 image-border" src="assets/3f606921-6845-425b-80be-548fee6c4353.png" style="width:31.00em;height:2.00em;"/></div>
+<p class="mce-root"/>
+<p>Care should be taken, however. Although increasing the threshold will reduce the occurrences of PG splitting and also reduce the complexity of the directory structure, when a PG split does occur, it will have to split far more objects. The greater the number of objects that need to be split, the greater the impact on performance, which may even lead to OSDs timing out. There is a trade-off of split frequency to split time; the defaults may be slightly on the conservative side, especially with larger disks.</p>
+<p>Doubling or tripling the split threshold can probably be done safely without too much concern; greater values should be tested with the cluster under I/O load before putting it into production.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Scrubbing</h1>
+                </header>
+            
+            <article>
+                
+<p class="CDPAlignLeft CDPAlign">Scrubbing is Ceph's way of verifying that the objects stored in RADOS are consistent, and to <span>protect</span> against bit rot or other corruptions. Scrubbing can either be normal or deep, depending on the set schedule. During a normal scrub operation, Ceph reads all objects for a certain PG and compares the copies to make sure that their size and attributes match.</p>
+<p class="CDPAlignLeft CDPAlign">A deep scrub operation goes one step further and compares the actual data contents of the objects. This generates a lot more I/O than the simpler standard scrubbing routine. Normal scrubbing is carried out daily, whereas deep scrubbing should be carried out weekly due to the extra I/O load.</p>
+<p>Despite being deprioritized, scrubbing does have an impact on client IO, and so, there are a number of OSD settings that can be tweaked to guide Ceph as to when it should carry out the scrubbing.</p>
+<p>The <kbd>osd _scrub_begin_hour</kbd> and <kbd>osd _scrub_end_hour</kbd> OSD configuration options determine the window Ceph will try to schedule scrubs in. By default, these are set to allow scrubbing to occur throughout a 24-hour period. If your workload only runs during the day, you might want to adjust the scrub start and end times to tell Ceph that you want it to scrub during off-peak times only. The <kbd>osd_scrub_sleep</kbd> configuration option controls the amount of time in seconds that a scrub operation waits between each chunk—this can help to allow the client IO to be serviced in-between the reading of each object. The chunk size is determined by the two variables <kbd>osd_scrub_chunk_min</kbd> and <kbd>osd_scrub_chunk_max</kbd>.</p>
+<p>It should be noted that this time, a window is only honored if the PG has not fallen outside its maximum scrub interval. If it has, it will be scrubbed, regardless of the time window settings. The default maximum intervals for both normal and deep scrubs are set to one week.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">OP priorities</h1>
+                </header>
+            
+            <article>
+                
+<p class="NormalPACKT">Ceph has the ability to prioritize certain operations over others, with the idea that the client I/Os should have precedence over the recovery, scrubbing, and snapshot trimming IO. These priorities are controlled by the following configuration options:</p>
+<pre class="CommandLinePACKT"><strong>osd client op priority<br/></strong><strong>osd recovery op priority<br/></strong><strong>osd scrub priority<br/></strong><strong>osd snap trim priority</strong></pre>
+<p class="NormalPACKT">Here, the higher the value, the higher priority. The default values work fairly well, and there shouldn't be much requirement to change them. But there can be some benefit in lowering the priority of scrub and recovery operations to limit their impact on the client I/O. It's important to understand that Ceph can only prioritize the I/O in the sections of the I/O path that it controls. Therefore, tuning the disk queue lengths in the previous section may be needed to get the maximum benefits.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">The network</h1>
+                </header>
+            
+            <article>
+                
+<p class="NormalPACKT">The network is a core component of a Ceph cluster, and its performance will greatly affect the overall performance of the cluster. 10 GB should be treated as a minimum; 1 GB networking will not provide the required latency for a high performance Ceph cluster. There are a number of tunings that can help to improve network performance which is done by decreasing latency and increasing throughput.</p>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="NormalPACKT">The first thing to consider if you wish to use jumbo frames is using an MTU of 9,000 instead of 1,500; each I/O request can be sent using fewer Ethernet frames. As each Ethernet frame has a small overhead, increasing the maximum Ethernet frame to 9,000 can help. In practice, gains are normally less than 5% and should be weighed against the disadvantages of having to make sure every device is configured correctly.</p>
+<p class="NormalPACKT">The following network options set in your <kbd>sysctl.conf</kbd> file are recommended to maximize network performance:</p>
+<pre><strong>#Network buffers<br/></strong><strong>net.core.rmem_max = 56623104<br/></strong><strong>net.core.wmem_max = 56623104<br/></strong><strong>net.core.rmem_default = 56623104<br/></strong><strong>net.core.wmem_default = 56623104<br/></strong><strong>net.core.optmem_max = 40960<br/></strong><strong>net.ipv4.tcp_rmem = 4096 87380 56623104<br/></strong><strong>net.ipv4.tcp_wmem = 4096 65536 56623104<br/></strong><strong><br/>#Maximum connections and backlog<br/></strong><strong>net.core.somaxconn = 1024<br/></strong><strong>net.core.netdev_max_backlog = 50000<br/><br/></strong><strong>#TCP tuning options<br/></strong><strong>net.ipv4.tcp_max_syn_backlog = 30000<br/></strong><strong>net.ipv4.tcp_max_tw_buckets = 2000000<br/></strong><strong>net.ipv4.tcp_tw_reuse = 1<br/></strong><strong>net.ipv4.tcp_tw_recycle = 1<br/></strong><strong>net.ipv4.tcp_fin_timeout = 10<br/></strong><strong><br/>#Don't use slow start on idle TCP connections<br/></strong><strong>net.ipv4.tcp_slow_start_after_idle = 0</strong><strong><br/></strong></pre>
+<div class="packt_infobox">
+<p>If you are using IPv6 for your Ceph cluster, make sure you use the appropriate IPv6 <kbd>sysctl</kbd> options.</p>
+</div>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">General system tuning</h1>
+                </header>
+            
+            <article>
+                
+<p class="NormalPACKT">There are a number of general system parameters that are recommended to be tuned to best suit Ceph's performance requirements. The following settings can be added to your <kbd>/etc/sysctl.conf</kbd> file.</p>
+<p class="mce-root"/>
+<p class="NormalPACKT"><span>Make sure that the system has sufficient memory free at all times:</span></p>
+<pre>vm/min_free_kbytes = 524288</pre>
+<p class="CodePACKT">Increase the maximum number of allowed processes:</p>
+<pre>kernel.pid_max=4194303</pre>
+<p class="CodePACKT"><span>Use the following to set the maximum number of file handles:</span></p>
+<pre>fs.file-max=26234859</pre>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Kernel RBD</h1>
+                </header>
+            
+            <article>
+                
+<p class="NormalPACKT">The Linux kernel RBD driver allows you to directly map Ceph RBDs as standard Linux block devices and use them in the same way as any other device. Generally, kernel-mapped RBDs need minimum configuration, but in some special cases, some tuning may be necessary.</p>
+<p class="NormalPACKT">Firstly, it is recommended to use a kernel that is as new as possible because newer kernels will have better RBD support, and in some cases, improved performance.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Queue depth</h1>
+                </header>
+            
+            <article>
+                
+<p class="NormalPACKT">Since kernel 4.0, the RBD driver uses <kbd>blk-mq</kbd>, which is designed to offer higher performance than the older queuing system. By default, the maximum outstanding requests possible with RBD when using <kbd>blk-mq</kbd> are 128. For most use cases, this is more than enough; however, if your workload needs to utilize the full power of a large Ceph cluster, you may find that only having 128 outstanding requests is not enough. There is an option that can be specified when mapping the RBD to increase this value, which can be set next.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">readahead</h1>
+                </header>
+            
+            <article>
+                
+<p class="NormalPACKT">By default, RBD will be configured with a 128 KB <kbd>readahead</kbd>. If your workload mainly involves large sequential reading, you can get a significant boost in performance by increasing the <kbd>readahead</kbd> value. In kernels before 4.4, there was a limitation where <kbd>readahead</kbd> values larger than 2 MB were ignored. In most storage systems, this was not an issue, as the stripe sizes would have been smaller than 2 MB. As long as <kbd>readahead</kbd> is bigger than the stripe size, all the disks will be involved and performance will increase.</p>
+<p class="NormalPACKT">By default, a Ceph RBD is striped across 4 MB objects, and so an RBD has a chunk size of 4 MB and <em>a</em> <em>stripe size of 4 MB * number of OSDS in the cluster</em>. Therefore, with a <kbd>readahead</kbd> size smaller than 4 MB, most of the time, <kbd>readahead</kbd> will be doing very little to improve performance, and you will likely see that read's performance is struggling to exceed that of a single OSD.</p>
+<p class="NormalPACKT">In kernel 4.4 and above, you can set the <kbd>readahead</kbd> value much higher and experience read performance in the range of hundreds of MBs in a second.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Tuning CephFS</h1>
+                </header>
+            
+            <article>
+                
+<p>There are two main performance characteristics that determine CephFS performance—the speed of metadata access and the speed of data access, although in the majority of cases, both of these contribute to access requests.</p>
+<p>It is important to understand that in CephFS, once the metadata has been retrieved for a file, reads to the actual file data do not require any further metadata operations until the file is closed by the client. Similarly, when writing files, only when dirty data is flushed by the client is the metadata updated. Thus, for a large, sequential buffered IO, metadata operations will likely only make up a small proportion of the total cluster IO.</p>
+<p>Similarly, for CephFS filesystems that are dealing with a large number of clients constantly opening and closing lots of smaller files, metadata operations will have a much bigger role to play in determining overall performance. Additionally, metadata is used to supply client information surrounding the filesystem, such as providing directory listings.</p>
+<p>Dealing with CephFS's data pool performance should be handled like any other Ceph performance requirements that were covered in this chapter, so for the purpose of this section, metadata performance will be the focus.</p>
+<p>Metadata performance is determined by two factors: the speed of reading/writing metadata via the RADOS metadata pool, and the speed at which the MDS can handle client requests. First, make sure that the metadata pool is residing on flash storage, as this will reduce the latency of metadata requests by at least and order of magnitude, if not more. However, as was discussed earlier in the <em>Latency</em> section of this chapter, the latency introduced by a distributed network-storage platform can also have an impact on metadata performance.</p>
+<p>To work around some of this latency, the MDS has the concept of a local cache to serve hot metadata requests from. By default, an MDS reserves 1 GB of RAM to use as a cache and, generally speaking, the more ram you can allocate, the better. The reservation is controlled by the <kbd>mds_cache_memory_limit</kbd> variable. By increasing the amount of memory the MDS can use as a cache, the number of requests having to go to the RADOS pool are reduced, and the locality of the RAM will reduce metadata access latency.</p>
+<p>There will come a point when adding additional RAM brings very little benefit. This may either be due to the cache being sufficiently sized that the majority of requests are being served from cache, or that the number of requests the actual MDS can handle has been reached.</p>
+<p>Regarding the later point, the MDS process is single-threaded and so there will come a point where the number of metadata requests is causing an MDS to consume 100% of a single CPU core and no additional caching or SSDs will help. The current recommendations are to try and run the MDS on a high clocked CPU as possible. The quad core Xeon E3s are ideal for this use and can often be obtained with frequencies nearing 4 GHz for a reasonable price. Compared to some of the lower-clocked Xeon CPUs, often with high core counts, the performance gain could almost be double by ensuring a fast CPU is used.</p>
+<p>If you have purchased the fastest CPU possible and are finding that a single MDS process is still the bottleneck, the last option should be to start deploying multiple active MDSes, so that the metadata requests are sharded across multiple MDSes.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">RBDs and erasure-coded pools</h1>
+                </header>
+            
+            <article>
+                
+<p>When using RBDs stored in erasure-coded pools, to maintain the best performance, you should try to generate full stripe writes wherever possible. When an erasure-coded pool performs a full stripe write, the operation can be done via a single IO and not have the penalties associated with the read-modify-write cycle with partial writes.</p>
+<p>The RBD clients have some intelligence where they will issue RADOS, thus writing full commands if they detect that the higher-level client IO is overwriting an entire object. Making sure that the filesystem on top of the RBD is formatted with the correct stripe alignment is important to ensure that as many write fulls are generated as possible.</p>
+<p>An example of formatting an XFS filesystem on an RBD on a 4 + 2 EC pool is as follows:</p>
+<pre><strong>mkfs.xfs /dev/rbd0 -d su=1m,sw=4</strong></pre>
+<p>This would instruct XFS to align allocations that are best suited for the 4x1 MB shards that make up a 4 MB object stored on a 4 + 2 erasure pool.</p>
+<p>Additionally, if the use case requires the direct mounting of RBDs to a Linux server rather than through a QEMU/KVM virtual machine, it is also worth considering using <kbd>rbd-nbd</kbd>. The userspace RBD client makes use of librbd, whereas the kernel RBD client relies fully on the Ceph code present in the running kernel.</p>
+<p>Not only does librbd mean that you can use the latest features, which may not be present in the running kernel, but it also has the additional feature of a writeback cache. The writeback cache performs a much better job of coalescing writes into full-sized object writes than the kernel client is capable of and so less performance overhead is incurred. Keep in mind that the writeback cache in librbd is not persistent, so any synchronous writes will not benefit.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">PG distributions</h1>
+                </header>
+            
+            <article>
+                
+<p>While not strictly a performance-tuning option, ensuring even PG distribution across your Ceph cluster is an essential task that should be undertaken during the early stages of the deployment of your cluster. As Ceph uses CRUSH to pseudo-randomly determine where to place data, it will not always balance PG equally across every OSD. A Ceph cluster that is not balanced will be unable to take full advantage of the raw capacity, as the most oversubscribed OSD will effectively become the limit to the capacity.</p>
+<p>An unevenly balanced cluster will mean that a higher number of requests will be targeted at the OSDs holding the most PGs. These OSDs will then place an artificial performance ceiling on the cluster, especially if the cluster is composed of spinning-disk OSDs.</p>
+<p>To rebalance PGs across a Ceph cluster, you simply have to reweight the OSD so that CRUSH adjusts how many PGs will be stored on it. It's important to note that, by default, the weight of every OSD is 1, and you cannot weight an underutilized OSD above 1 to increase its utilization. The only option is to decrease the reweight value of over-utilized OSDs, which should move PGs to the less-utilized OSDs.</p>
+<p>It is also important to understand that there is a difference between the CRUSH weight of an OSD and the reweight value. The reweight value is used as an override to correct the misplacement from the CRUSH algorithm. The reweight command only affects the OSD and will not affect the weight of the bucket (for example, host) that it is a member of. It is also reset to 1.0 on restart of the OSD. While this can be frustrating, it's important to understand that any future modification to the cluster, be it increasing the number of PGs or adding additional OSDs, would have likely made any reweight value incorrect. Therefore, reweighting OSDs should not be looked at as a one-time operation, but something that is being continuously done and will adjust to the changes in the cluster.</p>
+<p class="NormalPACKT">To reweight an OSD, use this simple command:</p>
+<pre><strong>Ceph osd reweight &lt;osd number&gt; &lt;weight value 0.0-1.0&gt;</strong></pre>
+<p>Once executed, Ceph will start backfilling to move PGs to their newly-assigned OSDs.</p>
+<p>Of course, searching through all your OSDs and trying to find the OSD that needs weighting and then running this command for every one would be a very lengthy process. Luckily, there is another Ceph tool that can automate a large part of this process:</p>
+<pre>    ceph osd reweight-by-utilization &lt;threshold&gt; &lt;max change&gt;<br/>    &lt;number of OSDs&gt;</pre>
+<p class="NormalPACKT">This command will compare all the OSDs in your cluster and change the override weighting of the top <em>N</em> OSDs, where <em>N</em> is controlled by the last parameter, which is over the threshold value. You can also limit the maximum change applied to each OSD by specifying the second parameter: 0.05 or 5% is normally a recommended figure.</p>
+<p>There is also a <kbd>test-reweight-by-utilization</kbd> command, which will allow you to see what the command will do before running it.</p>
+<p>While this command is safe to use, there are a number of things that should be taken into consideration before running it:</p>
+<ul>
+<li>It has no concept of different pools on different OSDs. If, for example, you have an SSD tier and an HDD tier, the <kbd>reweight-by-utilization</kbd> command will still try to balance data across all OSDs. If your SSD tier is not as full as the HDD tier, the command will not work as expected. If you wish to balance OSDs confined to a single bucket, look into the script version of this command that was created by CERN.</li>
+<li>It is possible to reweight the cluster to the point that CRUSH is unable to determine placement for some PGs. If recovery halts and one or more PGs are left in a remapped state, this is likely what happened. Simply increase or reset the reweight values to fix it.</li>
+</ul>
+<p>Once you are confident with the operation of the command, it is possible to schedule it via <kbd>cron</kbd> so that your cluster is kept in a more balanced state automatically.</p>
+<p>Since the Luminous release, a new manager module has been included, called <strong>Ceph balancer</strong>. This new module works continuously in the background to optimize PG distribution and ensure that the maximum amount of capacity is available on your Ceph cluster.</p>
+<p>The Ceph balancer module can use one of two methods to balance data distribution. The first is crush-compat; this method uses an additional weight field to adjust the weights of each OSD. The main benefit of crush-compat is that it's backward-compatible with older clients. The other method is called upmap; upmap can achieve much more fine-grained PG mapping than is possible with crush-compat as it uses new capabilities in the OSD map to influence PG mapping. The downside is that due to these new capabilities, Ceph clients need to be running Luminous or a newer release.</p>
+<p>To enable ceph balancer, simply run these two commands:</p>
+<pre><strong><span class="n">ceph</span> <span class="n">mgr</span> <span class="n">module</span> <span class="n">enable</span> </strong><span class="n"><strong>balancer<br/></strong></span><strong><span class="n">ceph</span> <span class="n">balancer</span> </strong><span class="n"><strong>on</strong></span></pre>
+<p>You will see Ceph start to backfill as PGs are remapped to new OSDs to balance out the space utilization; this will continue to occur until the Ceph balancer has reduced deviation of OSD utilization.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Summary</h1>
+                </header>
+            
+            <article>
+                
+<p class="NormalPACKT">You should now have extensive knowledge on how to tune a Ceph cluster to maximize performance and achieve lower latency. Through the use of benchmarks, you should now be able to perform before and after tests to confirm whether your tunings have had the desired effect. It is worth reviewing the official Ceph documentation to get a better understanding of some of the other configuration options that may be beneficial to your cluster.</p>
+<p>You have also learned about some of the key factors that effect Ceph performance and how to tune them, such as CPU clock speed and sleep states. Ensuring that the infrastructure your Ceph cluster is running on is running at peak performance will ensure that Ceph can perform at its very best.</p>
+<p>In the next chapter we will discuss tiering and how it can be used to increase performance by combining different disk technologies together.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Questions</h1>
+                </header>
+            
+            <article>
+                
+<ol>
+<li>Is PG distribution uniform by default?</li>
+<li>Why is a full stripe write on an EC pool preferred?</li>
+<li>For low latency, what type of CPU should be preferred?</li>
+<li>What three factors largely impact latency?</li>
+<li>What automated tool can be used to balance space utilization in your cluster?</li>
+</ol>
+
+
+            </article>
+
+            
+        </section>
+    </body></html>

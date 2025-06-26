@@ -1,0 +1,240 @@
+<html><head></head><body><div id="sbo-rt-content"><div id="_idContainer116">
+			<h1 id="_idParaDest-133"><em class="italic"><a id="_idTextAnchor234"/>Chapter 7</em>: Monitors and Alerts</h1>
+			<p>In the last chapter, we learned how infrastructure is monitored using Datadog. The modern, cloud-based infrastructure is far more complex and virtual than the data center-based, bare-metal compute, storage, and network infrastructure. Datadog is designed to work with cloud-centric infrastructure, and it meets most of the infrastructure monitoring needs out of the box, be it a bare-metal or public cloud-based infrastructure.</p>
+			<p>A core requirement of any monitoring application is to notify you about an ongoing issue. Ideally, before that issue results in a service outage. In previous chapters, we discussed metrics and how they are generated, viewed, and charted on dashboards. An important use of metrics is to predict an upcoming issue. For example, by tracking the <strong class="source-inline">system.disk.free</strong> metric on a storage device, it is easy to notify when it reaches a certain point. By combining the <strong class="source-inline">system.disk.total</strong> metric to that equation, it's also possible to track the available storage as a percentage.</p>
+			<p>A monitor typically tracks a time-series value of a metric, and it sends out a notification when the metric value is abnormal with reference to a threshold during a specified time window. The notification that it sends out is called a warning or alert notification. Such notifications are commonly referred to as alerts. Thresholds for warning and critical statuses are set on the monitor. For example, from the disk storage metrics mentioned earlier, the percentage of free storage available can be calculated. The warning threshold could be set at 30 percent and the critical threshold could be set at 20 percent.</p>
+			<p>In this chapter, we will learn about monitors and alerts and how they are implemented in Datadog, in detail. Specifically, we will cover the following topics:</p>
+			<ul>
+				<li>Setting up monitors</li>
+				<li>Managing monitors</li>
+				<li>Distributing notifications</li>
+				<li>Configuring downtime</li>
+			</ul>
+			<h1 id="_idParaDest-134"><a id="_idTextAnchor235"/>Technical requirements</h1>
+			<p>To try out the examples mentioned in this book, you need to have the following tools installed and resources available:</p>
+			<ul>
+				<li>A Datadog account and a user with admin-level access.</li>
+				<li>A Datadog Agent running at host level or as a microservice depending on the example, pointing to the Datadog account.</li>
+			</ul>
+			<h1 id="_idParaDest-135"><a id="_idTextAnchor236"/>Setting up monitors</h1>
+			<p>In a generic monitoring system, a monitor is usually tied to metrics or events, and Datadog covers <a id="_idIndexMarker404"/>these and much more. There are multiple monitor types based on the data sources defined in Datadog. Some of the most important ones include the following:</p>
+			<ul>
+				<li><strong class="bold">Metric</strong>: As mentioned <a id="_idIndexMarker405"/>at the beginning of this chapter, metrics are the most common type of information used to build monitors. A metric type monitor is based on the user-defined thresholds set for the metric value.</li>
+				<li><strong class="bold">Event</strong>: This monitors <a id="_idIndexMarker406"/>the system events tracked by Datadog.</li>
+				<li><strong class="bold">Host</strong>: This checks <a id="_idIndexMarker407"/>whether the Datadog agent on the host <a id="_idIndexMarker408"/>reports into the Datadog <strong class="bold">Software as a Service</strong> (<strong class="bold">SaaS</strong>) backend.</li>
+				<li><strong class="bold">Live process</strong>: This <a id="_idIndexMarker409"/>monitors whether a set of processes at the operating system level are running on one or a group of hosts.</li>
+				<li><strong class="bold">Process check</strong>: This <a id="_idIndexMarker410"/>monitors whether a process tracked by Datadog is running on one or a group of hosts.</li>
+				<li><strong class="bold">Network</strong>: These <a id="_idIndexMarker411"/>monitors check on the status of the TCP/HTTP endpoints.</li>
+				<li><strong class="bold">Custom check</strong>: These <a id="_idIndexMarker412"/>monitors are based on the custom checks run by the Datadog agent.</li>
+			</ul>
+			<p>Now, we will look at how monitors of these types are created and what sort of instrumentation needs to be done to support them on the Datadog agent side.</p>
+			<p>To create a new monitor, on the Datadog dashboard, navigate to <strong class="bold">Monitors</strong> | <strong class="bold">New Monitor</strong>, as shown in the following screenshot:</p>
+			<div>
+				<div id="_idContainer102" class="IMG---Figure">
+					<img src="Images/Figure_7.1_B16483.jpg" alt="Figure 7.1 – The New Monitor menu item&#13;&#10;" width="587" height="612"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 7.1 – The New Monitor menu item</p>
+			<p>It will provide <a id="_idIndexMarker413"/>the option to select the monitor type, as shown in <em class="italic">Figure 7.2</em>. In this example, we will create a metric type monitor:</p>
+			<div>
+				<div id="_idContainer103" class="IMG---Figure">
+					<img src="Images/Figure_7.2_B16483.jpg" alt="Figure 7.2 – Choosing a metric type monitor &#13;&#10;" width="1650" height="758"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 7.2 – Choosing a metric type monitor </p>
+			<p>By clicking on this option, you will get to an elaborate form where all the information needed for the monitor will be provided to create it. As there are several options available when setting up a monitor, this form is rather long. We will view it in the following screenshots:</p>
+			<div>
+				<div id="_idContainer104" class="IMG---Figure">
+					<img src="Images/Figure_7.3_B16483.jpg" alt="Figure 7.3 – The New Monitor form – selecting the detection method and metric&#13;&#10;" width="1650" height="573"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 7.3 – The New Monitor form – selecting the detection method and metric</p>
+			<p>The first step is to select the detection method. In this example, as shown in <em class="italic">Figure 7.3</em>, the detection <a id="_idIndexMarker414"/>method is selected as <strong class="bold">Threshold Alert</strong>. This is the usual detection method in which the metric value is compared with a static threshold value to trigger an alert.</p>
+			<p>The following list highlights other detection methods that are available:</p>
+			<ul>
+				<li><strong class="bold">Change Alert</strong>: This compares <a id="_idIndexMarker415"/>the current metric value with a past value in the time series.</li>
+				<li><strong class="bold">Anomaly Detection</strong>: This <a id="_idIndexMarker416"/>detects any abnormality in the metric time series data based on past behavior.</li>
+				<li><strong class="bold">Outliers Alert</strong>: This <a id="_idIndexMarker417"/>alerts you about the unusual behavior of a member in a group. For example, increased usage of memory on a specific host in a cluster of hosts grouped by a tag.</li>
+				<li><strong class="bold">Forecast Alert</strong>: This is similar to a threshold alert; however, a forecasted metric <a id="_idIndexMarker418"/>value is compared with the static threshold. </li>
+			</ul>
+			<p>The selection of the monitor type is important, as the behavior and use of a monitor largely depend on the type of monitor.</p>
+			<p class="callout-heading">Important note</p>
+			<p class="callout">Note that only the threshold alert is a standard method that you can find in other monitoring systems; the rest of them are Datadog-specific. Usually, some customization will be needed to implement these detection methods in a generic monitoring system, which Datadog supports out of the box.</p>
+			<p>In the second step, the metric used for the monitor is selected, and filter conditions are added using <a id="_idIndexMarker419"/>tags to define the scope of the monitor. Let's take a look at each field, in this section, to understand all of the available options:</p>
+			<ul>
+				<li><strong class="bold">Metric</strong>: The metric used for the monitor is selected here. It should be one of the metrics that is reported by the Datadog agent.</li>
+				<li><strong class="bold">from</strong>: Using available tags, the scope of the monitor is defined. In this example, by selecting the <strong class="source-inline">host</strong> and <strong class="source-inline">device_name</strong> tags, the monitor is defined specifically for a disk partition on a host.</li>
+				<li><strong class="bold">excluding</strong>: Tags could be selected here to exclude more entities explicitly.</li>
+			</ul>
+			<p>If the filter condition (set in the <strong class="bold">from</strong> and <strong class="bold">excluding</strong> fields) returns more than one set of metric values, such as <strong class="source-inline">system.disk.free</strong> values from multiple hosts and devices, one of the aggregate functions, <strong class="source-inline">average</strong>, <strong class="source-inline">maximum</strong>, <strong class="source-inline">minimum</strong>, or <strong class="source-inline">sum</strong>, will be selected to specify which value can be used for metric value comparisons. Picking the correct aggregate function and tags for grouping is important. If the filter condition returns only one value already, then this setting is irrelevant.</p>
+			<p>The alert triggered by this monitor could be configured as <strong class="bold">Simple Alert</strong> or <strong class="bold">Multi Alert</strong> (in <em class="italic">Figure 7.3</em>, <strong class="bold">Simple Alert</strong> is selected). When the scope of the monitor is a single source, such as a storage device on a host, a simple alert is chosen. If there are multiple sources involved and the <strong class="bold">Simple Alert</strong> option is chosen for the monitor, an aggregated alert notification is sent out for all the sources, and an alert notification that is specific to each source is sent out if the <strong class="bold">Multi Alert</strong> option is chosen.</p>
+			<p>In this section of the form, the configurations mentioned earlier are all done under the <strong class="bold">Edit</strong> tab. By clicking on the <strong class="bold">Source</strong> tab, you can view the configurations you have done in the underlying Datadog definition language, as shown in the following example:</p>
+			<p class="source-code">avg:system.disk.free{device_name:xvda1,host:i-021b5a51fbdfe237b}</p>
+			<p>In the third part of this form, primarily, threshold values and related configurations for the monitor are set, as shown in the following screenshot:</p>
+			<div>
+				<div id="_idContainer105" class="IMG---Figure">
+					<img src="Images/Figure_7.4_B16483.jpg" alt="Figure 7.4 – The New Monitor form – Set alert conditions&#13;&#10;" width="1650" height="959"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 7.4 – The New Monitor form – Set alert conditions</p>
+			<p>In Datadog terminology, an alert indicates a critical status, and a warning is termed as such. In the <a id="_idIndexMarker420"/>sample monitor, we are building the <strong class="bold">Alert threshold</strong>, which is set at 0.5 GB, and the <strong class="bold">Warning threshold</strong>, which is set at 1 GB. This means that you will get a warning notification when the free space on the disk falls to 1 GB, and you will receive a notification with a critical status when the free space on the disk falls to 0.5 GB. The warning and alert statuses not only differ in terms of the content of the notifications triggered by the monitor, but the response to the alerts could also be configured differently. We will look at how that can be done later when we learn about configuring alert notifications.</p>
+			<p>Let's look at other options that could be set in the section of the form. </p>
+			<p>At the top of the section, in the first line itself, you can configure three items, as follows:</p>
+			<ul>
+				<li><strong class="bold">Metric value comparison criterion</strong>: <strong class="source-inline">above</strong>, <strong class="source-inline">or equal to</strong>, <strong class="source-inline">below</strong>, or <strong class="source-inline">below or equal to</strong>. In our example, we need to pick <strong class="source-inline">below</strong>, as the objective of the monitor is to check whether the free storage on the disk goes below the certain threshold values that have been set.</li>
+				<li><strong class="bold">Data window</strong>: This from <strong class="source-inline">1 minute</strong> to <strong class="source-inline">1 day</strong>, and there is also a <strong class="bold">custom</strong> option. Metric values from this time window are checked with reference to the nature of the occurrence setting.</li>
+				<li><strong class="bold">Nature of the occurrence</strong>: <strong class="source-inline">on average</strong>, <strong class="source-inline">at least once</strong>, <strong class="source-inline">at all times</strong>, or <strong class="source-inline">in total</strong>. As the options suggest, the metric values from the specified time window are checked for possible issues, warnings, or alerts, based on this setting.</li>
+			</ul>
+			<p>The monitor is marked as recovered from either the warning or alert state when the related conditions are no longer satisfied. However, you can add optional thresholds that are specific to recovery using <strong class="bold">Alert recovery threshold</strong> and <strong class="bold">Warning recovery threshold</strong>.</p>
+			<p>The data window <a id="_idIndexMarker421"/>can be chosen as <strong class="bold">Require</strong> or <strong class="bold">Do not require</strong>. If <strong class="bold">Require</strong> is selected, the monitor will wait for a full window of data to run the checks. This option must be selected if the source is expected to report metric values regularly. Select <strong class="bold">Do not require</strong> if the expectation is to run the checks with whatever data points are available during the data window specified on the monitor.</p>
+			<p>Besides the <strong class="bold">warning</strong> and <strong class="bold">alert</strong> notifications, the monitor can also report on missing data. If the <strong class="bold">Notify</strong> option is selected, a notification will be sent by the monitor when the metric values are not reported during the specified time window in minutes. This option is chosen when the sources are expected to report metric values during normal operational conditions, and a <strong class="bold">no data</strong> alert indicates some issue in the application system monitored by Datadog. If the sources selected in the monitor are not expected to report metric values regularly, choose the <strong class="bold">Do not notify</strong> option. The no data alert could be set to resolve automatically after a specified time window. Usually, this is set to <strong class="bold">Never</strong> unless there is a special case of it being automatically resolved.</p>
+			<p>Using the <strong class="bold">Delay evaluation</strong> option, the metric values used to evaluate various thresholds set in the monitor can be offset by a specified number of seconds. For example, if a 60-second evaluation delay is specified, at 10:00, the checks for the monitor will be run on the data reported from 9:54 to 9:59 for a 5-minute data window. In a public cloud environment, Datadog recommends as much as a 15-minute delay to reliably ensure that the metric values are available.</p>
+			<p>Based on the thresholds set for the monitor, the live status is charted at the top of the form, and the following screenshot shows how the sample monitor depicts the status it determined:</p>
+			<div>
+				<div id="_idContainer106" class="IMG---Figure">
+					<img src="Images/Figure_7.5_B16483.jpg" alt="Figure 7.5 – The New Monitor form – the thresholds chart&#13;&#10;" width="1650" height="446"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 7.5 – The New Monitor form – the thresholds chart</p>
+			<p>The light yellow <a id="_idIndexMarker422"/>area of the chart shows the range for the warning threshold, and the light purple area indicates the critical (alert) threshold. The bold blue line above these areas tracks the current value of the metric, and of course, it is well above the danger zone. While building a new monitor interactively, this chart is helpful to set realistic thresholds on the monitor.</p>
+			<p>In the fourth section of the <strong class="bold">New Monitor</strong> form, the notification to be sent out when a warning or critical (alert) state is triggered by the monitor. It is presented with a template, as shown in the following screenshot:</p>
+			<div>
+				<div id="_idContainer107" class="IMG---Figure">
+					<img src="Images/Figure_7.6_B16483.jpg" alt="Figure 7.6 – The New Monitor form – the notification template&#13;&#10;" width="1650" height="714"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 7.6 – The New Monitor form – the notification template</p>
+			<p>The notification can have a title and body, just like an email message. Template variables and <a id="_idIndexMarker423"/>conditionals could also be used to make them dynamic. The following screenshot indicates what an actual notification template might look like:</p>
+			<div>
+				<div id="_idContainer108" class="IMG---Figure">
+					<img src="Images/Figure_7.7_B16483.jpg" alt="Figure 7.7 – The New Monitor form – an example notification&#13;&#10;" width="1650" height="700"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 7.7 – The New Monitor form – an example notification</p>
+			<p>In the example notification shown in <em class="italic">Figure 7.7</em>, you can see how template and tag variables and conditionals are used in the notification message. With the use of <strong class="source-inline">is_warning</strong> and <strong class="source-inline">is_alert</strong> messages, a message specific warning or alert could be sent out. Let's take a look at some of the important variables and conditionals that can be used in the message:</p>
+			<ul>
+				<li><strong class="source-inline">Value</strong>: This is the metric value that will trigger the alert.</li>
+				<li><strong class="source-inline">threshold</strong>: This is the threshold for triggering an alert that the metric value is compared against.</li>
+				<li><strong class="source-inline">warn_threshold</strong>: This is similar to the threshold but set for triggering a warning.</li>
+				<li><strong class="source-inline">last_triggered_at</strong>: This details the time when the alert was triggered in UTC.</li>
+			</ul>
+			<p>If the <strong class="bold">Multi Alert</strong> option is selected, the values of the tags used to group the alerts will be available as <strong class="source-inline">TAG_KEY.name</strong> in the notification message. Click on the <strong class="bold">Use message template variables</strong> help link to know which tags are available for use.</p>
+			<p>Using conditionals, custom notifications can be sent out based on the nature of the alert triggered. In the example message template in <em class="italic">Figure 7.7</em>, you can see that part of the message is specific <a id="_idIndexMarker424"/>to a warning or an alert. The following is a list of the main conditionals that can be used in the message template:</p>
+			<ul>
+				<li><strong class="source-inline">is_alert</strong>: This is used if the notification is triggered by an alert.</li>
+				<li><strong class="source-inline">is_warning</strong>: This is used if the notification is triggered by a warning.</li>
+				<li><strong class="source-inline">is_no_data</strong>: This is used if the notification is triggered as a result of reporting no metric data.</li>
+				<li><strong class="source-inline">is_recovery</strong>: This is used if the notification is triggered when a warning, alert, or no data state is recovered to normal.</li>
+			</ul>
+			<p>Please refer to the Datadog documentation for a full set of template variables and how they are used at <a href="https://docs.datadoghq.com/monitors/notifications">https://docs.datadoghq.com/monitors/notifications</a>.</p>
+			<p>The notification message could be formatted as well, and the details of the markdown format can be viewed by following the <strong class="bold">Markdown Formatting Help</strong> link on the form.</p>
+			<p>The recipients of the notification can be specified using <em class="italic">@</em>, as mentioned in the example template. Usually, an email address or distribution list follows <em class="italic">@</em>. The notification message can be tested by clicking on the <strong class="bold">Test Notifications</strong> button at the bottom of the form, as shown in <em class="italic">Figure 7.9</em>. You should see a pop-up window where one or more test scenarios can be selected, and the test messages will be sent out to recipients accordingly.</p>
+			<p>You can tag a new monitor to help with searching for and grouping monitors later. The tag <strong class="source-inline">monitor-type</strong> with a value <strong class="source-inline">infra</strong> has been added to the sample monitor by typing in the tag key and value in the <strong class="bold">Tags</strong> field.</p>
+			<p>The <strong class="screen-inline">renotify if the monitor has not been resolved</strong> option must be used for escalating an issue if no action is taken to resolve the state in the application system that triggered the alert. An additional <a id="_idIndexMarker425"/>message template must be added to the monitor if the renotify option is selected, as shown in the following screenshot:</p>
+			<div>
+				<div id="_idContainer109" class="IMG---Figure">
+					<img src="Images/Figure_7.8_B16483.jpg" alt="Figure 7.8 – The New Monitor form – alert escalation template&#13;&#10;" width="1548" height="764"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 7.8 – The New Monitor form – alert escalation template</p>
+			<p>In the final part of the <strong class="bold">New Monitor</strong> form, the notification rules are configured, as shown in <em class="italic">Figure 7.9</em>:</p>
+			<div>
+				<div id="_idContainer110" class="IMG---Figure">
+					<img src="Images/Figure_7.9_B16483.jpg" alt="Figure 7.9 – The New Monitor form – the Notify your team and Save monitor&#13;&#10;" width="1170" height="538"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 7.9 – The New Monitor form – the Notify your team and Save monitor</p>
+			<p>The recipient list specified by <em class="italic">@</em> in the message template in section <em class="italic">4</em> automatically shows up in this section and vice versa.</p>
+			<p>It is possible to configure the monitor to notify the alert recipients of any changes with the monitor definition itself using the <strong class="bold">alert recipients when this alert is modified</strong> option.</p>
+			<p>Access to edit the monitor can also be restricted using the <strong class="bold">editing this monitor to its creator or administrators</strong> option.</p>
+			<p>The monitor we built in the preceding example is a metric type monitor, which is the most common type of monitor available on all monitoring platforms, including Datadog. The creation of all <a id="_idIndexMarker426"/>of these kinds of monitors is similar, and so, we will not look at every step that is needed to set up the remaining monitor types.</p>
+			<p>Let's take a look at the main features of other monitor types and the scenarios in which they might be useful:</p>
+			<ul>
+				<li><strong class="bold">Host</strong>: This monitor simply checks whether the Datadog agent running on the host reports into the SaaS backend. In infrastructure monitoring, pinging a host is a basic monitoring activity, and in Datadog, this is implemented by using the heartbeats sent by the agent to the backend. Multiple hosts can be monitored from one monitor by selecting the hosts using the <strong class="source-inline">host</strong> tag.</li>
+				<li><strong class="bold">Event</strong>: In this monitor type, Datadog provides a keyword-based search of events during a time window and allows you to set warning and alert thresholds based on the number of events found in the search result. Setting up an event monitor would be useful if it was also possible to track an issue based on the event descriptions posted to Datadog.</li>
+				<li><strong class="bold">Composite</strong>: Composite monitors are built by chaining existing monitors using logical operators AND (<strong class="source-inline">&amp;&amp;</strong>), OR (<strong class="source-inline">||</strong>), and NOT (<strong class="source-inline">!</strong>). For example, if a, b, and c are existing monitors, you can create a composite monitor using the following condition:<p class="source-code">( a || b ) &amp;&amp; !c</p><p>This monitor will trigger when either <strong class="source-inline">a</strong> or <strong class="source-inline">b</strong> triggers and <strong class="source-inline">c</strong> doesn't.</p></li>
+				<li><strong class="bold">Live Process</strong>: This monitor is based on the runtime information regarding processes running on the host, which are collected by the Process Agent part of the Datadog agent. When creating this monitor, the processes can be looked up using keywords, and warning and alert thresholds can be set up as counts of search results. <p>As an example, if you expect an SSH daemon to be running on a group of machines, a simple search keyword, <strong class="source-inline">sshd</strong>, and the alert threshold, <strong class="source-inline">below 1</strong>, are enough to set up the monitor.</p></li>
+				<li><strong class="bold">Process Check</strong>: This monitor type is similar to the Live Process monitors in terms of monitoring the processes running on the hosts. However, a Process Check monitor can only monitor the processes covered by the Datadog agent check, <strong class="source-inline">process.up</strong>; however, it's more organized. The processes to be monitored using this type of monitor must be defined in the <strong class="source-inline">conf.d/process.yaml</strong> file on the Datadog agent side.</li>
+				<li><strong class="bold">Network</strong>: This monitor type, essentially, monitors the TCP and HTTP endpoints defined in the TCP <a id="_idIndexMarker427"/>and HTTP checks configured on the Datadog agent side. The TCP checks are defined in the <strong class="source-inline">conf.d/tcp_check.d/conf.yaml</strong> file, and the HTTP checks are defined in the <strong class="source-inline">conf.d/http_check.d/conf.yaml</strong> file. The HTTP check also covers SSL certificate-related verifications for an HTTPS URL.<p>The network checks return <strong class="source-inline">OK</strong>, <strong class="source-inline">WARN</strong>, or <strong class="source-inline">CRITICAL</strong>. The threshold is set for how many such status codes must be returned consecutively for the monitor to trigger a warning or alert.</p></li>
+				<li><strong class="bold">Integration</strong>: Third-party applications, such as Docker and NGINX, provide integrations with Datadog that are available out of the box, and they only need to be enabled when required. Once enabled and configured by the Datadog agent, the integrations will publish domain-specific metrics and status check results into Datadog, and these will be available to monitors of this type.<p>When a monitor of this kind is created, either the integration-specific metric or a status check can be used as the source of information to be tracked by the monitor.</p></li>
+				<li><strong class="bold">Custom Check</strong>: When a certain status cannot be checked using various information reported by a Datadog agent out of the box with or without some configuration changes, or by the use of integrations, custom scripts can be written and deployed with the Datadog agent. We will discuss the details of doing that in <a href="B16483_08_Final_VK_ePub.xhtml#_idTextAnchor248"><em class="italic">Chapter 8</em></a><em class="italic">, Integrating with Platform Components</em>.<p>This monitor type is similar to the integration monitor, in which a custom check is selected for the status check.</p></li>
+				<li><strong class="bold">Watchdog</strong>: A Watchdog monitor will report on any abnormal activity in the system monitored by Datadog. Datadog provides various problem scenarios that cover both computational infrastructures and integrations.</li>
+			</ul>
+			<p>We have looked at <a id="_idIndexMarker428"/>how to set up new monitors at great length, and we have also reviewed different types of monitors that can cater to all possible requirements you might have. In the next section, we will learn how these monitors can be maintained in a large-scale environment, where some automation might al<a id="_idTextAnchor237"/>so be required.</p>
+			<h1 id="_idParaDest-136"><a id="_idTextAnchor238"/>Managing monitors</h1>
+			<p>By navigating <a id="_idIndexMarker429"/>to <strong class="bold">Monitors</strong> | <strong class="bold">Manage Monitors</strong> on the Datadog dashboard, you can list all of the existing monitors, as shown in the following screenshot:</p>
+			<div>
+				<div id="_idContainer111" class="IMG---Figure">
+					<img src="Images/Figure_7.10_B16483.jpg" alt="Figure 7.10 – List of monitors&#13;&#10;" width="1650" height="564"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 7.10 – List of monitors</p>
+			<p>As shown in <em class="italic">Figure 7.10</em>, a number of options are available to either mute or resolve the monitor. By muting a monitor, you can stop the monitor from triggering a warning or alert. Additionally, a monitor can be marked as resolved without waiting for the underlying issue <a id="_idIndexMarker430"/>to be resolved and the status to be reflected in Datadog.</p>
+			<p>Besides the obvious <strong class="bold">Edit</strong> and <strong class="bold">Delete</strong> options, a monitor can be cloned using the <strong class="bold">Clone</strong> option, as shown in the following screenshot, and it could be modified to make a new monitor that could use some features of the source monitor:</p>
+			<div>
+				<div id="_idContainer112" class="IMG---Figure">
+					<img src="Images/Figure_7.11_B16483.jpg" alt="Figure 7.11 – Cloning a monitor&#13;&#10;" width="624" height="128"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 7.11 – Cloning a monitor</p>
+			<p>The definition of a monitor can be exported into JSON format and maintained in a source code control system as a backup or as a template to derive similar monitors from later.</p>
+			<p>To export the definition, open the monitor in <strong class="bold">Edit window</strong> and use the <strong class="bold">Export Monitor</strong> button at <a id="_idIndexMarker431"/>the very bottom of the form. A window will pop up, as shown in the following screenshot, and you can copy the code using the <strong class="bold">Copy</strong> button:</p>
+			<div>
+				<div id="_idContainer113" class="IMG---Figure">
+					<img src="Images/Figure_7.12_B16483.jpg" alt="Figure 7.12 – Exporting the monitor into JSON&#13;&#10;" width="624" height="383"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 7.12 – Exporting the monitor into JSON</p>
+			<p>In the <strong class="bold">New Monitor</strong> workflow, using the <strong class="bold">Import Monitor from JSON</strong> option, a new monitor can be created from the JSON. This provides a textbox where the monitor definition in JSON format can be inputted, and, if successful, it will take you to the <strong class="bold">New Monitor</strong> form prefilled with the details from the JSON. Additional modifications can be done before the monitor is saved. The JSON for any new monitors created using this method is developed by modifying the JSON exported from a similar monitor.</p>
+			<p>Earlier, we learned how alert notifications can be forwarded to email addresses and distribution lists <a id="_idIndexMarker432"/>by adding them to the message template using an <em class="italic">@</em> sign. In the next section, we will explore how notifications can be distributed to a wide range of communic<a id="_idTextAnchor239"/>ation platforms.</p>
+			<h1 id="_idParaDest-137"><a id="_idTextAnchor240"/>Distributing notifications</h1>
+			<p>Let's recap some of the concepts that we have discussed in this chapter to reiterate the related workflows. A monitor triggers a warning or an alert when some threshold or state that the <a id="_idIndexMarker433"/>monitor is tracking in the system has been reached. Notifications about this change in status, from <strong class="bold">OK</strong> to <strong class="bold">Warning</strong> or <strong class="bold">Alert</strong>, and then recovering back to <strong class="bold">OK</strong>, can be sent out to different communication platforms such as email, Slack, Jira, and PagerDuty. These notifications can also be posted to any system that supports Webhooks.</p>
+			<p>We have already learned that just by prefixing a personal or group email address with <em class="italic">@</em>, the notifications could be forwarded to them. It's always a best practice to forward these notifications to a group email or a distribution list, as they must be addressed by someone on the team.</p>
+			<p>The integrations with other tools facilitate the distribution and escalation of alert notifications for systematic tracking and the closure of issues. Let's take a look at some of the important tools:</p>
+			<ul>
+				<li><strong class="bold">Jira</strong>: Atlassian's Jira is <a id="_idIndexMarker434"/>a popular issue tracking tool. By enabling this integration, a Jira ticket can be created for every alert notification the monitors generate. Additionally, the creation of the Jira ticket is tracked in Datadog as an event.</li>
+				<li><strong class="bold">PagerDuty</strong>: Tools <a id="_idIndexMarker435"/>such as PagerDuty are used by support teams to escalate issues systematically. An alert notification needs to be distributed to the right resource in order to triage the related issue, and if that person is not available, another resource must be notified or the issue has to be escalated. PagerDuty is good at taking care of such tasks, and it can be configured to implement complex escalation needs.</li>
+				<li><strong class="bold">Slack</strong>: IRC-style team communication platforms such as <strong class="bold">Slack</strong> have been very popular, and they <a id="_idIndexMarker436"/>cover many messaging requirements that email used to address before. Once integrated, many Datadog tasks, such as muting monitors, can be initiated from a Slack channel. These options are available in addition to the core feature of forwarding the alert notifications to Slack channels.</li>
+				<li><strong class="bold">Webhooks</strong>: While Datadog supports integrations with popular issue tracking and communication <a id="_idIndexMarker437"/>platforms such as PagerDuty, Jira, and Slack, it also provides a custom integration option using <strong class="bold">w</strong><strong class="bold">ebhooks</strong>. If specified in the alert notification template, a webhook will post alert-related JSON data into the target application. It's up to that application to consume the alert data and take any action based on that. In <a href="B16483_08_Final_VK_ePub.xhtml#_idTextAnchor248"><em class="italic">Chapter 8</em></a>, <em class="italic">Integrating with Platform Components</em>, we will learn, in detail, how webhooks are set up in Datadog for integration with other applications.</li>
+			</ul>
+			<p>Monitors can <a id="_idIndexMarker438"/>send out lots of notifications via multiple channels based on the integrations in place, and it might be necessary to mute the monitors at times, in situations such as maintenance or deployment. In the next section, you will learn how tha<a id="_idTextAnchor241"/>t can be accomplished.</p>
+			<h1 id="_idParaDest-138"><a id="_idTextAnchor242"/>Configuring downtime</h1>
+			<p>Using the options provided by Datadog, a group of monitors can be muted during a scheduled period. Typically, such downtime is needed when you make a change to the computing <a id="_idIndexMarker439"/>infrastructure or deploy some code. Until such changes are completed, and the impacted environments are stabilized, it might not make much sense to monitor the software system in production. Additionally, by disabling the monitors, you can avoid receiving alert notifications in emails, texts, and even phone calls depending on what integrations are in place.</p>
+			<p>To schedule downtime, navigate to <strong class="bold">Monitors</strong> | <strong class="bold">Manage Downtime</strong>, and you should see a form, as shown in the following screenshot, where the existing scheduling will be listed:</p>
+			<div>
+				<div id="_idContainer114" class="IMG---Figure">
+					<img src="Images/Figure_7.13_B16483.jpg" alt="Figure 7.13 – Managing monitor downtime&#13;&#10;" width="1650" height="778"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 7.13 – Managing monitor downtime</p>
+			<p>By clicking <a id="_idIndexMarker440"/>on the <strong class="bold">Schedule Downtime</strong> button, you can add a new downtime schedule, as follows:</p>
+			<div>
+				<div id="_idContainer115" class="IMG---Figure">
+					<img src="Images/Figure_7.14_B16483.jpg" alt="Figure 7.14 – Scheduling a new downtime&#13;&#10;" width="442" height="477"/>
+				</div>
+			</div>
+			<p class="figure-caption"> </p>
+			<p class="figure-caption">Figure 7.14 – Scheduling a new downtime</p>
+			<p>The following <a id="_idIndexMarker441"/>options are available for scheduling a downtime:</p>
+			<ul>
+				<li>The downtime can be defined for all monitors or a group of monitors identified by names or tags.</li>
+				<li>The downtime can be one-time or recurring. A recurring downtime is useful when some of the services being monitored will be unavailable periodically, such as some applications that are shut down during the weekend.</li>
+				<li>A notification message template and recipient list can be specified, similar to alert notifications, to send out notifications about the downtime.</li>
+			</ul>
+			<p>We have looked <a id="_idIndexMarker442"/>at the process of configuring the downtime of a monitor, and that concludes this chapter. Next, let's take a look at the best practices related to setting up and maintain<a id="_idTextAnchor243"/>ing monitors and alerts.</p>
+			<h1 id="_idParaDest-139"><a id="_idTextAnchor244"/>Best practices</h1>
+			<p>Now, let's review the best practices related to monitors and alerts:</p>
+			<ul>
+				<li>Define a comprehensive list of monitors that will cover all aspects of the working of the software system that Datadog is monitoring.</li>
+				<li>It's possible that you might only be using Datadog to address a certain part of the monitoring requirement, and, in that case, make sure that the monitors defined cover your area of focus.</li>
+				<li>To avoid alert fatigue, make sure that all alert notifications are actionable, and the remediation steps are documented in the notification itself or in a runbook. Continue fine-tuning the thresholds and data window size until you start getting credible alert notifications. If monitors are too sensitive, they can start generating noise.</li>
+				<li>If any amount of fine-tuning is not enough to tame a monitor from sending out too many alerts, consider deleting it, and plan to monitor the related scenario in some other reasonable way.</li>
+				<li>Integrate monitors with your company's choice of tools for incident tracking, escalation, and team communication. Email notifications must be a backup, and those notifications must be sent out to user groups and not individuals. Email alerts should also serve as a historical record that can be used as evidence for postmortems (or the <strong class="bold">Root Cause Analysis</strong> or <strong class="bold">RCA</strong> of production incidents) and third-party audits such as those required for <strong class="bold">SOC 2 Type</strong> 2 compliance. </li>
+				<li>Back up monitors as code by exporting out the JSON definition and maintaining it inside a source control system such as Git. If possible, maintain monitors in a code repository by defining monitors in Terraform or Ansible or Datadog's JSON format.</li>
+				<li>Socialize the downtime feature and practice it while doing maintenance. Without that, the alert notifications can become a nuisance, and the credibility of the monitoring syste<a id="_idTextAnchor245"/>m itself can take a hit.</li>
+			</ul>
+			<h1 id="_idParaDest-140"><a id="_idTextAnchor246"/>Summary</h1>
+			<p>In this chapter, you have learned how to create a new Datadog monitor based on the variety of information available in Datadog about the software system and the infrastructure that Datadog monitors. Additionally, we learned how those monitors could be maintained manually or maintained as code using the options available. We looked at different methods available to integrate the monitors with communication tools to distribute the alert notifications widely. Finally, you learned how the downtime feature could be used effectively during maintenance and shutdown periods.</p>
+			<p>We already discussed a number of third-party tools in the context of using or monitoring them with Datadog. In the next chapter, we will learn how such integrations are used in Datadog and how custom integrations can be rolled out.</p>
+		</div>
+	</div></body></html>

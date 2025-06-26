@@ -1,0 +1,258 @@
+<html><head></head><body><div id="sbo-rt-content"><div id="_idContainer225">
+			<h1 id="_idParaDest-371"><a id="_idTextAnchor381"/>Chapter 15: CloudWatch Metrics and Amazon EventBridge</h1>
+			<p>Metrics are one of the central tenants of AWS CloudWatch. They record the performance of your services and can be used to trigger alarms and actions based on the data they provide. There is a multitude of out-of-the-box metrics available, but there is also the ability to create custom metrics. This can expand the capabilities of CloudWatch even further. </p>
+			<p>Having the ability to harness the metrics captured when they reach certain thresholds is a capability of Amazon EventBridge. As a DevOps engineer, this is a powerful tool that can help you automate your systems so that they are self-healing, as well as constantly scaling up and down to meet your customers' generated capacity needs. These automated responses can be triggered by both native AWS services and third-party systems. This is especially useful in routine monitoring and creating routines when certain events occur. </p>
+			<p>In this chapter, we're going to cover the following main topics:  </p>
+			<ul>
+				<li>A closer look at CloudWatch metrics </li>
+				<li>Basic metrics in CloudWatch for AWS services  </li>
+				<li>Using CloudWatch metrics to create dashboards </li>
+				<li>Amazon EventBridge overview</li>
+			</ul>
+			<h1 id="_idParaDest-372"><a id="_idTextAnchor382"/>A closer look at CloudWatch metrics </h1>
+			<p>In the previous chapter, we looked at the CloudWatch service and examined a few of the features <a id="_idIndexMarker1302"/>that it offered. We even touched on the topic of metrics when creating our alarm. </p>
+			<p>Metrics, when it comes to applications and monitoring, is data. Many times, this is lots of data streaming constantly. This data is used not only from a technical perspective but also from a business perspective to see how the company is performing. </p>
+			<p>Metrics are fundamental in CloudWatch. When recorded, a <strong class="bold">metric</strong> represents a time-ordered set of data <a id="_idIndexMarker1303"/>points that are then published to the CloudWatch service. </p>
+			<p>Metrics endure in a single region. This means that if you have a multi-region environment, then the metrics for the different resources will be gathered and stored in the same region where the <a id="_idIndexMarker1304"/>resources have been created and have been running at a point in time. Although you cannot delete metrics, they do expire automatically after 15 months. </p>
+			<p>A <strong class="bold">namespace</strong> is a container for CloudWatch metrics. The namespace where you will find the metrics will be the <a id="_idIndexMarker1305"/>same as the AWS service names for many services:</p>
+			<div>
+				<div id="_idContainer208" class="IMG---Figure">
+					<img src="Images/Figure_15.1_B17405.jpg" alt="Figure 15.1 – Namespaces inside the CloudWatch console&#13;&#10;" width="811" height="584"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 15.1 – Namespaces inside the CloudWatch console</p>
+			<p><strong class="bold">Dimensions</strong> are name/value pairs that help you identify unique metrics. You can define the dimension when <a id="_idIndexMarker1306"/>you use the <strong class="source-inline">PutMetricData</strong> command with the CloudWatch agent. </p>
+			<p>The metric data is aggregated over specific periods into <strong class="bold">statistics</strong>. These aggregations are correlated using the namespaces, metric name, dimensions, and data point of measure. You can measure the statistics in one of five ways: average, minimum, maximum, sum, or sample <a id="_idIndexMarker1307"/>count. When choosing sample count, CloudWatch will count the number of data points. </p>
+			<p>One of the good things about CloudWatch is that the resource does not have to be running to access the metrics. You can even access metrics for resources that you have terminated, such as terminated EC2 instances, deleted Elastic Load Balancers, Fargate containers, and deleted EBS volumes. </p>
+			<h2 id="_idParaDest-373"><a id="_idTextAnchor383"/>Viewing your metrics in CloudWatch </h2>
+			<p>You can view graphs of your <a id="_idIndexMarker1308"/>metrics by logging into the AWS <a id="_idIndexMarker1309"/>Management Console, going to the <strong class="bold">CloudWatch</strong> service, and choosing <strong class="bold">Metrics</strong> from the left-hand menu:</p>
+			<div>
+				<div id="_idContainer209" class="IMG---Figure">
+					<img src="Images/Figure_15.2_B17405.jpg" alt="Figure 15.2 – An example of a graph from a CloudWatch metric &#13;&#10;" width="1218" height="351"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 15.2 – An example of a graph from a CloudWatch metric </p>
+			<p>In the <strong class="bold">All metrics</strong> view, you can <a id="_idIndexMarker1310"/>search by things such as <strong class="source-inline">InstanceID</strong>, <strong class="source-inline">functionName</strong>, <strong class="source-inline">Invocations</strong>, <strong class="source-inline">Namespace</strong>, and others. One thing that doesn't work is searching by <strong class="bold">Amazon Resource Name</strong> (<strong class="bold">ARN</strong>). </p>
+			<h2 id="_idParaDest-374"><a id="_idTextAnchor384"/>Streaming metrics with CloudWatch metric streams </h2>
+			<p>As we stated earlier, <strong class="bold">CloudWatch</strong> keeps your metric data for 15 months and then deletes <a id="_idIndexMarker1311"/>the data. If you would like <a id="_idIndexMarker1312"/>to push that data for long-term <a id="_idIndexMarker1313"/>storage in a data store such as an S3 bucket or a data lake via <strong class="bold">Amazon Kinesis Data Firehose</strong>, this is possible via a metric stream. You also have the option to push your metric data using metric streams to a third-party provider. </p>
+			<p>Data from <a id="_idIndexMarker1314"/>CloudWatch metrics can <a id="_idIndexMarker1315"/>be pushed to metric streams in either JSON or OpenTelemetry format. </p>
+			<p>Now that we have an understanding of what CloudWatch metric streams are, let's take a look at why we would use metric streams. </p>
+			<h3>Why would you push your metrics to a third party via metric streams?</h3>
+			<p>In the past, partners who specialized in services such as monitoring and dashboarding relied on API calls via the CloudWatch service to get the data from your account into their service. As your account grew, this could add additional expenses on your side. The <strong class="source-inline">GetMetricData</strong> API call is $0.01 per 1,000 requests. Metric streams reduce this cost substantially by only charging $0.003 per 1,000 requests. </p>
+			<p>Now that we have learned how to store or share our metrics using metric streams, let's examine the different types of metrics available in CloudWatch metrics. </p>
+			<h1 id="_idParaDest-375"><a id="_idTextAnchor385"/>Basic metrics in CloudWatch for AWS services </h1>
+			<p>CloudWatch automatically monitors a basic set of metrics at 5-minute intervals for free. Most AWS services <a id="_idIndexMarker1316"/>send metrics automatically for free to CloudWatch metrics. These include foundational services such as EC2, S3, EBS, Kinesis, Lambda, and many others. </p>
+			<h2 id="_idParaDest-376"><a id="_idTextAnchor386"/>Basic monitoring for the EC2 service </h2>
+			<p>When an instance is created, seven metrics are pushed out to CloudWatch at a frequency of every 5 minutes. You can change this frequency to 1-minute intervals for an additional charge. CloudWatch also makes a binary status check available as part of their Free Tier. Using this check is an essential measurement to see if your instance is up and running. It is not a <a id="_idIndexMarker1317"/>good check to ensure that your application is performing correctly. The status check can be a canary in the coalmine for things such as AMI issues, accidentally (or purposefully) terminating an instance, or even Availability Zone or regional failures. </p>
+			<p>Besides the status check, there are three standard categories that EC2 metrics fall into:</p>
+			<ul>
+				<li>CPU </li>
+				<li>Disk I/O </li>
+				<li>Network</li>
+			</ul>
+			<p>CPU metrics contain metric data points <a id="_idIndexMarker1318"/>for CPU usage. This can be one of the main metrics that you can use for AutoScaling events while gauging to see if your instances are starting to breach their compute capacity. For burstable instances, such as the <strong class="source-inline">T</strong> family of EC2 instances, you will also get metric data on <strong class="source-inline">CPUCreditUsage</strong> and <strong class="source-inline">CPUCreditBalance</strong>. </p>
+			<p class="callout-heading">Remember</p>
+			<p class="callout">With a burstable performance EC2 type instance, you earn a set rate of CPU credits every hour that can accrue until needed. When tasks that require more CPU than the baseline are processed by the instance, then that instance will spend its CPU credit balance. </p>
+			<p>Almost every service from AWS integrates with CloudWatch metrics. As you build and deploy your applications, think of <a id="_idIndexMarker1319"/>some of the most critical metrics that need to be monitored so that you can ensure the basic health of your application and your environment. These can include the following:</p>
+			<ul>
+				<li><strong class="source-inline">CPUUtilization</strong> for EC2 instances </li>
+				<li>Number of <em class="italic">errors</em> for Lambda functions </li>
+				<li><em class="italic">Duration</em> for Lambda functions </li>
+				<li><strong class="source-inline">DatabaseConnections</strong> for RDS instances </li>
+				<li><strong class="source-inline">DiskQueueDepth</strong> for RDS instances </li>
+				<li><strong class="source-inline">NumberOfObjects</strong> for S3 buckets </li>
+				<li><strong class="source-inline">ActiveConnectionCount</strong> for Elastic Load Balancers </li>
+				<li><strong class="source-inline">HealthyHostCount</strong> for Elastic Load Balancers </li>
+				<li><strong class="source-inline">TargetResponseTime</strong> for Elastic Load Balancers </li>
+			</ul>
+			<p>Now that we have looked at some of the primary metrics that CloudWatch provides for us with a few of the common services, let's look at how we can use custom metrics in cloudwatch.</p>
+			<h2 id="_idParaDest-377"><a id="_idTextAnchor387"/>Using custom metrics in CloudWatch </h2>
+			<p>The AWS CloudWatch service <a id="_idIndexMarker1320"/>not only allows you to watch and monitor the metrics coming from the resources themselves, such as CPU, memory, and network usage. It also allows you to create custom metrics that can be correlated to the number of errors in an application or tied directly to key performance indicators for business measurement. </p>
+			<h2 id="_idParaDest-378"><a id="_idTextAnchor388"/>High-resolution metrics in CloudWatch </h2>
+			<p>When monitoring your custom metrics, sometimes, 1-minute intervals just don't provide enough granular detail. Using the put-metric-data API, either through the CLI or from one of the SDKs, you can publish custom metrics in up to 1-second intervals. </p>
+			<p>If you have an application that can have short-lived spikes whose behavior would not be captured by the <a id="_idIndexMarker1321"/>default 1-minute intervals of CloudWatch metrics, then enabling high-resolution metrics allows you this visibility. Also, if you desire real-time monitoring, then once again, high-resolution metrics can fulfill this need. </p>
+			<p>After looking at the high-resolution metrics that are available to us, let's look at how we can create custom metrics that would be even more useful in our own scenarios. </p>
+			<h2 id="_idParaDest-379"><a id="_idTextAnchor389"/>Creating custom metrics in CloudWatch </h2>
+			<p>CloudWatch metrics allow <a id="_idIndexMarker1322"/>you to create metrics and namespaces for the items that matter to you. These can be incorporated into your scripts by using the SDKs available from AWS for your specific language or by using the AWS CLI and the put-metric-data command. </p>
+			<p>You can define metrics for things such as the <strong class="bold">Key Performance Indicators</strong> (<strong class="bold">KPIs</strong>) that you want to track. These <a id="_idIndexMarker1323"/>custom metrics don't always tie into a specific technology metric; they can be used to count the number of <strong class="source-inline">ERRORS</strong> instances <a id="_idIndexMarker1324"/>in a log file or track items such as the number of items in a cart at checkout for an e-commerce application. </p>
+			<p>When you create and publish a custom metric, you can either define it as standard resolution, and it would be measured in 1-minute intervals, or you can define it as a high-resolution metric, and it can be measured in 1-second intervals. </p>
+			<p>Now, let's use a Lambda function to create some custom metrics. </p>
+			<h2 id="_idParaDest-380"><a id="_idTextAnchor390"/>Publishing a custom metric</h2>
+			<p>Custom metrics can be <a id="_idIndexMarker1325"/>published from several services, including <strong class="bold">AWS Lambda</strong>, <strong class="bold">Elastic Beanstalk</strong>, <strong class="bold">Amazon EC2</strong>, or even <a id="_idIndexMarker1326"/>container services such <a id="_idIndexMarker1327"/>as ECS, EKS, or Fargate. </p>
+			<p>For our hands-on example, we will use a Lambda function to create our custom metrics and then send them to the AWS CloudWatch service. Our example scenario contains some example code <a id="_idIndexMarker1328"/>where we are trying to track signups from a particular marketing campaign. This way, both the marketing department and the executive team can instantly know how effective the dollars being spent on this particular campaign have been, almost in real time. We are pushing these metrics to a CloudWatch metric named <strong class="source-inline">custom_metric</strong>.  </p>
+			<p>The Lambda code that we will use for our example is located in this book's GitHub repository, in the <strong class="source-inline">Chapter-15</strong> folder, under the filename <strong class="source-inline">cw_events.py</strong>. We have also included an abbreviated version of the function that doesn't include the section for CloudWatch events:</p>
+			<p class="source-code">cw_events.py:</p>
+			<p class="source-code">import boto3</p>
+			<p class="source-code">import random </p>
+			<p class="source-code"># Resources </p>
+			<p class="source-code">cw = boto3.client('cloudwatch')</p>
+			<p class="source-code"># The Lambda handler </p>
+			<p class="source-code">def lambda_handler(event, context):</p>
+			<p class="source-code">    put_metric = custom_metric()</p>
+			<p class="source-code">    return put_metric </p>
+			<p class="source-code">###################################</p>
+			<p class="source-code"># Create CW Custom Metric </p>
+			<p class="source-code">###################################</p>
+			<p class="source-code">def custom_metric():</p>
+			<p class="source-code">    create_metric = cw.put_metric_data(</p>
+			<p class="source-code">        Namespace='custom_metric',</p>
+			<p class="source-code">        MetricData = [</p>
+			<p class="source-code">            {</p>
+			<p class="source-code">                'MetricName': 'Signups',</p>
+			<p class="source-code">                'Dimensions': [</p>
+			<p class="source-code">                    {</p>
+			<p class="source-code">                        'Name': 'EMAIL_CAMPAIGN',</p>
+			<p class="source-code">                        'Value': 'cableTV_spot2'</p>
+			<p class="source-code">                    },</p>
+			<p class="source-code">                ],</p>
+			<p class="source-code">                'Unit': 'None',</p>
+			<p class="source-code">                'Value': random.randint(1,100)</p>
+			<p class="source-code">            },</p>
+			<p class="source-code">        ],</p>
+			<p class="source-code">    )</p>
+			<p class="source-code">    return create_metric</p>
+			<p>The steps for creating a custom metric and then sending them to the AWS CloudWatch service are as follows:</p>
+			<ol>
+				<li>Log into <strong class="bold">Amazon Management Console</strong> and navigate to the <strong class="bold">Lambda</strong> service. </li>
+				<li>Once you're <a id="_idIndexMarker1329"/>on the <strong class="bold">Lambda</strong> service, click on the orange <strong class="bold">Create function</strong> button. </li>
+				<li>Once you're on the <strong class="bold">Create function</strong> screen, make sure that the option that's been selected to create the function is <strong class="screen-inline">Author from scratch</strong>. Under the <strong class="bold">Basic</strong> information, use the following options when creating the function:<ul><li><strong class="bold">Function name</strong>: <strong class="source-inline">custom_metric</strong> </li><li><strong class="bold">Runtime</strong>: <strong class="screen-inline">Python 3.8</strong><strong class="source-inline"> </strong></li><li><strong class="bold">Permissions</strong>: Create a new role with basic Lambda permissions: </li></ul></li>
+			</ol>
+			<div>
+				<div id="_idContainer210" class="IMG---Figure">
+					<img src="Images/Figure_15.3_B17405.jpg" alt="Figure 15.3 – Basic information for creating the Lambda function&#13;&#10;" width="884" height="522"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 15.3 – Basic information for creating the Lambda function</p>
+			<ol>
+				<li value="4">Once you have filled out all these options, press the orange <strong class="bold">Create function</strong> button.</li>
+				<li>Once the function has been created, go into the <strong class="bold">Code</strong> section and click on the <strong class="source-inline">lambda_function.py</strong> file in the <strong class="bold">Environment </strong>tab. We can now either type the code mentioned <a id="_idIndexMarker1330"/>previously or cut and paste the code from this book's GitHub repository, in the <strong class="source-inline">chapter-15</strong> directory, replacing what is currently in the <strong class="source-inline">lambda_function</strong> tab. Once you have replaced the code, click on the <strong class="bold">Deploy</strong> button at the top of the code window. Doing so will ensure that the <strong class="bold">Changes not deployed</strong> message disappears and is replaced with a green <strong class="bold">Changes deployed</strong> message:<div id="_idContainer211" class="IMG---Figure"><img src="Images/Figure_15.4_B17405.jpg" alt="Figure 15.4 – Lambda function showing the changes that have been deployed&#13;&#10;" width="629" height="80"/></div><p class="figure-caption">Figure 15.4 – Lambda function showing the changes that have been deployed</p></li>
+				<li>With our function now created, we can start creating a test event so that we can both test the function and see the custom metric appear in the CloudWatch metrics. Click on the orange <strong class="bold">Test</strong> button to configure the test event. No special test data is needed, so just set the event name to <strong class="bold">Test</strong> and then click the orange <strong class="bold">Create</strong> button at the bottom of the dialog window. </li>
+				<li>Before we test our function, we will need to give our function one more permission – the ability to <strong class="source-inline">PutMetricData</strong>. From the <strong class="bold">Lambda</strong> vertical menu, click on <strong class="bold">Configuration</strong>. Once you're in the <strong class="bold">Configuration</strong> settings, click on the <strong class="bold">Permissions</strong> menu item on the left-hand menu. This should bring up <strong class="bold">Execution role</strong> in the main window. Click on the <strong class="bold">Edit</strong> button to the right-hand side of the <strong class="bold">Execution role</strong> heading. </li>
+				<li>This will bring you to a <strong class="bold">Basic Settings</strong> page. At the bottom of the page, underneath the name of your existing role, there should be a link in blue that allows you to <strong class="bold">View the custom_metric_role</strong> on the <strong class="bold">IAM console</strong>. Upon clicking this link, a new tab will open for the IAM service. </li>
+				<li>When you're on your role in the <strong class="bold">IAM console</strong>, click on the <strong class="bold">Add inline policy</strong> link. Use the following values:<ul><li><strong class="bold">Service</strong>: <strong class="bold">Choose</strong> | <strong class="bold">CloudWatch</strong> </li><li><strong class="bold">Actions</strong>: <strong class="bold">Filter</strong> | <strong class="bold">PutMetricData</strong>:</li></ul></li>
+			</ol>
+			<div>
+				<div id="_idContainer212" class="IMG---Figure">
+					<img src="Images/Figure_15.5_B17405.jpg" alt="Figure 15.5 – Adding the inline policy from IAM to our Lambda role &#13;&#10;" width="826" height="483"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 15.5 – Adding the inline policy from IAM to our Lambda role </p>
+			<ol>
+				<li value="10">Once you have added <a id="_idIndexMarker1331"/>the extra permission, click the blue <strong class="bold">Review policy</strong> button at the bottom of the page. </li>
+				<li>Name the policy <strong class="source-inline">PutMetricData</strong> and then click the blue <strong class="bold">Create policy</strong> button at the bottom of the page. </li>
+				<li>Now that we have modified our IAM role so that it has the <strong class="source-inline">PutMetricData</strong> permission, go back to the tab that contains the Lambda function. You should still be on the <strong class="bold">Basic Settings</strong> page. Click on the orange <strong class="bold">Save</strong> button at the bottom of the screen. This will take you back to the main Lambda screen's <strong class="bold">Configuration</strong> menu. Click on the <strong class="bold">Code</strong> tab at the top of the horizontal menu. Now, press the orange <strong class="bold">Test</strong> button to send the test event to our Lambda function. </li>
+				<li>Go to the <strong class="bold">Services</strong> dropdown at the top left-hand side of the <strong class="bold">Navigation</strong> bar. You should see <strong class="bold">CloudWatch</strong> under your <strong class="bold">Recently visited</strong> services. Right-click on <strong class="bold">CloudWatch</strong> to open it in a new tab. If you don't see <strong class="bold">CloudWatch</strong> in your recently visited <a id="_idIndexMarker1332"/>services, then just search for <strong class="source-inline">CloudWatch</strong> in the top search bar and right-click on it to open it in a new tab. </li>
+				<li>From the left-hand menu of <strong class="bold">CloudWatch</strong>, find <strong class="bold">Metrics</strong> and then click on the <strong class="bold">All metrics</strong> sub-menu item. We should see a value of <strong class="source-inline">custom_metric</strong> in <strong class="bold">Custom Namespaces</strong>:<div id="_idContainer213" class="IMG---Figure"><img src="Images/Figure_15.6_B17405.jpg" alt="Figure 15.6 – Our custom metric in Custom Namespaces&#13;&#10;" width="732" height="181"/></div><p class="figure-caption">Figure 15.6 – Our custom metric in Custom Namespaces</p></li>
+				<li> Click on the <strong class="bold">custom_metric</strong> namespace. At this point, we will see our secondary namespace; that is, <strong class="bold">EMAIL_CAMPAIGN</strong>. Click on this value to be taken to the metric data. Check the box next to the <strong class="bold">cableTV_spot2</strong> value to see the data plotted on the graph. The number will vary since we used a random value in our function. </li>
+			</ol>
+			<p>With that, we have created a Lambda function that creates and publishes a custom metric to CloudWatch metrics. Next, we will look at how to incorporate this custom metric, along with others, in CloudWatch dashboards to provide a quick view of our environment to ourselves, our team, as well as others. </p>
+			<h1 id="_idParaDest-381"><a id="_idTextAnchor391"/>Using CloudWatch metrics to create dashboards </h1>
+			<p>Looking at individual <a id="_idIndexMarker1333"/>metrics in CloudWatch can <a id="_idIndexMarker1334"/>provide many insightful details. However, sometimes, it can be more useful to glance at a single pane of glass where the most <a id="_idIndexMarker1335"/>relevant metrics are displayed all at once for a quick view. CloudWatch dashboards allow us to quickly <a id="_idIndexMarker1336"/>and easily create these views – not only of the metrics created by the Amazon resources in our account but also custom metrics, along with text and hyperlinks to runbooks for documentation purposes in case of an emergency or other helpful documentation. </p>
+			<p>The CloudWatch service even comes with automatic dashboards for many of the most used AWS services, such as DynamoDB, EC2, Lambda, S3, EBS, and others. Each of these pre-configurated dashboards is interactive and can be viewed based on custom date ranges. </p>
+			<p>You can even share the dashboards that you create with people that don't have direct access to your AWS account. This can be done in a few ways. The first is by projecting the dashboard on a large screen so that a team of users, or anyone who comes into the room where the screen or projection is displayed, can view the metrics and graphs that are displayed on the dashboard. </p>
+			<p>The second method is the built-in ability to share a dashboard with a specified email address using both a username and password.  </p>
+			<p>This second way of sharing access to a dashboard can be beneficial when you're trying to provide real-time metrics to a stakeholder of a particular project. This user may not be incredibly technical but is looking for the correct business information to help make decisions. Adding some of the custom metrics that we discussed earlier in this chapter allows the business stakeholder to review the particular KPIs at their leisure, without requesting a special report to be generated for them.</p>
+			<p>When you create a dashboard in CloudWatch Dashboards, it becomes available globally. This is because dashboards are not region-specific. </p>
+			<p>With that, we've looked at how dashboards can allow us, as DevOps engineers, our development team, and even stakeholders of a project, to quickly view what is going on with our environment or project. Now, let's go through the hands-on process of creating a dashboard. </p>
+			<h2 id="_idParaDest-382"><a id="_idTextAnchor392"/>Creating a base dashboard to monitor our resources </h2>
+			<p>Let's use some of the <a id="_idIndexMarker1337"/>metrics that we created previously and incorporate them into a custom dashboard:</p>
+			<ol>
+				<li value="1">Open <strong class="bold">Amazon Management Console</strong> and go to the <strong class="bold">CloudWatch</strong> service. You may need to <a id="_idIndexMarker1338"/>log into your account if you have lost your session. Also, make sure that you are in the Ohio region (or whatever region you have been using to create your resources): <a href="https://console.aws.amazon.com/cloudwatch/">https://console.aws.amazon.com/cloudwatch/</a>.</li>
+				<li>Once you're in the CloudWatch service, find and click on the <strong class="bold">Dashboards</strong> menu item at the top of the left-hand menu. </li>
+				<li>This should bring you to the <strong class="bold">Custom Dashboards</strong> screen. We will start the process of creating our dashboard by pressing the orange <strong class="bold">Create dashboard</strong> button: <div id="_idContainer214" class="IMG---Figure"><img src="Images/Figure_15.7_B17405.jpg" alt="Figure 15.7 – The Create dashboard button &#13;&#10;" width="339" height="79"/></div><p class="figure-caption">Figure 15.7 – The Create dashboard button </p></li>
+				<li>Pressing the <strong class="bold">Create dashboard</strong> button will bring up a dialog where you can name the dashboard. Name this new dashboard <strong class="source-inline">Chapter15</strong>. Then, press the orange <strong class="bold">Create dashboard</strong> button to close the dialog box and start building the dashboard. </li>
+				<li>A new dialog should appear, asking us to add a widget to our dashboard. We will begin with the <strong class="screen-inline">Explorer</strong> widget: <div id="_idContainer215" class="IMG---Figure"><img src="Images/Figure_15.8_B17405.jpg" alt="Figure 15.8 – Adding a widget to a CloudWatch dashboard&#13;&#10;" width="1123" height="435"/></div><p class="figure-caption">Figure 15.8 – Adding a widget to a CloudWatch dashboard</p></li>
+				<li>Start your dashboard off by clicking on the <strong class="bold">Number</strong> widget. Scroll down to <strong class="bold">Custom namespaces</strong> and click on the <strong class="bold">custom_metric</strong> namespace. Change <strong class="bold">Period</strong> from <strong class="bold">5</strong> minutes to <strong class="bold">1</strong> day so that your dashboard will keep the data. Click through the <strong class="bold">EMAIL_CAMPAIGN</strong> secondary namespace and check the <strong class="bold">cableTV_spot2</strong> box. Once this <a id="_idIndexMarker1339"/>value has been checked, select the orange box labeled <strong class="bold">Create widget</strong> at the bottom of the dialog window: <div id="_idContainer216" class="IMG---Figure"><img src="Images/Figure_15.9_B17405.jpg" alt="Figure 15.9 – Adding the values for the Number widget&#13;&#10;" width="1083" height="231"/></div><p class="figure-caption">Figure 15.9 – Adding the values for the Number widget</p></li>
+				<li>Once our number widget has been added, click on the orange <strong class="bold">Add widget</strong> button to add another widget to our dashboard. </li>
+				<li>Choose the <strong class="bold">Line</strong> widget and then select <strong class="bold">Metrics</strong>. In the search box, use the <strong class="source-inline">custom_metric</strong> search term so that we can find the metrics for the Lambda function that we created in the previous exercise. Scroll past <strong class="bold">Custom namespaces</strong> and go to <strong class="bold">AWS Namespaces</strong>. You can click on either the <strong class="bold">Lambda</strong> | <strong class="bold">By Resource</strong> or <strong class="bold">Lambda</strong> | <strong class="bold">By Function</strong> name as they should both have the same set of metrics available. Find the <strong class="bold">Invocations</strong> metric and select the checkbox to the left of the function name. Once you have selected the checkbox, click on the orange box and then click on the orange <strong class="bold">Create widget</strong> button. </li>
+				<li>Let's add one more widget to our dashboard by clicking the <strong class="bold">Add widget</strong> button one last time. This time, scroll down and find the <strong class="bold">Logs table</strong> widget. From the dropdown box that contains the <strong class="bold">select log group(s)</strong> option, find the log group for the <strong class="source-inline">custom_metric lambda</strong> function. This should be named <strong class="source-inline">/aws/lambda/custom_metric</strong>. Use the checkbox to select this log group. Once you've selected the log group, click the orange <strong class="bold">Add to dashboard above</strong> button.</li>
+				<li>You will back <a id="_idIndexMarker1340"/>on your dashboard, which should now contain three widgets. Click the blue <strong class="bold">Save dashboard</strong> button at the top of the dashboard. You now have a working dashboard that you can view and share: </li>
+			</ol>
+			<div>
+				<div id="_idContainer217" class="IMG---Figure">
+					<img src="Images/Figure_15.10_B17405.jpg" alt="Figure 15.10 – The Chapter15 dashboard we created&#13;&#10;" width="888" height="586"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 15.10 – The Chapter15 dashboard we created</p>
+			<p>Now that we have learned how to incorporate our metrics into a dashboard so that we can quickly and easily monitor our systems, along with any custom metrics that we need to view at a glance, let's look at how we can use CloudWatch to kick off event-driven architectures using the <strong class="bold">Amazon EventBridge</strong> service. </p>
+			<h1 id="_idParaDest-383"><a id="_idTextAnchor393"/>Amazon EventBridge overview</h1>
+			<p><strong class="bold">Amazon EventBridge</strong> is a serverless event-driven bus that makes it easy to ingest and process data from a variety <a id="_idIndexMarker1341"/>of sources. These sources include AWS services, your applications, and third-party SaaS providers. It removes the discord of writing point-to-point integrations between services. EventBridge is a managed service from AWS. This means that you don't need to worry about having to provision more or <a id="_idIndexMarker1342"/>less of the service as your needs fall and rise. The EventBridge service takes care of this for you:</p>
+			<div>
+				<div id="_idContainer218" class="IMG---Figure">
+					<img src="Images/Figure_15.11_B17405.jpg" alt="Figure 15.11 – AWS EventBridge flow from events to targets&#13;&#10;" width="746" height="334"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 15.11 – AWS EventBridge flow from events to targets</p>
+			<p>An <strong class="bold">Event Source</strong> can be almost any of the AWS services, custom applications, or SaaS applications. </p>
+			<p>For SaaS applications, there is special support for partner applications called an <strong class="bold">Event Source</strong>. This Event Source provides a logical connection between the third-party SaaS provider and your AWS <a id="_idIndexMarker1343"/>account, without the need to provision any cross-account IAM roles or credentials. </p>
+			<p><strong class="bold">Event Buses</strong> are the core of the <strong class="bold">Event Bridge Service</strong>. There is a default event bus to handle AWS service <a id="_idIndexMarker1344"/>events. Event Buses can be custom-created for your application.   </p>
+			<p>Once you have set up an event bus, you can create <strong class="bold">rules</strong>. With the use of rules, you can match values in the metadata or payload of the event that has been inspected by the event bus. The rule then determines which events should get routed to which destination:</p>
+			<div>
+				<div id="_idContainer219" class="IMG---Figure">
+					<img src="Images/Figure_15.12_B17405.jpg" alt="Figure 15.12 – An example event and the rule it triggers &#13;&#10;" width="779" height="321"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 15.12 – An example event and the rule it triggers </p>
+			<p>Once a rule has been triggered, you can associate one or more <strong class="bold">Targets</strong> with that rule. Targets are various AWS <a id="_idIndexMarker1345"/>services such as Lambda functions, Step Functions, Kinesis Streams, and ECS or Fargate clusters. </p>
+			<p class="callout-heading">Note</p>
+			<p class="callout">The CloudWatch Events service is now known as Amazon EventBridge. If you had used CloudWatch events in the past, then that capability is still available through the default event bus in EventBridge. </p>
+			<p>Now that we have looked at the Amazon EventBridge service, let's take a look at some of the service limits that are automatically imposed on EventBridge. </p>
+			<h2 id="_idParaDest-384"><a id="_idTextAnchor394"/>EventBridge service limits </h2>
+			<p>As you start to build event-driven services with EventBridge, it is a good idea to keep the service limits that are <a id="_idIndexMarker1346"/>initially imposed on the EventBridge service in mind. This can help you in cases where you are sending too many events to your event bus at the same time. It can also help you as you are building out your applications since you know how many event buses and rules are allowed by default in a single region:</p>
+			<div>
+				<div id="_idContainer220" class="IMG---Figure">
+					<img src="Images/B17405_Table_15.1.jpg" alt="Table 15.1 – AWS EventBridge service limits &#13;&#10;" width="1523" height="266"/>
+				</div>
+			</div>
+			<p class="figure-caption">Table 15.1 – AWS EventBridge service limits </p>
+			<p class="callout-heading">Note</p>
+			<p class="callout">All of these limits are soft limits. This means that they can be raised by opening a service request ticket with AWS. </p>
+			<p>Now that we understand <a id="_idIndexMarker1347"/>what service limits we are working with, let's look at how to build event-driven architectures using AWS EventBridge. </p>
+			<h2 id="_idParaDest-385"><a id="_idTextAnchor395"/>Event-driven architectures with EventBridge</h2>
+			<p>Modern cloud applications are based on decoupled services. </p>
+			<p>There are three critical <a id="_idIndexMarker1348"/>components to event-driven architectures: event producers, event consumers, and event routers. The <a id="_idIndexMarker1349"/>producer is the service or trigger that produces the event and then sends it to the router. The router or event bus then filters the specific events and sends specific events to event consumers. </p>
+			<h3>Multiple benefits of event-driven architectures</h3>
+			<p>When you're using architectures that are decoupled, meaning that each component performs a specific <a id="_idIndexMarker1350"/>task, you are gaining multiple benefits:</p>
+			<div>
+				<div id="_idContainer221" class="IMG---Figure">
+					<img src="Images/Figure_15.13_B17405.jpg" alt="Figure 15.13 – A single service using EventBridge and custom rules to push to multiple targets&#13;&#10;" width="486" height="349"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 15.13 – A single service using EventBridge and custom rules to push to multiple targets</p>
+			<h2 id="_idParaDest-386"><a id="_idTextAnchor396"/>Using EventBridge to capture AWS service events</h2>
+			<p>We can use the EventBridge service to automatically trigger events through the use of rules and the <a id="_idIndexMarker1351"/>default event bus. Let's start by capturing any time an EC2 instance has an instance state change and send that to a log <a id="_idIndexMarker1352"/>file so that we can view the event: </p>
+			<ol>
+				<li value="1">Log into <strong class="bold">AWS Management Console</strong> and navigate to the <strong class="bold">CloudWatch</strong> service. From the left-hand menu, find and expand the menu for <strong class="bold">Events</strong>. In the <strong class="bold">Events</strong> sub-menu, click on the <strong class="bold">Rules</strong> link. </li>
+				<li>Once the <strong class="bold">Rules</strong> screen appears in the main window, click on the blue <strong class="bold">Create rule</strong> button:<div id="_idContainer222" class="IMG---Figure"><img src="Images/Figure_15.14_B17405.jpg" alt="Figure 15.14 – The EventBridge Rules page with the Create rule button" width="1037" height="314"/></div><p class="figure-caption">Figure 15.14 – The EventBridge Rules page with the Create rule button</p></li>
+				<li>We should now be on a screen called <strong class="bold">Step 1: Create rule</strong>. Under the <strong class="bold">Event Source</strong> heading, make sure that the radio button next to <strong class="bold">Event Pattern</strong> is selected so <a id="_idIndexMarker1353"/>that we can start building out our pattern. </li>
+				<li>For our event <a id="_idIndexMarker1354"/>pattern, use the <strong class="bold">Service Name</strong> selection dropdown to choose <strong class="screen-inline">EC2 service</strong>. Then, from the <strong class="bold">Event Type</strong> selection dropdown, select <strong class="bold">EC2 Instance State-change Notifications</strong>.  </li>
+				<li>We don't want every event from EC2; we only want to know when instances are being spun up or terminated. Choose <strong class="bold">Specific state(s)</strong> and then select the <strong class="bold">terminated</strong> and <strong class="bold">pending</strong> states for the states of the rule. You will have to use the dropdown menu twice to populate both selections. Leave the radio checkbox next to <strong class="bold">Any instance</strong> in the box: <div id="_idContainer223" class="IMG---Figure"><img src="Images/Figure_15.15_B17405.jpg" alt="Figure 15.15 – The EventBridge rule's Event Pattern populated&#13;&#10;" width="714" height="624"/></div><p class="figure-caption">Figure 15.15 – The EventBridge rule's Event Pattern populated</p></li>
+				<li>Next, we can <a id="_idIndexMarker1355"/>move on to the right-hand side of <em class="italic">Step 1</em>, where you can find the <strong class="bold">Targets</strong> heading. Click the <strong class="bold">Add target*</strong> button. </li>
+				<li>Under this <a id="_idIndexMarker1356"/>first target, find <strong class="bold">CloudWatch log group</strong> via the drop-down box. Keep the radio button selection as the top choice. Then, in the text field, insert <strong class="source-inline">EC2_STATE</strong>:<div id="_idContainer224" class="IMG---Figure"><img src="Images/Figure_15.16_B17405.jpg" alt="Figure 15.16 – Creating the custom log group as our EventBridge target&#13;&#10;" width="550" height="356"/></div><p class="figure-caption">Figure 15.16 – Creating the custom log group as our EventBridge target</p></li>
+				<li>Scroll down to the bottom of the page and click the blue button labeled <strong class="bold">Configure details</strong>.</li>
+				<li>For the name of the rule, use <strong class="source-inline">chapt15-ec2</strong>. You can insert a description if you like. Once you have filled in the name and the description, click the blue <strong class="bold">Create rule</strong> button. </li>
+				<li>Our rule should <a id="_idIndexMarker1357"/>appear on the <strong class="bold">Rules</strong> page with the status of a green dot, meaning that it is in good health. Now, let's <a id="_idIndexMarker1358"/>quickly switch to our terminal so that we can quickly start some <strong class="source-inline">ec2</strong> instances and trigger the rule. Don't close your browser window – we're going to want to go back and check on the CloudWatch log group afterward. </li>
+				<li>With your terminal window open, use the <strong class="source-inline">create-instance</strong> command to spin up an instance quickly (hopefully, these commands look a bit familiar to you if you completed the exercises in <a href="B17405_14_Final_JM_ePub.xhtml#_idTextAnchor366"><em class="italic">Chapter 14</em></a>, <em class="italic">CloudWatch and X-Ray's Role in DevOps</em>):<p class="source-code"># Capturing the AMI to a variable</p><p class="source-code"><strong class="bold">AMI='aws ssm get-parameters --names \</strong></p><p class="source-code"><strong class="bold">        /aws/service/canonical/ubuntu/server/16.04/stable/current/amd64/hvm/ebs-gp2/ami-id \</strong></p><p class="source-code"><strong class="bold">    --query 'Parameters[0].[Value]' --output text --region us-east-2'</strong></p><p class="source-code"># Creating a new instance with the AMI variable</p><p class="source-code"><strong class="bold">aws ec2 run-instances \</strong></p><p class="source-code"><strong class="bold">--image-id $AMI \</strong></p><p class="source-code"><strong class="bold">--instance-type t2.micro \</strong></p><p class="source-code"><strong class="bold">--iam-instance-profile 'Name=CW_SSM' \</strong></p><p class="source-code"><strong class="bold">--tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=EVENTBRIDGE}]' \</strong></p><p class="source-code"><strong class="bold">--region us-east-2</strong></p><p>Once your instance starts, it will be a good idea to take note of <strong class="source-inline">InstanceId</strong> so that you can <a id="_idIndexMarker1359"/>quickly reference it when terminating your instance in the next step. </p></li>
+				<li>After about 2 to 5 <a id="_idIndexMarker1360"/>minutes, we are going to terminate our instance to create another event for our rule:<p class="source-code"><strong class="bold">aws ec2 terminate-instances \</strong></p><p class="source-code"><strong class="bold">--instance-ids {YOUR INSTANCE ID} \</strong></p><p class="source-code"><strong class="bold">--region us-east-2</strong></p></li>
+				<li>Now, we should wait about another minute or two so that our instance can terminate completely. As it starts to terminate, go back to the browser that had <strong class="bold">Amazon Management Console</strong> open.</li>
+				<li>In <strong class="bold">Amazon Management Console</strong>, we should already be on the <strong class="bold">CloudWatch</strong> service, so we simply need to find the <strong class="bold">Log groups</strong> sub-menu under the <strong class="bold">Logs</strong> heading and click on it. </li>
+				<li>Now, you should be able to find the custom log group we quickly created, called <strong class="source-inline">EC2_STATE</strong>. If you have too many log groups in your region, simply search for the term <strong class="source-inline">EC2_STATE</strong>, and it should appear. Click on the log group's name so that we can see what EventBridge has generated for us. </li>
+				<li>You should now have two log entries in your log group. One will correspond to the <strong class="bold">pending</strong> event, while the other will correspond to the <strong class="bold">termination</strong> event. </li>
+			</ol>
+			<p>With that, we've learned how to use events that occur in our AWS account and the AWS EventBridge service to build out an event-driven architecture. Although we only used a simple example in our hands-on exercise, this could be expanded to perform actions such as sending out SNS notifications in concert with recording a log entry, or even creating a new resource if this was a critical piece of infrastructure. Now, let's recap everything that we have learned in this chapter. </p>
+			<h1 id="_idParaDest-387"><a id="_idTextAnchor397"/>Summary</h1>
+			<p>In this chapter, we took a deeper look at the <strong class="bold">AWS CloudWatch</strong> service. We focused on the metrics and what makes up a metric. We looked at the different types of metrics available from AWS, starting with basic metrics on the Free Tier, then moving on to detailed metrics, and finally learned how to create custom metrics. We also learned how to use these metrics to create custom dashboards in CloudWatch and discovered how the dashboards could be shared with not only team members who had IAM access, but also how they can be shared with others outside of our AWS account. </p>
+			<p>We also looked at <strong class="bold">EventBridge</strong>, the service that has taken over CloudWatch Events. We learned how using event buses for AWS services, custom application events, and even SaaS providers can help drive event-driven architectures. </p>
+			<p>In the next chapter, we are going to look at the various types of logs that can be generated from the different Amazon services. This includes VPC Flow Logs, Elastic Load Balancer logs, CloudTrail logs, and how these logs can help us troubleshoot issues with our application or security incidents. </p>
+			<h1 id="_idParaDest-388"><a id="_idTextAnchor398"/>Questions </h1>
+			<ol>
+				<li value="1">You have been hired by a company to help develop an e-commerce application on AWS. The stakeholders of the company want to know how many orders have been placed via this application with second-level granularity. To get this information, you will need to create a custom CloudWatch metric using the AWS CLI. You know that by default, custom metrics have a 1-minute granularity. How can you get the application to send the custom metric in sub-minute intervals?<p>a. Use the AWS CLI <strong class="source-inline">put-metric-data</strong> command to publish the data and set the <strong class="source-inline">StorageResolution</strong> option to <strong class="source-inline">1</strong> second to specify the metric as a high-resolution metric.</p><p>b. Update the CloudWatch agent config file and then add <strong class="source-inline">line high-resolution: true</strong>.</p><p>c. Go to the graph in the CloudWatch service on the Amazon Management Console and set the resolution to 1-second intervals. </p><p>d. Add the <strong class="source-inline">flag –dimensions=1</strong> to the AWS CLI <strong class="source-inline">put-metric-data</strong> command to specify a high-resolution metric. </p></li>
+				<li>You are currently working for a mid-sized e-commerce company that has built a serverless shopping cart system using AWS Lambda and DynamoDB. An executive for the company has asked you to create and share a dashboard with some of the board of directors, showing the number of purchases per cart and the number of abandoned purchases per cart. The board members do not currently have IAM accounts. How can you give the board members real-time access to the data as simply and cost-effectively possible?<p>a. Use social logins with Amazon Cognito. Have Cognito assume a role that has access to the specific dashboard so that the board members have access. </p><p>b. Create IAM users for each of the board members. Create an IAM group that has access to CloudWatch dashboards but has a condition to show only the ARN of the specific dashboard that they need to see. </p><p>c. Gather the emails of the board members. Share access to the CloudWatch dashboard via a username and password using the email access feature. </p><p>d. Gather the emails of the board members. Incorporate SAML for the CloudWatch dashboards. Allow the board members to use single sign-on to access the specific dashboard. </p></li>
+			</ol>
+			<h1 id="_idParaDest-389"><a id="_idTextAnchor399"/>Review answers </h1>
+			<ol>
+				<li value="1">a</li>
+				<li>c</li>
+			</ol>
+		</div>
+	</div></body></html>

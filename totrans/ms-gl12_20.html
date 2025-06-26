@@ -1,0 +1,312 @@
+<html><head></head><body>
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Using GitLab Runners with Docker or Kubernetes</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">In the previous chapter, we installed a GitLab Runner with the shell executor. In this chapter, we will take a closer look at containerized GitLab Runners. You can run a GitLab Runner in a container in multiple ways:</p>
+<ul>
+<li><strong>With the Shell executor running in a custom-built Docker container</strong>: This is not recommended because you are responsible for building and supporting this custom container afterward. On the other hand, if you want to tightly control the components inside the container and the behavior of them, then it might be a good way to containerize the Runner. Scaling this solution also requires more work from your side because the Runner itself only knows how to run jobs and connect to GitLab. You will collect state (files in <kbd>/tmp</kbd> <span>or elsewhere) in your containers if they don't restart after a job, so be prepared to handle that as well. </span></li>
+<li><strong>With the Docker executor, which pulls and starts a Docker image for your job</strong>: This is a much more scalable solution, with the added bonus of having no state. Each build gets a pristine clean environment and starts all over again. Another bonus is that you are able to create services for a job, which is another container or several that are started in parallel with a container for your job. For instance, you can start a MySQL database and it will be a linked service that is available under the service name.</li>
+<li><strong>With the Kubernetes executor so that you can use a Kubernetes cluster</strong>: The Runner can communicate with the cluster management API and ask for resources to spin up containers. The Runners are completely stateless and when there is a decreasing number of jobs in the queue, the number of containers is scaled back automatically.</li>
+<li><strong>With the Docker executor and autoscaling enabled (Docker Machines creates new Runners)</strong>: In this configuration, the GitLab Runner controls the Docker Machine binary. It can create new Runner containers on the fly and scale down again if there are less jobs in the queue.</li>
+</ul>
+<p>In this chapter, we are going to take a look at the basic way of running a GitLab Runner, and how to orchestrate this using a management system such as Kubernetes. The autoscaling executors will be part of the next chapter. The reason for this is that the autoscaling Docker executor has a lot of options and requires more planning and system management features to maintain.</p>
+<p>The following topics will be covered in this chapter:</p>
+<ul>
+<li><span>Runner client architecture</span></li>
+<li>Creating your own Dockerized GitLab Runner</li>
+<li>Using a prebuilt Docker container to deploy GitLab Runners</li>
+<li>Using a Kubernetes cluster to spawn GitLab Runners</li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Technical requirements</h1>
+                </header>
+            
+            <article>
+                
+<p><span>To follow along with the instructions in this chapter, please download this book's GitHub repository, along with the examples that are available, from GitHub at <a href="https://github.com/PacktPublishing/Mastering-GitLab-12/tree/master/Chapter16" target="_blank">https://github.com/PacktPublishing/Mastering-GitLab-12/tree/master/Chapter16</a></span>.<a href="https://github.com/PacktPublishing/Mastering-GitLab-12/tree/master/CHP15"/></p>
+<p>The other requirements for this chapter are as follows:</p>
+<ul>
+<li>Docker installed for your platform</li>
+<li>The <kbd>wget</kbd> command-line download tool (<a href="https://www.gnu.org/software/wget/">https://www.gnu.org/software/wget/</a>)</li>
+<li>Access to the Alpine Docker image (<a href="https://hub.docker.com/_/alpine">https://hub.docker.com/_/alpine</a>)</li>
+<li>Access to the Python Alpine Docker image (<a href="https://hub.docker.com/r/lgatica/python-alpine">https://hub.docker.com/r/lgatica/python-alpine</a>)</li>
+<li>Access to the GitLab Runner Docker image<span> (</span><a href="https://hub.docker.com/r/gitlab/gitlab-runner">https://hub.docker.com/r/gitlab/gitlab-runner</a>)</li>
+<li>The <kbd>kubectl</kbd> utility on your system (you can find installation instructions at <a href="https://kubernetes.io/docs/tasks/tools/install-kubectl/">https://kubernetes.io/docs/tasks/tools/install-kubectl/</a>)</li>
+<li>Helm or Tiller (a Kubernetes utility to help you to manage clusters: <a href="https://helm.sh/docs/using_helm/">https://helm.sh/docs/using_helm/</a>)</li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Runner client architecture</h1>
+                </header>
+            
+            <article>
+                
+<p>If you utilize a GitLab Runner with Docker, the resulting architecture differs from the one in the previous chapter in one way. The Runner binary is executed from inside a Docker container instead of directly on a host system. The following diagram shows this architecture:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/752fc375-9252-4ff6-9b2f-492f2ec7b80c.png" style="width:35.33em;height:21.92em;"/></p>
+<p>The image is the same whether you create a container yourself or you use an existing container from the internet.</p>
+<p>If you are going to orchestrate your GitLab Runners using Kubernetes, the architecture is going to look a bit different. You can see that, inside the cluster, a <strong>GitLab Runner</strong> with the Kubernetes architecture can talk to the cluster's Kubernetes API to scale up the number of Runner instances:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/933b0dfe-812b-4c39-8117-60663c61fd66.png" style="width:36.17em;height:27.75em;"/></p>
+<p>The two architectures both use Docker containers as the core unit of operation. The first needs more management in the field of scaling, upgrading the software, and setting up a network. Much of that has already been arranged with Kubernetes.</p>
+<p>Now, we know about the difference between these architectures and that a Runner is deployed without a container, but what does this mean in practice? We will explore this in the following sections.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Creating your own Dockerized GitLab Runner</h1>
+                </header>
+            
+            <article>
+                
+<p>Most people will use prebuilt Docker containers, but there are reasons to build your own. Maybe you have special requirements when building your software that aren't installed in the default Docker images that are available or maybe it's just not possible because of security restrictions. A lot of default images have software included that contain vulnerabilities.</p>
+<p>Let's create our own Dockerized GitLab Runner for the project from <a href="1eceee2e-41d6-41cc-95eb-3d225f25f3fa.xhtml">Chapter 10</a>, <em>Create Your Product, Verify, and Package it</em>, that is, the event manager documentation, using a Dockerfile. You will find our first attempt in the next section.</p>
+<div class="packt_infobox">Let me stress that this Dockerfile is purely for demonstration purposes. We don't recommend building containers like this for production-like systems or even your own development systems. It's being used here to show you how easily you can wrap commands and services in containers.</div>
+<p>The first line of the file is as follows:</p>
+<pre>FROM alpine:3.7</pre>
+<p>This is the base image we used for the container. It is from the Alpine Linux distribution, which contains only the bare minimum to run programs. It is only 4.41 MB and, when using container security scanners such as Clair (<a href="https://github.com/coreos/clair">https://github.com/coreos/clair</a>), it doesn't show vulnerabilities. You can also build containers from scratch (see <a href="https://ericchiang.github.io/post/containers-from-scratch/">https://ericchiang.github.io/post/containers-from-scratch/</a>), but this is a very tedious task. The Alpine Linux image is safe enough and is ready to go immediately.</p>
+<p>In the following lines, we install some basic packages:</p>
+<pre><strong>RUN apk add --no-cache \</strong><br/><strong>     ca-certificates \</strong><br/><strong>     git \</strong><br/><strong>     wget</strong></pre>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mceNonEditable"/>
+<p>We need CA certificates because we need the GitLab Runner client to connect to our HTTPS endpoint, where a TLS handshake will take place. The Git binary is also necessary to clone code from a project.</p>
+<p>Finally, the last command that is set to run in the creation sequence of the container is used to download, execute, and register the GitLab Runner with our GitLab server:</p>
+<pre><strong>RUN wget https://s3.amazonaws.com/gitlab-runner-downloads/master/binaries/gitlab-runner-linux-386 &amp;&amp; chmod +x gitlab-runner-linux-386 &amp;&amp; \</strong><br/><strong>  ./gitlab-runner-linux-386  register \</strong><br/><strong>   --non-interactive \</strong><br/><strong>   --url "https://gitlab-ee.joustie.nl/" \</strong><br/><strong>   --registration-token "xxxxxxx" \</strong><br/><strong>   --executor "shell" \</strong><br/><strong>   --shell "sh" \</strong><br/><strong>   --description "dockerized shell-runner" \</strong><br/><strong>   --tag-list "docker" \</strong><br/><strong>   --run-untagged="true" \</strong><br/><strong>   --locked="false"</strong></pre>
+<p>For this example's sake, we have hardcoded all of the arguments in the Dockerfile to show you how easy it is to Dockerize your command (don't do this normally):</p>
+<ul>
+<li><kbd>non-interactive</kbd>: Without it, there would be a dialog that takes you through the configuration settings.</li>
+<li><kbd>url</kbd>: This is the URL of our GitLab server.</li>
+<li><kbd>registration-token</kbd>: This is the token of a Runner from the project, group, or GitLab instance's scope.</li>
+<li><kbd>executor</kbd>: This specifies which kind of Runner to implement. We chose to use the shell executor.</li>
+<li><kbd>shell</kbd>: This specifies which kind of shell to implement; this could be <kbd>bash</kbd>, <kbd>sh</kbd>, or <kbd>powershell</kbd> on Windows. We chose <kbd>sh</kbd> as it is the most basic one.</li>
+<li><kbd>description</kbd>: This is what description you will see in GitLab.</li>
+<li><kbd>tag-list</kbd>: We can put tags on Runners for easier management in GitLab. In this case, we have used <kbd>docker</kbd>.</li>
+<li><kbd>run-untagged</kbd>: We set it to <kbd>true</kbd>, which means that any job with or without tags can be run on this Runner.</li>
+<li><kbd>locked</kbd>: The Runner isn't tied to a project.</li>
+</ul>
+<p>The next step is to build the Docker container with the <kbd>docker build</kbd> command (we specify <kbd>–no-cache</kbd> so that we can rebuild every time). The output is as follows, and we will go through it step by step. The first part is pulling the Alpine base image:</p>
+<pre><strong>$ docker build --no-cache -t dockerrunner . </strong><br/><strong> Sending build context to Docker daemon   2.56kB</strong><br/><strong> Step 1/4 : FROM alpine:3.9</strong><br/><strong> 3.9: Pulling from library/alpine</strong><br/><strong> Digest: sha256:769fddc7cc2f0a1c35abb2f91432e8beecf83916c421420e6a6da9f8975464b6</strong><br/><strong> Status: Downloaded newer image for alpine:3.9</strong><br/><strong>  ---&gt; 055936d39205</strong></pre>
+<p>The first Docker layer has been created. The second step is adding the necessary packages:</p>
+<pre><strong>Step 2/4 : RUN apk add --no-cache ca-certificates git openssl     tzdata     wget</strong><br/><strong>  ---&gt; Running in 0ab19e2eef86</strong><br/><strong> fetch http://dl-cdn.alpinelinux.org/alpine/v3.9/main/x86_64/APKINDEX.tar.gz</strong><br/><strong> fetch http://dl-cdn.alpinelinux.org/alpine/v3.9/community/x86_64/APKINDEX.tar.gz</strong><br/><strong> (1/8) Installing ca-certificates (20190108-r0)</strong><br/><strong> (2/8) Installing nghttp2-libs (1.35.1-r0)</strong><br/><strong> (3/8) Installing libssh2 (1.8.2-r0)</strong><br/><strong> (4/8) Installing libcurl (7.64.0-r1)</strong><br/><strong> (5/8) Installing expat (2.2.6-r0)</strong><br/><strong> (6/8) Installing pcre2 (10.32-r1)</strong><br/><strong> (7/8) Installing git (2.20.1-r0)</strong><br/><strong> (8/8) Installing wget (1.20.3-r0)</strong><br/><strong> Executing busybox-1.29.3-r10.trigger</strong><br/><strong> Executing ca-certificates-20190108-r0.trigger</strong><br/><strong> OK: 21 MiB in 22 packages</strong><br/><strong> Removing intermediate container 0ab19e2eef86</strong><br/><strong>  ---&gt; 17ab7c7dd1b9</strong></pre>
+<p>The previous code downloaded the packages we specified, as well as some dependencies. This is still a modest amount of packages. In the following build step, the GitLab Runner binary is downloaded:</p>
+<pre><strong>Step 3/4 : RUN wget https://s3.amazonaws.com/gitlab-runner-downloads/master/binaries/gitlab-runner-linux-386 &amp;&amp; chmod +x gitlab-runner-linux-386 &amp;&amp; ./gitlab-runner-linux-386 register --non-interactive --url "https://gitlab-ee.joustie.nl/" --registration-token "xxxx" --executor "shell" --shell "sh" --description "dockerized shell-runner" --tag-list "docker" --run-untagged="true" --locked="false"</strong><br/><strong> ---&gt; Running in d90d35beaa37</strong><br/><strong> --2019-05-22 21:05:18-- https://s3.amazonaws.com/gitlab-runner-downloads/master/binaries/gitlab-runner-linux-386</strong><br/><strong> Resolving s3.amazonaws.com... 52.216.18.115</strong><br/><strong> Connecting to s3.amazonaws.com|52.216.18.115|:443... connected.</strong><br/><strong> HTTP request sent, awaiting response... 200 OK</strong><br/><strong> ....</strong><br/><strong> 2019-05-22 19:46:24 (2.22 MB/s) - 'gitlab-runner-linux-386' saved [25824256/25824256]</strong></pre>
+<p>The next step is the execution of the Runner:</p>
+<pre><strong>Runtime platform arch=386 os=linux pid=1 revision=5159dcdb version=11.12.0~beta.1484.g5159dcdb</strong><br/><strong>Running in system-mode.</strong></pre>
+<p>Then, we need to register it:</p>
+<pre><strong>Registering runner... succeeded runner=Vh6hpU1D</strong><br/><strong> Runner registered successfully. Feel free to start it, but if it's running already the config should be automatically reloaded!</strong><br/><strong> Removing intermediate container b55a2ae6998a</strong><br/><strong> ---&gt; be4317ad95b0</strong></pre>
+<p>The binary was successfully downloaded, and the registration was successful; a specific Runner token was created and is now part of the Docker image. The final part of the build sets the entry point for the instantiation of a Docker instance with this image:</p>
+<pre><strong>Step 4/4 : ENTRYPOINT ["./gitlab-runner-linux-386","run"]</strong><br/><strong>  ---&gt; Running in 8b54b77030bc</strong><br/><strong> Removing intermediate container 8b54b77030bc</strong><br/><strong>  ---&gt; be206c4c268c</strong><br/><strong> Successfully built be206c4c268c</strong><br/><strong> Successfully tagged dockerrunner:latest</strong></pre>
+<p>It automatically tagged the image with <kbd>latest</kbd>. The image is now available on the machine where its build was executed. You can view it by using the following command:</p>
+<pre><strong>$ docker images</strong><br/> ...</pre>
+<p>If you go to GitLab and open the Runner list in the administrative settings menu, a new Runner will appear there:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/46ba2707-2ebe-4c45-bf16-b953004b46b8.png" style="width:57.08em;height:3.58em;"/></p>
+<p>Now, it's time to start the Runner and try to build the <kbd>eventmanager-documentation</kbd> project. You can start the Runner in the foreground using the following command:</p>
+<pre><strong>$ docker run -ti dockerrunner</strong></pre>
+<p>The following output should appear after a brief pause:</p>
+<pre><strong>Runtime platform arch=386 os=linux pid=1 revision=5159dcdb version=11.12.0~beta.1484.g5159dcdb</strong><br/><strong> Starting multi-runner from /etc/gitlab-runner/config.toml ... builds=0</strong><br/><strong> Running in system-mode.</strong><br/> <br/><strong> Configuration loaded builds=0</strong><br/><strong> listen_address not defined, metrics &amp; debug endpoints disabled builds=0</strong><br/><strong> [session_server].listen_address not defined, session endpoints disabled builds=0</strong></pre>
+<p>As you can see, it has successfully loaded a configuration that was saved in the container during the registration phase. It also mentions the fact that it didn't load a metrics and debug session server, so this Runner exposes no service of any kind to the outside world. It has connected to the GitLab server and is now waiting for commands.</p>
+<p>When we try to run the <kbd>eventmanager-documentation</kbd> project pipeline for the master branch, it will spin off a build job to the new GitLab Runner:</p>
+<pre><strong>Checking for jobs... received                       job=675 repo_url=https://gitlab-ee.joustie.nl/marketing/eventmanager-documentation.git runner=LT7jz43c</strong><br/><strong> WARNING: Job failed: exit status 1                  duration=347.5203ms job=675 project=10 runner=LT7jz43c</strong><br/><strong> ERROR: Failed to process runner                     builds=0 error=exit status 1 executor=shell runner=LT7jz43c</strong></pre>
+<p>Unfortunately, it's failed to build the project. If we look at the job log, we get the following output:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/7fdcd13d-9b72-4b72-9bf8-b59bcc6f21f1.png" style="width:56.08em;height:23.50em;"/></p>
+<p>It's quite clear why the job failed. We created a basic GitLab Runner container without support for the Python language. That is why it complains about the <strong>Python Package Manager</strong> (<strong>PIP</strong>) not being found. We need Python to install the <strong>Amazon</strong> <strong>Web</strong> <strong>Services</strong> <strong>Command-Line</strong> <strong>Interface</strong> (<strong>AWS CLI</strong>) <span>utility</span>, which is defined in the <kbd>.gitlab-ci.yml</kbd> file for this project.</p>
+<p>This is easy to fix. We can change the first line in the Dockerfile to the following:</p>
+<pre><strong>FROM python:3.7-alpine</strong></pre>
+<p>This will change the base image of the Docker container to a version of Linux with Python included. Now, you can rebuild the image using the exact same preceding command line and starting the container again.</p>
+<p>If we run the pipeline for this project again, the job will succeed:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/ba7011ed-5490-4bfe-b4a6-0edcfee8d0ad.png"/></p>
+<p>You can create much more elaborate container images, but this was a basic way to containerize a Runner. </p>
+<p>In this section, we have created our own GitLab Runner container and registered it with a GitLab instance. <span>In the next section, we will use a prebuilt image that GitLab provides from their site.</span></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Using a prebuilt Docker container to deploy GitLab Runners</h1>
+                </header>
+            
+            <article>
+                
+<p>There are two basic flavors of prebuilt Docker containers available (Ubuntu-based and Alpine-based). The big difference between them is that the Alpine one is much smaller and has a better security track. You can find it here: <a href="https://gitlab.com/gitlaborg/gitlabrunner/blob/master/dockerfiles/alpine/Dockerfile">https://gitlab.com/gitlaborg/gitlabrunner/blob/master/dockerfiles/alpine/Dockerfile</a>.</p>
+<p>You can run the container with arguments that will be passed through to the GitLab Runner binary that is started inside the container. This also enables easier runtime registration of the Runner with a GitLab instance. Remember from the <em>Creating your own Dockerized GitLab Runner</em> section that we baked the registration of the Runner inside the image. You can find the appropriate images on Docker Hub: <a href="https://hub.docker.com/r/gitlab/gitlab-runner/tags">https://hub.docker.com/r/gitlab/gitlab-runner/tags</a>.</p>
+<p>Just start a container using the following command. It will automatically download the right image:</p>
+<pre><strong>$ mkdir /Users/shared/gitlab-runner &amp;&amp; mkdir /Users/shared/gitlab-runner/config</strong><br/><strong> $ docker run -d --name gitlab-runner -v /Users/shared/gitlab-runner/config:/etc/gitlab-runner \</strong><br/><strong>    -v /var/run/docker.sock:/var/run/docker.sock \</strong><br/><strong>    gitlab/gitlab-runner:latest</strong></pre>
+<p>You can check the logs of the running container with the following command:</p>
+<pre><strong>$ dockers logs -f gitlab-runner</strong><br/><strong> ERROR: Failed to load config stat /etc/gitlab-runner/config.toml: no such file or directory  builds=0</strong></pre>
+<p>The preceding output means that the <kbd>gitlab-runner</kbd> software is running inside the container, but it isn't registered yet.</p>
+<p>The next step is to register it and save the configuration file in the container (in the configuration volume you specified with <kbd>-v</kbd>):</p>
+<pre><strong>docker run --rm -v /User/shared/gitlab-runner/config:/etc/gitlab-runner gitlab/gitlab-runner register \</strong><br/><strong>   --non-interactive \</strong><br/><strong>   --executor "docker" \</strong><br/><strong>   --docker-image python:3.7-alpine \</strong><br/><strong>   --url "https://gitlab-ee.joustie.nl/" \</strong><br/><strong>   --run-untagged="true" \</strong><br/><strong>   --registration-token "xxx" \</strong><br/><strong>   --description "docker-runner" \</strong><br/><strong>   --tag-list "eventmanager" \</strong><br/><strong>   --locked="false"</strong></pre>
+<p>If you examine the container logs (maybe you left the window open) after this, a message should appear:</p>
+<pre><strong>...</strong><br/><strong> Configuration loaded</strong>                               <strong> builds=0</strong></pre>
+<p>This means that the Runner now has a valid configuration and is online with GitLab.</p>
+<p>If we try to trigger the pipeline for the <kbd>eventmanager-documentation</kbd> project again, a job will be run:</p>
+<pre><strong>Checking for jobs... received                       job=660 repo_url=https://gitlab-ee.joustie.nl/marketing/eventmanager-documentation.git runner=8cX8wWCr</strong></pre>
+<p>In GitLab, you will see this job running:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/9ca6f192-edb0-4d8c-aab6-ab2b8288fb4e.png" style="width:39.08em;height:24.92em;"/></p>
+<p>In the log file of the container, a message will appear if the job succeeds:</p>
+<pre><strong>Job succeeded                                       duration=1m17.7055922s job=660 project=10 runner=8cX8wWCr</strong></pre>
+<p>This is also visible in the job log in GitLab:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/225c4efc-b8f2-4186-8f5b-8177f110b7fb.png" style="width:11.92em;height:5.50em;"/></p>
+<p>This concludes the two ways of running Docker locally with relatively simple containers:</p>
+<ul>
+<li>Building your own container</li>
+<li>Using a prebuilt image</li>
+</ul>
+<p>How can you manage this if you have massive amounts of build jobs? You can use an orchestration system such as Kubernetes, which is the subject of the next section.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Using a Kubernetes cluster to spawn GitLab Runners</h1>
+                </header>
+            
+            <article>
+                
+<p>The best method of deploying a GitLab Runner container into a Kubernetes cluster is by using the GitLab Runner Helm chart.</p>
+<p>It contains all of the configuration information that's run using the GitLab Runner Kubernetes executor. For each new job it receives from GitLab CI/CD, it will provision a new pod within the specified namespace to run it.</p>
+<p>You can run the install using the following command:</p>
+<pre><strong>$ helm install --namespace gitlab --name gitlabrunner -f values.yaml  gitlab/gitlab-runner</strong></pre>
+<p>This command can take some time to complete. After some time, you will receive the following output:</p>
+<pre><strong>NAME: gitlabrunner</strong><br/><strong> LAST DEPLOYED: Tue May 21 21:11:15 2019</strong><br/><strong> NAMESPACE: gitlab</strong><br/><strong> STATUS: DEPLOYED</strong><br/> <br/><strong> RESOURCES:</strong><br/><strong> ==&gt; v1/ConfigMap</strong><br/><strong> NAME DATA AGE</strong><br/><strong> gitlabrunner-gitlab-runner 5 0s</strong><br/> <br/><strong> ...</strong></pre>
+<p>This shows quite a bit of output, but the important part is that the status of the Helm chart is <kbd>DEPLOYED</kbd>.</p>
+<p>The GitLab Runner should now be registered to the GitLab instance reachable at <a href="https://gitlab-ee.joustie.nl/">https://gitlab-ee.joustie.nl/</a>.</p>
+<p>We have run this deployment on my local Kubernetes cluster.</p>
+<p>You can find out which Kubernetes pods are running by using the following command:</p>
+<pre><strong>$ kubectl get pods -n gitlab</strong><br/><strong> NAME</strong>                                         <strong> READY   STATUS    RESTARTS   AGE</strong><br/><strong> gitlabrunner-gitlab-runner-787dddf5b5-58fzw   1/1     Running</strong>  <strong> 0          2m</strong></pre>
+<p>As you can see, the Runner was deployed in Kubernetes in the Runner list of the administrative section of GitLab:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/e3e42102-c4ee-4cfe-ac72-57ce5833725a.png"/></p>
+<p>We can run the pipeline for the <kbd><span>eventmanager-documentation</span></kbd> project that was introduced in <a href="1eceee2e-41d6-41cc-95eb-3d225f25f3fa.xhtml">Chapter 10</a>, <em>Create Your Product, Verifying it, and Packaging it,</em> to demonstrate the fact that multiple Runners are spawned on the Kubernetes cluster. Here is the pipeline view in GitLab showing multiple parallel jobs:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/e80b020c-9086-45f1-a007-c2c6142fdf6b.png" style="width:13.50em;height:20.42em;"/></p>
+<p>If you look into individual jobs, you will see that it takes some time to spin up the new Runner resources in the cluster. Until it is ready, the job is polled:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/20bb77e4-4c92-4486-ac83-2b858610ec41.png" style="width:52.92em;height:24.67em;"/></p>
+<p>After some time, a Runner is spawned in the Kubernetes cluster and the jobs are dispatched to it:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/68dcf651-55e4-4809-ad45-63014911eadc.png" style="width:58.08em;height:25.25em;"/></p>
+<p>You can view a list of pods on the Kubernetes cluster and see that many pods were created:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/349e3596-bab6-4413-b629-551bcfb3f0fc.png" style="width:49.50em;height:2.42em;"/></p>
+<p>After some time, you will see that some parallel started jobs are finishing (in green):</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/f274f9f4-9cdb-436a-8a91-cffa490d7e98.png" style="width:22.58em;height:20.08em;"/></p>
+<p>In the end, all of the jobs will succeed and the pipeline will be passed:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/ebbe1740-7893-4758-9a3d-aa46e9c27c2a.png" style="width:22.75em;height:20.75em;"/></p>
+<p>After this job, the number of GitLab Runners is reduced once more.</p>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p>By doing this, we've shown you how to use Kubernetes to manage containers and how to handle scaling on the fly.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Summary</h1>
+                </header>
+            
+            <article>
+                
+<p>In this chapter, we showed you how to run GitLab Runners in containers. First, we looked at a quick way to containerize an existing Runner. Then, we showed you how to use existing Docker images that are provided by GitLab itself. Afterward, we talked about a way to manage a greater amount of containers and how you can handle this more economically with Kubernetes.</p>
+<p>In the next chapter, we will discuss another way to scale Runners: with autoscaling.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Questions</h1>
+                </header>
+            
+            <article>
+                
+<ol>
+<li>What are the advantages of the Docker executor?</li>
+<li>What is the basic build command for a Docker container?</li>
+<li>Which file contains the building instructions for a container?</li>
+<li>What is the name of a small Linux container distribution?</li>
+<li>What tool is used to configure a Kubernetes cluster with much more ease?</li>
+<li>How can you set the number of Runners to spawn by default in Kubernetes?</li>
+</ol>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Further reading</h1>
+                </header>
+            
+            <article>
+                
+<ul>
+<li><em>Kubernetes Course from a DevOps Guru (Kubernetes and Docker)</em>, by <em>Tao W</em>, <em>James Lee</em>, and <em>Basit Mustafa</em>: <a href="https://www.packtpub.com/application-development/kubernetes-course-devops-guru-kubernetes-docker">https://www.packtpub.com/application-development/kubernetes-course-devops-guru-kubernetes-docker</a></li>
+<li><em>Learn Docker <span>– </span>Fundamentals of Docker 18.x</em>, by <em>Gabriel N. Schenker</em>: <a href="https://www.packtpub.com/in/networking-and-servers/learn-docker-fundamentals-docker-18x">https://www.packtpub.com/in/networking-and-servers/learn-docker-fundamentals-docker-18x</a></li>
+<li><em>Hands-On Continuous Integration and Delivery</em>, by <em>Jean-Marcel Belmont</em>: <a href="https://www.packtpub.com/in/virtualization-and-cloud/hands-continuous-integration-and-delivery">https://www.packtpub.com/in/virtualization-and-cloud/hands-continuous-integration-and-delivery</a></li>
+<li><em>Containers from Scratch</em>: <a href="https://ericchiang.github.io/post/containers-from-scratch/">https://ericchiang.github.io/post/containers-from-scratch/</a></li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    </body></html>

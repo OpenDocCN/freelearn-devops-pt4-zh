@@ -1,0 +1,1432 @@
+<html><head></head><body>
+<div class="calibre6">
+<h2 id="sa" class="calibre16">Enabling Process Communication With Kube API Through Service Accounts</h2>
+
+<aside class="tip">
+    <p class="calibre3">Humans are not the only ones who rely on a cluster. Processes in containers often need to invoke Kube API as well. When using RBAC for authentication, we need to decide which users will have permissions to perform specific actions. The same holds true for the processes running inside containers.</p>
+
+</aside>
+
+<p class="calibre3">When we (humans) try to access a Kubernetes cluster with RBAC enabled, we are authenticated as users. Our username provides an identity that API server uses to decide whether we are allowed to perform intended actions. Similarly processes running inside containers might also need to access the API. In such cases, they are authenticated as a specific ServiceAccount.</p>
+
+<p class="calibre3">ServiceAccounts provide a mechanism to grant permissions to processes running inside containers. In many ways, ServiceAccounts are very similar to RBAC users or groups. With humans, we use RoleBindings and ClusterRoleBindings to relate users and groups to Roles and ClusterRoles. When working with processes, the main difference is in the name and the scope. Instead of users or groups, we create ServiceAccounts which we bind to roles.However unlike users that can be global, ServiceAccounts are tied to specific Namespaces.</p>
+
+<aside class="information">
+    <p class="calibre3">This chapter assumes that you are already familiar with Namespaces, Ingress, Deployments, Roles, ClusterRoles, RoleBindings, ClusterRoleBindings, Users, and Groups. If you’re not, please refer to <a href="https://amzn.to/2GvzDjy">The DevOps 2.3 Toolkit: Kubernetes</a> for more info.</p>
+
+</aside>
+
+<p class="calibre3">We won’t go into any more theory. Instead, we’ll try to learn different aspects of ServiceAccounts through hands-on examples.</p>
+
+<h3 id="leanpub-auto-creating-a-cluster-1" class="calibre20">Creating A Cluster</h3>
+
+<p class="calibre3">We’ll start the hands-on walk-through by entering the directory where we cloned the <code class="calibre19">vfarcic/k8s-specs</code> repository.</p>
+
+<aside class="information">
+    <p class="calibre3">All the commands from this chapter are available in the <a href="https://gist.github.com/5fdca8e7f7bb426003abf4ad55745807">02-sa.sh</a> Gist.</p>
+
+</aside>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code><code class="nb">cd</code> k8s-specs
+<code class="lineno">2 </code>
+<code class="lineno">3 </code>git pull
+</pre></div>
+
+</figure>
+
+<p class="calibre3">Next, we’ll need a cluster which we can use to experiment with ServiceAccounts. The requirements are the same as those we used in the previous chapter. We’ll need <strong class="calibre18">Kubernetes version 1.9</strong> or higher as well as <strong class="calibre18">nginx Ingress Controller</strong>, <strong class="calibre18">RBAC</strong>, and a <strong class="calibre18">default StorageClass</strong>. If you didn’t destroy it, please continue using the cluster you created in the previous chapter. Otherwise, it should be reasonably fast to create a new one. For your convenience, the Gists and the specs we used before are available here as well.</p>
+
+<ul class="calibre21">
+  <li class="calibre15">
+<a href="https://gist.github.com/06e313db2957e92b1df09fe39c249a14">docker4mac.sh</a>: <strong class="calibre18">Docker for Mac</strong> with 2 CPUs, 2GB RAM, and with <strong class="calibre18">nginx Ingress</strong>.</li>
+  <li class="calibre15">
+<a href="https://gist.github.com/536e6329e750b795a882900c09feb13b">minikube.sh</a>: <strong class="calibre18">minikube</strong> with 2 CPUs, 2GB RAM, and with <code class="calibre19">ingress</code>, <code class="calibre19">storage-provisioner</code>, and <code class="calibre19">default-storageclass</code> addons enabled.</li>
+  <li class="calibre15">
+<a href="https://gist.github.com/2a3e4ee9cb86d4a5a65cd3e4397f48fd">kops.sh</a>: <strong class="calibre18">kops in AWS</strong> with 3 t2.small masters and 2 t2.medium nodes spread in three availability zones, and with <strong class="calibre18">nginx Ingress</strong> (assumes that the prerequisites are set through <a href="part0018.html#appendix-b">Appendix B</a>).</li>
+  <li class="calibre15">
+<a href="https://gist.github.com/c9968f23ecb1f7b2ec40c6bcc0e03e4f">minishift.sh</a>: <strong class="calibre18">minishift</strong> with 2 CPUs, 2GB RAM, and version 1.16+.</li>
+  <li class="calibre15">
+<a href="https://gist.github.com/5c52c165bf9c5002fedb61f8a5d6a6d1">gke.sh</a>: <strong class="calibre18">Google Kubernetes Engine (GKE)</strong> with 3 n1-standard-1 (1 CPU, 3.75GB RAM) nodes (one in each zone), and with <strong class="calibre18">nginx Ingress</strong> controller running on top of the “standard” one that comes with GKE. We’ll use nginx Ingress for compatibility with other platforms. Feel free to modify the YAML files if you prefer NOT to install nginx Ingress.</li>
+  <li class="calibre15">
+<a href="https://gist.github.com/5496f79a3886be794cc317c6f8dd7083">eks.sh</a>: <strong class="calibre18">Elastic Kubernetes Service (EKS)</strong> with 2 t2.medium nodes, with <strong class="calibre18">nginx Ingress</strong> controller, and with a <strong class="calibre18">default StorageClass</strong>.</li>
+</ul>
+
+<p class="calibre3">Now that we have a cluster, we can proceed with a few examples.</p>
+
+<h3 id="leanpub-auto-configuring-jenkins-kubernetes-plugin" class="calibre20">Configuring Jenkins Kubernetes Plugin</h3>
+
+<p class="calibre3">We’ll start by creating the same Jenkins StatefulSet we used in the previous chapter. Once it’s up-and-running, we’ll try to use <a href="https://github.com/jenkinsci/kubernetes-plugin">Jenkins Kubernetes plugin</a>. If we’re successful, we’ll have a tool which could be used to execute continuous delivery or deployment tasks inside a Kubernetes cluster.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>cat sa/jenkins-no-sa.yml
+</pre></div>
+
+</figure>
+
+<p class="calibre3">We won’t go through the definition since it is the same as the one we used in the previous chapter. There’s no mystery that has to be revealed, so we’ll move on and create the resources defined in that YAML.</p>
+
+<aside class="warning">
+    <h3 id="leanpub-auto-a-note-to-minishift-users-3" class="calibre22">A note to minishift users</h3>
+
+  <p class="calibre3">OpenShift does not allow setting <code class="calibre19">fsGroup</code> in the security context, it uses Routes instead of Ingress, and Services accessible through Routes need to be the <code class="calibre19">LoadBalancer</code> type. Due to those changes, I had to prepare a different YAML specification for minishift. Please execute <code class="calibre19">oc apply -f sa/jenkins-no-sa-oc.yml --record</code> instead of the command that follows.</p>
+
+</aside>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl apply <code class="se">\</code>
+<code class="lineno">2 </code>    -f sa/jenkins-no-sa.yml <code class="se">\</code>
+<code class="lineno">3 </code>    --record
+</pre></div>
+
+</figure>
+
+<p class="calibre3">Next, we’ll wait until <code class="calibre19">jenkins</code> StatefulSet is rolled out.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl -n jenkins <code class="se">\</code>
+<code class="lineno">2 </code>    rollout status sts jenkins
+</pre></div>
+
+</figure>
+
+<aside class="warning">
+    <h3 id="leanpub-auto-a-note-to-gke-users-3" class="calibre22">A note to GKE users</h3>
+
+  <p class="calibre3">GKE uses external load balancer as Ingress. To work properly, the <code class="calibre19">type</code> of the service related to Ingress needs to be <code class="calibre19">NodePort</code>. We’ll have to patch the service to change its type. Please execute the command that follows.</p>
+
+  <p class="calibre3"><code class="calibre19">kubectl -n jenkins patch svc jenkins -p '{"spec":{"type": "NodePort"}}'</code></p>
+
+</aside>
+
+<p class="calibre3">Next, we’ll discover the DNS (or IP) of the load balancer.</p>
+
+<aside class="warning">
+    <h3 id="leanpub-auto-a-note-to-gke-users-4" class="calibre22">A note to GKE users</h3>
+
+  <p class="calibre3">Please change <code class="calibre19">hostname</code> to <code class="calibre19">ip</code> in the following command. The <code class="calibre19">jsonpath</code> should be <code class="calibre19">{.status.loadBalancer.ingress[0].ip}</code>.
+Please note that GKE Ingress spins up an external load balancer and it might take a while until the IP is generated. Therefore, you might need to repeat the command that follows until you get the IP.</p>
+
+</aside>
+
+<aside class="warning">
+    <h3 id="leanpub-auto-a-note-to-minikube-users-1" class="calibre22">A note to minikube users</h3>
+
+  <p class="calibre3">Please change the following command to <code class="calibre19">CLUSTER_DNS=$(minikube ip)</code>.</p>
+
+</aside>
+
+<aside class="warning">
+    <h3 id="leanpub-auto-a-note-to-minishift-users-4" class="calibre22">A note to minishift users</h3>
+
+  <p class="calibre3">Please change the following command to <code class="calibre19">CLUSTER_DNS=jenkins-jenkins.$(minishift ip).nip.io</code>.</p>
+
+</aside>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code><code class="nv">CLUSTER_DNS</code><code class="o">=</code><code class="k">$(</code>kubectl -n jenkins <code class="se">\</code>
+<code class="lineno">2 </code>    get ing jenkins <code class="se">\</code>
+<code class="lineno">3 </code>    -o <code class="nv">jsonpath</code><code class="o">=</code><code class="s">"{.status.loadBalancer.ingress[0].hostname}"</code><code class="k">)</code>
+<code class="lineno">4 </code>
+<code class="lineno">5 </code><code class="nb">echo</code> <code class="nv">$CLUSTER_DNS</code>
+</pre></div>
+
+</figure>
+
+<p class="calibre3">Now that we know the address of the cluster, we can proceed and open Jenkins UI in a browser.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>open <code class="s">"http://</code><code class="nv">$CLUSTER_DNS</code><code class="s">/jenkins"</code>
+</pre></div>
+
+</figure>
+
+<aside class="warning">
+    <p class="calibre3">In some cases (e.g., GKE), it might take a few minutes until the external load balancer is created. If you see 40x or 50x error message, please wait for a while and try to open Jenkins in the browser again.</p>
+
+</aside>
+
+<p class="calibre3">Now we need to go through the setup wizard. It’s a dull process, and I’m sure you’re not thrilled with the prospect of going through it. However, we’re still missing knowledge and tools that will allow us to automate the process. For now, we’ll have to do the boring part manually.</p>
+
+<p class="calibre3">The first step is to get the initial admin password.</p>
+
+<aside class="warning">
+    <h3 id="leanpub-auto-a-note-to-windows-users-2" class="calibre22">A note to Windows users</h3>
+
+  <p class="calibre3">The command that follows might result in <code class="calibre19">no such file or directory</code> error. In that case, please replace <code class="calibre19">/</code> with <code class="calibre19">//</code> in the path. Continue applying the same fix throughout the book if you continue experiencing the same problem.</p>
+
+</aside>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl -n jenkins <code class="se">\</code>
+<code class="lineno">2 </code>    <code class="nb">exec</code> jenkins-0 -it -- <code class="se">\</code>
+<code class="lineno">3 </code>    cat /var/jenkins_home/secrets/initialAdminPassword
+</pre></div>
+
+</figure>
+
+<p class="calibre3">Please copy the output and paste it into the <em class="calibre17">Administrator password</em> field. Click the <em class="calibre17">Continue</em> button, followed with a click to <em class="calibre17">Install suggested plugins</em> button. Fill in the <em class="calibre17">Create First Admin User</em> fields and press the <em class="calibre17">Save and Finish</em> button.</p>
+
+<p class="calibre3">Jenkins is ready, and only a click away. Please press the <em class="calibre17">Start using Jenkins</em> button.</p>
+
+<p class="calibre3">If we are to use the <a href="https://github.com/jenkinsci/kubernetes-plugin">Kubernetes plugin</a>, we need to install it first. We’ll do that through the <em class="calibre17">available plugins section</em> of the <em class="calibre17">plugin manager screen</em>.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>open <code class="s">"http://</code><code class="nv">$CLUSTER_DNS</code><code class="s">/jenkins/pluginManager/available"</code>
+</pre></div>
+
+</figure>
+
+<p class="calibre3">Type <em class="calibre17">Kubernetes</em> in the <em class="calibre17">Filter</em> field and select the checkbox next to it.</p>
+
+<p class="calibre3">Since we are already in the plugin manager screen, we might just as well install BlueOcean as well. It’ll make Jenkins prettier.</p>
+
+<p class="calibre3">Type <em class="calibre17">BlueOcean</em> in the <em class="calibre17">Filter</em> field and select the checkbox next to it.</p>
+
+<p class="calibre3">Now that we selected the plugins we want, the next step is to install them. Please click the <em class="calibre17">Install without restart</em> button and wait until all the plugins (and their dependencies) are installed.</p>
+
+<p class="calibre3">We are not yet finished. We still need to configure the newly installed Kubernetes plugin.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>open <code class="s">"http://</code><code class="nv">$CLUSTER_DNS</code><code class="s">/jenkins/configure"</code>
+</pre></div>
+
+</figure>
+
+<p class="calibre3">The plugin adds Kubernetes as yet another <em class="calibre17">Cloud</em> provider. Please expand the <em class="calibre17">Add a new cloud</em> drop-down list inside the <em class="calibre17">Cloud</em> section, and select <em class="calibre17">Kubernetes</em>. The section you’re looking for should be somewhere close to the bottom of the screen.</p>
+
+<p class="calibre3">Now that we added Kubernetes as a Cloud provider, we should confirm that it works. Please click the <em class="calibre17">Test Connection</em> button.</p>
+
+<p class="calibre3">Unless you forgot to unable RBAC in your cluster, the output should be similar to the one that follows.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>Error testing connection : Failure executing: GET at: https://kubernetes.default.svc\
+<code class="lineno">2 </code>/api/v1/namespaces/jenkins/pods. Message: Forbidden!Configured service account doesn\
+<code class="lineno">3 </code>'t have access. Service account may have been revoked. pods is forbidden: User "syst\
+<code class="lineno">4 </code>em:serviceaccount:jenkins:default" cannot list pods in the namespace "jenkins".
+</pre></div>
+
+</figure>
+
+<aside class="warning">
+    <h3 id="leanpub-auto-a-note-to-docker-for-macwindows-users-1" class="calibre22">A note to Docker For Mac/Windows users</h3>
+
+  <p class="calibre3">Even though Docker for Mac/Windows supports RBAC, it allows any internal process inside containers to communicate with Kube API. That is quite the opposite from what you’ll experience in other Kubernetes platforms. As a result, you’ll see a few discrepancies between the outputs in this chapter and those you’ll see in your cluster. You’ll notice that you’ll be able to perform actions that are forbidden in other Kubernetes platforms.</p>
+
+</aside>
+
+<p class="calibre3">API server rejected our request to list the Pods in the <code class="calibre19">jenkins</code> Namespace. Such a reaction makes perfect sense. If any process in any container could request anything from the API, our security efforts would be useless. What would be the point of trying to restrict users (humans), if all it takes is to create a single Pod that sends a request to the API server? Kube API rightfully denied our request to list the Pods.</p>
+
+<p class="calibre3">Just as a username provides a sort of identity to humans, a ServiceAccount is an identity for all the processes that run in containers. Since we did not specify any ServiceAccount for the Pod where Jenkins is running, Kubernetes assigned one for us. The Pod is authenticated as the <code class="calibre19">default</code> account which happens to be bound to roles that give almost no permissions. In other words, if we do not define a ServiceAccount for a Pod, it’ll be associated with the ServiceAccount <code class="calibre19">default</code>, and the processes inside that Pod will not be able to requests almost anything from the API server.</p>
+
+<p class="calibre3">The <code class="calibre19">default</code> ServiceAccount is created for every Namespace in the cluster. It is, in a way, similar to the default StorageClass. If a Pod does not have a ServiceAccount, it’ll get the <code class="calibre19">default</code>. That ServiceAccount has insufficient privileges, and it cannot do almost anything. We can bind more permissive role to the <code class="calibre19">default</code> ServiceAccount, but that would be a very uncommon solution to the problem.</p>
+
+<p class="calibre3">We need to associate Jenkins process with an entity that has more permissions. As a minimum, we should be able to list the Pods in the <code class="calibre19">jenkins</code> Namespace. To do that, we have to learn about ServiceAccounts first.</p>
+
+<p class="calibre3">We’ll delete <code class="calibre19">jenkins</code> Namespace and search for a simple way explore ServiceAccounts.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl delete ns jenkins
+</pre></div>
+
+</figure>
+
+<h3 id="leanpub-auto-exploring-the-default-serviceaccount" class="calibre20">Exploring the <code class="calibre12">default</code> ServiceAccount</h3>
+
+<p class="calibre3">Jenkins might not be the best starting point in our exploration of ServiceAccounts. Too many things are happening that are out of our control. There’s too much “magic” hidden behind Jenkins code. Instead, we’ll start with something simpler. We’ll run <code class="calibre19">kubectl</code> as a Pod. If we manage to make that work, we should have no problem applying the newly acquired knowledge to Jenkins and other similar use-cases we might have.</p>
+
+<p class="calibre3">Unfortunately, there is no <code class="calibre19">kubectl</code> official image (at least not in Docker Hub), so I built one. The definition is in the <a href="https://github.com/vfarcic/kubectl">vfarcic/kubectl</a> GitHub repository. Let’s take a quick look.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>curl https://raw.githubusercontent.com/vfarcic/kubectl/master/Dockerfile
+</pre></div>
+
+</figure>
+
+<p class="calibre3">The Dockerfile is so uneventful and straightforward that there’s probably no need going through it. It’s a <code class="calibre19">kubectl</code> binary in an <code class="calibre19">alpine</code> based image. Not more, not less.</p>
+
+<p class="calibre3">Let’s run it.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl run kubectl <code class="se">\</code>
+<code class="lineno">2 </code>    --image<code class="o">=</code>vfarcic/kubectl <code class="se">\</code>
+<code class="lineno">3 </code>    --restart<code class="o">=</code>Never <code class="se">\</code>
+<code class="lineno">4 </code>    sleep <code class="o">10000</code>
+</pre></div>
+
+</figure>
+
+<p class="calibre3">We should wait for a few moments until the image is pulled and the container that forms the Pod is running.</p>
+
+<p class="calibre3">Let’s start by checking out the <code class="calibre19">serviceAccount</code> entry in the Pod specification.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl get pod kubectl <code class="se">\</code>
+<code class="lineno">2 </code>    -o <code class="nv">jsonpath</code><code class="o">=</code><code class="s">"{.spec.serviceAccount}"</code>
+</pre></div>
+
+</figure>
+
+<p class="calibre3">The output is as follows.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>default
+</pre></div>
+
+</figure>
+
+<p class="calibre3">Since we did not specify any ServiceAccount, Kubernetes automatically assigned the <code class="calibre19">default</code>. That account was created with the Namespace.</p>
+
+<p class="calibre3">We might be able to dig a bit more information in the <code class="calibre19">kubectl</code> container.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl <code class="nb">exec</code> -it kubectl -- sh
+</pre></div>
+
+</figure>
+
+<p class="calibre3">No matter which ServiceAccount is used, Kubernetes always mounts a secret with the information about that account. The secret is mounted inside the <code class="calibre19">/var/run/secrets/kubernetes.io/serviceaccount</code> directory. </p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code><code class="nb">cd</code> /var/run/secrets/kubernetes.io/serviceaccount
+<code class="lineno">2 </code>
+<code class="lineno">3 </code>ls -la
+</pre></div>
+
+</figure>
+
+<p class="calibre3">We entered into the secret’s directory and listed all the files. The output is as follows.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>total 4
+<code class="lineno">2 </code>... .
+<code class="lineno">3 </code>... ..
+<code class="lineno">4 </code>... ..2018_05_07_00_35_25.899750157
+<code class="lineno">5 </code>... ..data -&gt; ..2018_05_07_00_35_25.899750157
+<code class="lineno">6 </code>... ca.crt -&gt; ..data/ca.crt
+<code class="lineno">7 </code>... namespace -&gt; ..data/namespace
+<code class="lineno">8 </code>... token -&gt; ..data/token
+</pre></div>
+
+</figure>
+
+<p class="calibre3">We can see that it created three soft-links (<code class="calibre19">ca.crt</code>, <code class="calibre19">namespace</code>, and <code class="calibre19">token</code>) which are pointing to a directory that contains the actual files. You should be able to guess what those files contain. The token and the certificate are used for authentication when communicating with the API server. The third file contains only the Namespace in which the Pod is running.</p>
+
+<p class="calibre3">Let’s try a very simple operation.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl get pods
+</pre></div>
+
+</figure>
+
+<p class="calibre3">The output is as follows.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>Error from server (Forbidden): pods is forbidden: User "system:serviceaccount:defaul\
+<code class="lineno">2 </code>t:default" cannot list pods in the namespace "default"
+</pre></div>
+
+</figure>
+
+<p class="calibre3">We got a similar error message as when we tried to use Jenkins’ Kubernetes plugin without credentials. Once again we’re faced with limited permissions bound to the <code class="calibre19">default</code> account. We’ll change that soon. For now, we’ll exit the container and remove the <code class="calibre19">kubectl</code> Pod.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code><code class="nb">exit</code>
+<code class="lineno">2 </code>
+<code class="lineno">3 </code>kubectl delete pod kubectl
+</pre></div>
+
+</figure>
+
+<p class="calibre3">We saw the limitations of the <code class="calibre19">default</code> account. We’ll try to overcome them by creating our own ServiceAccounts.</p>
+
+<h3 id="leanpub-auto-creating-serviceaccounts" class="calibre20">Creating ServiceAccounts</h3>
+
+<p class="calibre3">Let’s take a look at service accounts currently available in the <code class="calibre19">default</code> Namespace.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl get sa
+</pre></div>
+
+</figure>
+
+<p class="calibre3">The output is as follows.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>NAME    SECRETS AGE
+<code class="lineno">2 </code>default 1       24m
+</pre></div>
+
+</figure>
+
+<p class="calibre3">At the moment, there is only one ServiceAccount called <code class="calibre19">default</code>. We already saw the limitations of that account. It is stripped from (almost) all the privileges. If we check the other Namespaces, we’ll notice that all of them have only the <code class="calibre19">default</code> ServiceAccount. Whenever we create a new Namespace, Kubernetes creates that account for us.</p>
+
+<aside class="warning">
+    <h3 id="leanpub-auto-a-note-to-minishift-users-5" class="calibre22">A note to minishift users</h3>
+
+  <p class="calibre3">OpenShift is an exception. Unlike most other Kubernetes flavors, it created a few ServiceAccounts in the <code class="calibre19">default</code> Namespace. Feel free to explore them later when you learn more about ServiceAccounts and their relations to Roles.</p>
+
+</aside>
+
+<p class="calibre3">We already established that we’ll need to create new ServiceAccounts if we are ever to allow processes in containers to communicate with Kube API. As the first exercise, we’ll create an account that will enable us to view (almost) all the resources in the <code class="calibre19">default</code> Namespace. The definition is available in the <code class="calibre19">sa/view.yml</code> file.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>cat sa/view.yml
+</pre></div>
+
+</figure>
+
+<p class="calibre3">The output is as follows.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno"> 1 </code><code class="calibre19">apiVersion</code><code class="calibre19">:</code> <code class="calibre19">v1</code>
+<code class="lineno"> 2 </code><code class="calibre19">kind</code><code class="calibre19">:</code> <code class="calibre19">ServiceAccount</code>
+<code class="lineno"> 3 </code><code class="calibre19">metadata</code><code class="calibre19">:</code>
+<code class="lineno"> 4 </code>  <code class="calibre19">name</code><code class="calibre19">:</code> <code class="calibre19">view</code>
+<code class="lineno"> 5 </code>
+<code class="lineno"> 6 </code><code class="nn">---</code>
+<code class="lineno"> 7 </code>
+<code class="lineno"> 8 </code><code class="calibre19">apiVersion</code><code class="calibre19">:</code> <code class="calibre19">rbac.authorization.k8s.io/v1beta1</code>
+<code class="lineno"> 9 </code><code class="calibre19">kind</code><code class="calibre19">:</code> <code class="calibre19">RoleBinding</code>
+<code class="lineno">10 </code><code class="calibre19">metadata</code><code class="calibre19">:</code>
+<code class="lineno">11 </code>  <code class="calibre19">name</code><code class="calibre19">:</code> <code class="calibre19">view</code>
+<code class="lineno">12 </code><code class="calibre19">roleRef</code><code class="calibre19">:</code>
+<code class="lineno">13 </code>  <code class="calibre19">apiGroup</code><code class="calibre19">:</code> <code class="calibre19">rbac.authorization.k8s.io</code>
+<code class="lineno">14 </code>  <code class="calibre19">kind</code><code class="calibre19">:</code> <code class="calibre19">ClusterRole</code>
+<code class="lineno">15 </code>  <code class="calibre19">name</code><code class="calibre19">:</code> <code class="calibre19">view</code>
+<code class="lineno">16 </code><code class="calibre19">subjects</code><code class="calibre19">:</code>
+<code class="lineno">17 </code><code class="calibre19">-</code> <code class="calibre19">kind</code><code class="calibre19">:</code> <code class="calibre19">ServiceAccount</code>
+<code class="lineno">18 </code>  <code class="calibre19">name</code><code class="calibre19">:</code> <code class="calibre19">view</code>
+</pre></div>
+
+</figure>
+
+<p class="calibre3">The YAML defines two resources. The first one is the <code class="calibre19">ServiceAccount</code> named <code class="calibre19">view</code>. The ServiceAccount kind of resources is on pair with Namespace in its simplicity. Excluding a few flags which we won’t explore just yet, the only thing we can do with it is to declare its existence. The real magic is defined in the RoleBinding.</p>
+
+<p class="calibre3">Just as with RBAC users and groups, RoleBindings are tying Roles to ServiceAccounts. Since our objective to provide read-only permissions that can be fulfilled with the ClusterRole <code class="calibre19">view</code>, we did not need to create a new Role. Instead, we’re binding the ClusterRole <code class="calibre19">view</code> with the ServiceAccount with the same name.</p>
+
+<p class="calibre3">If you are already experienced with RBAC applied to users and groups, you probably noticed that ServiceAccounts follow the same pattern. The only substantial difference, from YAML perspective, is that the <code class="calibre19">kind</code> of the subject is now <code class="calibre19">ServiceAccount</code>, instead of being <code class="calibre19">User</code> or <code class="calibre19">Group</code>.</p>
+
+<p class="calibre3">Let’s create the YAML and observe the results.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl apply -f sa/view.yml --record
+</pre></div>
+
+</figure>
+
+<p class="calibre3">The output should show that the ServiceAccount and the RoleBinding were created.</p>
+
+<p class="calibre3">Next, we’ll list the ServiceAccounts in the <code class="calibre19">default</code> Namespace and confirm that the new one was created.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl get sa
+</pre></div>
+
+</figure>
+
+<p class="calibre3">The output is as follows.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>NAME    SECRETS AGE
+<code class="lineno">2 </code>default 1       27m
+<code class="lineno">3 </code>view    1       6s
+</pre></div>
+
+</figure>
+
+<p class="calibre3">Let’s take a closer look at the ServiceAccount <code class="calibre19">view</code> we just created.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl describe sa view
+</pre></div>
+
+</figure>
+
+<p class="calibre3">The output is as follows.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno"> 1 </code><code class="calibre19">Name</code><code class="calibre19">:</code>        <code class="calibre19">view</code>
+<code class="lineno"> 2 </code><code class="calibre19">Namespace</code><code class="calibre19">:</code>   <code class="k">default</code>
+<code class="lineno"> 3 </code><code class="calibre19">Labels</code><code class="calibre19">:</code>      <code class="o">&lt;</code><code class="calibre19">none</code><code class="o">&gt;</code>
+<code class="lineno"> 4 </code><code class="calibre19">Annotations</code><code class="calibre19">:</code> <code class="calibre19">kubectl</code><code class="calibre19">.</code><code class="calibre19">kubernetes</code><code class="calibre19">.</code><code class="calibre19">io</code><code class="o">/</code><code class="calibre19">last</code><code class="o">-</code><code class="calibre19">applied</code><code class="o">-</code><code class="calibre19">configuration</code><code class="o">=</code><code class="calibre19">{</code><code class="s">"apiVersion"</code><code class="calibre19">:</code><code class="s">"v1"</code><code class="calibre19">,</code><code class="s">"ki\</code>
+<code class="lineno"> 5 </code><code class="s">nd"</code><code class="calibre19">:</code><code class="s">"ServiceAccount"</code><code class="calibre19">,</code><code class="s">"metadata"</code><code class="calibre19">:{</code><code class="s">"annotations"</code><code class="calibre19">:{},</code><code class="s">"name"</code><code class="calibre19">:</code><code class="s">"view"</code><code class="calibre19">,</code><code class="s">"namespace"</code><code class="calibre19">:</code><code class="s">"default\</code>
+<code class="lineno"> 6 </code><code class="s">"</code><code class="calibre19">}}</code>
+<code class="lineno"> 7 </code>             <code class="calibre19">kubernetes</code><code class="calibre19">.</code><code class="calibre19">io</code><code class="o">/</code><code class="calibre19">change</code><code class="o">-</code><code class="calibre19">cause</code><code class="o">=</code><code class="calibre19">kubectl</code> <code class="calibre19">apply</code> <code class="o">--</code><code class="calibre19">filename</code><code class="o">=</code><code class="calibre19">sa</code><code class="o">/</code><code class="calibre19">view</code><code class="calibre19">.</code><code class="calibre19">yml</code> <code class="o">--</code><code class="calibre19">recor</code><code class="o">\</code>
+<code class="lineno"> 8 </code><code class="calibre19">d</code><code class="o">=</code><code class="k">true</code>
+<code class="lineno"> 9 </code><code class="calibre19">Image</code> <code class="calibre19">pull</code> <code class="calibre19">secrets</code><code class="calibre19">:</code> <code class="o">&lt;</code><code class="calibre19">none</code><code class="o">&gt;</code>
+<code class="lineno">10 </code><code class="calibre19">Mountable</code> <code class="calibre19">secrets</code><code class="calibre19">:</code>  <code class="calibre19">view</code><code class="o">-</code><code class="calibre19">token</code><code class="o">-</code><code class="o">292</code><code class="calibre19">vm</code>
+<code class="lineno">11 </code><code class="calibre19">Tokens</code><code class="calibre19">:</code>             <code class="calibre19">view</code><code class="o">-</code><code class="calibre19">token</code><code class="o">-</code><code class="o">292</code><code class="calibre19">vm</code>
+<code class="lineno">12 </code><code class="calibre19">Events</code><code class="calibre19">:</code>             <code class="o">&lt;</code><code class="calibre19">none</code><code class="o">&gt;</code>
+</pre></div>
+
+</figure>
+
+<p class="calibre3">There’s not much to look at since, as we already saw from the definition, ServiceAccounts are only placeholders for bindings.</p>
+
+<p class="calibre3">We should be able to get more information from the binding.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl describe rolebinding view
+</pre></div>
+
+</figure>
+
+<p class="calibre3">The output is as follows.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno"> 1 </code><code class="calibre19">Name</code><code class="o">:</code>        <code class="calibre19">view</code>
+<code class="lineno"> 2 </code><code class="calibre19">Labels</code><code class="o">:</code>      <code class="o">&lt;</code><code class="calibre19">none</code><code class="o">&gt;</code>
+<code class="lineno"> 3 </code><code class="calibre19">Annotations</code><code class="o">:</code> <code class="calibre19">kubectl</code><code class="o">.</code><code class="na">kubernetes</code><code class="o">.</code><code class="na">io</code><code class="o">/</code><code class="calibre19">last</code><code class="o">-</code><code class="calibre19">applied</code><code class="o">-</code><code class="calibre19">configuration</code><code class="o">={</code><code class="s">"apiVersion"</code><code class="o">:</code><code class="s">"rbac.au\</code>
+<code class="lineno"> 4 </code><code class="s">thorization.k8s.io/v1beta1"</code><code class="o">,</code><code class="s">"kind"</code><code class="o">:</code><code class="s">"RoleBinding"</code><code class="o">,</code><code class="s">"metadata"</code><code class="o">:{</code><code class="s">"annotations"</code><code class="o">:{},</code><code class="s">"name"</code><code class="o">\</code>
+<code class="lineno"> 5 </code><code class="o">:</code><code class="s">"view"</code><code class="o">,</code><code class="s">"namespace"</code><code class="o">:</code><code class="s">"default"</code><code class="o">},</code><code class="s">"roleRef"</code><code class="o">:{</code><code class="err">"</code><code class="calibre19">ap</code><code class="o">...</code>
+<code class="lineno"> 6 </code>             <code class="calibre19">kubernetes</code><code class="o">.</code><code class="na">io</code><code class="sr">/change-cause=kubectl apply --filename=sa/</code><code class="calibre19">view</code><code class="o">.</code><code class="na">yml</code> <code class="o">--</code><code class="calibre19">recor</code><code class="o">\</code>
+<code class="lineno"> 7 </code><code class="calibre19">d</code><code class="o">=</code><code class="k">true</code>
+<code class="lineno"> 8 </code><code class="calibre19">Role</code><code class="o">:</code>
+<code class="lineno"> 9 </code>  <code class="calibre19">Kind</code><code class="o">:</code> <code class="calibre19">ClusterRole</code>
+<code class="lineno">10 </code>  <code class="calibre19">Name</code><code class="o">:</code> <code class="calibre19">view</code>
+<code class="lineno">11 </code><code class="calibre19">Subjects</code><code class="o">:</code>
+<code class="lineno">12 </code>  <code class="calibre19">Kind</code>           <code class="calibre19">Name</code> <code class="calibre19">Namespace</code>
+<code class="lineno">13 </code>  <code class="o">----</code>           <code class="o">----</code> <code class="o">---------</code>
+<code class="lineno">14 </code>  <code class="calibre19">ServiceAccount</code> <code class="calibre19">view</code>
+</pre></div>
+
+</figure>
+
+<p class="calibre3">We can see that the <code class="calibre19">ClusterRole</code> named <code class="calibre19">view</code> has a single subject with the ServiceAccount.</p>
+
+<p class="calibre3">Now that we have the ServiceAccount that has enough permissions to view (almost) all the resources, we’ll create a Pod with <code class="calibre19">kubectl</code> which we can use to explore permissions.</p>
+
+<p class="calibre3">The definition is in the <code class="calibre19">sa/kubectl-view.yml</code> file.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>cat sa/kubectl-view.yml
+</pre></div>
+
+</figure>
+
+<p class="calibre3">The output is as follows.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno"> 1 </code><code class="calibre19">apiVersion</code><code class="calibre19">:</code> <code class="calibre19">v1</code>
+<code class="lineno"> 2 </code><code class="calibre19">kind</code><code class="calibre19">:</code> <code class="calibre19">Pod</code>
+<code class="lineno"> 3 </code><code class="calibre19">metadata</code><code class="calibre19">:</code>
+<code class="lineno"> 4 </code>  <code class="calibre19">name</code><code class="calibre19">:</code> <code class="calibre19">kubectl</code>
+<code class="lineno"> 5 </code><code class="calibre19">spec</code><code class="calibre19">:</code>
+<code class="lineno"> 6 </code>  <code class="calibre19">serviceAccountName</code><code class="calibre19">:</code> <code class="calibre19">view</code>
+<code class="lineno"> 7 </code>  <code class="calibre19">containers</code><code class="calibre19">:</code>
+<code class="lineno"> 8 </code>  <code class="calibre19">-</code> <code class="calibre19">name</code><code class="calibre19">:</code> <code class="calibre19">kubectl</code>
+<code class="lineno"> 9 </code>    <code class="calibre19">image</code><code class="calibre19">:</code> <code class="calibre19">vfarcic/kubectl</code>
+<code class="lineno">10 </code>    <code class="calibre19">command</code><code class="calibre19">:</code> <code class="calibre19">[</code><code class="s">"sleep"</code><code class="calibre19">]</code>
+<code class="lineno">11 </code>    <code class="calibre19">args</code><code class="calibre19">:</code> <code class="calibre19">[</code><code class="s">"100000"</code><code class="calibre19">]</code>
+</pre></div>
+
+</figure>
+
+<p class="calibre3">The only new addition is the <code class="calibre19">serviceAccountName: view</code> entry. It associates the Pod with the account.</p>
+
+<p class="calibre3">Let’s create the Pod and describe it.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl apply <code class="se">\</code>
+<code class="lineno">2 </code>    -f sa/kubectl-view.yml <code class="se">\</code>
+<code class="lineno">3 </code>    --record
+<code class="lineno">4 </code>
+<code class="lineno">5 </code>kubectl describe pod kubectl
+</pre></div>
+
+</figure>
+
+<p class="calibre3">The relevant parts of the output of the latter command are as follows.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno"> 1 </code><code class="calibre19">Name</code><code class="calibre19">:</code> <code class="calibre19">kubectl</code>
+<code class="lineno"> 2 </code><code class="nn">...</code>
+<code class="lineno"> 3 </code><code class="calibre19">Containers</code><code class="calibre19">:</code>
+<code class="lineno"> 4 </code>  <code class="calibre19">kubectl</code><code class="calibre19">:</code>
+<code class="lineno"> 5 </code>    <code class="calibre19">...</code>
+<code class="lineno"> 6 </code>    <code class="calibre19">Mounts</code><code class="calibre19">:</code>
+<code class="lineno"> 7 </code>      <code class="calibre19">/var/run/secrets/kubernetes.io/serviceaccount from view-token-292vm (ro)</code>
+<code class="lineno"> 8 </code><code class="nn">...</code>
+<code class="lineno"> 9 </code><code class="calibre19">Volumes</code><code class="calibre19">:</code>
+<code class="lineno">10 </code>  <code class="calibre19">view-token-292vm</code><code class="calibre19">:</code>
+<code class="lineno">11 </code>    <code class="calibre19">Type</code><code class="calibre19">:</code>       <code class="calibre19">Secret (a volume populated by a Secret)</code>
+<code class="lineno">12 </code>    <code class="calibre19">SecretName</code><code class="calibre19">:</code> <code class="calibre19">view-token-292vm</code>
+<code class="lineno">13 </code><code class="nn">...</code>
+</pre></div>
+
+</figure>
+
+<p class="calibre3">Since we declared that we want to associate the Pod with the account <code class="calibre19">view</code>, Kubernetes mounted a token to the container. If we defined more containers in that Pod, all would have the same mount.</p>
+
+<p class="calibre3">Further on, we can see that the mount is using a Secret. It contains the same file structure we observed earlier with the <code class="calibre19">default</code> account.</p>
+
+<p class="calibre3">Let’s see whether we can retrieve the Pods from the same Namespace.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl <code class="nb">exec</code> -it kubectl -- sh
+<code class="lineno">2 </code>
+<code class="lineno">3 </code>kubectl get pods
+</pre></div>
+
+</figure>
+
+<p class="calibre3">We entered into the Shell of the container and listed the Pods.</p>
+
+<p class="calibre3">The output is as follows.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>NAME    READY STATUS  RESTARTS AGE
+<code class="lineno">2 </code>kubectl 1/1   Running 0        55s
+</pre></div>
+
+</figure>
+
+<p class="calibre3">Now that the Pod is associated with the ServiceAccount that has <code class="calibre19">view</code> permissions, we can indeed list the Pods. At the moment, we can see the <code class="calibre19">kubectl</code> Pod since it is the only one running in the <code class="calibre19">default</code> Namespace.</p>
+
+<aside class="warning">
+    <h3 id="leanpub-auto-a-note-to-minishift-users-6" class="calibre22">A note to minishift users</h3>
+
+  <p class="calibre3">You should see three Pods instead of one. When we created the OpenShift cluster with minikube, it deployed Docker Registry and a Router to the <code class="calibre19">default</code> Namespace.</p>
+
+</aside>
+
+<p class="calibre3">Even though you probably know the answer, we’ll confirm that we can indeed only view the resources and that all other operations are forbidden. We’ll try to create a new Pod.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl run new-test <code class="se">\</code>
+<code class="lineno">2 </code>    --image<code class="o">=</code>alpine <code class="se">\</code>
+<code class="lineno">3 </code>    --restart<code class="o">=</code>Never <code class="se">\</code>
+<code class="lineno">4 </code>    sleep <code class="o">10000</code>
+</pre></div>
+
+</figure>
+
+<p class="calibre3">The output is a follows.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>Error from server (Forbidden): pods is forbidden: User "system:serviceaccount:defaul\
+<code class="lineno">2 </code>t:view" cannot create pods in the namespace "default"
+</pre></div>
+
+</figure>
+
+<p class="calibre3">As expected, we cannot create Pods. Since we bound the ClusterRole <code class="calibre19">view</code> to the ServiceAccount, and that allows us only read-only access to resources.</p>
+
+<p class="calibre3">We’ll exit the container and delete the resources we created before we continue exploring ServiceAccounts.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code><code class="nb">exit</code>
+<code class="lineno">2 </code>
+<code class="lineno">3 </code>kubectl delete -f sa/kubectl-view.yml
+</pre></div>
+
+</figure>
+
+<p class="calibre3">Jenkins’ Kubernetes plugin needs to have full permissions related to Pods. It should be able to create them, to retrieve logs from them, to execute processes, to delete them, and so on. The resources defined in <code class="calibre19">sa/pods.yml</code> should allow us just that.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>cat sa/pods.yml
+</pre></div>
+
+</figure>
+
+<p class="calibre3">The output is as follows.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno"> 1 </code><code class="calibre19">apiVersion</code><code class="calibre19">:</code> <code class="calibre19">v1</code>
+<code class="lineno"> 2 </code><code class="calibre19">kind</code><code class="calibre19">:</code> <code class="calibre19">ServiceAccount</code>
+<code class="lineno"> 3 </code><code class="calibre19">metadata</code><code class="calibre19">:</code>
+<code class="lineno"> 4 </code>  <code class="calibre19">name</code><code class="calibre19">:</code> <code class="calibre19">pods-all</code>
+<code class="lineno"> 5 </code>  <code class="calibre19">namespace</code><code class="calibre19">:</code> <code class="calibre19">test1</code>
+<code class="lineno"> 6 </code>
+<code class="lineno"> 7 </code><code class="nn">---</code>
+<code class="lineno"> 8 </code>
+<code class="lineno"> 9 </code><code class="calibre19">kind</code><code class="calibre19">:</code> <code class="calibre19">Role</code>
+<code class="lineno">10 </code><code class="calibre19">apiVersion</code><code class="calibre19">:</code> <code class="calibre19">rbac.authorization.k8s.io/v1beta1</code>
+<code class="lineno">11 </code><code class="calibre19">metadata</code><code class="calibre19">:</code>
+<code class="lineno">12 </code>  <code class="calibre19">name</code><code class="calibre19">:</code> <code class="calibre19">pods-all</code>
+<code class="lineno">13 </code>  <code class="calibre19">namespace</code><code class="calibre19">:</code> <code class="calibre19">test1</code>
+<code class="lineno">14 </code><code class="calibre19">rules</code><code class="calibre19">:</code>
+<code class="lineno">15 </code><code class="calibre19">-</code> <code class="calibre19">apiGroups</code><code class="calibre19">:</code> <code class="calibre19">[</code><code class="s">""</code><code class="calibre19">]</code>
+<code class="lineno">16 </code>  <code class="calibre19">resources</code><code class="calibre19">:</code> <code class="calibre19">[</code><code class="s">"pods"</code><code class="calibre19">,</code> <code class="s">"pods/exec"</code><code class="calibre19">,</code> <code class="s">"pods/log"</code><code class="calibre19">]</code>
+<code class="lineno">17 </code>  <code class="calibre19">verbs</code><code class="calibre19">:</code> <code class="calibre19">[</code><code class="s">"*"</code><code class="calibre19">]</code>
+<code class="lineno">18 </code>
+<code class="lineno">19 </code><code class="nn">---</code>
+<code class="lineno">20 </code>
+<code class="lineno">21 </code><code class="calibre19">apiVersion</code><code class="calibre19">:</code> <code class="calibre19">rbac.authorization.k8s.io/v1beta1</code>
+<code class="lineno">22 </code><code class="calibre19">kind</code><code class="calibre19">:</code> <code class="calibre19">RoleBinding</code>
+<code class="lineno">23 </code><code class="calibre19">metadata</code><code class="calibre19">:</code>
+<code class="lineno">24 </code>  <code class="calibre19">name</code><code class="calibre19">:</code> <code class="calibre19">pods-all</code>
+<code class="lineno">25 </code>  <code class="calibre19">namespace</code><code class="calibre19">:</code> <code class="calibre19">test1</code>
+<code class="lineno">26 </code><code class="calibre19">roleRef</code><code class="calibre19">:</code>
+<code class="lineno">27 </code>  <code class="calibre19">apiGroup</code><code class="calibre19">:</code> <code class="calibre19">rbac.authorization.k8s.io</code>
+<code class="lineno">28 </code>  <code class="calibre19">kind</code><code class="calibre19">:</code> <code class="calibre19">Role</code>
+<code class="lineno">29 </code>  <code class="calibre19">name</code><code class="calibre19">:</code> <code class="calibre19">pods-all</code>
+<code class="lineno">30 </code><code class="calibre19">subjects</code><code class="calibre19">:</code>
+<code class="lineno">31 </code><code class="calibre19">-</code> <code class="calibre19">kind</code><code class="calibre19">:</code> <code class="calibre19">ServiceAccount</code>
+<code class="lineno">32 </code>  <code class="calibre19">name</code><code class="calibre19">:</code> <code class="calibre19">pods-all</code>
+</pre></div>
+
+</figure>
+
+<p class="calibre3">Just as before, we are creating a ServiceAccount. This time we’re naming it <code class="calibre19">pods-all</code>. Since none of the existing roles provide the types of privileges we need, we’re defining a new one that provides full permissions with Pods. Finally, the last resource is the binding that ties the two together. All three resources are, this time, defined in the Namespace <code class="calibre19">test1</code>.</p>
+
+<p class="calibre3">Let’s create the resources.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl apply -f sa/pods.yml <code class="se">\</code>
+<code class="lineno">2 </code>    --record
+</pre></div>
+
+</figure>
+
+<p class="calibre3">So far, we did not explore the effect of ServiceAccounts to Namespaces other than those where we created them, so we’ll create another one called <code class="calibre19">test2</code>.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl create ns test2
+</pre></div>
+
+</figure>
+
+<p class="calibre3">Finally, we’ll run <code class="calibre19">kubectl</code> as a Pod so that we can test the new account. Let’s take a very quick look at the updated <code class="calibre19">kubectl</code> Pod definition.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>cat sa/kubectl-test1.yml
+</pre></div>
+
+</figure>
+
+<p class="calibre3">The output is as follows.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno"> 1 </code><code class="calibre19">apiVersion</code><code class="calibre19">:</code> <code class="calibre19">v1</code>
+<code class="lineno"> 2 </code><code class="calibre19">kind</code><code class="calibre19">:</code> <code class="calibre19">Pod</code>
+<code class="lineno"> 3 </code><code class="calibre19">metadata</code><code class="calibre19">:</code>
+<code class="lineno"> 4 </code>  <code class="calibre19">name</code><code class="calibre19">:</code> <code class="calibre19">kubectl</code>
+<code class="lineno"> 5 </code>  <code class="calibre19">namespace</code><code class="calibre19">:</code> <code class="calibre19">test1</code>
+<code class="lineno"> 6 </code><code class="calibre19">spec</code><code class="calibre19">:</code>
+<code class="lineno"> 7 </code>  <code class="calibre19">serviceAccountName</code><code class="calibre19">:</code> <code class="calibre19">pods-all</code>
+<code class="lineno"> 8 </code>  <code class="calibre19">containers</code><code class="calibre19">:</code>
+<code class="lineno"> 9 </code>  <code class="calibre19">-</code> <code class="calibre19">name</code><code class="calibre19">:</code> <code class="calibre19">kubectl</code>
+<code class="lineno">10 </code>    <code class="calibre19">image</code><code class="calibre19">:</code> <code class="calibre19">vfarcic/kubectl</code>
+<code class="lineno">11 </code>    <code class="calibre19">command</code><code class="calibre19">:</code> <code class="calibre19">[</code><code class="s">"sleep"</code><code class="calibre19">]</code>
+<code class="lineno">12 </code>    <code class="calibre19">args</code><code class="calibre19">:</code> <code class="calibre19">[</code><code class="s">"100000"</code><code class="calibre19">]</code>
+</pre></div>
+
+</figure>
+
+<p class="calibre3">The only differences from the previous <code class="calibre19">kubectl</code> definition are in the <code class="calibre19">namespace</code> and the <code class="calibre19">serviceAccountName</code>. I’ll assume that there’s no need for an explanation. Instead, we’ll proceed and <code class="calibre19">apply</code> the definition.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl apply <code class="se">\</code>
+<code class="lineno">2 </code>    -f sa/kubectl-test1.yml <code class="se">\</code>
+<code class="lineno">3 </code>    --record
+</pre></div>
+
+</figure>
+
+<p class="calibre3">Now we’re ready to test the new account.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl -n test1 <code class="nb">exec</code> -it kubectl -- sh
+<code class="lineno">2 </code>
+<code class="lineno">3 </code>kubectl get pods
+</pre></div>
+
+</figure>
+
+<p class="calibre3">We entered the <code class="calibre19">kubectl</code> container and retrieved the Pods.</p>
+
+<p class="calibre3">The output is as follows.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>NAME    READY STATUS  RESTARTS AGE
+<code class="lineno">2 </code>kubectl 1/1   Running 0        5m
+</pre></div>
+
+</figure>
+
+<p class="calibre3">We already experienced the same result when we used the ServiceAccount with the <code class="calibre19">view</code> Role, so let’s try something different and try to create a Pod.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl run new-test <code class="se">\</code>
+<code class="lineno">2 </code>    --image<code class="o">=</code>alpine <code class="se">\</code>
+<code class="lineno">3 </code>    --restart<code class="o">=</code>Never <code class="se">\</code>
+<code class="lineno">4 </code>    sleep <code class="o">10000</code>
+</pre></div>
+
+</figure>
+
+<p class="calibre3">Unlike before, this time the <code class="calibre19">pod "new-test"</code> was <code class="calibre19">created</code>. We can confirm that by listing the Pods one more time.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl get pods
+</pre></div>
+
+</figure>
+
+<p class="calibre3">The output is as follows.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>NAME     READY STATUS  RESTARTS AGE
+<code class="lineno">2 </code>kubectl  1/1   Running 0        6m
+<code class="lineno">3 </code>new-test 1/1   Running 0        17s
+</pre></div>
+
+</figure>
+
+<p class="calibre3">How about creating a Deployment?</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl run new-test <code class="se">\</code>
+<code class="lineno">2 </code>    --image<code class="o">=</code>alpine sleep <code class="o">10000</code>
+</pre></div>
+
+</figure>
+
+<p class="calibre3">As you hopefully already know, if we execute a <code class="calibre19">run</code> command without the <code class="calibre19">--restart=Never</code> argument, Kubernetes creates a Deployment, instead of a Pod.</p>
+
+<p class="calibre3">The output is as follows.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>Error from server (Forbidden): deployments.extensions is forbidden: User "system:ser\
+<code class="lineno">2 </code>viceaccount:test1:pods-all" cannot create deployments.extensions in the namespace "t\
+<code class="lineno">3 </code>est1"
+</pre></div>
+
+</figure>
+
+<p class="calibre3">It’s obvious that our ServiceAccount does not have any permissions aside from those related to Pods, so we were forbidden from creating a Deployment.</p>
+
+<p class="calibre3">Let’s see what happens if, for example, we try to retrieve the Pods from the Namespace <code class="calibre19">test2</code>. As a reminder, we are still inside a container that forms the Pod in the <code class="calibre19">test1</code> Namespace.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl -n test2 get pods
+</pre></div>
+
+</figure>
+
+<p class="calibre3">The ServiceAccount was created in the <code class="calibre19">test1</code> Namespace. Therefore only the Pods created in the same Namespace can be attached to the <code class="calibre19">pods-all</code> ServiceAccount. In this case, the principal thing to note is that the RoleBinding that gives us the permissions to, for example, retrieve the Pods, exists only in the <code class="calibre19">test1</code> Namespace. The moment we tried to retrieve the Pods from a different Namespace, the API server responded with an error notifying us that we do not have permissions to <code class="calibre19">list pods in the namespace "test2"</code>.</p>
+
+<aside class="tip">
+    <p class="calibre3">While user accounts are global, ServiceAccounts are namespaced. After all, a human user is almost always invoking the API from outside the cluster while the processes inside containers are always inside the Pods which are inside the Namespaces.</p>
+
+</aside>
+
+<p class="calibre3">We’ll exit the container and delete the resources we created, before we explore other aspects of ServiceAccounts.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code><code class="nb">exit</code>
+<code class="lineno">2 </code>
+<code class="lineno">3 </code>kubectl delete -f sa/kubectl-test1.yml
+</pre></div>
+
+</figure>
+
+<p class="calibre3">We saw that, with the previous definition, we obtained permissions only within the same Namespace as the Pod attached to the ServiceAccount. In some cases that is not enough. Jenkins is a good use-case. We might decide to run Jenkins master in one Namespace but run the builds in another. Or, we might create a pipeline that deploys a beta version of our application and tests it in one Namespace and, later on, deploys it as production release in another. Surely there is a way to accommodate such needs.</p>
+
+<p class="calibre3">Let’s take a look at yet another YAML.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>cat sa/pods-all.yml
+</pre></div>
+
+</figure>
+
+<p class="calibre3">The output is as follows.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno"> 1 </code><code class="calibre19">apiVersion</code><code class="calibre19">:</code> <code class="calibre19">v1</code>
+<code class="lineno"> 2 </code><code class="calibre19">kind</code><code class="calibre19">:</code> <code class="calibre19">ServiceAccount</code>
+<code class="lineno"> 3 </code><code class="calibre19">metadata</code><code class="calibre19">:</code>
+<code class="lineno"> 4 </code>  <code class="calibre19">name</code><code class="calibre19">:</code> <code class="calibre19">pods-all</code>
+<code class="lineno"> 5 </code>  <code class="calibre19">namespace</code><code class="calibre19">:</code> <code class="calibre19">test1</code>
+<code class="lineno"> 6 </code>
+<code class="lineno"> 7 </code><code class="nn">---</code>
+<code class="lineno"> 8 </code>
+<code class="lineno"> 9 </code><code class="calibre19">kind</code><code class="calibre19">:</code> <code class="calibre19">Role</code>
+<code class="lineno">10 </code><code class="calibre19">apiVersion</code><code class="calibre19">:</code> <code class="calibre19">rbac.authorization.k8s.io/v1beta1</code>
+<code class="lineno">11 </code><code class="calibre19">metadata</code><code class="calibre19">:</code>
+<code class="lineno">12 </code>  <code class="calibre19">name</code><code class="calibre19">:</code> <code class="calibre19">pods-all</code>
+<code class="lineno">13 </code>  <code class="calibre19">namespace</code><code class="calibre19">:</code> <code class="calibre19">test1</code>
+<code class="lineno">14 </code><code class="calibre19">rules</code><code class="calibre19">:</code>
+<code class="lineno">15 </code><code class="calibre19">-</code> <code class="calibre19">apiGroups</code><code class="calibre19">:</code> <code class="calibre19">[</code><code class="s">""</code><code class="calibre19">]</code>
+<code class="lineno">16 </code>  <code class="calibre19">resources</code><code class="calibre19">:</code> <code class="calibre19">[</code><code class="s">"pods"</code><code class="calibre19">,</code> <code class="s">"pods/exec"</code><code class="calibre19">,</code> <code class="s">"pods/log"</code><code class="calibre19">]</code>
+<code class="lineno">17 </code>  <code class="calibre19">verbs</code><code class="calibre19">:</code> <code class="calibre19">[</code><code class="s">"*"</code><code class="calibre19">]</code>
+<code class="lineno">18 </code>
+<code class="lineno">19 </code><code class="nn">---</code>
+<code class="lineno">20 </code>
+<code class="lineno">21 </code><code class="calibre19">kind</code><code class="calibre19">:</code> <code class="calibre19">Role</code>
+<code class="lineno">22 </code><code class="calibre19">apiVersion</code><code class="calibre19">:</code> <code class="calibre19">rbac.authorization.k8s.io/v1beta1</code>
+<code class="lineno">23 </code><code class="calibre19">metadata</code><code class="calibre19">:</code>
+<code class="lineno">24 </code>  <code class="calibre19">name</code><code class="calibre19">:</code> <code class="calibre19">pods-all</code>
+<code class="lineno">25 </code>  <code class="calibre19">namespace</code><code class="calibre19">:</code> <code class="calibre19">test2</code>
+<code class="lineno">26 </code><code class="calibre19">rules</code><code class="calibre19">:</code>
+<code class="lineno">27 </code><code class="calibre19">-</code> <code class="calibre19">apiGroups</code><code class="calibre19">:</code> <code class="calibre19">[</code><code class="s">""</code><code class="calibre19">]</code>
+<code class="lineno">28 </code>  <code class="calibre19">resources</code><code class="calibre19">:</code> <code class="calibre19">[</code><code class="s">"pods"</code><code class="calibre19">,</code> <code class="s">"pods/exec"</code><code class="calibre19">,</code> <code class="s">"pods/log"</code><code class="calibre19">]</code>
+<code class="lineno">29 </code>  <code class="calibre19">verbs</code><code class="calibre19">:</code> <code class="calibre19">[</code><code class="s">"*"</code><code class="calibre19">]</code>
+<code class="lineno">30 </code>
+<code class="lineno">31 </code><code class="nn">---</code>
+<code class="lineno">32 </code>
+<code class="lineno">33 </code><code class="calibre19">apiVersion</code><code class="calibre19">:</code> <code class="calibre19">rbac.authorization.k8s.io/v1beta1</code>
+<code class="lineno">34 </code><code class="calibre19">kind</code><code class="calibre19">:</code> <code class="calibre19">RoleBinding</code>
+<code class="lineno">35 </code><code class="calibre19">metadata</code><code class="calibre19">:</code>
+<code class="lineno">36 </code>  <code class="calibre19">name</code><code class="calibre19">:</code> <code class="calibre19">pods-all</code>
+<code class="lineno">37 </code>  <code class="calibre19">namespace</code><code class="calibre19">:</code> <code class="calibre19">test1</code>
+<code class="lineno">38 </code><code class="calibre19">roleRef</code><code class="calibre19">:</code>
+<code class="lineno">39 </code>  <code class="calibre19">apiGroup</code><code class="calibre19">:</code> <code class="calibre19">rbac.authorization.k8s.io</code>
+<code class="lineno">40 </code>  <code class="calibre19">kind</code><code class="calibre19">:</code> <code class="calibre19">Role</code>
+<code class="lineno">41 </code>  <code class="calibre19">name</code><code class="calibre19">:</code> <code class="calibre19">pods-all</code>
+<code class="lineno">42 </code><code class="calibre19">subjects</code><code class="calibre19">:</code>
+<code class="lineno">43 </code><code class="calibre19">-</code> <code class="calibre19">kind</code><code class="calibre19">:</code> <code class="calibre19">ServiceAccount</code>
+<code class="lineno">44 </code>  <code class="calibre19">name</code><code class="calibre19">:</code> <code class="calibre19">pods-all</code>
+<code class="lineno">45 </code>
+<code class="lineno">46 </code><code class="nn">---</code>
+<code class="lineno">47 </code>
+<code class="lineno">48 </code><code class="calibre19">apiVersion</code><code class="calibre19">:</code> <code class="calibre19">rbac.authorization.k8s.io/v1beta1</code>
+<code class="lineno">49 </code><code class="calibre19">kind</code><code class="calibre19">:</code> <code class="calibre19">RoleBinding</code>
+<code class="lineno">50 </code><code class="calibre19">metadata</code><code class="calibre19">:</code>
+<code class="lineno">51 </code>  <code class="calibre19">name</code><code class="calibre19">:</code> <code class="calibre19">pods-all</code>
+<code class="lineno">52 </code>  <code class="calibre19">namespace</code><code class="calibre19">:</code> <code class="calibre19">test2</code>
+<code class="lineno">53 </code><code class="calibre19">roleRef</code><code class="calibre19">:</code>
+<code class="lineno">54 </code>  <code class="calibre19">apiGroup</code><code class="calibre19">:</code> <code class="calibre19">rbac.authorization.k8s.io</code>
+<code class="lineno">55 </code>  <code class="calibre19">kind</code><code class="calibre19">:</code> <code class="calibre19">Role</code>
+<code class="lineno">56 </code>  <code class="calibre19">name</code><code class="calibre19">:</code> <code class="calibre19">pods-all</code>
+<code class="lineno">57 </code><code class="calibre19">subjects</code><code class="calibre19">:</code>
+<code class="lineno">58 </code><code class="calibre19">-</code> <code class="calibre19">kind</code><code class="calibre19">:</code> <code class="calibre19">ServiceAccount</code>
+<code class="lineno">59 </code>  <code class="calibre19">name</code><code class="calibre19">:</code> <code class="calibre19">pods-all</code>
+<code class="lineno">60 </code>  <code class="calibre19">namespace</code><code class="calibre19">:</code> <code class="calibre19">test1</code>
+</pre></div>
+
+</figure>
+
+<p class="calibre3">We start by creating a ServiceAccount and a Role called <code class="calibre19">pods-all</code> in the <code class="calibre19">test1</code> Namespace. Further on, we’re creating the same role but in the <code class="calibre19">test2</code> Namespace. Finally, we’re creating RoleBindings in both Namespaces. The only difference between the two is in a single line. The RoleBinding in the <code class="calibre19">test2</code> Namespace has the <code class="calibre19">subjects</code> entry <code class="calibre19">namespace: test1</code>. With it, we are linking a binding from one Namespace to a ServiceAccount in another. As a result, we should be able to create a Pod in the <code class="calibre19">test1</code> Namespace that will have full permissions to operate Pods in both Namespaces.</p>
+
+<p class="calibre3">The two Roles could have been with different permission. They are the same (for now) only for simplicity reasons. We could have simplified the definition by defining a single ClusterRole and save ourselves from having two Roles (one in each Namespace). However, once we get back to Jenkins, we’ll probably want to have different permissions in different Namespaces, so we’re defining two Roles as a practice.</p>
+
+<p class="calibre3">Let’s apply the new definition, create a <code class="calibre19">kubectl</code> Pod again, and enter inside its only container.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl apply -f sa/pods-all.yml <code class="se">\</code>
+<code class="lineno">2 </code>    --record
+<code class="lineno">3 </code>
+<code class="lineno">4 </code>kubectl apply <code class="se">\</code>
+<code class="lineno">5 </code>    -f sa/kubectl-test2.yml <code class="se">\</code>
+<code class="lineno">6 </code>    --record
+<code class="lineno">7 </code>
+<code class="lineno">8 </code>kubectl -n test1 <code class="nb">exec</code> -it kubectl -- sh
+</pre></div>
+
+</figure>
+
+<p class="calibre3">There’s probably no need to confirm again that we can retrieve the Pods from the same Namespace so we’ll jump straight to testing whether we can now operate within the <code class="calibre19">test2</code> Namespace.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl -n test2 get pods
+</pre></div>
+
+</figure>
+
+<p class="calibre3">The output shows that <code class="calibre19">no resources</code> were <code class="calibre19">found</code>. If we did not have permissions to view the files, we’d get the already familiar <code class="calibre19">forbidden</code> message instead.</p>
+
+<p class="calibre3">To be on the safe side, we’ll try to create a Pod in the <code class="calibre19">test2</code> Namespace.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl -n test2 <code class="se">\</code>
+<code class="lineno">2 </code>    run new-test <code class="se">\</code>
+<code class="lineno">3 </code>    --image<code class="o">=</code>alpine <code class="se">\</code>
+<code class="lineno">4 </code>    --restart<code class="o">=</code>Never <code class="se">\</code>
+<code class="lineno">5 </code>    sleep <code class="o">10000</code>
+<code class="lineno">6 </code>
+<code class="lineno">7 </code>kubectl -n test2 get pods
+</pre></div>
+
+</figure>
+
+<p class="calibre3">The output of the latter command is as follows.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>NAME     READY STATUS  RESTARTS AGE
+<code class="lineno">2 </code>new-test 1/1   Running 0        18s
+</pre></div>
+
+</figure>
+
+<p class="calibre3">The Pod was created in the <code class="calibre19">test2</code> Namespace. Mission was accomplished, and we can get out of the container and delete the Namespaces we created, before we try to apply the knowledge about ServiceAccounts to Jenkins.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code><code class="nb">exit</code>
+<code class="lineno">2 </code>
+<code class="lineno">3 </code>kubectl delete ns test1 test2
+</pre></div>
+
+</figure>
+
+<h3 id="leanpub-auto-configuring-jenkins-kubernetes-plugin-with-serviceaccounts" class="calibre20">Configuring Jenkins Kubernetes Plugin With ServiceAccounts</h3>
+
+<p class="calibre3">Now that we got a grip on ServiceAccounts, it should be relatively straightforward to correct the problem we experienced with Jenkins. As a reminder, we could not configure the Kubernetes plugin. We experienced the same <code class="calibre19">forbidden</code> message as when we tried to use <code class="calibre19">kubectl</code> container with the <code class="calibre19">default</code> ServiceAccount. Now that we know that ServiceAccounts provide permissions to processes running inside containers, all we have to do is to define one for Jenkins.</p>
+
+<p class="calibre3">We’ll spice it up a bit with a slightly more complicated use-case. We’ll try to run Jenkins master in one Namespace and perform builds in another. That way we can have a clear separation between Jenkins and “random” stuff our builds might be doing. Through such separation, we can guarantee that Jenkins will (probably) not be affected if we do something wrong in our builds.</p>
+
+<aside class="warning">
+    <p class="calibre3">Our example will not set up LimitRanges and ResourceQuotas. I’ll assume that you’re familiar with them and that you understand that a more serious setting must have them defined. If you’re a newbie to those things, please consult the official documentation or explore related chapters in <a href="https://amzn.to/2GvzDjy">The DevOps 2.3 Toolkit: Kubernetes</a>.</p>
+
+</aside>
+
+<p class="calibre3">Let’s take a look at yet another Jenkins definition.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>cat sa/jenkins.yml
+</pre></div>
+
+</figure>
+
+<p class="calibre3">The relevant parts of the output are as follows.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno"> 1 </code><code class="nn">...</code>
+<code class="lineno"> 2 </code><code class="calibre19">apiVersion</code><code class="calibre19">:</code> <code class="calibre19">v1</code>
+<code class="lineno"> 3 </code><code class="calibre19">kind</code><code class="calibre19">:</code> <code class="calibre19">Namespace</code>
+<code class="lineno"> 4 </code><code class="calibre19">metadata</code><code class="calibre19">:</code>
+<code class="lineno"> 5 </code>  <code class="calibre19">name</code><code class="calibre19">:</code> <code class="calibre19">build</code>
+<code class="lineno"> 6 </code>
+<code class="lineno"> 7 </code><code class="nn">---</code>
+<code class="lineno"> 8 </code>
+<code class="lineno"> 9 </code><code class="calibre19">apiVersion</code><code class="calibre19">:</code> <code class="calibre19">v1</code>
+<code class="lineno">10 </code><code class="calibre19">kind</code><code class="calibre19">:</code> <code class="calibre19">ServiceAccount</code>
+<code class="lineno">11 </code><code class="calibre19">metadata</code><code class="calibre19">:</code>
+<code class="lineno">12 </code>  <code class="calibre19">name</code><code class="calibre19">:</code> <code class="calibre19">jenkins</code>
+<code class="lineno">13 </code>  <code class="calibre19">namespace</code><code class="calibre19">:</code> <code class="calibre19">jenkins</code>
+<code class="lineno">14 </code>
+<code class="lineno">15 </code><code class="nn">---</code>
+<code class="lineno">16 </code>
+<code class="lineno">17 </code><code class="calibre19">kind</code><code class="calibre19">:</code> <code class="calibre19">Role</code>
+<code class="lineno">18 </code><code class="calibre19">apiVersion</code><code class="calibre19">:</code> <code class="calibre19">rbac.authorization.k8s.io/v1beta1</code>
+<code class="lineno">19 </code><code class="calibre19">metadata</code><code class="calibre19">:</code>
+<code class="lineno">20 </code>  <code class="calibre19">name</code><code class="calibre19">:</code> <code class="calibre19">jenkins</code>
+<code class="lineno">21 </code>  <code class="calibre19">namespace</code><code class="calibre19">:</code> <code class="calibre19">build</code>
+<code class="lineno">22 </code><code class="calibre19">rules</code><code class="calibre19">:</code>
+<code class="lineno">23 </code><code class="calibre19">-</code> <code class="calibre19">apiGroups</code><code class="calibre19">:</code> <code class="calibre19">[</code><code class="s">""</code><code class="calibre19">]</code>
+<code class="lineno">24 </code>  <code class="calibre19">resources</code><code class="calibre19">:</code> <code class="calibre19">[</code><code class="s">"pods"</code><code class="calibre19">,</code> <code class="s">"pods/exec"</code><code class="calibre19">,</code> <code class="s">"pods/log"</code><code class="calibre19">]</code>
+<code class="lineno">25 </code>  <code class="calibre19">verbs</code><code class="calibre19">:</code> <code class="calibre19">[</code><code class="s">"*"</code><code class="calibre19">]</code>
+<code class="lineno">26 </code><code class="calibre19">-</code> <code class="calibre19">apiGroups</code><code class="calibre19">:</code> <code class="calibre19">[</code><code class="s">""</code><code class="calibre19">]</code>
+<code class="lineno">27 </code>  <code class="calibre19">resources</code><code class="calibre19">:</code> <code class="calibre19">[</code><code class="s">"secrets"</code><code class="calibre19">]</code>
+<code class="lineno">28 </code>  <code class="calibre19">verbs</code><code class="calibre19">:</code> <code class="calibre19">[</code><code class="s">"get"</code><code class="calibre19">]</code>
+<code class="lineno">29 </code>
+<code class="lineno">30 </code><code class="nn">---</code>
+<code class="lineno">31 </code>
+<code class="lineno">32 </code><code class="calibre19">apiVersion</code><code class="calibre19">:</code> <code class="calibre19">rbac.authorization.k8s.io/v1beta1</code>
+<code class="lineno">33 </code><code class="calibre19">kind</code><code class="calibre19">:</code> <code class="calibre19">RoleBinding</code>
+<code class="lineno">34 </code><code class="calibre19">metadata</code><code class="calibre19">:</code>
+<code class="lineno">35 </code>  <code class="calibre19">name</code><code class="calibre19">:</code> <code class="calibre19">jenkins</code>
+<code class="lineno">36 </code>  <code class="calibre19">namespace</code><code class="calibre19">:</code> <code class="calibre19">build</code>
+<code class="lineno">37 </code><code class="calibre19">roleRef</code><code class="calibre19">:</code>
+<code class="lineno">38 </code>  <code class="calibre19">apiGroup</code><code class="calibre19">:</code> <code class="calibre19">rbac.authorization.k8s.io</code>
+<code class="lineno">39 </code>  <code class="calibre19">kind</code><code class="calibre19">:</code> <code class="calibre19">Role</code>
+<code class="lineno">40 </code>  <code class="calibre19">name</code><code class="calibre19">:</code> <code class="calibre19">jenkins</code>
+<code class="lineno">41 </code><code class="calibre19">subjects</code><code class="calibre19">:</code>
+<code class="lineno">42 </code><code class="calibre19">-</code> <code class="calibre19">kind</code><code class="calibre19">:</code> <code class="calibre19">ServiceAccount</code>
+<code class="lineno">43 </code>  <code class="calibre19">name</code><code class="calibre19">:</code> <code class="calibre19">jenkins</code>
+<code class="lineno">44 </code>  <code class="calibre19">namespace</code><code class="calibre19">:</code> <code class="calibre19">jenkins</code>
+<code class="lineno">45 </code><code class="nn">...</code>
+<code class="lineno">46 </code><code class="calibre19">apiVersion</code><code class="calibre19">:</code> <code class="calibre19">apps/v1beta2</code>
+<code class="lineno">47 </code><code class="calibre19">kind</code><code class="calibre19">:</code> <code class="calibre19">StatefulSet</code>
+<code class="lineno">48 </code><code class="calibre19">metadata</code><code class="calibre19">:</code>
+<code class="lineno">49 </code>  <code class="calibre19">name</code><code class="calibre19">:</code> <code class="calibre19">jenkins</code>
+<code class="lineno">50 </code>  <code class="calibre19">namespace</code><code class="calibre19">:</code> <code class="calibre19">jenkins</code>
+<code class="lineno">51 </code><code class="calibre19">spec</code><code class="calibre19">:</code>
+<code class="lineno">52 </code>  <code class="calibre19">...</code>
+<code class="lineno">53 </code>  <code class="calibre19">template</code><code class="calibre19">:</code>
+<code class="lineno">54 </code>    <code class="calibre19">...</code>
+<code class="lineno">55 </code>    <code class="calibre19">spec</code><code class="calibre19">:</code>
+<code class="lineno">56 </code>      <code class="calibre19">serviceAccountName</code><code class="calibre19">:</code> <code class="calibre19">jenkins</code>
+<code class="lineno">57 </code>      <code class="calibre19">...</code>
+</pre></div>
+
+</figure>
+
+<p class="calibre3">This time we are creating a second Namespace called <code class="calibre19">build</code> and a ServiceAccount <code class="calibre19">jenkins</code> in the <code class="calibre19">jenkins</code> namespace. Further on, we created a Role and a RoleBinding that provides required permissions in the <code class="calibre19">build</code> Namespace. As such, we bound the Role with the ServiceAccount in the <code class="calibre19">jenkins</code> Namespace. As a result, Jenkins should be able to create Pods in <code class="calibre19">build</code>, but it won’t be able to do anything in its own Namespace <code class="calibre19">jenkins</code>. That way we can be relatively safe that a problem in our builds will not affect Jenkins. If we specified ResourceQuotas and LimitRanges for both Namespaces, our solution would be even more bulletproof. But, since I assume that you know how to do that, I excluded them in an attempt to simplify the definition.</p>
+
+<p class="calibre3">Let’s apply the config and observe the result.</p>
+
+<aside class="warning">
+    <h3 id="leanpub-auto-a-note-to-minishift-users-7" class="calibre22">A note to minishift users</h3>
+
+  <p class="calibre3">Due to the changes required for OpenShift, we’ll use a different YAML specification. Please execute <code class="calibre19">oc apply -f sa/jenkins-oc.yml --record</code> instead of the command that follows.</p>
+
+</aside>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl apply <code class="se">\</code>
+<code class="lineno">2 </code>    -f sa/jenkins.yml <code class="se">\</code>
+<code class="lineno">3 </code>    --record
+</pre></div>
+
+</figure>
+
+<aside class="warning">
+    <h3 id="leanpub-auto-a-note-to-gke-users-5" class="calibre22">A note to GKE users</h3>
+
+  <p class="calibre3">GKE uses external load balancer as Ingress. To work properly, the <code class="calibre19">type</code> of the service related to Ingress needs to be <code class="calibre19">NodePort</code>. We’ll have to patch the service to change its type. Please execute the command that follows.</p>
+
+  <p class="calibre3"><code class="calibre19">kubectl -n jenkins patch svc jenkins -p '{"spec":{"type": "NodePort"}}'</code></p>
+
+</aside>
+
+<p class="calibre3">We can see from the output that the resources were created. All that’s left is to wait until Jenkins rolls out.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl -n jenkins <code class="se">\</code>
+<code class="lineno">2 </code>    rollout status sts jenkins
+</pre></div>
+
+</figure>
+
+<p class="calibre3">Now that Jenkins is up-and-running, we should open it in a browser and repeat the same setup steps we did before.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>open <code class="s">"http://</code><code class="nv">$CLUSTER_DNS</code><code class="s">/jenkins"</code>
+</pre></div>
+
+</figure>
+
+<p class="calibre3">The first step is to get the initial admin password.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl -n jenkins <code class="se">\</code>
+<code class="lineno">2 </code>    <code class="nb">exec</code> jenkins-0 -it -- <code class="se">\</code>
+<code class="lineno">3 </code>    cat /var/jenkins_home/secrets/initialAdminPassword
+</pre></div>
+
+</figure>
+
+<p class="calibre3">Please copy the output and paste it into the <em class="calibre17">Administrator password</em> field. Click <em class="calibre17">Continue</em>, followed by the <em class="calibre17">Install suggested plugins</em> button. The rest of the setup requires you to <em class="calibre17">Create First Admin User</em>, so please go ahead. You don’t need my help on that one.</p>
+
+<p class="calibre3">Just as before, we’ll need to add <em class="calibre17">Kubernetes</em> and <em class="calibre17">BlueOcean</em> plugins.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>open <code class="s">"http://</code><code class="nv">$CLUSTER_DNS</code><code class="s">/jenkins/pluginManager/available"</code>
+</pre></div>
+
+</figure>
+
+<p class="calibre3">You already know what to do. Once you’re done installing the two plugins, we’ll go to the configuration screen.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>open <code class="s">"http://</code><code class="nv">$CLUSTER_DNS</code><code class="s">/jenkins/configure"</code>
+</pre></div>
+
+</figure>
+
+<p class="calibre3">Please expand the <em class="calibre17">Add a new cloud</em> drop-down list in the <em class="calibre17">Cloud</em> section and select <em class="calibre17">Kubernetes</em>.</p>
+
+<p class="calibre3">Now that we have the ServiceAccount that grants us the required permissions, we can click the <em class="calibre17">Test Connection</em> button and confirm that it works.</p>
+
+<p class="calibre3">The output is as follows.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>Error testing connection : Failure executing: GET at: https://kubernetes.default.svc\
+<code class="lineno">2 </code>/api/v1/namespaces/jenkins/pods. Message: Forbidden!Configured service account doesn\
+<code class="lineno">3 </code>'t have access. Service account may have been revoked. pods is forbidden: User "syst\
+<code class="lineno">4 </code>em:serviceaccount:jenkins:jenkins" cannot list pods in the namespace "jenkins".
+</pre></div>
+
+</figure>
+
+<p class="calibre3">Did we do something wrong? We didn’t. That was the desired behavior. By not specifying a Namespace, Jenkins checked whether it has necessary permission in the Namespace where it runs. If we try to invoke Kube API from a container, it’ll always use the same Namespace as the one where the container is. Jenkins is no exception. On the other hand, our YAML explicitly defined that we should have permissions to create Pods in the <code class="calibre19">build</code> Namespace. Let’s fix that.</p>
+
+<p class="calibre3">Please type <em class="calibre17">build</em> in the <em class="calibre17">Kubernetes Namespace</em> field and click the <em class="calibre17">Test Connection</em> button again.</p>
+
+<p class="calibre3">This time the output shows that the <code class="calibre19">connection test</code> was <code class="calibre19">successful</code>. We managed to configure Jenkins’ Kubernetes plugin to operate inside the <code class="calibre19">build</code> Namespace. Still, there is one more thing missing.</p>
+
+<p class="calibre3">When we create a job that uses Kubernetes Pods, an additional container will be added. That container will use JNLP to establish communication with the Jenkins master. We need to specify a valid address JNLP can use to connect to the master. Since the Pods will be in the <code class="calibre19">build</code> Namespace and the master is in <code class="calibre19">jenkins</code>, we need to use the longer DNS name that specifies both the name of the service (<code class="calibre19">jenkins</code>) as well as the Namespace (also <code class="calibre19">jenkins</code>). On top of all that, our master is configured to respond to requests with the root path <code class="calibre19">/jenkins</code>. All the all, the full address Pods can use to communicate with Jenkins master is should be <code class="calibre19">http://[SERVICE_NAME].[NAMESPACE]/[PATH]</code>. Since all three of those elements are <code class="calibre19">jenkins</code>, the “real” address is <code class="calibre19">http://jenkins.jenkins/jenkins</code>. Please type it inside the <em class="calibre17">Jenkins URL</em> field and click the <em class="calibre17">Save</em> button.</p>
+
+<p class="calibre3">Now we’re ready to create a job that’ll test that everything works as expected.</p>
+
+<p class="calibre3">Please click the <em class="calibre17">New Item</em> link from the left-hand menu to open a screen for creating jobs. Type <em class="calibre17">my-k8s-job</em> in the <em class="calibre17">item name</em> field, select <em class="calibre17">Pipeline</em> as the type, and click the <em class="calibre17">OK</em> button. Once inside the job configuration screen, click the <em class="calibre17">Pipeline</em> tab and write the script that follows inside the <em class="calibre17">Pipeline Script</em> field.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno"> 1 </code><code class="calibre19">podTemplate</code><code class="o">(</code>
+<code class="lineno"> 2 </code>    <code class="nl">label:</code> <code class="s">'kubernetes'</code><code class="o">,</code>
+<code class="lineno"> 3 </code>    <code class="nl">containers:</code> <code class="o">[</code>
+<code class="lineno"> 4 </code>        <code class="calibre19">containerTemplate</code><code class="o">(</code><code class="nl">name:</code> <code class="s">'maven'</code><code class="o">,</code> <code class="nl">image:</code> <code class="s">'maven:alpine'</code><code class="o">,</code> <code class="nl">ttyEnabled:</code> <code class="k">true</code><code class="o">,</code> <code class="calibre19">co</code><code class="err">\</code>
+<code class="lineno"> 5 </code><code class="nl">mmand:</code> <code class="s">'cat'</code><code class="o">),</code>
+<code class="lineno"> 6 </code>        <code class="calibre19">containerTemplate</code><code class="o">(</code><code class="nl">name:</code> <code class="s">'golang'</code><code class="o">,</code> <code class="nl">image:</code> <code class="s">'golang:alpine'</code><code class="o">,</code> <code class="nl">ttyEnabled:</code> <code class="k">true</code><code class="o">,</code> <code class="err">\</code>
+<code class="lineno"> 7 </code><code class="nl">command:</code> <code class="s">'cat'</code><code class="o">)</code>
+<code class="lineno"> 8 </code>    <code class="o">]</code>
+<code class="lineno"> 9 </code><code class="o">)</code> <code class="o">{</code>
+<code class="lineno">10 </code>    <code class="calibre19">node</code><code class="o">(</code><code class="s">'kubernetes'</code><code class="o">)</code> <code class="o">{</code>
+<code class="lineno">11 </code>        <code class="calibre19">container</code><code class="o">(</code><code class="s">'maven'</code><code class="o">)</code> <code class="o">{</code>
+<code class="lineno">12 </code>            <code class="calibre19">stage</code><code class="o">(</code><code class="s">'build'</code><code class="o">)</code> <code class="o">{</code>
+<code class="lineno">13 </code>                <code class="calibre19">sh</code> <code class="s">'mvn --version'</code>
+<code class="lineno">14 </code>            <code class="o">}</code>
+<code class="lineno">15 </code>            <code class="calibre19">stage</code><code class="o">(</code><code class="s">'unit-test'</code><code class="o">)</code> <code class="o">{</code>
+<code class="lineno">16 </code>                <code class="calibre19">sh</code> <code class="s">'java -version'</code>
+<code class="lineno">17 </code>            <code class="o">}</code>
+<code class="lineno">18 </code>        <code class="o">}</code>
+<code class="lineno">19 </code>        <code class="calibre19">container</code><code class="o">(</code><code class="s">'golang'</code><code class="o">)</code> <code class="o">{</code>
+<code class="lineno">20 </code>            <code class="calibre19">stage</code><code class="o">(</code><code class="s">'deploy'</code><code class="o">)</code> <code class="o">{</code>
+<code class="lineno">21 </code>                <code class="calibre19">sh</code> <code class="s">'go version'</code>
+<code class="lineno">22 </code>            <code class="o">}</code>
+<code class="lineno">23 </code>        <code class="o">}</code>
+<code class="lineno">24 </code>    <code class="o">}</code>
+<code class="lineno">25 </code><code class="o">}</code>
+</pre></div>
+
+</figure>
+
+<aside class="information">
+    <p class="calibre3">If you prefer to copy and paste, the job is available in the <a href="https://gist.github.com/2cf872c3a9acac51409fbd5a2789cb02">my-k8s-job.groovy Gist</a>.</p>
+
+</aside>
+
+<p class="calibre3">The job is relatively simple. It uses <code class="calibre19">podTemplate</code> to define a <code class="calibre19">node</code> that will contain two containers. One of those is <code class="calibre19">golang</code>, and the other is <code class="calibre19">maven</code>. In both cases the <code class="calibre19">command</code> is <code class="calibre19">cat</code>. Without a long-running command (process <code class="calibre19">1</code>), the container would exit immediately, Kubernetes would detect that and start another container based on the same image. It would fail again, and the loop would continue. Without the main process running, we’d enter into a never-ending loop.</p>
+
+<p class="calibre3">Further on, we are defining that we want to use the <code class="calibre19">podTemplate</code> as a node and we start executing <code class="calibre19">sh</code> commands in different containers. Those commands only output software versions. The goal of this job is not to demonstrate a full CD pipeline (we’ll do that later), but only to prove that integration with Kubernetes works and that we can use different containers that contain the tools we need.</p>
+
+<p class="calibre3">Don’t forget to click the <em class="calibre17">Save</em> button.</p>
+
+<p class="calibre3">Now that we have a job, we should run it and validate that the integration with Kubernetes indeed works.</p>
+
+<p class="calibre3">Please click the <em class="calibre17">Open Blue Ocean</em> link from the left-hand menu followed by the <em class="calibre17">Run</em> button.</p>
+
+<p class="calibre3">We’ll let Jenkins run the build and switch to Shell to observe what’s happening.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl -n build get pods
+</pre></div>
+
+</figure>
+
+<p class="calibre3">After a while, the output should be as follows.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>NAME              READY STATUS            RESTARTS AGE
+<code class="lineno">2 </code>jenkins-slave-... 0/3   ContainerCreating 0        11s
+</pre></div>
+
+</figure>
+
+<p class="calibre3">We can see that Jenkins created a Pod with three containers. At this moment in time, those containers are still not fully functional. Kubernetes is probably pulling them to the assigned node.</p>
+
+<p class="calibre3">You might be wondering why are there three containers even though we specified two. Jenkins added the third to the Pod definition. It contains JNLP that is in charge of communication between Pods acting as nodes and Jenkins masters. From user’s perspective, JNLP is non-existent. It is a transparent process we do not need to worry about.</p>
+
+<p class="calibre3">Let’s take another look at the Pods in the <code class="calibre19">build</code> Namespace.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl -n build get pods
+</pre></div>
+
+</figure>
+
+<p class="calibre3">The output is as follows.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>NAME              READY STATUS  RESTARTS AGE
+<code class="lineno">2 </code>jenkins-slave-... 3/3   Running 0        5s
+</pre></div>
+
+</figure>
+
+<p class="calibre3">This time, if you are a fast reader, all the containers that form the Pod are running, and Jenkins is using them to execute the instructions we defined in the job.</p>
+
+<p class="calibre3">Let’s take another look at the Pods.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl -n build get pods
+</pre></div>
+
+</figure>
+
+<p class="calibre3">The output is as follows.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>NAME              READY STATUS      RESTARTS AGE
+<code class="lineno">2 </code>jenkins-slave-... 3/3   Terminating 0        32s
+</pre></div>
+
+</figure>
+
+<p class="calibre3">Once Jenkins finished executing the instructions from the job, it issued a command to Kube API to terminate the Pod.</p>
+
+<p class="calibre3">Jenkins nodes created through <code class="calibre19">podTemplate</code> are called on-shot agents. Instead of having long-running nodes, they are created when needed and destroyed when not in use. Since they are Pods, Kubernetes is scheduling them on the nodes that have enough resources. By combining one-shot agents with Kubernetes, we are distributing load and, at the same time, using only the resources we need. After all, there’s no need to waste CPU and memory on non-existing processes.</p>
+
+<p class="calibre3">We’re done with Jenkins, so let’s remove the Namespaces we created before we move into the next use-case.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl delete ns jenkins build
+</pre></div>
+
+</figure>
+
+<h3 id="leanpub-auto-using-serviceaccounts-from-side-car-containers" class="calibre20">Using ServiceAccounts From Side-Car Containers</h3>
+
+<p class="calibre3">We still have one more pending issue that we can solve with ServiceAccounts. In the previous chapter we tried to use <code class="calibre19">cvallance/mongo-k8s-sidecar</code> container in hopes it’ll dynamically create and manage a MongoDB replica set. We failed because, at that time, we did not know how to create sufficient permissions that would allow the side-car to do its job. Now we know better.</p>
+
+<p class="calibre3">Let’s take a look at an updated version of our <em class="calibre17">go-demo-3</em> application.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>cat sa/go-demo-3.yml
+</pre></div>
+
+</figure>
+
+<p class="calibre3">The relevant parts of the output are as follows</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno"> 1 </code><code class="nn">...</code>
+<code class="lineno"> 2 </code><code class="calibre19">apiVersion</code><code class="calibre19">:</code> <code class="calibre19">v1</code>
+<code class="lineno"> 3 </code><code class="calibre19">kind</code><code class="calibre19">:</code> <code class="calibre19">ServiceAccount</code>
+<code class="lineno"> 4 </code><code class="calibre19">metadata</code><code class="calibre19">:</code>
+<code class="lineno"> 5 </code>  <code class="calibre19">name</code><code class="calibre19">:</code> <code class="calibre19">db</code>
+<code class="lineno"> 6 </code>  <code class="calibre19">namespace</code><code class="calibre19">:</code> <code class="calibre19">go-demo-3</code>
+<code class="lineno"> 7 </code>
+<code class="lineno"> 8 </code><code class="nn">---</code>
+<code class="lineno"> 9 </code>
+<code class="lineno">10 </code><code class="calibre19">kind</code><code class="calibre19">:</code> <code class="calibre19">Role</code>
+<code class="lineno">11 </code><code class="calibre19">apiVersion</code><code class="calibre19">:</code> <code class="calibre19">rbac.authorization.k8s.io/v1beta1</code>
+<code class="lineno">12 </code><code class="calibre19">metadata</code><code class="calibre19">:</code>
+<code class="lineno">13 </code>  <code class="calibre19">name</code><code class="calibre19">:</code> <code class="calibre19">db</code>
+<code class="lineno">14 </code>  <code class="calibre19">namespace</code><code class="calibre19">:</code> <code class="calibre19">go-demo-3</code>
+<code class="lineno">15 </code><code class="calibre19">rules</code><code class="calibre19">:</code>
+<code class="lineno">16 </code><code class="calibre19">-</code> <code class="calibre19">apiGroups</code><code class="calibre19">:</code> <code class="calibre19">[</code><code class="s">""</code><code class="calibre19">]</code>
+<code class="lineno">17 </code>  <code class="calibre19">resources</code><code class="calibre19">:</code> <code class="calibre19">[</code><code class="s">"pods"</code><code class="calibre19">]</code>
+<code class="lineno">18 </code>  <code class="calibre19">verbs</code><code class="calibre19">:</code> <code class="calibre19">[</code><code class="s">"list"</code><code class="calibre19">]</code>
+<code class="lineno">19 </code>
+<code class="lineno">20 </code><code class="nn">---</code>
+<code class="lineno">21 </code>
+<code class="lineno">22 </code><code class="calibre19">apiVersion</code><code class="calibre19">:</code> <code class="calibre19">rbac.authorization.k8s.io/v1beta1</code>
+<code class="lineno">23 </code><code class="calibre19">kind</code><code class="calibre19">:</code> <code class="calibre19">RoleBinding</code>
+<code class="lineno">24 </code><code class="calibre19">metadata</code><code class="calibre19">:</code>
+<code class="lineno">25 </code>  <code class="calibre19">name</code><code class="calibre19">:</code> <code class="calibre19">db</code>
+<code class="lineno">26 </code>  <code class="calibre19">namespace</code><code class="calibre19">:</code> <code class="calibre19">go-demo-3</code>
+<code class="lineno">27 </code><code class="calibre19">roleRef</code><code class="calibre19">:</code>
+<code class="lineno">28 </code>  <code class="calibre19">apiGroup</code><code class="calibre19">:</code> <code class="calibre19">rbac.authorization.k8s.io</code>
+<code class="lineno">29 </code>  <code class="calibre19">kind</code><code class="calibre19">:</code> <code class="calibre19">Role</code>
+<code class="lineno">30 </code>  <code class="calibre19">name</code><code class="calibre19">:</code> <code class="calibre19">db</code>
+<code class="lineno">31 </code><code class="calibre19">subjects</code><code class="calibre19">:</code>
+<code class="lineno">32 </code><code class="calibre19">-</code> <code class="calibre19">kind</code><code class="calibre19">:</code> <code class="calibre19">ServiceAccount</code>
+<code class="lineno">33 </code>  <code class="calibre19">name</code><code class="calibre19">:</code> <code class="calibre19">db</code>
+<code class="lineno">34 </code>
+<code class="lineno">35 </code><code class="nn">---</code>
+<code class="lineno">36 </code>
+<code class="lineno">37 </code><code class="calibre19">apiVersion</code><code class="calibre19">:</code> <code class="calibre19">apps/v1beta1</code>
+<code class="lineno">38 </code><code class="calibre19">kind</code><code class="calibre19">:</code> <code class="calibre19">StatefulSet</code>
+<code class="lineno">39 </code><code class="calibre19">metadata</code><code class="calibre19">:</code>
+<code class="lineno">40 </code>  <code class="calibre19">name</code><code class="calibre19">:</code> <code class="calibre19">db</code>
+<code class="lineno">41 </code>  <code class="calibre19">namespace</code><code class="calibre19">:</code> <code class="calibre19">go-demo-3</code>
+<code class="lineno">42 </code><code class="calibre19">spec</code><code class="calibre19">:</code>
+<code class="lineno">43 </code>  <code class="calibre19">...</code>
+<code class="lineno">44 </code>  <code class="calibre19">template</code><code class="calibre19">:</code>
+<code class="lineno">45 </code>    <code class="calibre19">...</code>
+<code class="lineno">46 </code>    <code class="calibre19">spec</code><code class="calibre19">:</code>
+<code class="lineno">47 </code>      <code class="calibre19">serviceAccountName</code><code class="calibre19">:</code> <code class="calibre19">db</code>
+<code class="lineno">48 </code>      <code class="calibre19">...</code>
+</pre></div>
+
+</figure>
+
+<p class="calibre3">Just as with Jenkins, we have a ServiceAccount, a Role, and a RoleBinding. Since the side-car needs only to list the Pods, the Role is this time more restrictive than the one we created for Jenkins. Further down, in the StatefulSet, we added <code class="calibre19">serviceAccountName: db</code> entry that links the set with the account. By now, you should be familiar with all those resources. We’re applying the same logic to the side-car as to Jenkins.</p>
+
+<p class="calibre3">Since there’s no need for a lengthy discussion, we’ll move on and <code class="calibre19">apply</code> the definition.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl apply <code class="se">\</code>
+<code class="lineno">2 </code>    -f sa/go-demo-3.yml <code class="se">\</code>
+<code class="lineno">3 </code>    --record
+</pre></div>
+
+</figure>
+
+<p class="calibre3">Next, we’ll take a look at the Pods created in the <code class="calibre19">go-demo-3</code> Namespace.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl -n go-demo-3 <code class="se">\</code>
+<code class="lineno">2 </code>    get pods
+</pre></div>
+
+</figure>
+
+<p class="calibre3">After a while, the output should be as follows.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>NAME    READY STATUS  RESTARTS AGE
+<code class="lineno">2 </code>api-... 1/1   Running 1        1m
+<code class="lineno">3 </code>api-... 1/1   Running 1        1m
+<code class="lineno">4 </code>api-... 1/1   Running 1        1m
+<code class="lineno">5 </code>db-0    2/2   Running 0        1m
+<code class="lineno">6 </code>db-1    2/2   Running 0        1m
+<code class="lineno">7 </code>db-2    2/2   Running 0        54s
+</pre></div>
+
+</figure>
+
+<p class="calibre3">All the Pods are running so it seems that, this time, the side-car did not have trouble communicating with the API.</p>
+
+<p class="calibre3">To be on the safe side, we’ll output the logs of one of the side-car containers.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl -n go-demo-3 <code class="se">\</code>
+<code class="lineno">2 </code>    logs db-0 -c db-sidecar
+</pre></div>
+
+</figure>
+
+<p class="calibre3">The output, limited to the last entries, is as follows.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno"> 1 </code><code class="err">...</code>
+<code class="lineno"> 2 </code>     <code class="calibre19">{</code> <code class="err">_id:</code> <code class="err">1,</code>
+<code class="lineno"> 3 </code>       <code class="err">host:</code> <code class="err">'db-1.db.go-demo-3.svc.cluster.local:27017',</code>
+<code class="lineno"> 4 </code>       <code class="err">arbiterOnly:</code> <code class="err">false,</code>
+<code class="lineno"> 5 </code>       <code class="err">buildIndexes:</code> <code class="err">true,</code>
+<code class="lineno"> 6 </code>       <code class="err">hidden:</code> <code class="err">false,</code>
+<code class="lineno"> 7 </code>       <code class="err">priority:</code> <code class="err">1,</code>
+<code class="lineno"> 8 </code>       <code class="err">tags:</code> <code class="err">{</code><code class="calibre19">}</code><code class="err">,</code>
+<code class="lineno"> 9 </code>       <code class="err">slaveDelay:</code> <code class="o">0</code><code class="err">,</code>
+<code class="lineno">10 </code>       <code class="err">votes:</code> <code class="o">1</code> <code class="err">},</code>
+<code class="lineno">11 </code>     <code class="calibre19">{</code> <code class="err">_id:</code> <code class="err">2,</code> <code class="err">host:</code> <code class="err">'db-2.db.go-demo-3.svc.cluster.local:27017'</code> <code class="calibre19">}</code> <code class="err">],</code>
+<code class="lineno">12 </code>  <code class="err">settings:</code>
+<code class="lineno">13 </code>   <code class="calibre19">{</code> <code class="err">chainingAllowed:</code> <code class="err">true,</code>
+<code class="lineno">14 </code>     <code class="err">heartbeatIntervalMillis:</code> <code class="err">2000,</code>
+<code class="lineno">15 </code>     <code class="err">heartbeatTimeoutSecs:</code> <code class="err">10,</code>
+<code class="lineno">16 </code>     <code class="err">electionTimeoutMillis:</code> <code class="err">10000,</code>
+<code class="lineno">17 </code>     <code class="err">catchUpTimeoutMillis:</code> <code class="err">2000,</code>
+<code class="lineno">18 </code>     <code class="err">getLastErrorModes:</code> <code class="err">{</code><code class="calibre19">}</code><code class="err">,</code>
+<code class="lineno">19 </code>     <code class="err">getLastErrorDefaults:</code> <code class="calibre19">{</code> <code class="err">w:</code> <code class="err">1,</code> <code class="err">wtimeout:</code> <code class="err">0</code> <code class="calibre19">}</code><code class="err">,</code>
+<code class="lineno">20 </code>     <code class="err">replicaSetId:</code> <code class="o">5</code><code class="err">aef</code><code class="o">9e4</code><code class="err">c</code><code class="o">52</code><code class="err">b</code><code class="o">968</code><code class="err">b</code><code class="o">72</code><code class="err">a</code><code class="o">16</code><code class="err">ea</code><code class="o">5</code><code class="err">b</code> <code class="err">}</code> <code class="err">}</code>
+</pre></div>
+
+</figure>
+
+<p class="calibre3">The details behind the output are not that important. What matters is that there are no errors. The side-car managed to retrieve the information it needs from Kube API, and all that’s left for us is to delete the Namespace and conclude the chapter.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl delete ns go-demo-3
+</pre></div>
+
+</figure>
+
+<h3 id="leanpub-auto-what-now-1" class="calibre20">What Now?</h3>
+
+<p class="calibre3">ServiceAccounts combined with Roles and RoleBindings are an essential component for continuous deployment or any other process that needs to communicate with Kubernetes. The alternative is to run an unsecured cluster which is not an option for any but smallest organizations. RBAC is required when more than one person is operating or using a cluster. If RBAC is enabled, ServiceAccounts are a must. We’ll use them a lot in the chapters that follow.</p>
+
+<p class="calibre3">Please consult the APIs that follow for any additional information about ServiceAccounts and related resources.</p>
+
+<ul class="calibre21">
+  <li class="calibre15">
+<a href="https://v1-9.docs.kubernetes.io/docs/reference/generated/kubernetes-api/v1.9/#serviceaccount-v1-core">ServiceAccount v1 core</a>]</li>
+  <li class="calibre15"><a href="https://v1-9.docs.kubernetes.io/docs/reference/generated/kubernetes-api/v1.9/#role-v1-rbac">Role v1 rbac</a></li>
+  <li class="calibre15"><a href="https://v1-9.docs.kubernetes.io/docs/reference/generated/kubernetes-api/v1.9/#clusterrole-v1-rbac">ClusterRole v1 rbac</a></li>
+  <li class="calibre15"><a href="https://v1-9.docs.kubernetes.io/docs/reference/generated/kubernetes-api/v1.9/#rolebinding-v1-rbac">RoleBinding v1 rbac</a></li>
+  <li class="calibre15"><a href="https://v1-9.docs.kubernetes.io/docs/reference/generated/kubernetes-api/v1.9/#clusterrolebinding-v1-rbac">ClusterRoleBinding v1 rbac</a></li>
+</ul>
+
+<p class="calibre3">One more thing before you leave. Please consult <a href="https://github.com/jenkinsci/kubernetes-plugin">jenkins-kubernetes-plugin</a> for more information about the plugin.</p>
+
+
+
+</div>
+</body></html>

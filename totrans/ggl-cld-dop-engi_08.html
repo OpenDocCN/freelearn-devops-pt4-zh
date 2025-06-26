@@ -1,0 +1,593 @@
+<html><head></head><body>
+		<div id="_idContainer077">
+			<h1 id="_idParaDest-131"><em class="italic"><a id="_idTextAnchor131"/>Chapter 6</em>: Building Code Using Cloud Build, and Pushing to Container Registry</h1>
+			<p>The last chapter focused on managing source code using <strong class="bold">Cloud Source Repositories</strong> (<strong class="bold">CSR</strong>). CSR provides a fully managed private Git repository, provides one-way sync with GitHub and Bitbucket, and integrates with GCP services. This is the first step in the <strong class="bold">Continuous Integration</strong> (<strong class="bold">CI</strong>) flow.</p>
+			<p>This chapter will focus on the constructs required to build code, create image artifacts using Cloud Build and manage artifacts using GCP's Container Registry. This forms the crux of the CI workflow as the code is continuously built, artifacts are continuously created and stored in the registry, and application code is continuously deployed as containers.</p>
+			<p>In this chapter, we're going to cover the following main topics:</p>
+			<ul>
+				<li><strong class="bold">Key terminology</strong> – Quick insights into the terminology around Docker and containers</li>
+				<li><strong class="bold">Understanding the need for automation</strong> – Understanding the need for automation by exploring the Docker life cycle</li>
+				<li><strong class="bold">Building and creating container images</strong> – Cloud Build essentials such as cloud builders and build configuration files, building code, storing and viewing build logs, managing access controls, and best practices to optimize the build speed</li>
+				<li><strong class="bold">Managing container artifacts</strong> – CSR essentials to push and pull images, manage access controls, configure authentication methods, and CI/CD integrations with CSR</li>
+				<li><strong class="bold">Hands-on lab</strong> – Step-by-step instructions to deploy an application to Cloud Run when a code change is pushed to the master branch</li>
+			</ul>
+			<h1 id="_idParaDest-132"><a id="_idTextAnchor132"/>Technical requirements</h1>
+			<p>There are three main technical requirements:</p>
+			<ul>
+				<li>A valid <strong class="bold">Google Cloud Platform</strong> (<strong class="bold">GCP</strong>) account to go hands-on with GCP services: <a href="https://cloud.google.com/free">https://cloud.google.com/free</a>.</li>
+				<li>Install Google Cloud SDK: <a href="https://cloud.google.com/sdk/docs/quickstart">https://cloud.google.com/sdk/docs/quickstart</a>.</li>
+				<li>Install Git: <a href="https://git-scm.com/book/en/v2/Getting-Started-Installing-Git">https://git-scm.com/book/en/v2/Getting-Started-Installing-Git</a>.</li>
+			</ul>
+			<h1 id="_idParaDest-133"><a id="_idTextAnchor133"/>Key terminology (prerequisites)</h1>
+			<p>There are several key terminologies that are important to understand while trying to build, deploy, and maintain a distributed application that runs on containers. The following is a quick insight into some of those critical terminologies when dealing with containers:</p>
+			<ul>
+				<li><strong class="bold">Operating system</strong> – An <strong class="bold">Operating System</strong> (<strong class="bold">OS</strong>) is <a id="_idIndexMarker609"/>system software that is critical to <a id="_idIndexMarker610"/>control a computer's hardware and software requirements across multiple applications, such as memory, CPU, storage, and so on. The OS coordinates tasks to ensure each application gets what it needs to run successfully. The OS consists of a kernel and software. The kernel is responsible for interacting with the hardware and the software is responsible for running the UI, drivers, file managers, compilers, and so on.</li>
+				<li><strong class="bold">Virtualization</strong> – Virtualization is <a id="_idIndexMarker611"/>the act of doing more with less by creating a virtual or software-based version of <a id="_idIndexMarker612"/>compute, storage, a network, and so on. It allows you to run multiple applications on the same physical hardware. Each application and its associated OS can run on a separate, completely isolated, software-based machine called a <strong class="bold">virtual machine</strong> or <strong class="bold">VM</strong>.</li>
+				<li><strong class="bold">Hypervisor</strong> – A hypervisor is <a id="_idIndexMarker613"/>software that <a id="_idIndexMarker614"/>creates and runs VMs, and essentially implements the concept of virtualization. A hypervisor allows one host computer to support multiple guest VMs by virtually sharing resources such as memory, storage, processing, and so on, and is <a id="_idIndexMarker615"/>responsible for <a id="_idIndexMarker616"/>giving every VM the required resources for peak performance.</li>
+				<li><strong class="bold">Container</strong> – A container is a <a id="_idIndexMarker617"/>unit of software that packages code and all its dependencies, which include libraries and configuration files. This enables applications to run quickly and reliably across computing environments. Containers use low-level OS constructs that allow you to specify unique system users, hostnames, IP addresses, filesystem segments, RAM, and CPU quotas.</li>
+				<li><strong class="bold">Docker</strong> – Docker is an <a id="_idIndexMarker618"/>open source platform for developing, building, deploying, and managing containerized applications. Docker <a id="_idIndexMarker619"/>uses OS-level virtualization to deploy or deliver software in packages called containers, providing the flexibility to run anywhere. Docker can also run any flavor of OS if the underlying OS kernel is Linux. As an example, containers can run different flavors of the Linux OS, such as Debian, CentOS, Fedora, and so on.</li>
+				<li><strong class="bold">Docker daemon</strong> – The Docker daemon <a id="_idIndexMarker620"/>represents the server that runs one or more containers. It is the service that runs the <a id="_idIndexMarker621"/>host OS. Additionally, the CLI represents the client, and the combination with the Docker daemon forms a client-server architecture.</li>
+				<li><strong class="bold">Dockerfile</strong> – A Dockerfile is a text <a id="_idIndexMarker622"/>document that contains a series or list of commands that can be executed from a <a id="_idIndexMarker623"/>command line in order to potentially assemble an image. A Dockerfile is the input for Docker to build images. The process automates the execution of a series of instructions or commands.</li>
+				<li><strong class="bold">Docker layers</strong> – A Docker layer represents an <a id="_idIndexMarker624"/>intermediate image that is created by executing each instruction in a Dockerfile. The link <a id="_idIndexMarker625"/>between the instruction and the intermediate image is stored in the build cache. A Docker container is essentially an image that has a readable/writable Docker layer built on top of multiple read-only images.</li>
+				<li><strong class="bold">Docker images</strong> – A Docker image <a id="_idIndexMarker626"/>consists of <a id="_idIndexMarker627"/>multiple Docker layers that are used to execute code in one or more containers. Essentially, a Docker image represents a plan that needs to be executed or, in other words, deployed.</li>
+			</ul>
+			<p>The next section illustrates the Docker life cycle and emphasizes <a id="_idIndexMarker628"/>one of the key <strong class="bold">Site Reliability Engineering</strong> (<strong class="bold">SRE</strong>) objectives, which is to eliminate toil by investing in automation.</p>
+			<h1 id="_idParaDest-134"><a id="_idTextAnchor134"/>Understanding the need for automation</h1>
+			<p>Once code is <a id="_idIndexMarker629"/>checked into a source code repository, the next step in a CI process is to build code and create artifacts as per the requirements to run the application. Once the artifacts are created, the artifacts are further stored in a repository and are later used by the <strong class="bold">Continuous Deployment/Delivery (CD)</strong> process to run the application. Given that the running theme in this book is to work with containers, Docker forms a key role as the OS-level virtualization platform to deploy applications in containers.</p>
+			<p>Following is an illustration of the Docker life cycle that highlights the multiple steps involved in creating container images to actually deploy containers that run the actual application:</p>
+			<ol>
+				<li value="1">The developer hosts code in a source code repository. The code can be changed during the development or enhancement process.</li>
+				<li>The source code repository can be set up to have trigger points, such as raising a pull request or merging code into a specific branch. The trigger points can be tied to initiate the code build process.</li>
+				<li>The code build process will look for a Dockerfile, which is essentially a set of instructions to create an application along with its dependencies.</li>
+				<li>A Dockerfile is used to create the build artifact – the container image, using <strong class="source-inline">docker build</strong>.</li>
+				<li>The created image can be pushed to an artifact repository to store container images, such as Docker Hub or GCP's Container Registry, and so on.</li>
+				<li>The application is created by downloading the container image from the repository into a compute environment and subsequently building a container, which essentially is a package that contains code, libraries, and dependencies.</li>
+			</ol>
+			<p>If the preceding steps are <a id="_idIndexMarker630"/>converted into actual commands, then it will look like the following snippet:</p>
+			<p class="source-code">#Build code using the Dockerfile</p>
+			<p class="source-code">docker build -t &lt;image-name&gt; .</p>
+			<p class="source-code">#Tag the locally created image with the destination repository</p>
+			<p class="source-code">docker tag &lt;image-name&gt; &lt;host-name&gt;/&lt;project-id&gt;/&lt;image-name&gt;</p>
+			<p class="source-code">#Push the tagged image to the choice of repository</p>
+			<p class="source-code">docker push &lt;host-name&gt;/&lt;project-id&gt;/&lt;image-name&gt;</p>
+			<p class="source-code"># Note that hostname refers to the location where image is stored. 'gcr.io' refers that by default the images are stored in Cloud Storage; specifically US location</p>
+			<p class="source-code">#To deploy the application, pull the image from the repository as a pre-requisite</p>
+			<p class="source-code">docker pull &lt;host-name&gt;/&lt;project-id&gt;/&lt;image-name&gt;</p>
+			<p class="source-code">#To deploy or run the application</p>
+			<p class="source-code">docker run –name &lt;container-name&gt; &lt;host-name&gt;/&lt;project-id&gt;/&lt;image-name&gt;</p>
+			<p>The steps mentioned as part of the Docker workflow are steps that need to be executed and in sequence. If there is a code fix or an incremental code change, then the steps need to be repeated in order to build, push, and deploy the code. This forms a repetitive or even an infinite loop, causing a lot of pain and suffering for developers. This is because the more manual steps there are, the greater the chance of human error. This qualifies as toil, since the steps are manual, repetitive in nature, devoid of any value, and can be automated. </p>
+			<p>Given that SRE's objective is to eliminate toil through automation, this forms a feasible approach to eliminate the infinite loop of pain and suffering. In addition, the preceding steps need to be executed in an environment that would need special attention or setup. For example, Docker will need to be set up to execute the preceding commands. In addition, the <a id="_idIndexMarker631"/>machine needs to have enough computing power and storage requirements to run the preceding steps in a repeated fashion. The machine also needs to be scaled if there are multiple parallel builds that are initiated at once.</p>
+			<p>GCP offers a service called <strong class="bold">Cloud Build</strong>, an automation engine that plays a key part in the CI/CD workflow. Cloud Build can import the source code, build in a managed workspace, and create artifacts such as Docker images, Java packages, binaries, and so on. Cloud Build can practically combine the steps to build, tag, and push a container image into a single configuration file. The container artifacts created by Cloud Build can be pushed and stored in another GCP service called <strong class="bold">Container Registry</strong>. The container image can be pulled from Container Registry at the time of container deployment. CloudBuild is capable of automating all these steps into a declarative syntax; also known as the build configuration file, which can be effectively run as many times as needed.</p>
+			<p>The upcoming sections will go into the details of the following:</p>
+			<ul>
+				<li>Cloud Build as the GCP service to build and create container images</li>
+				<li>Container Registry as the GCP service to manage container artifacts</li>
+			</ul>
+			<h1 id="_idParaDest-135"><a id="_idTextAnchor135"/>Building and creating container images – Cloud Build</h1>
+			<p>Cloud Build is a service to build and create artifacts based on the commits made to source code repositories. The artifacts produced by Cloud Build can either be container or non-container artifacts. Cloud Build can integrate with GCP's CSR as well as popular external repositories such as GitHub and Bitbucket. Key features of <a id="_idIndexMarker632"/>Cloud Build include the following:</p>
+			<ul>
+				<li><strong class="bold">Serverless platform</strong>: Cloud Build removes the need to pre-provision servers or pay in advance for computing power or storage required to build the code and produce artifacts. Based on the number of commits being made in parallel, scaling up or scaling down is an inherent process and doesn't require manual intervention.</li>
+				<li><strong class="bold">Access to builder images</strong>: Cloud Build provides cloud builders, which are pre-baked ready-to-use container images with support for multiple common languages and tools installed. For example, Docker Cloud Builders run the Docker tool.</li>
+				<li><strong class="bold">The ability to add custom build steps</strong>: Cloud Build requires a build config file where the list of steps can be explicitly specified by the user. The user can also specify the order of execution and include any dependencies as needed.</li>
+				<li><strong class="bold">A focus on security</strong>: Cloud Build supports vulnerability scanning and provides the ability to define policies that can block the deployment of vulnerable images.</li>
+			</ul>
+			<p>The foundation for these Cloud Build features is based upon certain key elements that will be discussed in the upcoming sub-sections.</p>
+			<h2 id="_idParaDest-136"><a id="_idTextAnchor136"/>Cloud Build essentials</h2>
+			<p>There are <a id="_idIndexMarker633"/>two key essential concepts with respect to Cloud Build, cloud builders and the build configuration.</p>
+			<h3>Cloud builders</h3>
+			<p>Cloud builders are <a id="_idIndexMarker634"/>container images that run the build process. The build process within a cloud builder is essentially a set of pre-defined build steps. In addition, a cloud builder can also include custom build steps. Cloud builder images are packaged with common languages and tools. Cloud Build can be used to run specific commands inside the builder containers within the context of cloud builders. Cloud builders can either be Google-managed, community-contributed, or public Docker Hub images.</p>
+			<h3>Google-managed builders</h3>
+			<p>Google provides managed <a id="_idIndexMarker635"/>pre-built images that can be <a id="_idIndexMarker636"/>used to execute one or more build steps. These pre-built images are in Google's Container Registry. Popular examples include docker builder (to perform <strong class="source-inline">docker build</strong>, <strong class="source-inline">docker tag</strong>, and <strong class="source-inline">docker push</strong> commands), gcloud builder (to perform the <strong class="source-inline">docker run</strong> command to deploy against a Google service such as Cloud Run), gke-deploy builder (to deploy in a GKE cluster), and so on. The complete list of <a id="_idIndexMarker637"/>Google-managed builders can be found at <a href="https://github.com/GoogleCloudPlatform/cloud-builders">https://github.com/GoogleCloudPlatform/cloud-builders</a>.</p>
+			<h3>Community-contributed builders</h3>
+			<p>Community-contributed builders are <a id="_idIndexMarker638"/>open source builders and are managed by the Cloud Build developer community. These are <a id="_idIndexMarker639"/>not pre-built images and, instead, only source code is made available by the developer community. Individual adaptations should build the source code and create an image. Popular examples include Helm (to manage the Kubernetes package), Packer (to automate the creation of images), and so on. The complete list of <a id="_idIndexMarker640"/>community-contributed builders can be found at <a href="https://github.com/GoogleCloudPlatform/cloud-builders-community">https://github.com/GoogleCloudPlatform/cloud-builders-community</a>.</p>
+			<h3>Public Docker Hub builders</h3>
+			<p>Public Docker Hub builders refers to <a id="_idIndexMarker641"/>publicly available <a id="_idIndexMarker642"/>Docker images that can be used to execute a set of build tasks. From a thought process standpoint, these builders are very similar to Google-managed builders but the images are not stored in Google Container Registry and are instead stored in Docker Hub. The complete list of public <a id="_idIndexMarker643"/>Docker Hub builders can be found at <a href="https://hub.docker.com/search?q=&amp;type=image">https://hub.docker.com/search?q=&amp;type=image</a>.</p>
+			<h3>The build configuration</h3>
+			<p>The build configuration is a <a id="_idIndexMarker644"/>configuration file that <a id="_idIndexMarker645"/>encapsulates the steps to perform build-related tasks. A build configuration file can be written in JSON or YAML format. The configuration steps specifically make use of cloud builders, which are either pre-built images (Google-managed or public Docker images) or images built by code maintained by the developer community, and essentially represent templated steps that could be reused with an option to pass explicit arguments. These templated steps can be used to fetch dependencies, perform unit and integration tests, and create artifacts using build tools such as Docker, Gradle, Maven, Bazel, and Gulp. An example of a build config file can contain instructions to build, package, and push Docker images to a container registry of choice. The structure of such a file will be detailed in the next sub-section.</p>
+			<h3>Structure</h3>
+			<p>A build config file <a id="_idIndexMarker646"/>consists of various fields or options. The most important of them is the build step (refer to <em class="italic">Figure 6.1</em>). There could be one or more build steps defined to reflect tasks required for the build process. Each build step essentially executes a Docker container and provides the flexibility to include multiple options:</p>
+			<ul>
+				<li><strong class="bold">Name</strong>: Specifies a cloud builder that is a container image running common tools.</li>
+				<li><strong class="bold">args</strong>: Takes a list of arguments and passes it to the builder as input. If the builder used in the build step has an entry point, <strong class="source-inline">args</strong> will be used as arguments to that entry point; otherwise, the first element in <strong class="source-inline">args</strong> will be used as the entry point, and the remainder will be used as arguments.</li>
+				<li><strong class="bold">Env</strong>: Takes a list of environment variables in the form of a key-value pair.</li>
+				<li><strong class="bold">dir</strong>: Used to set a specific working directory. Optionally, artifacts produced by one step can be passed as input to the next step by persisting the artifacts in a specific directory. The directory path can either be a relative path (relative to the default working directory, which is <strong class="source-inline">/workspace</strong>) or a specific absolute path.</li>
+				<li><strong class="bold">id</strong>: Used to set a unique identifier for a build step.</li>
+				<li><strong class="bold">waitFor</strong>: Used if a specific build step is required to run prior. If not specified, then all prior steps need to be completed prior to the current build step.</li>
+				<li><strong class="bold">entrypoint</strong>: Used to override the default entry point provided by the cloud builder.</li>
+				<li><strong class="bold">secretEnv</strong>: Allows you to define a list of environment variables encrypted by Cloud KMS.</li>
+				<li><strong class="bold">volumes</strong>: Represents a Docker container volume that is mounted into build steps to persist artifacts across build steps.</li>
+				<li><strong class="bold">timeout</strong>: To specify the amount of time that a build can run. The default value is 10 minutes and the maximum allowed is 24 hours. Time should be specified in seconds.</li>
+			</ul>
+			<p><em class="italic">Figure 6.1</em> shows the skeleton <a id="_idIndexMarker647"/>structure of a build configuration file that could consist of one or more build steps:</p>
+			<div>
+				<div id="_idContainer064" class="IMG---Figure">
+					<img src="image/B15597_06_01.jpg" alt="Figure 6.1 – Build steps in a build configuration file&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 6.1 – Build steps in a build configuration file</p>
+			<p>Apart from the options that form the build steps of a build configuration file, additional possible options along with their details can be found at <a href="https://cloud.google.com/cloud-build/docs/build-config">https://cloud.google.com/cloud-build/docs/build-config</a>.</p>
+			<h2 id="_idParaDest-137"><a id="_idTextAnchor137"/>Building code using Cloud Build</h2>
+			<p>The combination of <a id="_idIndexMarker648"/>cloud builders and build configuration files forms the <a id="_idIndexMarker649"/>core of Cloud Build. When Cloud Build is initiated, the following steps happen in the background:</p>
+			<ol>
+				<li value="1">The application code, Dockerfile, and other assets in a given directory are compressed.</li>
+				<li>The compressed code is then uploaded to a Cloud Storage bucket, which is either the default bucket created by Cloud Build on a per-project basis or a user-supplied Cloud Storage bucket.</li>
+				<li>A build is initiated with the uploaded files as input and the output of the build is a container image that is tagged with the provided image name.</li>
+				<li>The container image is then pushed to Container Registry or a destination registry of choice.</li>
+			</ol>
+			<p>There are multiple approaches to invoke the build process via Cloud Build manual invocation and automatic builds using triggers.</p>
+			<h3>Cloud Build – manual invocation via the gcloud CLI</h3>
+			<p>There are two ways to <a id="_idIndexMarker650"/>initiate a build <a id="_idIndexMarker651"/>manually through Cloud Build using the <strong class="source-inline">gcloud</strong> command-line tool, which essentially uses the <a id="_idIndexMarker652"/>Cloud Build API:</p>
+			<ul>
+				<li>Using a Dockerfile</li>
+				<li>Using Cloud Build – build configuration file</li>
+			</ul>
+			<p>The upcoming sub-sections go into the details of the preceding two ways to initiate a build through Cloud Build.</p>
+			<h3>Cloud Build – a manual build using a Dockerfile</h3>
+			<p>The Dockerfile should <a id="_idIndexMarker653"/>contain all the information required to build a Docker image using Cloud Build. The following <a id="_idIndexMarker654"/>command will initiate the build process manually. This command should be run from the directory <a id="_idIndexMarker655"/>that contains the application code, Dockerfile, and any other required assets:</p>
+			<p class="source-code"># Format to invoke the build manually using Dockerfile</p>
+			<p class="source-code">gcloud builds submit --tag &lt;host-name&gt;/&lt;project-id&gt;/&lt;image-name&gt; &lt;app-code-directory-path&gt;</p>
+			<p class="source-code">#Example (. Indicates current directory)</p>
+			<p class="source-code">gcloud builds submit –tag gcr.io/gcp-devops-2021/manual-dockerfile-image .</p>
+			<p>Once the build is complete, the build ID will be displayed on the terminal or shell from where the <strong class="source-inline">build</strong> command was invoked. The build ID can be used to filter through the builds displayed in the Cloud Build console and is subsequently useful to view the build logs. Additionally, the newly created image will be pushed to Container Registry as per the preceding example.</p>
+			<h3>Cloud Build – a manual build using a build configuration file</h3>
+			<p>Another approach to initiate a <a id="_idIndexMarker656"/>manual build through Cloud Build is to use a build configuration file. The build configuration file <a id="_idIndexMarker657"/>uses cloud builders, which essentially are critical to <a id="_idIndexMarker658"/>minimize the manual steps in a templated specification file.</p>
+			<p>The following is an example build configuration file that uses docker cloud builder to build code and push an image to Container Registry. The name of the container image used here is <strong class="source-inline">builder-myimage</strong> and the name of the configuration file is <strong class="source-inline">cloudbuild.yaml</strong>:</p>
+			<p class="source-code">steps:</p>
+			<p class="source-code">- name: 'gcr.io/cloud-builders/docker'</p>
+			<p class="source-code">  args: ['build', '-t', 'gcr.io/$PROJECT_ID/builder-myimage', '.']</p>
+			<p class="source-code">- name: 'gcr.io/cloud-builders/docker'</p>
+			<p class="source-code">  args: ['push', 'gcr.io/$PROJECT_ID/builder-myimage']</p>
+			<p class="source-code">- name: 'gcr.io/cloud-builders/gcloud'</p>
+			<p>The following <a id="_idIndexMarker659"/>command will initiate the <a id="_idIndexMarker660"/>Cloud Build process by using the build configuration file (which is <strong class="source-inline">cloudbuild.yaml</strong> in this case) as the input, along with the path to the <a id="_idIndexMarker661"/>source code:</p>
+			<p class="source-code"># Format to invoke the build manually using the build configuration file</p>
+			<p class="source-code">gcloud builds submit --config &lt;build-config-file&gt; &lt;source-code-path&gt;</p>
+			<p class="source-code">#Example 1 (Source code is located in the current directory)</p>
+			<p class="source-code">gcloud builds submit --config cloudbuild.yaml .</p>
+			<p class="source-code">#Example 2 (Source code is located in a cloud storage bucket)</p>
+			<p class="source-code">gcloud builds submit --config cloudbuild.yaml gs://my-cloud-build-examples/cloud-build-manual.tar.gz</p>
+			<h3>Cloud Build – automatic build using triggers</h3>
+			<p>The manual invocation of Cloud Build does not fit into the CI/CD workflow as it adds toil. The preferred approach is to automatically build code whenever a qualified event is detected. Cloud Build facilitates this feature <a id="_idIndexMarker662"/>by using the option of triggers.</p>
+			<p>The user can create a trigger <a id="_idIndexMarker663"/>that could be invoked on one of the following qualifying events:</p>
+			<ul>
+				<li>Push to a branch.</li>
+				<li>Push a new tag.</li>
+				<li>A pull request (GitHub app only).</li>
+			</ul>
+			<p>The trigger continuously <a id="_idIndexMarker664"/>monitors for the configured event against the configured repository. If the event occurs, the trigger initiates the build process using either the Dockerfile or Cloud Build configuration file (as configured on the trigger) and subsequently, the build process will result in build artifacts. A step-by-step hands-on lab is illustrated toward the end of this chapter.</p>
+			<p class="callout-heading">Dockerfile versus cloudbuild.yaml</p>
+			<p class="callout">A Dockerfile allows <a id="_idIndexMarker665"/>you to build and compose a Docker container image using the <strong class="source-inline">docker build</strong> command. A Dockerfile also allows you to incorporate build steps using bash commands; they could include commands specific to Google Cloud; after specifying the installation of Google Cloud SDK as one of the steps.</p>
+			<p class="callout">On the contrary to using a <a id="_idIndexMarker666"/>Dockerfile, <strong class="source-inline">Cloudbuild.yaml</strong> also allows you to build and compose a Docker container image and to utilize Google-managed or community-managed builders that come with pre-built images and offer more customization. The choice between the two comes to intent, choice of cloud platform, and ease of customization.</p>
+			<p>This concludes the sub-section on how a build can be initiated through Cloud Build. The next sub-section focuses on details related to storing and viewing build logs.</p>
+			<h2 id="_idParaDest-138"><a id="_idTextAnchor138"/>Storing and viewing build logs</h2>
+			<p>Cloud Build creates a <a id="_idIndexMarker667"/>log trail for actions performed as part of a build process. This log information is stored in Cloud Logging. Additionally, Cloud Build stores the log information in a Cloud Storage bucket. In fact, a default Cloud Storage bucket is created on a per-project basis, once the Cloud Build API is enabled. The bucket is named in the format <strong class="source-inline">&lt;project-id_cloudbuild&gt;</strong>. The logs related to every build are compressed and stored in the storage bucket.</p>
+			<p>So, the default option to store the Cloud Build logs is both in Cloud Logging as well as a Cloud Storage bucket. However, it is possible to choose either of the two options specifically in the build configuration file by using the <em class="italic">logging</em> field:</p>
+			<ul>
+				<li>If set to <strong class="source-inline">CLOUD_LOGGING_ONLY</strong>, then logs are written only to Cloud Logging.</li>
+				<li>If set to <strong class="source-inline">GCS_ONLY</strong>, then logs are written only to the Cloud Storage bucket. The default bucket will be used unless a Cloud Storage bucket is explicitly specified using the <strong class="bold">logsBucket</strong> option.</li>
+			</ul>
+			<p>It's possible that the user will go with an option other than the default options either due to cost constraints or it's possible that logs are ingested to another logging framework with the Cloud Storage bucket being the source.</p>
+			<p>The following is a code snippet that demonstrates the usage of the <em class="italic">logging</em> option as part of the build configuration file:</p>
+			<p class="source-code">steps: </p>
+			<p class="source-code">- name: 'gcr.io/cloud-builders/docker'</p>
+			<p class="source-code">  args: ['build', '-t', 'gcr.io/myproject/myimage', '.'] </p>
+			<p class="source-code">options:</p>
+			<p class="source-code">  logging: GCS_ONLY</p>
+			<p class="source-code">logsBucket: 'gs://mylogsbucket'</p>
+			<p>Logs can be viewed using the Cloud Logging console. If logs need to be viewed at an individual build level, it is preferred to view the logs from the Cloud Build console. The information in the Cloud Build console will be derived from the Cloud Storage bucket (either the default or the explicit bucket). In order to view the logs, the user should either have the <em class="italic">Storage Object Viewer</em> role or the <em class="italic">Project Viewer</em> role. </p>
+			<p>To view the build logs, follow <a id="_idIndexMarker668"/>these steps:</p>
+			<ol>
+				<li value="1">Navigate to <strong class="bold">Cloud Build</strong> in the GCP Console (by default, the user will be taken to the <strong class="bold">Build History</strong> page).</li>
+				<li>Select a build to view its respective logs (builds that succeeded will be in green, and in red otherwise).</li>
+				<li>The user can view the build log per build step. In addition, execution details and the storage locations of any relevant build artifacts are also displayed. Optionally, the source of the cloud logs is also shown (refer to <em class="italic">Figure 6.2</em>):</li>
+			</ol>
+			<div>
+				<div id="_idContainer065" class="IMG---Figure">
+					<img src="image/B15597_06_02.jpg" alt="Figure 6.2 – Build log from Cloud Build&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 6.2 – Build log from Cloud Build</p>
+			<p>If a need arises to delete the build logs, then logs cannot be deleted from a Google-created log bucket. However, logs can be deleted from a user-created log bucket or by deleting the user-created bucket itself that contains one or more build logs. This requires the user to have access to Cloud Storage to delete a file – through Cloud Storage; specifically, the role Storage Admin or Storage Object Admin (depending upon whether the intention is to delete the entire user-created bucket or the specific build log file respectively).</p>
+			<h2 id="_idParaDest-139"><a id="_idTextAnchor139"/>Managing access controls</h2>
+			<p>A build can be <a id="_idIndexMarker669"/>triggered either by a user or by an application. As per Google's recommended practices, if an application needs access to a service, then it can be possible through a service account. So, to be precise, access control to Cloud Build can either be managed via <strong class="bold">end user IAM roles</strong> or through a <strong class="bold">Cloud Build service account</strong>.</p>
+			<h3>End user IAM roles</h3>
+			<p>Cloud Build has a set of <a id="_idIndexMarker670"/>predefined IAM roles that can provide granular access and can also align to a specific job role. This prevents <a id="_idIndexMarker671"/>unwanted access and allows you to implement the principle of least privilege.</p>
+			<p>The following table summarizes the critical IAM roles required to access or perform actions on Cloud Build:</p>
+			<div>
+				<div id="_idContainer066" class="IMG---Figure">
+					<img src="image/B15597_06_Table_01.jpg" alt=""/>
+				</div>
+			</div>
+			<h3>Cloud Build service accounts</h3>
+			<p>Google recommends using a <a id="_idIndexMarker672"/><strong class="bold">service account (SA)</strong> when a task needs to be performed by an application or on behalf of a user. A service account is a special kind of account that is used by an application or a <a id="_idIndexMarker673"/>VM to make authorized API calls but not by an individual. The regular practice in such scenarios is to create a SA and assign the necessary permissions to the SA so that the application with that SA can perform the necessary actions.</p>
+			<p>Cloud Build instead creates a specific Cloud Build SA for a project when the Cloud Build API is enabled on the project. The Cloud Build SA has a minimal number of permissions assigned to it, for example, Cloud Storage. If you want to use other services, the SA needs to be updated to reflect the desired permissions. </p>
+			<p>The set of pre-assigned <a id="_idIndexMarker674"/>permissions for the Cloud Build SA will essentially allow Cloud Build to perform the <a id="_idIndexMarker675"/>following actions on behalf of the user:</p>
+			<ul>
+				<li>Create, list, get, or cancel builds.</li>
+				<li>Create, patch, delete, or run a build trigger.</li>
+				<li>Pull source code from CSR.</li>
+				<li>Store images in and get images from Container Registry.</li>
+				<li>Store artifacts in and get artifacts from Cloud Storage.</li>
+				<li>Store artifacts in and get artifacts from Artifact Registry.</li>
+				<li>Create build logs in Cloud Logging.</li>
+				<li>Store build logs in a user-created logs bucket.</li>
+				<li>Push build updates to Pub/Sub.</li>
+				<li>Get project information and list projects.</li>
+			</ul>
+			<p>This concludes the topic on managing access controls, giving insights into the required IAM roles. The upcoming topic focuses on best practices while executing the build process, which could essentially reduce the build execution time.</p>
+			<h2 id="_idParaDest-140"><a id="_idTextAnchor140"/>Cloud Build best practices – optimizing builds</h2>
+			<p>Decreasing the build time helps in optimizing the build process. Given that the focus is on handling containers, there are two common strategies to increase the build speed:</p>
+			<ul>
+				<li><strong class="bold">Building Leaner Containers</strong>: As a <a id="_idIndexMarker676"/>part of this <a id="_idIndexMarker677"/>strategy, the size of a container can be reduced if files related to build-time dependencies and any intermediate files are not included in the container image.</li>
+				<li><strong class="bold">Cached Docker images</strong>: As a part of this <a id="_idIndexMarker678"/>strategy, a cached image can be specified via the <strong class="source-inline">--cache-from</strong> argument and can <a id="_idIndexMarker679"/>be used for subsequent builds as the starting point. The cached image will be retrieved from a registry. A cached Docker image is only supported for Docker builds and is not supported by cloud builders.</li>
+			</ul>
+			<p>In addition to a generic strategy of building leaner containers to optimize the build speed, Cloud Build specifically prescribes the following best practices, which can additionally be used:</p>
+			<ul>
+				<li>Kaniko cache</li>
+				<li>Cloud Storage for caching directories</li>
+				<li>Custom VM sizes</li>
+				<li>Ignoring unwanted files</li>
+			</ul>
+			<p>The following are the details of the above-mentioned best practices.</p>
+			<h3>Kaniko cache</h3>
+			<p>Kaniko cache is <a id="_idIndexMarker680"/>based on the open source tool Kaniko and is also a feature of Cloud Build where intermediate container image layers are <a id="_idIndexMarker681"/>directly written to Google's Container Registry without an explicit push step.</p>
+			<p>To enable Kaniko cache, as part of the build configuration file <strong class="source-inline">cloudbuild.yaml</strong>, the following is a code snippet that could incorporate it:</p>
+			<p class="source-code">steps: </p>
+			<p class="source-code">- name: 'gcr.io/kaniko-project/executor:latest'</p>
+			<p class="source-code">  args:</p>
+			<p class="source-code">  - --destination=gcr.io/$PROJECT_ID/image</p>
+			<p class="source-code">  - --cache=true</p>
+			<p class="source-code">  - --cache-ttl=XXh</p>
+			<p>The following are <a id="_idIndexMarker682"/>recommendations that should be taken into consideration while <a id="_idIndexMarker683"/>implementing Kaniko cache through the <strong class="source-inline">kaniko-project</strong> cloud builder:</p>
+			<ul>
+				<li>Use <strong class="source-inline">kaniko-project/executor</strong> instead of <strong class="source-inline">cloud-builders/docker</strong>.</li>
+				<li>The <strong class="source-inline">destination</strong> flag should refer to the target container image.</li>
+				<li>The <strong class="source-inline">cache</strong> flag should be set to <strong class="source-inline">true</strong>.</li>
+				<li>The cache-ttl flag should be set to the required cache expiration time.</li>
+			</ul>
+			<p>Alternatively, Kaniko cache can be enabled via the gcloud CLI by running the command as shown in the following snippet:</p>
+			<p class="source-code">gcloud config set builds/use_kaniko True</p>
+			<p>Kaniko cache speeds up the build execution time by storing and indexing the intermediate layers within a Container Registry and eventually saves build execution time since it can be used by subsequent builds.</p>
+			<h3>Cloud Storage for caching directories</h3>
+			<p>Conceptually, this is like a <a id="_idIndexMarker684"/>cached Docker image. The results of a previous build can be reused by copying from a Cloud Storage bucket and the new results can also be written back to the Cloud Storage bucket. This concept is not restricted only to Docker builds but can also be extended to any builder supported by Cloud Build.</p>
+			<p>Additionally, Cloud Build uses a default working directory named <strong class="source-inline">/workspace</strong>, which is available to all steps in the build process. The results of one step can be passed on to the next step by persisting it in the default working directory. The working directory can also be explicitly set using the <strong class="source-inline">dir</strong> field as part of the build step.</p>
+			<p>The following is a sample snippet of a build configuration file where Cloud Storage is used for caching directories:</p>
+			<p class="source-code">steps: </p>
+			<p class="source-code">- name: gcr.io/cloud-builders/gsutil</p>
+			<p class="source-code">  args: ['cp','gs://mybucket/results.zip','previous_results.zip']</p>
+			<p class="source-code">  dir: 'my-cloud-build/examples'</p>
+			<p class="source-code"># operations that use previous_results.zip and produce new_results.zip</p>
+			<p class="source-code">- name: gcr.io/cloud-builders/gsutil</p>
+			<p class="source-code">  args: ['cp','new_results.zip','gs://mybucket/results.zip']</p>
+			<p class="source-code">  dir: 'my-cloud-build/examples'</p>
+			<p>The preceding example also <a id="_idIndexMarker685"/>shows the usage of a specific working directory, <strong class="source-inline">my-cloud-build/examples</strong>, as specified under the <strong class="source-inline">dir</strong> field as part of the build steps. Like Kaniko cache, cloud storage can be used to optimize build speeds by using the results from a previous build.</p>
+			<h3>Custom VM sizes</h3>
+			<p>Cloud builds are executed <a id="_idIndexMarker686"/>against a managed VM of a standard size. However, Cloud Build provides an option to increase the speed of a build by using a higher CPU VM, which essentially speeds up the build process. This is done by specifying the <strong class="source-inline">--machine-type</strong> argument. Cloud Build specifically provides a choice of 8 cores or 32 cores across two families of VMs. Specific choices are as follows:</p>
+			<ul>
+				<li><strong class="source-inline">N1_HIGHCPU_8 </strong></li>
+				<li><strong class="source-inline">N1_HIGHCPU_32</strong></li>
+				<li><strong class="source-inline">E2_HIGHCPU_8 </strong></li>
+				<li><strong class="source-inline">E2_HIGHCPU_32</strong></li>
+			</ul>
+			<p>The following is the CLI command to specify a machine type while initiating the Cloud Build process:</p>
+			<p class="source-code">gcloud builds submit --config=cloudbuild.yaml \</p>
+			<p class="source-code">  --machine-type=N1_HIGHCPU_8</p>
+			<h3>Ignoring unwanted files</h3>
+			<p>Cloud Build uploads the <a id="_idIndexMarker687"/>code directory to a Cloud Storage location. The upload process can be made quicker by ignoring files that are not relevant to the build process. These files might include third-party dependencies, compiled code, binaries, or JAR files used for local development. In addition, documentation and code samples are not required for the build process. These files can be specified as part of the <strong class="source-inline">gcloudignore</strong> file to optimize the upload time.</p>
+			<p>This completes our deep dive into Cloud Build and its key constructs, which include cloud builders and the build configuration, options available to initiate a build process, automating the available options using triggers, viewing build results with information stored in Cloud Storage, defining access controls, and prescribing recommended practices to optimize builds.</p>
+			<p>The next section focuses on the concepts of artifact management and the usage of Container Registry to manage build artifacts while working with containers.</p>
+			<h1 id="_idParaDest-141"><a id="_idTextAnchor141"/>Managing build artifacts – Container Registry</h1>
+			<p>Source code management is the <a id="_idIndexMarker688"/>first step in the CI process. This is followed by building the code. Code can be built based on various trigger points; either against a development branch or when a PR is merged into the master branch. The code build process can result in one or more artifacts. Based on the nature of the code being built, the resultant artifacts can either be binaries, packages, container images, or a combination. These artifacts are stored in a registry and then deployed into a computing environment and form the CD process. In between the CI and CD process, there is an intermediate process where the build artifacts are stored and then subsequently deployed. This is <a id="_idIndexMarker689"/>known as <strong class="bold">artifact management</strong>.</p>
+			<p>Artifact management acts as a single source of truth and a critical integration point between CI and CD. Many artifact management systems provide versioning, the ability to scan for vulnerabilities, provide consistent configuration, and accommodate unified access control.</p>
+			<p>Given that the theme of this book is working with containers, the critical build artifacts in this case will be the container images. Images are typically stored in a central registry. The most common container registry is Docker Hub, which stores public Docker images. However, when working within an enterprise, it is generally a requirement to secure access to the container images produced by building code that is specific to the enterprise. In such scenarios, a private registry is preferred over a public registry, since a private registry can offer role-based access controls to provide more security and governance.</p>
+			<p>Container Registry is GCP's private <a id="_idIndexMarker690"/>container image registry service, which supports Docker Image Manifest V2 and OCI image formats including Docker. The Container Registry service can be accessed through secure HTTPS endpoints and allows users to push or pull images from any possible compute option.</p>
+			<p class="callout-heading">Artifact Registry</p>
+			<p class="callout">Artifact Registry is a <a id="_idIndexMarker691"/>managed service offering from GCP that is similar to Container Registry but also provides options to store non-container artifacts such as Java packages, Node.js modules, and so on. It is currently not part of the GCP DevOps Professional exam.</p>
+			<h2 id="_idParaDest-142"><a id="_idTextAnchor142"/>Container Registry – key concepts</h2>
+			<p>Container Registry is one of Google's approaches to artifact management. Like any other service, it has <a id="_idIndexMarker692"/>certain key constructs and concepts. The following sub-sections dive into those details.</p>
+			<h3>Enabling/disabling Container Registry</h3>
+			<p>The Container Registry service can be <a id="_idIndexMarker693"/>enabled or disabled using the GCP Console via the <strong class="bold">APIs &amp; Services</strong> section. Additionally, the service can be <a id="_idIndexMarker694"/>enabled or disabled through the CLI using the following command:</p>
+			<p class="source-code"># To enable container registry</p>
+			<p class="source-code">gcloud services enable containerregistry.googleapis.com</p>
+			<p class="source-code"># To disable container registry</p>
+			<p class="source-code">gcloud services disable containerregistry.googleapis.com</p>
+			<h3>Container Registry service accounts</h3>
+			<p>Like Cloud Build, when <a id="_idIndexMarker695"/>Container Registry is enabled, a Google-managed SA will get created that is specific to your current project. This SA allows Container Registry to access critical GCP services such as Pub/Sub and Cloud Storage within the project. Google makes this possible by assigning the Container Registry Service Agent role to the Container Registry SA.</p>
+			<h3>The structure of Container Registry</h3>
+			<p>There could be one or more <a id="_idIndexMarker696"/>registries in a Container Registry service. Each registry is identified by the hostname, project ID, and image (tag or image digest). The following are the two possible formats:</p>
+			<ul>
+				<li><strong class="source-inline">HOSTNAME / PROJECT_ID / IMAGE:TAG</strong></li>
+				<li><strong class="source-inline">HOSTNAME / PROJECT_ID / IMAGE@IMAGE-DIGEST</strong></li>
+			</ul>
+			<p>In the preceding code, we have the following:</p>
+			<ul>
+				<li><strong class="source-inline">HOSTNAME</strong>: Refers to the location where the image is stored. Images are stored in a Cloud Storage bucket. If the hostname is <strong class="source-inline">gcr.io</strong>, then by default the images are stored in the United States. Additionally, the user can specify specific hosts such as <strong class="source-inline">us.gcr.io</strong>, <strong class="source-inline">eu.gcr.io</strong>, or <strong class="source-inline">asia.gcr.io</strong>, where each host is tied to a specific geographic region where the images are hosted.</li>
+				<li><strong class="source-inline">PROJECT_ID</strong>: Refers to the specific GCP project ID.</li>
+				<li><strong class="source-inline">IMAGE</strong>: Refers to the image name. Registries in Container Registry are listed by image name. A single registry can hold different versions of an image. Adding either <strong class="source-inline">:TAG</strong> or <strong class="source-inline">@IMAGE-DIGEST</strong> helps to differentiate between images with the same image name. If neither is specified, then the image is tagged as latest.</li>
+			</ul>
+			<p><strong class="bold">Examples</strong>:</p>
+			<p>The following are examples of a registry for a specific image where the version of the image is differentiated by either adding a tag or image digest:</p>
+			<p class="source-code"># Add image tag:</p>
+			<p class="source-code">gcr.io/PROJECT-ID/my-image:tag1</p>
+			<p class="source-code"># Add image digest:</p>
+			<p class="source-code">gcr.io/PROJECT-ID/my-image@sha256:4d11e24ba8a615cc85a535daa17 b47d3c0219f7eeb2b8208896704ad7f88ae2d</p>
+			<p>This completes the topic that <a id="_idIndexMarker697"/>details the structure of Container Registry, an understanding that is critical to upload or download container images to/from Container Registry. This will be detailed in upcoming topics.</p>
+			<h3>Uploading images to Container Registry</h3>
+			<p>The build process, on completion, will produce container images as artifacts. These artifacts are generally <a id="_idIndexMarker698"/>created in the local directory where the build process was run. These local Docker images need to be uploaded to a <a id="_idIndexMarker699"/>private registry such as Container Registry. The process of uploading an image to Container Registry is also synonymous with pushing images to Container Registry.</p>
+			<p>To break it down, there are two main steps that push images to Container Registry:</p>
+			<ol>
+				<li value="1">Tag the local image with the registry name (as shown in the following snippet):<p class="source-code"><strong class="bold">docker tag SOURCE_IMAGE HOSTNAME/PROJECT_ID/IMAGE</strong></p><p class="source-code"><strong class="bold">#Example</strong></p><p class="source-code"><strong class="bold">docker tag my-local-image gcr.io/gcpdevops-2021/my-gcr-image </strong></p></li>
+				<li>Push the tagged image to Container Registry (as shown in the following snippet):<p class="source-code"><strong class="bold">docker push HOSTNAME/PROJECT-ID/IMAGE</strong></p><p class="source-code"><strong class="bold">#Example</strong></p><p class="source-code"><strong class="bold">docker push gcr.io/gcpdevops-2021/my-gcr-image</strong></p></li>
+			</ol>
+			<p>A container image can be pushed to a new registry or an existing registry:</p>
+			<ul>
+				<li>If pushed to a new registry, that is, a registry with a new hostname, then Container Registry will create a multi-regional storage bucket.</li>
+				<li>If pushed to an existing registry, then a new version of the image is created either with an image tag or image digest. If <a id="_idIndexMarker700"/>neither is present, then the image is tagged as <strong class="source-inline">latest</strong>.<p class="callout-heading">Specifying the location of Container Registry</p><p class="callout">The location of Container Registry can be specified under the hostname. If <strong class="source-inline">gcr.io</strong> is used, then the default location is <em class="italic">United States</em>. If a specific location needs to be used, then the host can be specified as <strong class="source-inline">eu.gcr.io</strong>.</p></li>
+			</ul>
+			<p>The newly <a id="_idIndexMarker701"/>created image can be listed using the following gcloud CLI command:</p>
+			<p class="source-code">gcloud container images list –repository=HOSTNAME/PROJECT-ID</p>
+			<p class="source-code">#Example</p>
+			<p class="source-code">gcloud container images list –repository=gcr.io/gcpdevops-2021</p>
+			<p>This concludes the topic on uploading or pushing a container image to GCP's Container Registry. Now the newly pushed image can be deployed by any application by downloading the image from Container Registry. This will be covered as the next topic.</p>
+			<h3>Downloading images from Container Registry</h3>
+			<p>The CD process <a id="_idIndexMarker702"/>feeds on the <a id="_idIndexMarker703"/>output of the CI process, which essentially is stored in a registry such as Container Registry in the form of an OCI image. So, for the CD process to progress, the <a id="_idIndexMarker704"/>Docker image needs to be downloaded from Container Registry. The process of downloading an image from Container Registry is synonymous with pulling images from Container Registry.</p>
+			<p>An image can be pulled from Container Registry either using the image tag or image digest. If neither is specified, then the image with a tag of <strong class="source-inline">latest</strong> will be downloaded (as shown in the following snippet):</p>
+			<p class="source-code"># Pull based on Image Tag</p>
+			<p class="source-code">docker pull HOSTNAME/PROJECT-ID/IMAGE:TAG</p>
+			<p class="source-code"># Pull based on Image-Digest</p>
+			<p class="source-code">docker pull HOSTNAME/PROJECT-ID/IMAGE@IMAGE_DIGEST</p>
+			<p class="source-code"># Pull without Image Tag or Image-Digest</p>
+			<p class="source-code">docker pull HOSTNAME/PROJECT-ID/IMAGE</p>
+			<p>This completes the topic on <a id="_idIndexMarker705"/>downloading images from Container Registry. To either upload or download images to or from <a id="_idIndexMarker706"/>Container Registry, it is critical that the user or application trying to perform those actions has the necessary access controls. This will be covered as the next topic.</p>
+			<h3>Container Registry access controls</h3>
+			<p>Container Registry is a <a id="_idIndexMarker707"/>repository for container images. The images are physically stored in a Cloud Storage bucket. So, in order to push or pull images from Container Registry, the user or SA should be granted the following roles:</p>
+			<div>
+				<div id="_idContainer067" class="IMG---Figure">
+					<img src="image/B15597_06_Table_02.jpg" alt=""/>
+				</div>
+			</div>
+			<p>If an application is deployed using GCP's available compute options, such as Compute Engine, App Engine, or GKE, then each of these services will have default service accounts with a pre-defined set of roles. However, the use of default service accounts is not recommended as this practice does not follow the principle of least privilege. Alternatively, it is also possible that the compute options could use a custom SA with the minimum <a id="_idIndexMarker708"/>set of required permissions. Either way, it is important to understand the scope of these service accounts and their impact during the CD process. This will be discussed in detail in the next topic.</p>
+			<h3>Continuous Delivery/Deployment integrations via Container Registry</h3>
+			<p>As mentioned previously, artifact management is the <a id="_idIndexMarker709"/>bridge between CI and CD. GCP has multiple compute options <a id="_idIndexMarker710"/>where code or an <a id="_idIndexMarker711"/>application can be deployed as part of the CD process. Each of GCP's compute options has a <a id="_idIndexMarker712"/>way to interact and integrate with Container Registry, which are detailed in the following sub-sections.</p>
+			<h3>Compute Engine</h3>
+			<p>The <strong class="bold">Compute Engine</strong> service uses either a <a id="_idIndexMarker713"/>SA or access scopes to identify the identity and provide API access to other services. The <a id="_idIndexMarker714"/>following is a summary of the possibilities or potential changes to successfully push or pull an image originating from a Compute Engine instance:</p>
+			<ul>
+				<li>The default Compute Engine SA or the default access scope provides read-only access to storage and service management. This allows you to download or pull images from Container Registry within the same project.</li>
+				<li>To push images, either the read-write storage access scope should be used, or the default Compute Engine SA should be configured with the Storage Object Admin role.</li>
+				<li>If the VM instance is using a SA other than the default Compute Engine SA or if the VM instance is in a project different from Container Registry, then the SA should be given the appropriate permissions to access the storage bucket used by Container Registry.</li>
+			</ul>
+			<h3>Google Kubernetes Engine</h3>
+			<p>A <strong class="bold">Google Kubernetes Engine</strong> (<strong class="bold">GKE</strong>) cluster is <a id="_idIndexMarker715"/>essentially a collection of Google Compute Engine VMs that represents a node pool. This <a id="_idIndexMarker716"/>also means that GKE uses the SA configured on the VM instance. So, eventually, GKE's access to Container Registry is based on the access granted to the VM's SA. So, refer to the previous sub-section on <em class="italic">Compute Engine</em> for the possibilities or potential changes to successfully push or pull an image originating from a compute instance within GKE.</p>
+			<h3>App Engine flexible</h3>
+			<p><strong class="bold">App Engine flexible</strong> supports the <a id="_idIndexMarker717"/>deployment of Docker containers. The default SA tied with App Engine flexible has the <a id="_idIndexMarker718"/>required permissions to push and pull images from Container Registry, provided both are present in the same project.</p>
+			<p>If App Engine is in a different project than Container Registry or if App Engine is using a different SA than the default App Engine SA, then the SA tied to App Engine should be given the appropriate permissions to access the storage bucket used by Container Registry.</p>
+			<p>This completes the topic on how GCP compute options can integrate with Container Registry. Outside the compute options provided by GCP, there are several use cases where CD systems use a compute option that is not native to GCP.</p>
+			<p>The next topic discusses the details of how third-party clients can access artifacts in GCP's Container Registry.</p>
+			<h3>Container Registry authentication methods</h3>
+			<p>There are compute options <a id="_idIndexMarker719"/>outside Google Cloud that could potentially deploy an application by pulling container images from Google Cloud's Container Registry. Such compute options are referred to as third-party clients. A <strong class="bold">Red Hat Enterprise Linux (RHEL</strong>) cluster is an example of a third-party client that is a compute option from Red Hat and can download a container image from Container Registry.</p>
+			<p>Apart from ensuring that the third-party client has the required access control to pull or push images, it is mandatory for third-party clients to authenticate with Container Registry prior to initiating an attempt to push or pull images. The following are the possible authentication <a id="_idIndexMarker720"/>methods that third-party clients can use to authenticate with Container Registry:</p>
+			<ul>
+				<li>gcloud credential helper</li>
+				<li>Standalone credential helper</li>
+			</ul>
+			<p>The details on how third-party clients can authenticate with Container Registry are elaborated on in the upcoming sub-sections.</p>
+			<h3>gcloud credential helper</h3>
+			<p>This is the recommended <a id="_idIndexMarker721"/>authentication method and mandates the installation of Google's Cloud SDK or the usage of GCP's Cloud Shell. This <a id="_idIndexMarker722"/>method essentially uses the gcloud tool to configure authentication. The following are the required steps to use this authentication method:</p>
+			<ol>
+				<li value="1">Log into gcloud as the IAM user that will run the Docker commands:<p class="source-code"><strong class="bold"># To configure authentication with IAM user credentials:</strong></p><p class="source-code"><strong class="bold">gcloud auth login</strong> </p></li>
+				<li>If the intent is to log into gcloud as a SA, then run the following Docker command. This uses a JSON key file that contains the information about the SA and retrieves an access token that is valid for 60 minutes:<p class="source-code"><strong class="bold"># To configure authentication with service account credentials:</strong></p><p class="source-code"><strong class="bold">gcloud auth activate-service-account &lt;service-account-name&gt; --key-file=&lt;key-file-name&gt;</strong></p></li>
+				<li>Configure Docker with the following command, which allows Docker to authenticate with Container Registry:<p class="source-code"><strong class="bold">gcloud auth configure-docker </strong></p></li>
+			</ol>
+			<p>The next sub-section details an alternative approach to how the Docker standalone credential helper can be <a id="_idIndexMarker723"/>used as an authorization method for third-party clients to <a id="_idIndexMarker724"/>interact with GCP's Container Registry.</p>
+			<h3>Standalone credential helper</h3>
+			<p><strong class="source-inline">docker-credential-gcr</strong> is GCP Container Registry's standalone credential helper. This authentication method is used <a id="_idIndexMarker725"/>when Google Cloud SDK is not installed or GCP Cloud Shell is not used but Docker needs to be configured to authenticate with GCP Container Registry. This credential helper implements the <a id="_idIndexMarker726"/>Docker Credential Store API and enables more advanced authentication schemes for using GCP Container Registry. It allows you to fetch credentials from application default credentials and is also capable of generating credentials without an explicit login operation. More details about <strong class="source-inline">docker-credential-gcr</strong> can be found at <a href="https://github.com/GoogleCloudPlatform/docker-credential-gcr">https://github.com/GoogleCloudPlatform/docker-credential-gcr</a>.</p>
+			<p>The following are the required steps to use the standalone credential helper as the authentication method:</p>
+			<ol>
+				<li value="1">Log on to the machine as the user that will run the Docker commands.</li>
+				<li>Download <strong class="source-inline">docker-credential-gcr</strong> from GitHub releases: (<a href="https://github.com/GoogleCloudPlatform/docker-credential-gcr/releases">https://github.com/GoogleCloudPlatform/docker-credential-gcr/releases</a>).</li>
+				<li>Configure Docker with the following command. Internally, the credential helper will use a SA that is supplied in a JSON key file:<p class="source-code"><strong class="bold">docker-credential-gcr configure-docker</strong></p></li>
+			</ol>
+			<h3>Container Analysis</h3>
+			<p><strong class="bold">Container Analysis</strong> is a construct of <a id="_idIndexMarker727"/>Container Registry and even Artifact Registry. The purpose of this construct is to analyze the image that is being <a id="_idIndexMarker728"/>pushed into GCP Container Registry for any vulnerabilities that might be a security concern. The resulting metadata from vulnerability scanning is stored and is made available through an API for consumption. This metadata is later used in the authorization process.</p>
+			<p>There are two specific APIs through which Container Analysis provides metadata storage and vulnerability scanning:</p>
+			<ul>
+				<li><strong class="bold">Container Analysis API</strong>: Enables <a id="_idIndexMarker729"/>metadata storage. Metadata storage includes information about vulnerability or build information, also referred to as <em class="italic">note</em>.</li>
+				<li><strong class="bold">Container Scanning API</strong>: Enables <a id="_idIndexMarker730"/>vulnerability scanning across the project. The process comprises scanning and continuous analysis to find malicious activity or potential compromises leading to system failure.</li>
+			</ul>
+			<p>The <a id="_idIndexMarker731"/>following are the steps involved in configuring <a id="_idIndexMarker732"/>Container Analysis as part of Container Registry:</p>
+			<ol>
+				<li value="1">Enable the Container Analysis API: Navigate to <strong class="bold">APIs &amp; Services</strong>, search for <strong class="source-inline">Container Analysis API</strong>, and select the <strong class="bold">Enable</strong> option.</li>
+				<li>Enable the Container Scanning API: Navigate to <strong class="bold">APIs &amp; Services</strong>, search for <strong class="source-inline">Container Scanning API</strong>, and select the <strong class="bold">Enable</strong> option. In addition, also search for <strong class="source-inline">On-Demand Scanning API</strong> and enable it.</li>
+				<li>Navigate to <strong class="bold">Container Registry</strong> and under <strong class="bold">Settings</strong>, verify that <strong class="bold">Vulnerability Scanning</strong> is enabled. If enabled, the <strong class="bold">Settings</strong> screen will be similar to <em class="italic">Figure 6.3</em>. If not, enable it:<div id="_idContainer068" class="IMG---Figure"><img src="image/B15597_06_03.jpg" alt="Figure 6.3 – Vulnerability scanning enabled in Container Registry&#13;&#10;"/></div><p class="figure-caption">Figure 6.3 – Vulnerability scanning enabled in Container Registry</p></li>
+				<li>Now when an image is <a id="_idIndexMarker733"/>pushed to Container Registry, container analysis and vulnerability scanning will be performed automatically. The results will be displayed under the <strong class="bold">Images</strong> section of <strong class="bold">Container Registry</strong>. <em class="italic">Figure 6.4</em> represents the summary of the container analysis:<div id="_idContainer069" class="IMG---Figure"><img src="image/B15597_06_04.jpg" alt="Figure 6.4 – Summary of container analysis on a newly created image&#13;&#10;"/></div><p class="figure-caption">Figure 6.4 – Summary of container analysis on a newly created image</p></li>
+				<li>The details of all the <a id="_idIndexMarker734"/>vulnerabilities scanned and the categorization of them can be found by clicking on the summary. <em class="italic">Figure 6.5</em> represents the detailed report:</li>
+			</ol>
+			<div>
+				<div id="_idContainer070" class="IMG---Figure">
+					<img src="image/B15597_06_05.jpg" alt="Figure 6.5 – Details of vulnerability scanning through Container Analysis&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 6.5 – Details of vulnerability scanning through Container Analysis</p>
+			<p>This completes multiple sub-sections related to how GCP's compute options, as well as other third-party CD systems, can <a id="_idIndexMarker735"/>integrate with GCP Container Registry. This also <a id="_idIndexMarker736"/>concludes the deep dive into several of the key factors related to Container Registry.</p>
+			<p>The next section is a hands-on lab that tries to combine multiple concepts learned across sections of this chapter.</p>
+			<h1 id="_idParaDest-143"><a id="_idTextAnchor143"/>Hands-on lab – building, creating, pushing, and deploying a container to Cloud Run using Cloud Build triggers</h1>
+			<p>The goal of this hands-on lab is to <a id="_idIndexMarker737"/>provide a step-by-step illustration of how code can be automatically built, pushed, and deployed to a compute option called Cloud Run.</p>
+			<p class="callout-heading">Cloud Run</p>
+			<p class="callout">Cloud Run is GCP's managed serverless compute option, which deploys containers and abstracts away the infrastructure management. Cloud Run can scale up or down from zero based on traffic and charges on a pay-per-use model.</p>
+			<p>The hands-on lab <a id="_idIndexMarker738"/>implements concepts across Cloud Build and Container Registry. The following is a high-level breakdown of the steps involved. Each of the steps is further elaborated into multiple sub-steps:</p>
+			<ol>
+				<li value="1">Creating an empty repository in Source Repositories</li>
+				<li>Creating a Cloud Build trigger</li>
+				<li>Adding code and pushing it to the master branch</li>
+				<li>Code walk-through to build, create, push, and deploy the container image</li>
+				<li>Viewing the build results in Cloud Build, Container Registry, and Cloud Run</li>
+			</ol>
+			<p>Let's take a look at these steps in detail.</p>
+			<h2 id="_idParaDest-144"><a id="_idTextAnchor144"/>Creating an empty repository in Source Repositories</h2>
+			<p>The following are the <a id="_idIndexMarker739"/>steps required to create an <a id="_idIndexMarker740"/>empty repository in GCP's Source Repositories:</p>
+			<ol>
+				<li value="1">Navigate to <strong class="bold">Source Repositories</strong> in the GCP Console.</li>
+				<li>Create a new repository by using the <strong class="bold">Add repository</strong> option under the <strong class="bold">All repositories</strong> tab. Select an appropriate project and name the repository as per your choice (for example, <strong class="source-inline">my-cloud-build-trigger</strong>).</li>
+			</ol>
+			<h2 id="_idParaDest-145"><a id="_idTextAnchor145"/>Creating a Cloud Build trigger</h2>
+			<p>The following are the <a id="_idIndexMarker741"/>steps required to create a Cloud Build trigger against a specific repository, which will be invoked on a specific repository event (refer to <em class="italic">Figure 6.6</em>):</p>
+			<ol>
+				<li value="1">Navigate to the <strong class="bold">Triggers</strong> section under <strong class="bold">Cloud Build</strong> in the GCP console.</li>
+				<li>Select the <strong class="bold">Create Trigger </strong>option.</li>
+				<li>Enter an appropriate name for the trigger, for example, <strong class="source-inline">build-on-push-to-master</strong>.</li>
+				<li>Enter an appropriate description.</li>
+				<li>Select a choice of event. Available options are <strong class="bold">Push to a branch</strong>, <strong class="bold">Push new tag</strong>, or <strong class="bold">Pull request</strong>. In this specific example, select the <strong class="bold">Push to a branch </strong>option.</li>
+				<li>Select a <a id="_idIndexMarker742"/>source repository. In this specific example, select the newly created repository, that is, <strong class="source-inline">my-cloud-build-trigger</strong>.</li>
+				<li>Select a choice of branch. It can be <strong class="source-inline">*</strong> or a specific branch. In this specific example, enter the option as <strong class="source-inline">^master$</strong>.</li>
+				<li>Select the source for the build configuration. It can either be a Cloud Build configuration file or a Dockerfile. In this specific example, select the <strong class="bold">Cloud Build configuration file</strong> option and accordingly provide the file location (as <strong class="source-inline">/cloudbuild.yaml</strong>).</li>
+				<li>Create the Cloud Build trigger (refer to <em class="italic">Figure 6.6</em>):</li>
+			</ol>
+			<div>
+				<div id="_idContainer071" class="IMG---Figure">
+					<img src="image/B15597_06_06.jpg" alt="Figure 6.6 – Steps to illustrate the creation of the Cloud Build trigger&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 6.6 – Steps to illustrate the creation of the Cloud Build trigger</p>
+			<h2 id="_idParaDest-146"><a id="_idTextAnchor146"/>Adding code and pushing it to the master branch</h2>
+			<p>We have created a repository and set up a trigger against the repository. The trigger will build code when the code is pushed to the master branch. The next step is to add code to the repository and push it to <a id="_idIndexMarker743"/>the master branch. The following <a id="_idIndexMarker744"/>steps illustrate this:</p>
+			<ol>
+				<li value="1">Clone the empty repository to a local Git repository:<p class="source-code"><strong class="bold">gcloud source repos clone my-cloud-build-trigger --project=$GOOGLE_CLOUD_PROJECT</strong></p><p class="source-code"><strong class="bold">#$GOOGLE_CLOUD_PROJECT is an environment variable that refers to the current project</strong></p></li>
+				<li>Switch to the new local Git repository:<p class="source-code"><strong class="bold">cd my-cloud-build-trigger</strong></p></li>
+				<li>Create a remote branch:<p class="source-code"><strong class="bold">git checkout -b feature/build-trigger</strong></p></li>
+				<li>Copy the <strong class="source-inline">my-cloud-build-trigger</strong> folder from <a href="https://github.com/PacktPublishing/Google-Cloud-Platform-for-DevOps-Engineers/tree/main/my-cloud-build-trigger">https://github.com/PacktPublishing/Google-Cloud-Platform-for-DevOps-Engineers/tree/main/my-cloud-build-trigger</a>.</li>
+				<li>Add files, commit the changes, and push to the remote branch:<p class="source-code"><strong class="bold">git add *</strong></p><p class="source-code"><strong class="bold">git commit -m "Adding files!"</strong></p><p class="source-code"><strong class="bold">git push --set-upstream origin feature/build-trigger</strong></p></li>
+				<li>Checkout to the master branch and fix the upstream:<p class="source-code"><strong class="bold">git checkout -b master</strong></p><p class="source-code"><strong class="bold">git branch --unset-upstream</strong></p></li>
+				<li>Merge the remote branch with the master branch:<p class="source-code"><strong class="bold">git push –set-upstream origin git push -u master</strong></p></li>
+			</ol>
+			<h2 id="_idParaDest-147"><a id="_idTextAnchor147"/>Code walk-through</h2>
+			<p>As soon as the code is pushed to the master branch in the previous step, the configured trigger will come into effect and will eventually build the code, create a container image, push the container image to Container Registry, and eventually provide the feasibility of the container image being deployed.</p>
+			<p>The <strong class="source-inline">my-cloud-build-trigger</strong> repository consists of <a id="_idIndexMarker745"/>three types of files:</p>
+			<ul>
+				<li>The application code</li>
+				<li>Dockerfile</li>
+				<li>The build configuration file</li>
+			</ul>
+			<h3>The application code</h3>
+			<p>The application code <a id="_idIndexMarker746"/>represents the core code that runs the <a id="_idIndexMarker747"/>application. In this specific case, the code is under <strong class="source-inline">app/main.py</strong>, is written in Python, and creates a web application using the FastAPI framework. The following is the code snippet:</p>
+			<p class="source-code">app = FastAPI()</p>
+			<p class="source-code">@app.get("/")</p>
+			<p class="source-code">def read_root():</p>
+			<p class="source-code">    return {"Hello": "World"}</p>
+			<h3>Dockerfile</h3>
+			<p>The Dockerfile represents the <a id="_idIndexMarker748"/>instructions required to <a id="_idIndexMarker749"/>build the application code using a base image and subsequently create a container image. The following is the code snippet:</p>
+			<p class="source-code">FROM tiangolo/uvicorn-gunicorn-fastapi:python3.7</p>
+			<p class="source-code">COPY ./app /app</p>
+			<p class="source-code">EXPOSE 8080</p>
+			<p class="source-code">CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]</p>
+			<h3>The build configuration file</h3>
+			<p>The build configuration file <a id="_idIndexMarker750"/>represents the configuration to initiate the build process. In addition, it can include steps to push the <a id="_idIndexMarker751"/>container image to Container Registry and subsequently deploy it. The following is the code snippet:</p>
+			<p class="source-code">steps:</p>
+			<p class="source-code">- name: 'gcr.io/cloud-builders/docker'</p>
+			<p class="source-code">  args: ['build', '-t', 'gcr.io/$PROJECT_ID/cloud-build-trigger', '.']</p>
+			<p class="source-code">- name: 'gcr.io/cloud-builders/docker'</p>
+			<p class="source-code">  args: ['push', 'gcr.io/$PROJECT_ID/cloud-build-trigger']</p>
+			<p class="source-code">- name: 'gcr.io/cloud-builders/gcloud'</p>
+			<p class="source-code">  args: ['run', 'deploy', 'cbt-cloud-run', '--image', 'gcr.io/$PROJECT_ID/cloud-build-trigger', '--region', 'us-central1', '--platform', 'managed', '--allow-unauthenticated'] </p>
+			<p>In this specific example, the configuration file has three specific steps:</p>
+			<ol>
+				<li value="1">Build the code using Docker Cloud Builder. The code is picked up from the specified directory. In this case, it is the current directory.</li>
+				<li>The code built in the first step creates a container image that is local to the cloud builder. The image is then tagged and pushed to Container Registry using the Docker Cloud Builder. The container image is pushed against a specific repository.</li>
+				<li>The image pushed in <em class="italic">step 2</em> is used in this step to deploy to Google's Cloud Run.</li>
+			</ol>
+			<h2 id="_idParaDest-148"><a id="_idTextAnchor148"/>Viewing the results</h2>
+			<p>After the code is pushed to the <a id="_idIndexMarker752"/>master branch, the configured trigger will initiate the build process. To view the build results, navigate to the <strong class="bold">History</strong> section of <strong class="bold">Cloud Build</strong> in the GCP console and find the build result for the specific source repository (refer to <em class="italic">Figure 6.7</em>):</p>
+			<div>
+				<div id="_idContainer072" class="IMG---Figure">
+					<img src="image/B15597_06_07.jpg" alt="Figure 6.7 – Summary of the build history specific to the Cloud Build trigger&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 6.7 – Summary of the build history specific to the Cloud Build trigger</p>
+			<p>To view the details of the build, click on the specific build. The details will show reference to steps that include the execution of the Dockerfile and the creation of a container image that is pushed to Container Registry (refer to <em class="italic">Figure 6.8</em>):</p>
+			<div>
+				<div id="_idContainer073" class="IMG---Figure">
+					<img src="image/B15597_06_08.jpg" alt="Figure 6.8 – Log to build a container image and push to Container Registry&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 6.8 – Log to build a container image and push to Container Registry</p>
+			<p>The newly created container can be found under <strong class="bold">Container Registry</strong> (refer to <em class="italic">Figure 6.9</em>):</p>
+			<div>
+				<div id="_idContainer074" class="IMG---Figure">
+					<img src="image/B15597_06_09.jpg" alt="Figure 6.9 – Viewing the container image in Container Registry&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 6.9 – Viewing the container image in Container Registry</p>
+			<p>The end of the build log will show the deployment of the container image to Cloud Run. This will also include the newly created service URL to access the application (refer to <em class="italic">Figure 6.10</em>):</p>
+			<div>
+				<div id="_idContainer075" class="IMG---Figure">
+					<img src="image/B15597_06_10.jpg" alt="Figure 6.10 – Log to deploy the container to Cloud Run&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 6.10 – Log to deploy the container to Cloud Run</p>
+			<p>Navigate to the highlighted service URL to <a id="_idIndexMarker753"/>view the deployed application in Cloud Run (refer to <em class="italic">Figure 6.11</em>):</p>
+			<div>
+				<div id="_idContainer076" class="IMG---Figure">
+					<img src="image/B15597_06_11.jpg" alt="Figure 6.11 – Container image deployed in Cloud Run&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 6.11 – Container image deployed in Cloud Run</p>
+			<p>This completes the hands-on lab where we deployed an application automatically to Cloud Run whenever a developer made a code change and pushed the code to the master branch. This illustrates an automatic CI/CD process that is built using GCP's native constructs such as Cloud Build and Container Registry.</p>
+			<h1 id="_idParaDest-149"><a id="_idTextAnchor149"/>Summary</h1>
+			<p>In this chapter, we discussed two key services that are central to building a CI/CD workflow in Google. These are Cloud Build and Container Registry. Cloud Build is critical to build application code and output container images as build artifacts. Container Registry manages these build artifacts using the concepts of artifact management. The chapter went into in-depth details with respect to each of the services' key constructs and concluded with a hands-on lab where users can automatically deploy code to Cloud Run when a code change is detected by a configured trigger.</p>
+			<p>Google strongly recommends deploying applications using containers specifically against GKE, which is a key container deployment option apart from App Engine flexible and Cloud Run. The key concepts of GKE will be discussed in the next three chapters, which include understanding the core features of native Kubernetes, learning about GKE-specific features, and topics specific to hardening a GKE cluster.</p>
+			<h1 id="_idParaDest-150"><a id="_idTextAnchor150"/>Points to remember</h1>
+			<p>The following are some important points to remember:</p>
+			<ul>
+				<li>Cloud Build can import source code from Google Cloud Storage, CSR, GitHub, or Bitbucket.</li>
+				<li>Cloud builders are container images that run the build process.</li>
+				<li>Google-managed builders are pre-built images that can be used to execute one or more build steps.</li>
+				<li>Community-contributed builders are open source builders but not pre-built images and only source code is made available.</li>
+				<li>The build configuration is a configuration file that encapsulates the steps to perform build-related tasks, written in <strong class="source-inline">yaml</strong> or <strong class="source-inline">json</strong> format.</li>
+				<li>Manual invocation and automatic builds using triggers are the two main options to invoke the build process via Cloud Build.</li>
+				<li>Cloud Build related logs are stored in Cloud Storage and Cloud Logging.</li>
+				<li>Cloud Build Editor provides full control of Cloud Build resources.</li>
+				<li>Cloud Build creates a specific Cloud Build SA (with minimal permissions assigned) for a project when the Cloud Build API is enabled on a project.</li>
+				<li>Two common strategies to increase build speed are building leaner containers and using cached Docker images.</li>
+				<li>Kaniko cache is a feature of Cloud Build where intermediate container image layers are directly written to Google's Container Registry.</li>
+				<li>Cloud Build provides an option to increase the speed of the build by using a higher CPU VM.</li>
+				<li>Unwanted files during the Cloud Build process can be ignored using the <strong class="source-inline">gcloudignore</strong> file. </li>
+				<li>Container Registry is GCP's private container image registry service, which supports Docker Image Manifest V2 and OCI image formats.</li>
+				<li>If <strong class="source-inline">gcr.io</strong> is used, then the default location is considered as <em class="italic">United States</em>.</li>
+				<li>Storage Admin provides the ability to push and pull images from the Cloud Storage bucket associated with Container Registry.</li>
+				<li>The gcloud credential helper and standalone credential helper are possible authentication methods that third-party clients can use to authenticate with Container Registry.</li>
+				<li>Container Analysis is a service that provides vulnerability scanning and metadata storage for software artifacts.</li>
+				<li>The Container Analysis API enables metadata storage and the Container Scanning API enables vulnerability scanning.</li>
+			</ul>
+			<h1 id="_idParaDest-151"><a id="_idTextAnchor151"/>Further reading</h1>
+			<p>For more information on Cloud Build and Container Registry, read the following articles:</p>
+			<ul>
+				<li><strong class="bold">Cloud Build</strong>: <a href="https://cloud.google.com/cloud-build">https://cloud.google.com/cloud-build</a> </li>
+				<li><strong class="bold">Container Registry</strong>: <a href="https://cloud.google.com/container-registry">https://cloud.google.com/container-registry</a></li>
+			</ul>
+			<h1 id="_idParaDest-152"><a id="_idTextAnchor152"/>Practice test</h1>
+			<p>Answer the following questions:</p>
+			<ol>
+				<li value="1">Select all possible options that Cloud Build can import source code from (multiple):<p>a) GitHub and Bitbucket</p><p>b) Google Cloud Storage</p><p>c) CSR</p><p>d) None of the above</p></li>
+				<li>Cloud Build requires a build configuration file. Select the option that represents this:<p>a) <strong class="source-inline">cloudbuild.json</strong>, <strong class="source-inline">cloudbuild.xml</strong></p><p>b) <strong class="source-inline">build.json</strong>, <strong class="source-inline">build.yaml</strong></p><p>c) <strong class="source-inline">cloudbuild.json</strong>, <strong class="source-inline">cloudbuild.yaml</strong></p><p>d) <strong class="source-inline">build.json</strong>, <strong class="source-inline">build.xml</strong></p></li>
+				<li>Select the command that will configure Cloud Build to store an image in Container Registry during the build process:<p>a) The <strong class="source-inline">push</strong> command</p><p>b) The <strong class="source-inline">docker put</strong> command</p><p>c) The <strong class="source-inline">put</strong> command </p><p>d) The <strong class="source-inline">docker push</strong> command</p></li>
+				<li>Which of the following options can be used to store container images?<p>a) Container Analysis</p><p>b) Cloud Build</p><p>c) Container Registry</p><p>d) CSR</p></li>
+				<li>Select the option that stores trusted metadata used later in the authorization process:<p>a) Container Registry</p><p>b) Container Analysis</p><p>c) Container Scanning</p><p>d) Container Artifactory</p></li>
+				<li>Select the option that represents an intermediate image that is created by executing each instruction in a Dockerfile:<p>a) Docker image</p><p>b) Dockerfile</p><p>c) Docker layer</p><p>d) Docker daemon</p></li>
+				<li>Select the option that allows you to run multiple applications on the same physical hardware:<p>a) OS</p><p>b) Virtualization </p><p>c) Hypervisor</p><p>d) All of the above</p></li>
+				<li>Select all options that are applicable to Cloud Build:<p>a) Managed service</p><p>b) Serverless </p><p>c) Both (a) and (b)</p><p>d) None of the above</p></li>
+				<li>Which of the following is not a valid option that a user can provide in a build step (select one):<p>a) <strong class="source-inline">name</strong></p><p>b) <strong class="source-inline">args</strong></p><p>c) <strong class="source-inline">env</strong></p><p>d) <strong class="source-inline">uniqueid</strong></p></li>
+				<li>The build configuration file can be configured to store Cloud Build logs. Select the appropriate option to store logs: <p>a) Cloud Storage</p><p>b) Cloud Logging</p><p>c) Both (a) and (b)</p><p>d) None of the above</p></li>
+			</ol>
+			<h1 id="_idParaDest-153"><a id="_idTextAnchor153"/>Answers</h1>
+			<ol>
+				<li value="1">(a) – (b) and (c).</li>
+				<li>(c) – <strong class="source-inline">cloudbuild.json</strong>, <strong class="source-inline">cloudbuild.yaml</strong>.</li>
+				<li>(d) – The <strong class="source-inline">docker push</strong> command.</li>
+				<li>(c) – Container Registry.</li>
+				<li>(b) – Container Analysis.</li>
+				<li>(c) – Docker layer.</li>
+				<li>(b) - Virtualization.</li>
+				<li>(c) – Managed service and Serverless. Every serverless service is a managed service.</li>
+				<li>(d) – <strong class="source-inline">uniqueid</strong>. The right option is <strong class="source-inline">id</strong>.</li>
+				<li>(c) – Cloud Storage and Cloud Logging.</li>
+			</ol>
+		</div>
+	</body></html>

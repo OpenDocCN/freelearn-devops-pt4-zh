@@ -1,0 +1,1073 @@
+<html><head></head><body>
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Moving to Continuous Integration</h1>
+                </header>
+            
+            <article>
+                
+<p>After setting up source control for your organization and deciding on a branching and merging strategy that supports parallel work, you are ready to move on to continuous integration. Continuous integration is a method where every developer takes their work and integrates it with the work of others, and then verifies the quality of the combined work. The value of this is an increase in quality early on in the pipeline. This reduces the risk of error later on when merging code changes and reduces the number of bugs that are found in production, thereby reducing costs and protecting your reputation.</p>
+<p>Continuous integration is only possible when you have the proper setup with the necessary tools. In this chapter, you will learn how to use Azure DevOps pipelines to set up continuous integration.</p>
+<p>The following topics will be covered in this chapter:</p>
+<ul>
+<li class="h1">Introducing continuous integration</li>
+<li class="h1">Creating a build definition</li>
+<li class="h1">Running a build</li>
+<li class="h1">Working with YAML pipelines</li>
+<li class="h1">Agents and agent queues</li>
+<li class="h1">Other tools</li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Technical requirements </h1>
+                </header>
+            
+            <article>
+                
+<p>To go through the recipes that are covered in this chapter, you will need an Azure DevOps organization.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Introducing continuous integration</h1>
+                </header>
+            
+            <article>
+                
+<p><strong>Continuous integration </strong>is a methodology where you integrate your own changes with those of all of the other developers in your project and test whether the combined code still works as expected. This way, you create a fast loop that provides you with feedback on your work.</p>
+<p>When working with extensive branching strategies for isolating code changes, it is not uncommon for one or more developers to work for days, weeks, or even months on an isolated branch. While this is great for making sure that their changes do not disrupt others, it is also a great way to make sure that there won't be merge issues later. If you have ever had to merge weeks or months of work back into a master branch, you will know how much work is involved and how often this results in bugs or other issues.</p>
+<p>To prevent this, developers should make it a habit to integrate their changes with those of all the other developers at least once a day. Here, integrating means at least merging, compiling, and running unit tests. This way, there is a constant stream of feedback on the quality of the developer's changes and since this feedback is combined, it is a great way to prevent merge issues later.</p>
+<p><span>Continuous integration also enables you to embed other concerns in your pipeline to automatically preserve the quality of your code. Testing and security scanning are two prime examples of this. These topics are discussed in later chapters, but a good continuous integration pipeline is the basis for these practices. </span></p>
+<p>In the rest of this chapter, you will learn about the technical means to set up continuous integration using Azure Pipelines. But first, let’s look at a common misconception and the four pillars of continuous integration.</p>
+<div class="packt_infobox">While an automated continuous integration build is an important ingredient for performing continuous integration, continuous integration entails more than just having a build pipeline. The important thing to remember is that continuous integration is a process where every developer integrates their work with that of their colleagues at least daily. Then, the integrated sources are compiled and tested. The value comes from compiling and testing the integrated work, not the isolated work.</div>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">The four pillars of continuous integration</h1>
+                </header>
+            
+            <article>
+                
+<p>There are four pillars that underpin the successful adoption of continuous integration:</p>
+<ul>
+<li class="mce-root"><strong>A version control system</strong>:<em> </em>Used for storing all of the changes made to a system since its inception. Version control systems were discussed in the previous chapter.</li>
+<li class="mce-root"><strong>A package management system</strong>:<em> </em>Used to store the binary packages that you use in your own application and the packages that you create. This will be discussed in detail in <a href="d4208d51-c982-414f-9e96-17f14e084b90.xhtml">Chapter 5</a>, <em>Dependency Management</em>.</li>
+<li class="mce-root"><strong>A continuous integration system</strong>: A system that can pull the changes of all developers together—several times a day—and create one integrated source version. This can be done using Azure DevOps pipelines.</li>
+<li class="mce-root"><strong>An</strong> <strong>automated build process</strong>: Used to compile and test the combined sources. We will look at how to implement this process using Azure DevOps Pipelines.</li>
+</ul>
+<p>Continuous integration and automated builds can be set up in Azure DevOps. The next section explains how to set both up in Azure DevOps.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Creating a build definition in Azure DevOps</h1>
+                </header>
+            
+            <article>
+                
+<p>The main way to perform continuous integration is by using a continuous integration build. In Azure DevOps, builds can be configured as part of the Azure Pipelines offering. There are currently two approaches available for creating a build definition:</p>
+<ul>
+<li>Via the visual designer (also called <strong>classic builds and releases</strong>)</li>
+<li>Through <strong>Yet Another Markup Language</strong> (<strong>YAML</strong>) files (also called <strong>YAML pipelines</strong> or <strong>multistage pipelines</strong>)</li>
+</ul>
+<p>The rest of this section focuses on the visual designer. The following section, <em>YAML build definitions,</em> will go into more detail about YAML pipelines. Both approaches support roughly the same capabilities, although there are some differences. Some features that are available in classic builds and releases are not (yet) available in YAML build definitions. Also, some new features are only provided to YAML pipelines.</p>
+<p>If you have no experience with pipelines, the classic editor is a good way to get familiar with the workings of continuous integration/continuous development pipelines before moving on to YAML pipelines. Almost all of the concepts in classic builds translate to YAML builds as well.</p>
+<p>In the following sections, we will start by building a classic build pipeline.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Connecting to source control</h1>
+                </header>
+            
+            <article>
+                
+<p>To get started with a build definition, follow these simple steps:</p>
+<ol>
+<li>Open the <span class="packt_screen">Pipelines</span> menu.</li>
+<li>From this menu, click on <span class="packt_screen">Builds</span>. Here, you will be presented with a button to create a new build. After clicking on this button, a new view for creating a build will open, as in the following screenshot:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/c10e2393-4fe8-4c11-b088-ae6ba067d483.png" style="width:29.00em;height:23.83em;"/></p>
+<ol start="3">
+<li>You will then be guided to the new YAML experience, but you can still opt to go back by choosing the classic editor.</li>
+</ol>
+<p>After choosing the classic editor, you can configure how to connect to the source control. The classical editor is the editor that is visible in all of the screenshots in the following sections.</p>
+<p>Many source control systems are supported. If you are working with a hosted Git repository, pick your specific product, if available, and only choose <span class="packt_screen">Other Git</span> if your product is not available; currently, <span class="packt_screen">GitHub</span>, <span class="packt_screen">GitHub Enterprise Server</span>, and <span class="packt_screen">BitBucket Cloud</span> are supported. The reason for this is that continuous integration using <span class="packt_screen">Other Git</span> works by using a polling model, where all the specific products use their known integration webhooks. The following example works with a Git repository that is in the same Azure DevOps instance.</p>
+<p>When you select the <span class="packt_screen">Pipeline</span> header, you can set the name of the build definition and select an agent pool that the phases will run on by default. Agents take care of the actual execution of your tasks and will be looked at in more detail in the A<em>gents and agent queues </em><span>section of this chapter</span><span>.</span></p>
+<p>Below the <span class="packt_screen">Pipeline</span> header, you can see the chronological layout of your build definition. First up is downloading sources. Here, you can <span>once again choose to connect to a source control system. You can also specify more advanced</span><span> </span><span>settings that relate to the way sources are fetched, such as whether to clean the build directory first, select a branch, or add tags.</span></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Configuring a job</h1>
+                </header>
+            
+            <article>
+                
+<p>Below the source's node, you can add one or more jobs that will perform the bulk of the work that you want to perform. Jobs can be added using the ellipsis on the pipeline header. There are two types of jobs available:</p>
+<ul>
+<li><strong>Agentless jobs</strong>: <span>Agentless jobs can be used to run tasks that need an agent.</span></li>
+<li><strong>Agent jobs</strong>: <span>Agent jobs are used to run tasks that require an agent to run on, which is the case for the bulk of the tasks.</span></li>
+</ul>
+<p>Some examples of agentless tasks are as follows:</p>
+<ul>
+<li>Waiting for manual approval before continuing</li>
+<li>Inserting a delay before proceeding</li>
+<li>Calling a REST API</li>
+<li>Calling an Azure function</li>
+</ul>
+<p>The main benefit of an agentless job is that it does not keep an agent occupied while running. This frees the agent up to do other work, meaning that you need fewer agents, which can save costs. Also, the number of agents that you can use concurrently is governed by the number of parallel pipelines that you have bought in Azure DevOps. Limiting the number of agent jobs will save money here as well.</p>
+<p>Let's go over the process of configuring a job:</p>
+<ol>
+<li>Select any job. You will see the view shown in the following screenshot. <span>In this view, you can change the name of the job and, for agent jobs, override the agent pool to execute this job on:</span></li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1005 image-border" src="assets/dbfbf685-df22-4f4a-8332-f907f1f10e16.png" style="width:111.17em;height:73.67em;"/></p>
+<ol start="2">
+<li>Next, specify which agent pool to use for running the job. Here, it also specifies the demands that you have of the agent that will execute this job. Demands will be discussed in the <em>Agents and agent queues </em>section of this chapter.</li>
+</ol>
+<p class="mce-root"/>
+<ol start="3">
+<li>As part of the execution plan for an agent, you can specify <span class="packt_screen">Parallelism</span> and choose one of three options:
+<ul>
+<li><span class="packt_screen">None</span>: This will just execute all the tasks you add to the agent job one after another on the same agent.</li>
+<li><span class="packt_screen">Multi-configuration</span>: Here, you can specify a series of variables that determine the number of variations of the build to run. This is useful if you want to create, for example, x86 and x64 builds from the same code.</li>
+<li><span class="packt_screen">Multi-agent</span>: Here, you can specify the number of agents that will run the same tasks in parallel.</li>
+</ul>
+</li>
+</ol>
+<ol start="4">
+<li>Next, you can specify one or more dependencies. These are the other jobs that need to be completed before the selected job runs.</li>
+<li>Also, for any job, you can specify how to cope with errors in previous jobs by telling it to continue or stop.</li>
+</ol>
+<p>As an alternative to steps 3 and 4, you can also specify a custom expression to specify whether a job should run. This expression should evaluate to a Boolean and support rudimentary operations, such as <kbd>or()</kbd>, <kbd>and()</kbd>, or <kbd>eq()</kbd>. The following is an example condition:</p>
+<pre>and(succeeded(), ne(variables['Build.SourceBranch'], 'refs/heads/master'))</pre>
+<p>This condition specifies that the job will only run when all previous jobs have succeeded and the build is not started from the master branch. A link to a detailed description of the conditions syntax is included at the end of this chapter.</p>
+<p>Agentless jobs have fewer options available than agent jobs. For example, it is not possible to execute the same build for multiple variable values in parallel.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Adding tasks to your job</h1>
+                </header>
+            
+            <article>
+                
+<p>After adding one or more jobs, you can add tasks to a job. Tasks define the actual work that is to be done during the execution of your build. The following screenshot shows you how to add a task and then configure it:</p>
+<ol>
+<li>Click on the plus sign next to the job you want to add tasks to:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1006 image-border" src="assets/8c704d41-483e-45bc-8f2c-68655f5c9339.png" style="width:65.83em;height:31.50em;"/></p>
+<ol start="2">
+<li>You will then be presented with a task picker, where you can find any task that matches your search input and add one or more tasks by clicking the <span class="packt_screen">Add</span> button. A new screen will then open, where you can configure the individual task. The options provided here differ for each task.</li>
+<li>There can be multiple versions of a task and you can switch between the major versions of the task. This means that the maintainer can push non-breaking updates and you will receive them automatically. Major or breaking updates can be pushed with a new major version number and you can upgrade them at your own discretion.</li>
+</ol>
+<p>It is possible to add as many tasks as needed to a pipeline job.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Publishing build artifacts</h1>
+                </header>
+            
+            <article>
+                
+<p>An important part of a build definition is its outcomes. Builds are often used to produce one or more artifacts that are later used for the deployment of an application. Examples of artifacts can be executables or installer files. These files need to be made available for use after the pipeline has completed.</p>
+<p>The <span class="packt_screen">Publish Build Artifacts</span> task that is shown in the preceding screenshot is a task that is specifically designed to do this. It allows you to select a file or directory and publish it under an <strong>artifact name</strong>. The result of this is that the file(s) in the selected path is retained with every execution of the pipeline for manual download or use in a release definition later. Release definitions are discussed in the next chapter, <a href="8ab4597a-becd-4855-9b45-89045982c14a.xhtml">Chapter 4</a>, <em>Continuous Deployment</em>.</p>
+<p>Next, we'll learn how to integrate our pipeline with other tools and configure our service connection.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Calling other tools</h1>
+                </header>
+            
+            <article>
+                
+<p>When building pipelines, <span>we will often need to integrate them with other tools</span>. For source control systems, this is part of the flow when creating a pipeline and you are limited to the built-in options. For tasks, you can create references to any tool or location you want using service connections. An example of a task that uses a service connection to an Azure app service is shown in the following screenshot.</p>
+<p>A service connection is a pointer to a third-party system, with a name and series of properties that differ for each type of service connection. Often, you will need to put in a URL to locate the other service and a mechanism for authentication. The following steps will help you configure your service connection:</p>
+<ol>
+<li>After defining one or more service connections, you can select the one to use from a drop-down menu:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1007 image-border" src="assets/a9ec689c-480f-4b57-9997-338d77913f41.png" style="width:95.50em;height:70.17em;"/></p>
+<ol start="2">
+<li>Service connections are managed in a central location as project settings. You can access them by going to the management view directly from the task you are currently configuring, as shown in the preceding screenshot. You can also do this by navigating to <span class="packt_screen">Project Settings</span> <span>and then to</span> <span class="packt_screen">Service connections</span><span>, as in the following screenshot (see label <span class="packt_screen">1</span>):<br/></span></li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1008 image-border" src="assets/8b676478-8d5d-4587-af5b-e32622d6e7c5.png" style="width:43.83em;height:31.33em;"/></p>
+<ol start="3">
+<li>In <span>this view, you can then either add a new service connection</span><span> or update an existing service connection (see label <span class="packt_screen">2</span> in the preceding screenshot).</span></li>
+</ol>
+<p>By default, service connections are scoped to the project level, meaning they are not available for everyone in the Azure DevOps organization. To encourage the reuse of service connections, Azure has made it possible to share them between projects since mid-2019.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Task Marketplace</h1>
+                </header>
+            
+            <article>
+                
+<p>A set of frequently used tasks is built into Azure Pipelines; however, there are even more available using the Visual Studio marketplace for Azure DevOps. If you are an administrator, you can find and install extensions that add tasks here. If you are a regular user, you can find tasks here as well; however, you cannot install them, only request them. Your Azure DevOps administrator will then be notified and can install the extension on your behalf if they approve.</p>
+<p>Of course, you can write and distribute extensions with tasks of your own as well.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Creating variables and variable groups</h1>
+                </header>
+            
+            <article>
+                
+<p>When you are configuring your build, there might be values that you need to use more than once. It is often wise to extract these values into variables, rather than just repeating those values throughout your tasks.</p>
+<p><span>Variables can be used to note down values that you do not want to have stored in source control. Values such as passwords and license keys can </span><span>be</span><span> </span><span>safely stored as non-retrievable values when locked down using the lock symbol (see label <span class="packt_screen">1</span> in the following screenshot). After saving the build definition, these values are encrypted and can only be used by the build that they belong to. You will no longer be able to retrieve these values and they will be automatically scrubbed from logs and other output.</span></p>
+<p>To learn how to work with variables in Azure Pipelines, go through the following steps:</p>
+<ol>
+<li>In Azure Pipelines, you can add variables to your build definition by going to the <span class="packt_screen">Variables</span> | <span class="packt_screen">Pipeline variables</span> tab (see label <span class="packt_screen">3</span> in the following screenshot). Here, you can enter them as name value, as can be seen in the following screenshot:</li>
+</ol>
+<p class="mce-root CDPAlignCenter CDPAlign"><img src="assets/6b846c91-0699-48ed-9598-e17df94d08ec.png"/></p>
+<ol start="2">
+<li>Once defined, you can use the variables in the configuration of all tasks in all jobs of the same build. For this, you can use the following notation:</li>
+</ol>
+<pre style="padding-left: 90px"><strong>$(variableName)</strong></pre>
+<ol start="3">
+<li>Finally, you can mark variables as <span class="packt_screen">Settable at queue time</span> (see label <span class="packt_screen">2</span> in the preceding screenshot), which means that their value can be changed whenever someone queues a new build. An example of a variable for which this is used is the <kbd>system.debug</kbd><em> </em>built-in variable<em>.</em> When this variable is set to <kbd>true</kbd>, there is a verbose debug logging included in the build.</li>
+</ol>
+<p>Next to your own variables, system variables are also defined. These are variables that contain information about the build that is currently running, including version numbers, agent names, build definition details, the source version, and so on. A link to the full list of system-defined variables is included at the end of this chapter.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Variable groups</h1>
+                </header>
+            
+            <article>
+                
+<p>As well as creating the variables that go with a specific build, you can create variable groups. These variable groups can, <span>in turn, </span><span>be linked to one or more builds. This is an effective way of sharing variables between builds; some examples of these might be the name of your company, trademark texts, product names, and so on. Let's see how we can work with variable groups:</span></p>
+<ol>
+<li>Access variable groups through the menu by clicking on <span class="packt_screen">Library</span> in the <span class="packt_screen">Pipelines</span> menu (see label <span class="packt_screen">1</span> in the following screenshot). This displays a list of the existing variable groups that you can edit and you can add a new group here as well, as in the following screenshot:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1009 image-border" src="assets/bdfdd678-3ed2-46ae-ab48-089def21a003.png" style="width:39.50em;height:30.42em;"/></p>
+<ol start="2">
+<li>Here, you can work with variables in the same way that you would with the variables that come with a build. The only differences are highlighted in the following list:
+<ul>
+<li>You cannot mark variables in a group as settable at queue time.</li>
+<li>You can allow or deny the use of this group in all pipelines. If you deny their use in all pipelines, then only you can use the variable group. You can authorize other users or groups through the <span class="packt_screen">Security</span> option (labeled with a <span><span class="packt_screen">2</span></span> in the preceding screenshot).</li>
+<li>You can reference an Azure key vault for which this variable group will act as a placeholder. After logging into Azure, you can select a key vault and select which values that are stored in the key vault you want to be accessible through the variable group.</li>
+</ul>
+</li>
+</ol>
+<p><strong>Azure Key Vault</strong> is an Azure offering that can be used for the secure storage of secrets. Secrets in a key vault are automatically versioned, so older values are not overwritten but replaced by a newer version. In addition to this, you can specify segregated access policies that specify, per user, whether they can read, write, update, or delete values. All these actions are audited in a key vault, so you can also find who has made which change. If you are linking Azure DevOps to a key vault, then a new service principal will be created in your active directory that has access to that key vault. N<span>ow,</span><span> w</span><span>henever Azure DevOps needs a variable from the variable group, the actual values will be pulled from the key vault.</span></p>
+<p>Variable groups can be linked to the variables of a build under the <span class="packt_screen">Variable groups </span><span>tab</span><span> (refer to the screenshot in the previous section).</span></p>
+<p>As well as working with variable groups, you can also work with files in the library. You can upload files that are not accessible by other users but that can be used within a build. This is useful for files with private keys, license keys, and other secrets.</p>
+<p>Just as you can with variable groups, you can specify whether each<span> secure file</span><span> can be used by any build or authorize specific users only.</span></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Triggering the build</h1>
+                </header>
+            
+            <article>
+                
+<p>The next tab in a build definition governs what should start or trigger the build. T<span>o implement continuous integration, go through the following steps:</span></p>
+<ol>
+<li>Click on the <span class="packt_screen">Triggers</span> tab and<span> select the first header on the</span> left:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-929 image-border" src="assets/1ab8338e-bef1-4f04-a865-8e642484a3d9.png" style="width:56.25em;height:25.00em;"/></p>
+<ol start="2">
+<li>Check the <span class="packt_screen">Enable continuous integration</span> box. This means that Azure DevOps will listen for changes in your repository and will queue a new build as soon as a new chance is available.</li>
+<li>Next, you can choose whether you want to build every incoming change individually or batch multiple changes when more than one new change comes in while building a change. It is recommended that you build every single change separately if this is feasible.</li>
+<li>Along with the continuous integration trigger, specify one or more branch and path filters. Here, you can specify which branches and files to queue a new build for. You can specify either inclusions or exclusions, depending on your needs. A common example is to limit your build to the master branch. If you have folders named <kbd>doc</kbd> and <kbd>src</kbd> in your repository and all your sources are in the latter folder, then it might make sense to limit the trigger to this path.</li>
+<li>As well as choosing to have a continuous integration trigger, you can also opt to execute a build on a recurring schedule where you select one or more weekdays and a time.</li>
+<li>You can also schedule a build to run whenever another build completes. This is called <strong>chaining</strong> builds.</li>
+</ol>
+<p>Next, let's learn how to change the configurations of our build definition.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Build options</h1>
+                </header>
+            
+            <article>
+                
+<p><span>You can</span> change the advanced configuration options for your build definition. These options include a description, the format of the build number, and the automated creation of work items on failures and times. To set this up, go through the following steps:</p>
+<ol>
+<li>Click on the <span class="packt_screen">Options</span> tab. You should arrive at the following screen:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-952 image-border" src="assets/8745ab6a-1703-48e0-b913-9dba0d108273.png" style="width:67.00em;height:32.25em;"/></p>
+<ol start="2">
+<li>Now, create your build number format. If this field is left empty, then the build number for your application will be set to an ever-increasing number that will increase by 1 with every build. This number is unique within a team project and counts over all the build definitions. You can also specify a format of your own using the variables available to you. A common approach is to specify a major and minor version number manually and then add an increasing number using a variable. The following example specifies a version of 4.1.xx, where the last part is replaced by a two-digit increasing number:</li>
+</ol>
+<pre style="padding-left: 90px">4.1($Rev:.rr)</pre>
+<ol start="3">
+<li>On the right, there are advanced (but rarely used) options for specifying the authorization scope for the <span class="packt_screen">Build job</span> time-outs for each job in the build definition.</li>
+<li>It is also possible to specify the agent demands that every agent, for every job in the build definition, should fulfill. Again, we will look further at demands in the <em>Agents and agent queues</em> section of this chapter<em>.</em></li>
+</ol>
+<p><span>Other options on the left enable you to suspend the pipeline temporarily.</span></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Build history</h1>
+                </header>
+            
+            <article>
+                
+<p>The final tab, called <span class="packt_screen">History</span>, shows you a list of every change that has been made to the build definition. Build definitions are stored in JSON format and you can pull up side-by-side comparisons for every change. The comment that you put in when saving a build is also stored here and can be used to provide the rationale for a change.</p>
+<p>Since builds are an important means of preserving quality, it is important to keep track of who has changed them to ensure that automated quality metrics are not removed.</p>
+<p><span>With this, you are now ready to run your first build. You can directly run it using the </span><span class="packt_screen">Save<span> </span></span><span class="packt_screen">&amp;</span><span> </span><span class="packt_screen">Queue<span> </span></span><span>button that is visible in most of the screenshots in this section. The <em>Running a build</em> </span><span>section</span><span> of this chapter </span><span>will teach you how to work with the results that you obtain.</span></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Task groups</h1>
+                </header>
+            
+            <article>
+                
+<p>When working in a team or organization that has more than one pipeline, it often doesn't take long before multiple pipelines that take the same shape emerge. For example, in some companies, all pipelines contain tasks for security scanning, running tests, and calculating the test coverage.</p>
+<p>Instead of repeating these tasks everywhere, they can be extracted from an existing pipeline into a task group. Task groups, in turn, can be used within multiple pipelines as if they are tasks themselves. Doing this reduces the effort needed to create a new pipeline or update all the pipelines with a new requirement. Doing this also ensures that all the pipelines using the task group have the same task configuration.</p>
+<p>To create a new task group, open any existing build definition and go through the following steps:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1010 image-border" src="assets/6cadb314-e51b-4e8f-a492-4dc7dbdfc74f.png" style="width:168.92em;height:108.08em;"/></p>
+<ol>
+<li>Select one or more tasks by clicking on them while holding down <em>Ctrl</em>, or by using the selectors that appear when hovering the mouse over a task.</li>
+<li>Right-click on the selection and select <span class="packt_screen">Create task group</span>.</li>
+<li>In the popup that now appears (not shown in the screenshot), choose a name, description, and category for the task group. If any of the selected tasks have a variable value specified, you can now provide a default value and description for these parameters. These parameters will be available within the task group and need to be configured when the task group is used.</li>
+<li>After clicking <span class="packt_screen">Create</span> (not shown in the screenshot), the existing build definition is updated by removing the selected tasks and replacing them with the new task group.</li>
+</ol>
+<p>Adding an already existing task group to a build or release definition is done in precisely the same way as adding regular tasks. Task groups show up in the same list of tasks to choose from.</p>
+<p>A list of all the existing task groups can be found by navigating to the <span class="packt_screen">Pipelines</span> menu and then <span class="packt_screen">Task groups</span>. To edit an existing task group, select it in the list that is shown, and select the <span class="packt_screen">E</span><span class="packt_screen">dit</span> option. Editing task groups works in precisely the same way as editing a build definition.</p>
+<p>This section was all about creating a build definition and describing how an application should be built. The next section is about executing the build.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Running a build</h1>
+                </header>
+            
+            <article>
+                
+<p>In this section, you will learn how to work with the build results and use them to report and generate builds. You will also learn how to run a build with every pull request and report the quality of the changes back to that pull request to assist the reviewer.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Viewing the build results</h1>
+                </header>
+            
+            <article>
+                
+<p>While a build is running, an agent will perform all the configured steps one by one. Azure Pipelines will capture detailed information and logs from all these steps. As you can see in the following screenshot, <span>a build will display a list of all the steps it has executed </span><span>on the left</span><span>. Clicking on any of these steps will open a detailed view that displays the logs per step:</span></p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1011 image-border" src="assets/4147fb46-d394-4aa6-9413-c6f24dd82f74.png" style="width:42.83em;height:24.33em;"/></p>
+<p>Whenever there are warnings or errors during the build, they show up in orange or red, <span>respectively</span><span>.</span></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Building a pull request</h1>
+                </header>
+            
+            <article>
+                
+<p>After setting up your build definition and running your first builds, you might also see the first failures coming in—for example, when someone accidentally commits and pushes changes that do not compile or contain unit tests that do not run successfully. You can prevent this by having a build definition run automatically whenever a pull request comes in. To configure this, go through the following steps:</p>
+<ol>
+<li>Click on <span class="packt_screen">Policies</span> under <span class="packt_screen">Project Settings</span>. The following screen will open. C<span>lick on <span class="packt_screen">Add build policy</span></span>:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1012 image-border" src="assets/26a16b99-d5cc-41a7-a202-029d9db74fc0.png" style="width:100.67em;height:69.08em;"/></p>
+<ol start="2">
+<li>Select a build definition that you want to use to validate the pull request.</li>
+<li>Next, there will be three more things that you can configure:
+<ul>
+<li><span class="packt_screen">Trigger</span>: When the build definition should start, either automatically or manually. Of course, the real value comes from running a verification build automatically.</li>
+<li><span class="packt_screen">Policy requirement</span>: This determines whether a pull request can be completed if the build fails. In other words, this determines whether you can ignore a failing build. It is recommended that you avoid setting this to <span class="packt_screen">Optional</span>, if possible.</li>
+<li><span class="packt_screen">Build expiration</span>: This determines how long a positive build result is valid for. The default value is <kbd>12</kbd> hours, but you should consider changing this to <span class="packt_screen">Immediately when master is updated</span>. The advantage of this is that you cannot merge changes without first running the build against a combination of the current state of the branch that you will merge to and the proposed changes.</li>
+</ul>
+</li>
+</ol>
+<p>You can add more than one build policy. If you have a lot of things that you can automatically validate and want to keep automated validation times to a minimum, then this is a good approach.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Accessing build artifacts</h1>
+                </header>
+            
+            <article>
+                
+<p>As well as compiling, testing, and validating your source code, builds can also be used to generate what are called artifacts. Artifacts are the outputs from a build and can be anything that you want to save and publish from a build, such as test results and application packages.</p>
+<p>An application package is intended to be an immutable build of a version of your application. This package can later be picked up in a release and deployed to one or more environments:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1013 image-border" src="assets/3c26cc7c-4394-41bd-ab9d-ea72dfed90ae.png" style="width:86.50em;height:57.50em;"/></p>
+<p>In the preceding screenshot, you can see, as part of the summary of an executed build, that there were two artifacts published. Artifacts can be accessed from either the <span class="packt_screen">Artifacts</span> drop-down menu at the top-right corner of the screen or from the <span class="packt_screen">Summary</span> tab. You can download and explore artifacts from this page and, <span>in the next chapter, </span><span>you will see how to work with them to set up continuous delivery.</span></p>
+<p>Great! With this, you have learned how to create a definition using the visual designer. But wait—as we mentioned earlier, there is another way of doing this, which is by using YAML files. Let's see how this works in the next section.</p>
+<p class="mce-root"/>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Working with YAML pipelines</h1>
+                </header>
+            
+            <article>
+                
+<p>You have seen how to create a build definition using the visual designer. A new, alternative approach, which has been available since early 2019, is the use of YAML pipelines. When working with YAML pipelines, you specify your complete build definition in a YAML file and store it in source control, often next to the source code that the build is for.</p>
+<p>While both pipeline systems coexist, using YAML pipelines is now the preferred approach for defining pipelines. This means that it is very likely that new features will only surface in YAML pipelines.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">The reason for using build definitions as code</h1>
+                </header>
+            
+            <article>
+                
+<p>When you first start working with YAML build definitions, you might find that the learning curve is steeper than it is when working with the visual designer. This might raise the question as to why you would use YAML-defined builds. There are two main advantages that YAML build definitions have over visually designed definitions.</p>
+<p>When you are writing your definition in YAML, it can be hosted in source control next to your code. The consequence of this is that all the policies that you have in place for changing source control now automatically apply to your build definition. This means that any change must go through a pull request, be reviewed by a peer, and can be built and verified ahead of time. Enforcing the <strong>four-eyes principle</strong> on your build definition, as well as your code, increases the stability of your build process. Of course, it also benefits security and compliance, topics that will be discussed in later chapters.</p>
+<p>As well as this increase in security, having the build definition in source control also means that it is available in every branch. This means that it can be changed in every branch to build that specific branch before merging it to the master branch. When working with a visually designed build definition, this single definition is responsible for building not only your master branch but also all the branches that you want to merge through a pull request.</p>
+<p>This means that you must do one of the following:</p>
+<ul>
+<li><span>Update the build definition for the change that you will merge. However, this will terminate building of the current state of the master branch.</span></li>
+<li><span>Merge the change, which will also result in a broken build since the build definition has not yet been updated.</span></li>
+</ul>
+<p><span>Either option has the risk of allowing faulty changes to flow through the target branch, defeating the purpose of a continuous integration build. With a build definition per branch, we eradicate this problem.</span></p>
+<p>While having build definitions in source control is beneficial, this is also available in classic builds. Every change is recorded and you can see who has changed what and when, along with an optional explanation from the author of the change.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Writing a basic YAML pipeline</h1>
+                </header>
+            
+            <article>
+                
+<p>To get started with YAML builds, there are two things you need to do:</p>
+<ol>
+<li>First, you need to write your YAML file.</li>
+<li>Then, you need to create a build definition out of it.</li>
+</ol>
+<p>So, let's get started.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Writing the YAML file</h1>
+                </header>
+            
+            <article>
+                
+<p>The following code sample contains an example YAML definition for building a .NET Core application and running unit tests. Save a file with any name, for example, <kbd>pipeline.yaml</kbd>, in any Git repository in Azure DevOps. Then, it can be used to create a pipeline out of it later on:</p>
+<pre>trigger: <br/>- master<br/><br/>pool:<br/>  name: Azure Pipelines<br/>  vmImage: windows-2019<br/><br/>steps:<br/>- task: DotNetCoreCLI@2<br/>  displayName: 'dotnet build'<br/>  inputs:<br/>    projects: '**/*.csproj' <br/>- task: DotNetCoreCLI@2<br/>  displayName: 'dotnet test'<br/>  inputs:<br/>    command: test<br/>    projects: '**/*.csproj'</pre>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p>This example YAML defines a basic pipeline. Every pipeline needs to be triggered in some way. Just as with classic builds, this can be done by connecting the pipeline to a change in a source code repository. The default repository for this is the repository that also contains the YAML definition. The <kbd>trigger</kbd> keyword is used to specify a push to which branches should trigger the pipeline. A good starting point is the <kbd>master</kbd> branch. As the <kbd>trigger</kbd> keyword accepts a list, multiple branches can be specified and wildcards can be used.</p>
+<p>A trigger is not mandatory as a pipeline can also be started manually.</p>
+<div class="packt_tip">There are also alternative options to using the <kbd>trigger</kbd> keyword, such as to include or exclude one or more branches, tags, or paths in the repository. These options are described in detail at <a href="https://docs.microsoft.com/en-us/azure/devops/pipelines/yaml-schema#triggers">https://docs.microsoft.com/en-us/azure/devops/pipelines/yaml-schema#triggers</a>.</div>
+<p>As well as a trigger, every pipeline contains one or more tasks, just as in classic build definitions. All these tasks need to execute on an agent pool—again, just as in classic build definitions. The <kbd>pool</kbd> keyword is used to specify a set of key/value pairs that determine which pool the tasks will run on by specifying the name of the pool. When working with the default agents that Microsoft provides, the default name of <kbd>Azure Pipelines</kbd> can be used. When using this specific pool, <span><span>a</span></span> VM image has to be specified. This determines which operating system and what software is available on the agent that will execute the task.</p>
+<div class="packt_tip">An up-to-date list of all the VM images that are available can be found at <a href="https://docs.microsoft.com/en-us/azure/devops/pipelines/agents/hosted#use-a-microsoft-hosted-agent">https://docs.microsoft.com/en-us/azure/devops/pipelines/agents/hosted#use-a-microsoft-hosted-agent</a>.</div>
+<p>Finally, the definition contains a list of the steps that make up the pipeline itself. These steps correspond one-to-one with the tasks that you could drag into a classic build pipeline. A task is added by specifying the name and version—separated by the <kbd>@</kbd> sign—of the task that you want to run. Next, you can optionally specify a display name for the task. This display name will later be visible in the views that show the results of an executed pipeline. Finally, specify one or more inputs for the task. These inputs relate to the task-specific configuration that you have already seen for the visual designer.</p>
+<p class="mce-root"/>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Creating a YAML pipeline</h1>
+                </header>
+            
+            <article>
+                
+<p>After saving your YAML file in a repository, you can create a build definition from it. When creating a new build definition (see the <em>Creating a build definition</em> <span>section</span><span> of this chapter)</span><span>, you should go through the following steps:</span></p>
+<ol>
+<li>Choose the <span class="packt_screen">Azure Repos Git YAML</span> option when the wizard starts.</li>
+<li>From here, go through the wizard to select and review the YAML you want to build, as in the following screenshot:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1152 image-border" src="assets/83bd90aa-8c2b-4693-b350-2524c05755be.png" style="width:139.67em;height:66.50em;"/></p>
+<ol start="3">
+<li>In the first step, you locate the repository that contains the YAML file that you want to use as your pipeline.</li>
+<li>Next, you configure the pipeline by choosing an example YAML file to start from or by referring to an already existing file.</li>
+<li>Finally, you can review the YAML file that you have selected and start a build from it.</li>
+</ol>
+<p>Your pipeline is saved automatically. Once the pipeline is saved, it can be started and you can interact with it in the same way as you would with classic build pipelines.</p>
+<p class="mce-root"/>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Multi-job pipelines</h1>
+                </header>
+            
+            <article>
+                
+<p>The pipeline you saw in the previous section does not specify any jobs, as you may recall from the section on classic builds. Instead, it contains a list of tasks under the <kbd>steps</kbd> keyword. This means that it implicitly contains only a single job. With YAML pipelines, it is also possible to create a definition that contains more than one job. To do this, the following structure can be used:</p>
+<pre>trigger: <br/>- master<br/><br/>pool:<br/>  name: Azure Pipelines<br/>  vmImage: windows-2019<br/><br/>jobs:<br/>- job: job1<br/>  displayName: A pretty name for job1<br/>  steps:<br/>  - task: DotNetCoreCLI@2<br/>    ...<br/>- job: job2<br/>  displayName: My second job<br/>  pool:<br/>    name: Azure Pipelines<br/>    vmImage: ubuntu-18.04<br/>  ...</pre>
+<p>Instead of adding the <kbd>steps</kbd> keyword directly to the pipeline, first, a list of jobs is created. Within that list, one or more <kbd>job</kbd> keywords are added, followed by the name for that job. Next to this technical name, a display name (<kbd>displayName</kbd>) can be specified for each job.</p>
+<p>As the second job in this example shows, it is also possible to specify which agent pool to use<span> </span><span>per job</span><span>. When no pool</span><span> is specified for a job, the default pool specified at the</span><span> top of the file is used.</span></p>
+<div class="packt_tip">The jobs that are discussed in this section are called agent jobs. Besides agent jobs, there are also server jobs, container jobs, and deployment jobs available. More information about these types of jobs can be found at <a href="https://docs.microsoft.com/en-us/azure/devops/pipelines/process/phases#types-of-jobs">https://docs.microsoft.com/en-us/azure/devops/pipelines/process/phases#types-of-jobs</a>.</div>
+<p>By default, all the jobs in a pipeline run in parallel, but there are control options available to change this.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Control options</h1>
+                </header>
+            
+            <article>
+                
+<p>To control the order of jobs, the <kbd>dependsOn</kbd> keyword can be used on the definition of a job. This signals that the job can only be started after one or more jobs are completed. Besides this, the <kbd>condition</kbd> keyword can be used to specify a condition that a job should run<span> </span><span>under</span><span>. These two keywords can be combined to realize more complex scenarios, such as the one shown here:</span></p>
+<pre>jobs:<br/>- job: compile<br/>  steps:<br/>  ...<br/>- job: test<br/>  dependsOn: compile<br/>  steps:<br/>  ...<br/>- job: build_schema<br/>  dependsOn: compile<br/>  steps:<br/>  ..<br/>- job: report<br/>  dependsOn:<br/>  - test<br/>  - build_schema<br/>  condition: or(succeeded('test'), succeeded('build_schema'))<br/>  steps:<br/>  ..</pre>
+<p class="mce-root">This pipeline will start by running the job named <kbd>compile</kbd>. Once this job completes, the next two jobs, <kbd>test</kbd> and <kbd>build_schema</kbd>, will run in parallel as they both depend on the <kbd>compile</kbd> task. After both of these tasks complete, the report task runs as it declares a dependency on both the <kbd>test</kbd> and <kbd>build_schema</kbd> jobs. Before this job actually starts, the condition is evaluated to determine whether the job should actually run or be skipped. Conditions can be built using a syntax that is similar to many programming languages. It checks the successful completion of a job using the <kbd>succeeded()</kbd> and <kbd>failed()</kbd> functions. There is also support for Boolean operators such as <kbd>or()</kbd>, <kbd>and()</kbd>, and <kbd>ne()</kbd>.</p>
+<p>You can combine the <kbd>dependsOn</kbd> and <kbd>condition</kbd> keywords in any way you see fit. The only requirement is that there should be at least one job that does not depend on any other job.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Variables</h1>
+                </header>
+            
+            <article>
+                
+<p>Just like classic build pipelines, YAML pipelines support the use of variables. Variables can be defined at every level of a YAML pipeline (except for within a task) using the following syntax:</p>
+<pre>variables:<br/>  name: value<br/>  anotherName: otherValue</pre>
+<p>Variables can later be retrieved using the syntax that you already know from classic build pipelines—<kbd>$(name)</kbd> and <kbd>$(anotherName)</kbd>.</p>
+<p>It is also possible to reference existing variable groups from within a YAML pipeline. This is done by using the <kbd>group</kbd><span> </span><span>keyword, </span><span>instead of specifying the name of a variable. To also retrieve all the variables from a variable group called</span> <kbd>myVariableGroup</kbd><span>, you would extend the preceding YAML, as follows:</span></p>
+<pre>variables:<br/>  name: value<br/>  anotherName: otherValue<br/>  group: myVariableGroup</pre>
+<p>Variables can be set at every level in a YAML pipeline, but only variables set at the root level can be overridden when queuing a new execution manually.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Pipeline artifacts</h1>
+                </header>
+            
+            <article>
+                
+<p>Just like classic builds, YAML pipelines can be used to build and publish artifacts. As the task used to do this is a task like any other, it can be added directly to the list of steps in a job.</p>
+<p>However, with the introduction of YAML pipelines, a new type of artifact has become available—the so-called pipeline artifact. This comes with the benefit of improving the speed at which large artifacts can be uploaded and downloaded. When working with classic releases, pipeline artifacts are not automatically downloaded, whereas build artifacts are.</p>
+<p>To publish a pipeline artifact, the following YAML can be used in the <kbd>steps</kbd> keyword of a job:</p>
+<pre>steps:<br/>- publish: folder/to/publish<br/>  artifact: artifactName</pre>
+<p>Pipeline artifacts are mainly intended to be downloaded in multi-stage YAML pipelines, which are also covered in the next chapter.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Tips for writing YAML pipelines</h1>
+                </header>
+            
+            <article>
+                
+<p>Writing YAML pipelines from scratch can be complicated when you are just getting started. There are two tools available that can help you.</p>
+<p>First, there is the option to export YAML from the visual designer. For every task, there is a link with the<span> </span><span class="packt_screen">View YAML</span><span> </span><span>title</span><span>. This opens a small pop-up box that shows you the YAML corresponding to the task and configuration that you currently </span><span>have</span><span> </span><span>open. The same can be done for jobs and, under specific conditions, for complete build definitions.</span></p>
+<p>The other tool available for writing YAML is the built-in YAML editor:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/af66f656-bb67-4536-9b45-f8758f4407eb.png"/></p>
+<p class="mce-root"/>
+<p>Whenever you open a YAML build definition, there are two tools available to help you. First, there is autocompletion for every location in your YAML file. This shows you the options available at that point in the file. As well as this, there are snippets available in the task picker on the right. When selecting any of the tasks on the right, you configure them visually and then click the <span class="packt_screen">Add</span> button to add the generated YAML to your definition.</p>
+<p>These two tools aim to bring the ease of the visual designer to the YAML build experience as well, combining the best of both worlds.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Agents and agent queues</h1>
+                </header>
+            
+            <article>
+                
+<p>The build definitions that you have created so far can contain agent jobs, which in turn contain tasks. These tasks are not executed within your Azure DevOps organization directly, but are executed by agents that run on VMs or in containers. In turn, agents are grouped in agent pools. There are two types of agent pools that you can work with:</p>
+<ul>
+<li>Built-in agent pools</li>
+<li>Self-hosted agent pools</li>
+</ul>
+<p>Let's go through them one by one.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Built-in agent pools</h1>
+                </header>
+            
+            <article>
+                
+<p>Built-in agent pools are managed by Microsoft and are made available to you as part of the product. There are different agent pools available, depending on your needs. Pools run different versions of Windows and Visual Studio, and there are also pools available that run Linux (Ubuntu) and macOS.</p>
+<p>The disadvantage of these managed pools is that you cannot install extra software on the machines or containers that host the agents if you need to. This means that in these cases, you have to create your own private agent pools.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Creating a private agent pool</h1>
+                </header>
+            
+            <article>
+                
+<p>Private pools are defined in your Azure DevOps organization and are provisioned <span>from there </span><span>to one or more of your team projects. However, you can also create your private pools at the team project level, in case they are created and provisioned in one go. To do so, go to </span><span class="packt_screen">Project Settings</span> <span>|</span> <span class="packt_screen">Agent pools.</span> <span>You should see the following</span> <span class="packt_screen">Add agent pool</span> <span>option:</span></p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1014 image-border" src="assets/374c4de3-0979-4895-a050-00de8ea00fc7.png" style="width:101.33em;height:73.83em;"/></p>
+<p>After giving the pool a name and determining whether you want to automatically provide access to all pipelines, you can save the pool. After creating the pool, you can add or remove agents.</p>
+<p class="mce-root"/>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Adding and removing agents</h1>
+                </header>
+            
+            <article>
+                
+<p>Adding an agent is done in two steps:</p>
+<ol>
+<li>Download and extract the agent runtime. You can find the agent runtime by going to the section with the overview of the agent pools and opening the details of any private agent pool. After the details of the pool are opened, click on <span class="packt_screen">New agent</span> in the top-right corner:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/59d02297-1f43-4e8f-bde5-2b8379a57611.png" style="width:39.58em;height:41.17em;"/></p>
+<ol start="2">
+<li>In the dialog that opens, you can download a ZIP file with the agent and instructions for extracting and installing the agent.</li>
+</ol>
+<div class="packt_infobox">During the configuration phase, you will be prompted to authenticate with your Azure DevOps organization and to provide the name of the agent pool you want to install the agent in. While there are x86 and x64 agents available, it is recommended that you work with the x64 agent unless you have a specific reason not to.</div>
+<p>To remove agents from the pool, you can use one of two methods:</p>
+<ul>
+<li>You can return to the PowerShell command line, just as you did for the installation, and use the following command:</li>
+</ul>
+<pre style="padding-left: 90px"><strong>.\remove.cmd</strong></pre>
+<ul>
+<li>As an alternative, you can also remove agents from the agent pool overview using the <span class="packt_screen">Agents</span> tab. Go to <span class="packt_screen">Project <span class="packt_screen">Settings</span></span> | <span class="packt_screen">Agent pools</span> (see label <span class="packt_screen">1</span> in the following screenshot) | <span class="packt_screen">Agents</span> <span>(see label </span><span class="packt_screen">2</span><span> in the following screenshot) </span>and then select the options button <span>(see label </span><span class="packt_screen">3</span><span> in the following screenshot</span>) on the agent you want to remove. Then, click <span class="packt_screen">Delete</span> <span>(see label <span class="packt_screen">4</span> </span><span>in the following screenshot):</span></li>
+</ul>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/5a0300ca-a7e6-4c92-bb7b-876bd3ed1333.png" style="width:67.33em;height:38.17em;"/></p>
+<p>In the preceding screenshot, you can see the steps to remove an agent using the interface. Be aware that this does not clean up the binaries and any files on the host machine; however, if a machine that is hosting an agent breaks down or a VM is removed, then this is the only way to remove the agent.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Agent selection</h1>
+                </header>
+            
+            <article>
+                
+<p>Whenever a build job starts running, an agent is selected from the pool that will perform the tasks that you have defined in the pipeline. The selection of an agent is done in two steps:</p>
+<ol>
+<li>Only agents that are part of the selected pool are eligible for running the tasks. This means that when working with private agent pools, it is wise to have multiple agents in a pool. If you then take one agent offline for maintenance, the agent jobs that rely on the agent pool can continue running.</li>
+<li>Before an agent job can run, the demands from each job and the tasks it contains are gathered. As you learned in the <em>Variable groups </em>section, an agent job can specify the demands it has of the agent that it uses. The same goes for tasks—they can also specify demands. To run a job, only agents that meet all of these demands are used. Demands and capabilities are key–value pairs, where the value is an integer. An example capability is <kbd>msbuild=15.0</kbd> and the corresponding demand is <kbd>msbuild&gt;15.0</kbd>.</li>
+</ol>
+<p>When there is no eligible agent for a build definition, the build eventually fails after a timeout.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Finding agent capabilities</h1>
+                </header>
+            
+            <article>
+                
+<p>To find the capabilities that are available on the individual agents, go through the following steps:</p>
+<ol>
+<li>Navigate to <span class="packt_screen">Organization Settings</span> | <span class="packt_screen">Agent pools</span>:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1015 image-border" src="assets/8b8d2080-5d74-4bc2-b1d4-111d245951e5.png" style="width:162.75em;height:114.92em;"/></p>
+<ol start="2">
+<li>Navigate to the correct agent pool (either hosted or private) and then <span class="packt_screen">Agents</span>, and then open the agent details (not shown in the preceding screenshot).</li>
+<li>Open the <span class="packt_screen">Capabilities</span> tab.</li>
+</ol>
+<p>Here, you can specify one or more custom capabilities for the agent using the top block, called <span class="packt_screen">User-defined capabilities</span>. For self-hosted (private) agents, all the capabilities that were discovered on the machine when you installed the agent are also shown.</p>
+<p><span>Azure DevOps is not the only tool available for running continuous integration builds. The next section will take you through a couple of other tools.</span></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Other tools</h1>
+                </header>
+            
+            <article>
+                
+<p><span>There are many tools available b</span>esides Azure DevOps. Two other well-known tools are GitLab CI and Jenkins. Some very basic knowledge of these tools will help you to understand how to integrate with them if that is ever necessary. Also, a limited understanding of other tools will help you to more quickly understand the concepts and generalize your knowledge of how to work with these other tools.</p>
+<p>To highlight how these tools work with the same concepts, both examples in this section are equivalent to the Azure DevOps YAML pipeline in the <em>Writing a YAML build definition </em><span>section</span><em>.</em></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">GitLab CI</h1>
+                </header>
+            
+            <article>
+                
+<p>GitLab offers build pipelines using the GitLab CI capabilities. GitLab CI is configured by putting a file with the <kbd>.gitlab-ci.yml</kbd><span> </span><span>name </span><span>in the root of a repository. In this file, you can define one or more stages and jobs, along with the tasks that they should perform. An example YAML file for GitLab CI can appear as in the following example:</span></p>
+<pre>stages:<br/>  - build<br/>  - test<br/><br/>build:<br/>    stage: build<br/>    script: dotnet build **/*.csproj<br/><br/>test:<br/>    stage: test<br/>    script: dotnet test **/*.csproj</pre>
+<p>Just as Azure DevOps uses agent pools with agents, GitLab CI relies on <strong>runners</strong> to perform the actual work. In GitLab CI, there is currently no support for visually creating or editing your pipelines.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Jenkins</h1>
+                </header>
+            
+            <article>
+                
+<p>Jenkins is another tool used to run build pipelines. Complex builds can be run using Jenkins pipelines, which get their work from a Jenkinsfile. A <strong>Jenkinsfile</strong> is written in a Jenkins-specific notation, as in the following code:</p>
+<pre>pipeline {<br/>    agent any <br/>    <br/>    stages {<br/>        stage(‘build’) {<br/>        agent any <br/>            steps {<br/>                dotnet build **/*.csproj<br/>            }<br/>        }<br/><br/>        stage('test') {<br/>            agent any<br/>            steps {<br/>                dotnet test **/*.csproj<br/>            }<br/>        }<br/>    }<br/>}</pre>
+<p>Jenkins has limited support for visually creating and editing a pipeline. This is referred to as a freestyle project.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Summary</h1>
+                </header>
+            
+            <article>
+                
+<p>In this chapter, we looked at continuous integration and learned how it is a combination of your mindset, the process, and tools. You learned how to create build definitions using Azure Pipelines using both the graphical designer and YAML, as well as how to run builds. You learned that you can use build pipelines to compile and test your code, as well as report the outcome back to pull requests.</p>
+<p>You learned that builds can produce outcomes, called artifacts. Artifacts are stored and retained within Azure pipelines and can be used to store reports, but are also the starting point of deployment pipelines, which you will learn about in the next chapter. You also learned about the infrastructure that you need to run builds—namely, agents and agent pools. Finally, you saw two brief examples of how to run a continuous integration build using GitLab CI and Jenkins, which are two other tools that you can use for build pipelines.</p>
+<p>With this knowledge, you are now able to create build pipelines for your projects. You can hook up to source control and produce the builds that you will use in the next chapter to deploy your applications. With this deep knowledge of the underlying structure of tasks, jobs, stages, and pipelines, you can solve complex application-building problems.</p>
+<p>In the next chapter, you will continue learning about pipelines, but this time for releases. You will learn how to pick up builds and release them to one or more environments.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Questions </h1>
+                </header>
+            
+            <article>
+                
+<p>As we conclude, here is a list of questions for you to test your knowledge regarding this chapter's material. You will find the answers in the <em>Assessments</em> section of the appendix:</p>
+<ol>
+<li><span>True or false – you achieve continuous integration if you compile all the branches of your project at least daily.<br/></span></li>
+<li>True or false – a classic build definition is always connected to a source code repository<span>.</span></li>
+<li>True or false – a YAML pipeline definition is always connected to a source code repository<span>.</span></li>
+<li>Which of the following is needed to call an external tool from an Azure pipeline?
+<ol>
+<li>An external service definition</li>
+<li>An Azure services connection</li>
+<li>A service connection</li>
+<li>A service locator</li>
+</ol>
+</li>
+</ol>
+<ol start="5">
+<li>What are some common reasons for using self-hosted agents<span>? (Choose all of the correct answers from the following:)</span>
+<ol>
+<li>Access to closed networks is needed.</li>
+<li>Specific extension tasks need to be available to the agent.</li>
+<li>The number of parallel pipeline executions needs to be larger than 10.</li>
+<li>Specific software needs to be installed in order for the agent to use it.</li>
+</ol>
+</li>
+</ol>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Further reading</h1>
+                </header>
+            
+            <article>
+                
+<ul>
+<li>An in-depth definition of continuous integration by Martin Fowler is available at <a href="https://martinfowler.com/articles/continuousIntegration.html">https://martinfowler.com/articles/continuousIntegration.html</a>.<a href="https://martinfowler.com/articles/continuousIntegration.html"/></li>
+<li>A detailed description of the conditions syntax is available at <a href="https://docs.microsoft.com/en-us/azure/devops/pipelines/process/conditions?view=azure-devops&amp;tabs=classic">https://docs.microsoft.com/en-us/azure/devops/pipelines/process/conditions?view=azure-devops&amp;tabs=classic</a>.</li>
+<li>Exercises for practicing with Azure DevOps builds can be found at <a href="https://docs.microsoft.com/en-us/learn/modules/create-a-build-pipeline/index">https://docs.microsoft.com/en-us/learn/modules/create-a-build-pipeline/index</a>.</li>
+<li>You can find the Visual Studio marketplace for Azure DevOps at <a href="https://marketplace.visualstudio.com/azuredevops">https://marketplace.visualstudio.com/azuredevops</a>.</li>
+<li>You can find a detailed description of the Azure Pipelines YAML syntax at <a href="https://docs.microsoft.com/en-us/azure/devops/pipelines/yaml-schema?view=azure-devops&amp;tabs=schema">https://docs.microsoft.com/en-us/azure/devops/pipelines/yaml-schema?view=azure-devops&amp;tabs=schema</a>.</li>
+<li>Details of the pricing of the Azure pipelines hosted and self-hosted agent pools are available at <a href="https://azure.microsoft.com/en-us/pricing/details/devops/azure-pipelines/">https://azure.microsoft.com/en-us/pricing/details/devops/azure-pipelines/</a>.</li>
+<li>More information about GitLab CI can be found at <a href="https://about.gitlab.com/product/continuous-integration/">https://about.gitlab.com/product/continuous-integration/</a>.</li>
+<li>More information about Jenkins can be found at <a href="https://jenkins.io/">https://jenkins.io/</a>.</li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    </body></html>

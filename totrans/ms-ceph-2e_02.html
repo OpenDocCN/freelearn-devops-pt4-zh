@@ -1,0 +1,863 @@
+<html><head></head><body>
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Planning for Ceph</h1>
+                </header>
+            
+            <article>
+                
+<p>The first chapter of this book covers all the areas you need to consider when deploying a Ceph cluster, from the initial planning stages through to hardware choices. The topics we will cover include the following:</p>
+<ul>
+<li>What Ceph is and how it works</li>
+<li>Good use cases for Ceph and important considerations</li>
+<li>Advice and best practices on infrastructure design</li>
+<li>Ideas about planning a Ceph project</li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">What is Ceph?</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">Ceph is an open source, distributed, scaled-out, software-defined storage system that can provide block, object, and file storage. Through the use of the <strong>Controlled Replication Under Scalable Hashing</strong> (<strong><span>CRUSH</span></strong>) algorithm, Ceph eliminates the need for centralized metadata and can distribute the load across all the nodes in the cluster. Since CRUSH is an algorithm, data placement is calculated rather than based on table lookups, and can scale to hundreds of petabytes without the risk of bottlenecks and the associated single points of failure. Clients also form direct connections with the required OSDs, which also eliminates any single points becoming bottlenecks.</p>
+<p class="mce-root">Ceph provides three main types of storage: block storage via the <strong><span>RADOS Block Device</span></strong> (<strong>RBD</strong>), file storage via CephFS, and object storage via RADOS Gateway, which provides S3 and Swift-compatible storage.</p>
+<p class="mce-root">Ceph is a pure SDS solution, and this means that you are free to run it on any hardware that matches Ceph's requirements. This is a major development in the storage industry, which has typically suffered from strict vendor lock-in.</p>
+<div class="mce-root packt_infobox"><br/>
+It should be noted that Ceph prefers consistency as per the CAP theorem, and will try at all costs to make protecting your data a higher priority than availability in the event of a partition.</div>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">How Ceph works</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">The core storage layer in Ceph is the <strong>Reliable Autonomous Distributed Object Store </strong>(<strong>RADOS</strong>), which, <span>as the name suggests,</span> provides an object store on which the higher-level storage protocols are built. The RADOS layer in Ceph consists of a number of <strong>object storage daemons</strong> (<strong>OSDs</strong>). Each OSD is completely independent and forms peer-to-peer relationships to form a cluster. Each OSD is typically mapped to a single disk, in contrast to the traditional approach of presenting a number of disks combined into a single device via a RAID controller to the OS.</p>
+<p class="mce-root">The other key component in a Ceph cluster is the monitors. These are responsible for forming a cluster quorum via the use of Paxos. The monitors are not directly involved in the data path and do not have the same performance requirements of OSDs. They are mainly used to provide a known cluster state, including membership, via the use of various cluster maps. These cluster maps are used by both Ceph cluster components and clients to describe the cluster topology and enable data to be safely stored in the right location. There is one final core component—the manager—which is responsible for configuration and statistics. Because of the scale that Ceph is intended to be operated at, one can appreciate that tracking the state of every single object in the cluster would become very computationally expensive. Ceph solves this problem by hashing the underlying object names to place objects into a number of placement groups. An algorithm called CRUSH is then used to place the placement groups onto the OSDs. This reduces the task of tracking millions of objects to a matter of tracking a much more manageable number of placement groups, normally measured in thousands.</p>
+<p class="mce-root">Librados is a Ceph library that can be used to build applications that interact directly with the RADOS cluster to store and retrieve objects.</p>
+<p class="mce-root">For more information on how the internals of Ceph work, it is strongly recommended that you read the official Ceph documentation, as well as the thesis written by <em>Sage Weil</em>, the creator and primary architect of Ceph.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Ceph use cases</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">Before jumping into specific use cases, let's look at the following key points that should be understood and considered before thinking about deploying a Ceph cluster:</p>
+<ul>
+<li><strong>Ceph is not a storage array</strong>: Ceph should not be compared to a traditional scale-up storage array; it is fundamentally different, and trying to shoe horn Ceph into that role using existing knowledge, infrastructure, and expectations will lead to disappointment. Ceph is software-defined storage with internal data movements that operate over TCP/IP networking, introducing several extra layers of technology and complexity compared to a simple SAS cable at the rear of a traditional storage array. Work is continuing within the Ceph project to expand its reach into areas currently dominated by legacy storage arrays with support for iSCSI and NFS, and with each release, Ceph gets nearer to achieving better interoperability.</li>
+<li><strong>Performance</strong>: Because of Ceph's non-centralized approach, it can offer unrestrained performance compared to scale-up storage arrays, which typically have to funnel all I/O through a pair of controller heads. While technological development means that faster CPUs and faster network speeds are constantly being developed, there is still a limit to the performance that you can expect to achieve with just a pair of storage controllers. With recent advances in Flash technology, combined with new interfaces such as NVMe, which bring the promise of a level of performance not seen before, the scale-out nature of Ceph provides a linear increase in CPU and network resources with every added OSD node. However, we should also consider where Ceph is not a good fit for performance. This is mainly concerning use cases where extremely low latency is desired. The very reason that enables Ceph to become a scale-out solution also means that low latency performance will suffer. The overhead of performing a large proportion of the processing in software and additional network hops means that latency will tend to be about double that of a traditional storage array and at least ten times that of local storage. Thought should be given to selecting the best technology for given performance requirements. That said, a well-designed and tuned Ceph cluster should be able to meet performance requirements in all but the most extreme cases<span>. It is important to remember that with any storage system that employs wide striping, where data is spread across all disks in the system, speed will often be limited to the slowest component in the cluster. It's therefore important that every node in the cluster should be of similar performance. With new developments of NVMe and NVDIMMS, the latency of storage access is continuing to be forced lower.</span></li>
+</ul>
+<p style="padding-left: 60px"><span>Work in Ceph is being done to remove bottlenecks to take advantage of these new technologies, but thought should be given to how to balance latency requirements against the benefits of a distributed storage system.</span></p>
+<ul>
+<li><strong>Reliability</strong>: Ceph is designed to provide a highly fault-tolerant storage system by the scale-out nature of its components. While no individual component is highly available, when clustered together, any component should be able to fail without causing an inability to service client requests. In fact, as your Ceph cluster grows, failure of individual components should be expected and will become part of normal operating conditions. However, Ceph's ability to provide a resilient cluster should not be an invitation to compromise on hardware or design choice, and doing so will likely lead to failure. There are several factors that Ceph assumes your hardware will meet, which are covered later in this chapter. Unlike RAID, where disk rebuilds with larger disks can now stretch into time periods measured in weeks, Ceph will often recover from single disk failures in a matter of hours. With the increasing trend of larger capacity disks<span>, Ceph offers numerous advantages to both the reliability and degraded performance when compared to a traditional storage array.</span></li>
+<li><strong>Use of commodity hardware</strong>: Ceph is designed to be run on commodity hardware, which gives us the ability to design and build a cluster without the premium cost demanded by traditional tier 1 storage and server vendors. This can be both a blessing and a curse. Being able to choose your own hardware allows you to build your Ceph components to exactly match your requirements. However, one thing that branded hardware does offer is compatibility testing. It's not unknown for strange exotic firmware bugs to be discovered that can cause very confusing symptoms. Thought should be applied to whether your IT teams have the time and skills to cope with any obscure issues that may crop up with untested hardware solutions. The use of commodity hardware also protects against the traditional fork-lift upgrade model, where the upgrade of a single component often requires the complete replacement of the whole storage array. With Ceph, you can replace individual components in a very granular way, and with automatic data balancing, lengthy data migration periods are avoided.</li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Specific use cases</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">We will now cover some of the more common use cases for Ceph and discuss some of the concepts behind them.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">OpenStack or KVM based virtualization</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">Ceph is the perfect match for providing storage to an OpenStack environment; in fact, Ceph <span>is</span><span> </span><span>currently the most popular choice. The OpenStack survey in 2018 revealed that 61% of surveyed OpenStack users are utilizing Ceph to provide storage in OpenStack. The OpenStack Cinder block driver uses Ceph RBDs to provision block volumes for VMs, and OpenStack Manila, the</span> <strong>File as a Service</strong> <span>(</span><strong>FaaS</strong><span>) software, integrates well with CephFS. There are a number of reasons why Ceph is such a good solution for OpenStack, as shown in the following list:</span></p>
+<ul>
+<li class="mce-root">Both are open source projects with commercial offerings</li>
+<li class="mce-root">Both have a proven track record in large-scale deployments</li>
+<li class="mce-root">Ceph can provide block, CephFS, and object storage, all of which OpenStack can use</li>
+<li class="mce-root">With careful planning, it is possible to deploy a hyper-converged cluster</li>
+</ul>
+<p class="mce-root">If you are not using OpenStack, or have no plans to, Ceph also integrates very well with KVM virtualization.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Large bulk block storage</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">Because of the ability to design and build cost-effective OSD nodes, Ceph enables you to build large, high-performance storage clusters that are very cost-effective compared to alternative options. The Luminous release brought support for Erasure coding for block and file workloads, which has increased the attractiveness of Ceph even more for this task.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Object storage</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">The very fact that the core RADOS layer is an object store means that Ceph excels at providing object storage either via the S3 or Swift protocols. Ceph currently has one of the best compatibility records for matching the S3 API. If cost, latency, or data security are a concern over using public cloud object storage solutions, running your own Ceph cluster to provide object storage can be an ideal use case.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Object storage with custom applications</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">Using librados, you can get your in-house application to <span>talk</span><span> </span><span>directly to the underlying Ceph RADOS layer. This can greatly simplify the development of your application, and gives you direct access to high-performant reliable storage. Some of the more advanced features of librados that allow you to bundle a number of operations into a single atomic operation are also very hard to implement with existing storage solutions.</span></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Distributed filesystem – web farm</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">A farm of web servers all need to access the same files so that they can all serve the same content no matter which one the client connects to. Traditionally, an HA NFS solution would be used to provide distributed file access, but can start to hit several limitations at scale. CephFS can provide a distributed filesystem to store the web content and allow it to be mounted across all the web servers in the farm.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Distributed filesystem – NAS or fileserver replacement</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">By using Samba in conjunction with CephFS, a highly available filesystem can be exported to Windows based clients. Because of the active and inactive nature of both Samba and CephFS, performance will grow with the expansion of the Ceph cluster.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Big data</h1>
+                </header>
+            
+            <article>
+                
+<p>Big data is the concept of analyzing large amounts of data that would not fit into traditional data analysis systems or for which the use of analysis methods would be too complex. Big data tends to require storage systems that are both capable of storing large amounts of data and also offering scale-out performance. Ceph can meet both of these requirements, and is therefore an ideal candidate for providing scale-out storage to big data systems.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Infrastructure design</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">While considering infrastructure design, we need to take care of certain components. We will now briefly look at these components.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">SSDs</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">SSDs are great. Their price has been lowered enormously over the last 10 years, and all evidence suggests that it will continue to do so. They have the ability to offer access times several orders of magnitude lower than rotating disks and consume less power.</p>
+<p class="mce-root">One important concept to understand about SSDs is that, although their read and write latencies are typically measured in tens of microseconds, to overwrite existing data in a flash block, requires the entire flash block to be erased before the write can happen. A typical flash block size in an SSD may be 128k, and even a 4 KB write I/O would require the entire block to be read, erased, and then the existing data and new I/O to be finally written. The erase operation can take several milliseconds, and without clever routines in the SSD firmware, this would make writes painfully slow. To get around this limitation, SSDs are equipped with a RAM buffer so they can acknowledge writes instantly while the firmware internally moves data around flash blocks to optimize the overwrite process and wear leveling. However, the RAM buffer is volatile memory, and would normally result in the possibility of data loss and corruption in the event of sudden power loss. To protect against this, SSDs can have power-loss protection, which is accomplished by having a large capacitor on board to store enough power to flush any outstanding writes to flash.</p>
+<p class="mce-root">One of the biggest trends in recent years is the different tiers of SSDs that have become available. Broadly speaking, these can be broken down into the following categories:</p>
+<ul>
+<li><strong>Consumer</strong>:<strong> </strong>These are the cheapest you can buy, and are pitched at the average PC user. They provide a lot of capacity very cheaply and offer fairly decent performance. They will likely offer no power-loss protection, and will either demonstrate extremely poor performance when asked to do synchronous writes or lie about stored data integrity. They will also likely have very poor write endurance, but still more than enough for standard use.</li>
+<li><strong>Prosumer</strong>: These are a step up from the consumer models, and will typically provide better performance and have higher write endurance, although still far from what enterprise SSDs provide.</li>
+</ul>
+<p class="mce-root">Before moving on to the enterprise models, it is worth just covering why you should not <span>under any condition </span><span>use the preceding models of SSDs for Ceph. These reasons are shown in the following list:</span></p>
+<ul>
+<li class="mce-root">Lack of proper power-loss protection will either result in extremely poor performance or not ensure proper data consistency</li>
+<li class="mce-root">Firmware is not as heavily tested, as enterprise SSDs often reveal data-corrupting bugs</li>
+</ul>
+<ul>
+<li class="mce-root">Low write endurance will mean that they will quickly wear out, often ending in sudden failure</li>
+<li class="mce-root">Because of high wear and failure rates, their initial cost benefits rapidly disappear</li>
+<li class="mce-root">The use of consumer SSDs with Ceph will result in poor performance and increase the chance of catastrophic data loss</li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Enterprise SSDs</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">The biggest difference between consumer and enterprise SSDs is that an enterprise SSD should provide the guarantee that, when it responds to the host system confirming that data has been safely stored, it actually has been permanently written to flash. That is to say that if power is suddenly removed from a system, all data that the operating system believes was committed to disk will be safely stored in flash. Furthermore, it should be expected that, in order to accelerate writes but maintain data safety, the SSDs will contain super capacitors to provide just enough power to flush the SSD's RAM buffer to flash in the event of a power-loss condition.</p>
+<p class="mce-root">Enterprise SSDs are normally provided in a number of different flavors to provide a wide range of costs per GB options balanced against write endurance.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Enterprise – read-intensive</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">Read-intensive SSDs are a bit of a marketing term, as all SSDs will easily handle reads. The name refers to the lower write endurance. They will, however, provide the best cost per GB. These SSDs will often only have a write endurance of around 0.3-1 drive writes per day over a five-year period. That is to say that you should be able to write 400 GB a day to a 400 GB SSD and expect it to still be working in five years time. If you write 800 GB a day to it, it will only be guaranteed to last two and a half years. Generally, for most Ceph workloads, this range of SSDs is normally deemed not to have enough write endurance.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Enterprise – general usage</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">General usage SSDs will normally provide three to five DWPD, and are a good balance of cost and write endurance. For use in Ceph, they will normally be a good choice for an SSD based OSD assuming that the workload on the Ceph cluster is not planned to be overly write heavy. They also make excellent choices for storing the BlueStore DB partition in a hybrid HDD/SSD cluster.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Enterprise – write-intensive</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">Write-intensive SSDs are the most expensive type. They will often offer write endurances up to and over 10 DWPD. They should be used for pure SSD OSDs if very heavy write workloads are planned. If your cluster is still using the deprecated filestore object store, then high write endurance SSDs are also recommended for the journals.</p>
+<p class="mce-root">For any new deployments of Ceph, BlueStore is the recommended default object store. The following information only relates to clusters that are still running <span>filestore</span>. Details of how <span>filestore </span>works and why it has been replaced is covered later in <a href="5c188246-4bac-42ef-8135-ba55336f3847.xhtml">Chapter 3</a>, <em>BlueStore</em>.</p>
+<p class="mce-root">To understand the importance of choosing the right SSD when running <span>filestore</span>, we must understand that because of the limitations in normal POSIX filesystems, in order to provide atomic transactions that occur during a write, a journal is necessary to be able to roll back a transaction if it can't fully complete. If no separate SSD is used for the journal, a separate partition is created for it. Every write that the OSD handles will first be written to the journal and then flushed to the main storage area on the disk. This is the main reason why using an SSD for a journal for spinning disks is advised. The double write severely impacts spinning disk performance, mainly caused by the random nature of the disk heads moving between the journal and data areas.</p>
+<p class="mce-root">Likewise, an SSD OSD using <span>filestore</span><span> </span>still requires a journal, and so it will experience approximately double the number of writes and thus provide half the expected client performance.</p>
+<p class="mce-root">As can now be seen, not all models of SSD are equal, and Ceph's requirements can make choosing the correct one a tough process. Fortunately, a quick test can be carried out to establish an SSD's potential for use as a Ceph journal.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Memory</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">Recommendations for BlueStore OSDs are 3 GB of memory for every HDD OSD and 5 GB for an SSD OSD. In truth, there are a number of variables that lead to this recommendation, but suffice to say that you never want to find yourself in the situation where your OSDs are running low on memory and any excess memory will be used to improve performance.<br/>
+Aside from the base-line memory usage of the OSD, the main variable affecting memory usage is the number of PGs running on the OSD. While total data size does have an impact on memory usage, it is dwarfed by the effect of the number of PGs. A healthy cluster running within the recommendation of 200 PGs per OSD will probably use less than 4 GB of RAM per OSD.</p>
+<p class="mce-root">However, in a cluster where the number of PGs has been set higher than best practice, memory usage will be higher. It is also worth noting that when an OSD is removed from a cluster, extra PGs will be placed on remaining OSDs to re-balance the cluster. This will also increase memory usage as well as the recovery operation itself. This spike in memory usage can sometimes be the cause of cascading failures, if insufficient RAM has been provisioned. A large swap partition on an SSD should always be provisioned to reduce the risk of the Linux out-of-memory killer randomly killing OSD processes in the event of a low-memory situation.</p>
+<p class="mce-root">As a minimum, the aim is to provision around 4 GB per OSD for HDDs and 5 GB per OSD for SSDs; this should be treated as the bare minimum, and 5 GB/6 GB (HDD/SSD respectively) per OSD would be the ideal amount. With both BlueStore and <span>filestore</span>, any additional memory installed on the server may be used to cache data, reducing read latency for client operations. F<span>ilestore</span><span> </span>uses Linux page cache, and so RAM is automatically utilized. With BlueStore, we need to manually tune the memory limit to assign extra memory to be used as a cache; this will be covered in more detail in <a href="5c188246-4bac-42ef-8135-ba55336f3847.xhtml">Chapter 3</a>, <em>BlueStore</em>.</p>
+<p class="mce-root">If your cluster is still running <span>filestore</span>, depending on your workload and the size of the spinning disks that are used for the Ceph OSD's, extra memory may be required to ensure that the operating system can sufficiently cache the directory entries and file nodes from the filesystem that is used to store the Ceph objects. This may have a bearing on the RAM you wish to configure your nodes with, and is covered in more detail in the tuning section of this book.</p>
+<p class="mce-root">Regardless of the configured memory size, ECC memory should be used at all times.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">CPU</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">Ceph's official recommendation is for 1 GHz of CPU power per OSD. Unfortunately, in real life, it's not quite as simple as this. What the official recommendations don't point out is that a certain amount of CPU power is required per I/O; it's not just a static figure. Thinking about it, this makes sense: the CPU is only used when there is something to be done. If there's no I/O, then no CPU is needed. This, however, scales the other way: the more I/O, the more CPU is required. The official recommendation is a good safe bet for spinning-disk based OSDs. An OSD node equipped with fast SSDs can often find itself consuming several times this recommendation. To complicate things further, the CPU requirements vary depending on I/O size as well, with larger I/Os requiring more CPU.</p>
+<p class="mce-root">If the OSD node starts to struggle for CPU resources, it can cause OSDs to start timing out and getting marked out from the cluster, often to rejoin several seconds later. This continuous loss and recovery tends to place more strain on the already limited CPU resource, causing cascading failures.</p>
+<p class="mce-root">A good figure to aim for would be around 1-10 MHz per I/O, corresponding to 4 kb-4 MB I/Os respectively. As always, testing should be carried out before going live to confirm that CPU requirements are met both in normal and stressed I/O loads. Additionally, utilizing compression and checksums in BlueStore will use additional CPU per I/O, and should be factored into any calculations when upgrading from a Ceph cluster that had been previously running with <span>filestore</span>. Erasure-coded pools will also consume additional CPU over replicated pools. CPU usage will vary with the erasure coding type and profile, and so testing must be done to gain a better understanding of the requirements.</p>
+<p class="mce-root">Another aspect of CPU selection that is key to determining performance in Ceph is the clock speed of the cores. A large proportion of the I/O path in Ceph is single threaded, and so a faster-clocked core will run through this code path faster, leading to lower latency. Because of the limited thermal design of most CPUs, there is often a trade-off of clock speed as the number of cores increases. High core count CPUs with high clock speeds also tend to be placed at the top of the pricing structure, and so it is beneficial to understand your I/O and latency requirements when choosing the best CPU.</p>
+<p class="mce-root">A small experiment was done to find the effect of CPU clock speed on write latency. A Linux workstation running Ceph had its CPU clock manually adjusted using the user space governor. The following results clearly show the benefit of high-clocked CPUs:</p>
+<table border="1" style="border-collapse: collapse;width: 100%">
+<tbody>
+<tr>
+<td><strong><span>CPU MHz</span></strong></td>
+<td><strong><span>4 KB write I/O</span></strong></td>
+<td><span> <strong>Avg latency (us)</strong></span></td>
+</tr>
+<tr>
+<td><span>1600 </span></td>
+<td><span>797 </span></td>
+<td><span>1250</span></td>
+</tr>
+<tr>
+<td><span>2000 </span></td>
+<td><span>815 </span></td>
+<td><span>1222</span></td>
+</tr>
+<tr>
+<td><span>2400 </span></td>
+<td><span>1161 </span></td>
+<td><span>857</span></td>
+</tr>
+<tr>
+<td><span>2800 </span></td>
+<td><span>1227 </span></td>
+<td><span>812</span></td>
+</tr>
+<tr>
+<td><span>3300 </span></td>
+<td><span>1320 </span></td>
+<td><span>755</span></td>
+</tr>
+<tr>
+<td><span>4300 </span></td>
+<td><span>1548 </span></td>
+<td><span>644</span></td>
+</tr>
+</tbody>
+</table>
+<p> </p>
+<p class="mce-root">If low latency, and especially low write latency, is important, then go for the highest-clocked CPUs you can get, ideally at least above 3 GHz. This may require a compromise in SSD-only nodes on how many cores are available, and thus how many SSDs each node can support. For nodes with 12 spinning disks and SSD journals, single-socket quad core processors make an excellent choice, as they are often available with very high clock speeds, and are very aggressively priced.</p>
+<p class="mce-root">Where extreme low latency is not as important—for example, in object workloads—look at entry-level processors with well-balanced core counts and clock speeds.</p>
+<p class="mce-root">Another consideration concerning CPU and motherboard choice should be the number of sockets. In dual-socket designs, the memory, disk controllers, and NICs are shared between the sockets. When data required by one CPU is required from a resource located on another CPU, a socket is required that must cross the interlink bus between the two CPUs. Modern CPUs have high speed interconnections, but they do introduce a performance penalty, and thought should be given to whether a single socket design is achievable. There are some options given in the section on tuning as to how to work around some of these possible performance penalties.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Disks</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">When choosing the disks to build a Ceph cluster with, there is always the temptation to go with the biggest disks you can, as the total cost of ownership figures looks great on paper. Unfortunately, in reality this is often not a great choice. While disks have dramatically increased in capacity over the last 20 years, their performance hasn't. Firstly, you should ignore any sequential MB/s figures, as you will never see them in enterprise workloads; there is always something making the I/O pattern non-sequential enough that it might as well be completely random. Secondly, remember the following figures:</p>
+<ul>
+<li class="mce-root">7.2k disks = 70–80 4k IOPS</li>
+<li class="mce-root">10k disks = 120–150 4k IOPS</li>
+<li class="mce-root">15k disks = You should be using SSDs</li>
+</ul>
+<p class="mce-root">As a general rule, if you are designing a cluster that will offer active workloads rather than bulk inactive/archive storage, then you should design for the required IOPS and not capacity. If your cluster will <span>largely</span><span> </span><span>contain spinning disks with the intention of providing storage for an active workload, then you should prefer an increased number of smaller capacity disks rather than the use of larger disks. With the decrease in cost of SSD capacity, serious thought should be given to using them in your cluster, either as a cache tier or even for a full SSD cluster. SSDs have already displaced 15k disks in all but very niche workloads; 10K disks will likely be going the same way by the end of the decade. It is likely that the storage scene will become a two-horse race, with slow, large-capacity disks filling the bulk storage role and flash-based devices filling the active I/O role.</span></p>
+<p class="mce-root">Thought should also be given to the use of SSDs as either journals with Ceph's <span>filestore </span>or for storing the DB and WAL when using BlueStore. <span>Filestore </span>performance is dramatically improved when using SSD journals and it is not recommended that it should be used unless the cluster is designed to be used with very cold data.</p>
+<p class="mce-root">When choosing SSDs for holding the BlueStore DB, it's important to correctly size the SSDs so that the majority, or ideally all, of the metadata will be stored on the SSD. Official recommendations are for the RocksDB database to be about 4% of the size of the HDD. In practice, you will rarely see this level of consumption in the real world, and the 4% figure is a conservative estimate. With 10 TB disks and larger becoming widely available, dedicating 400 GB of SSD to such a disk is not cost effective. If the RocksDB grows larger than the space allocated from the SSD, then metadata will overflow onto the HDD. So while the OSD will still operate, requests that require metadata to be read from the HDD will be slower than if all metadata was stored on an SSD. In real-world tests with clusters used for RBD workloads, DB usage is normally seen to lie in the 0.5% region. The <a href="5c188246-4bac-42ef-8135-ba55336f3847.xhtml">Chapter 3</a>, <em>BlueStore</em> of this book will contain more details on what data is stored in RocksDB and the space required for it.</p>
+<p class="mce-root">As the SSDs used for storing the BlueStore DB are not used for storing data, their write endurance is not as critical as it has been in the past, when SSDs were used with <span>filestore</span>.<br/>
+You should also bear in mind that the default replication level of 3 will mean that each client write I/O will generate at least three times the I/O on the backend disks. When using <span>filestore</span>, because of the internal mechanisms in Ceph, in most instances, <span>this number </span><span>will likely be over six times write amplification.</span></p>
+<p class="mce-root">Understand that even though, compared to a legacy RAID array, Ceph enables rapid recovery from a failed disk, this is because of the fact that Ceph involves a much larger number of disks in the recovery process. However, larger disks still pose a challenge, particularly when you want to recover from a node failure where several disks are affected. In a cluster comprised of ten 1TB disks, each 50% full, in the event of a disk failure, the remaining disks would have to recover 500 GB of data between them, around 55 GB each. At an average recovery speed of 20 MB/s, recovery would be expected in around 45 minutes. A cluster with a hundred 1TB disks would still have to recover 500 GB of data, but this time that task is shared between 99 disks, each having to recover about 5 GB; in theory, <span>it would take around 4 minutes </span><span>for the larger cluster to recover from a single disk failure. In reality, these recovery times will be higher as there are additional mechanisms at work that increase recovery time. In smaller clusters, recovery times should be a key factor when selecting disk capacity.</span></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Networking</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">The network is a key and often overlooked component in a Ceph cluster. A poorly designed network can often lead to a number of problems that manifest themselves in peculiar ways and make for a confusing troubleshooting session.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">10 G requirement</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">A 10 G network is strongly recommended for building a Ceph cluster; while 1 G networking will work, the amount of latency will almost be unacceptable, and will limit you as to the size of the nodes you can deploy. Thought should also be given to recovery; in the event of a disk or node failure, large amounts of data will need to be moved around the cluster. Not only will a 1 G network be table to provide sufficient performance for this, but normal I/O traffic will be impacted. In the very worst case, this may lead to OSDs timing out, causing cluster instabilities.</p>
+<p class="mce-root">As mentioned, one of the main benefits of 10 G networking is the lower latency. Quite often, a cluster will never push enough traffic to make full use of the 10 G bandwidth; however, the latency improvement will be realized no matter the load on the cluster. The round trip <span>time</span><span> </span><span>for a 4k packet over a 10 G network might take around 90 us, whereas the same 4k packet over 1 G networking will take over 1 ms. As you will learn in the tuning section of this book, latency has a direct affect on the performance of a storage system, particularly when performing direct or synchronous I/O.</span></p>
+<p class="mce-root">Lately, the next generation of networking hardware has become available, supporting speeds starting at 25 G and climbing to 100 G. If you are implementing a new network when deploying your Ceph cluster, it is highly recommended that you look into deploying this next-generation hardware.</p>
+<p class="mce-root">If your OSD node will come equipped with dual <span>NICs</span>, you should carefully work on for a network design that allows you to use them active for both transmit and receive. It is wasteful to leave a 10 G link in a passive state, and will help to lower latency under load.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Network design</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">A good network design is an important step to bringing a Ceph cluster online. If your networking is handled by another team, then make sure they are included in all stages of the design, as often an existing network will not be designed to handle Ceph's requirements, leading to poor Ceph performance and impacting existing systems.</p>
+<p class="mce-root">It's recommended that each Ceph node be connected via redundant links to two separate switches so that, in the event of a switch failure, the Ceph node is still accessible. Stacking switches should be avoided if possible, as they can introduce single points of failure, and in some cases both will be required to be offline to carry out firmware upgrades.</p>
+<p class="mce-root">If your Ceph cluster will be contained in only one set of switches, then feel free to skip this next section.</p>
+<p class="mce-root">Traditional networks were mainly designed around a north–south access path, where clients at the north access data through the network to servers at the south. If a server is connected to an access switch that is needed to talk to another server connected to another access switch, then the traffic would be routed through the core switch. Because of this access pattern, the access and aggregation layers that feed into the core layer were not designed to handle a lot of intra-server traffic, which is fine for the environment they were designed to support. Server-to-server traffic is called east–west traffic, and is becoming more prevalent in the modern data center as applications become less isolated and require data from several other servers.</p>
+<p class="mce-root">Ceph generates a lot of east–west traffic, both from internal cluster replication traffic, but also from other servers consuming Ceph storage. In large environments, the traditional core, aggregation, and access layer design may struggle to cope, as large amounts of traffic will be expected to be routed through the core switch. Faster switches can be obtained and faster or additional up-links can be added; however, the underlying problem is that you are trying to run a scale-out storage system on a scale-up network design. The layout of the layers is shown in the following diagram:</p>
+<div class="mce-root CDPAlignCenter CDPAlign packt_figref"><br/>
+<img src="assets/4b01539d-5019-47ca-9dee-321e7abcdcbf.png" style="width:22.75em;height:16.42em;"/></div>
+<div class="mce-root CDPAlignCenter CDPAlign packt_figref">A traditional network topology</div>
+<p class="mce-root">A design that is becoming very popular in data centers is the leaf spine design. This approach completely gets rid of the traditional model and replaces it with two layers of switches, the spine layer and the leaf layer. The core concept is that each leaf switch connects to each spine switch so that any leaf switch is only one hop anyway from any other leaf switch. This provides consistent hop latency and bandwidth. This is shown in the following diagram:</p>
+<p class="mce-root CDPAlignCenter CDPAlign"><img src="assets/992c1436-b1e9-47b8-a86e-93a49de8f1db.png" style="width:21.92em;height:11.25em;"/></p>
+<div class="mce-root CDPAlignCenter CDPAlign packt_figref">A leaf spine topology</div>
+<p class="mce-root">The leaf layer is where the servers connect to, and is typically made up of a large number of 10 G ports and a handful of 40 G or faster up-link ports to connect into the spine layer.<br/>
+The spine layer won't normally connect directly into servers unless there are certain special requirements, and will just serve as an aggregation point for all the leaf switches. The spine layer will often have higher port speeds to reduce any possible contention of the traffic coming out of the leaf switches.</p>
+<p class="mce-root">Leaf spine networks are typically moving away from pure layer 2 topologies, where the layer 2 domain is terminated on the leaf switches and layer 3 routing is done between the leaf and spine layer. It is advised that you do this using dynamic routing protocols, such as BGP or OSPF, to establish the routes across the fabric. This brings numerous advantages over large layer-2 networks. A spanning tree, which is typically used in layer-2 networks to stop switching loops, works by blocking an up-link. When using 40 G up-links, this is a lot of bandwidth to lose. When using dynamic routing protocols with a layer-3 design, ECMP (equal cost multipathing) can be used to fairly distribute data over all up-links to maximize the available bandwidth. In the example of a leaf switch connected to two spine switches via a 40 G up-link, there would be 80 G of bandwidth available to any other leaf switch in the topology, no matter where it resides.</p>
+<p class="mce-root">Some network designs take this even further and push the layer-3 boundary down to the servers by actually running these routing protocols on servers as well, so that ECMP can be used to simplify the use of both <span>NICs </span>on the server in an active/active fashion. This is called routing on the host.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">OSD node sizes</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">A common approach when designing nodes for use with Ceph is to pick a large-capacity server that contains large numbers of disk slots. In certain scenarios, this may be a good choice, but generally with Ceph, smaller nodes are preferable. To decide on the number of disks that each node in your Ceph cluster should contain, there are a number of things you should consider, as we will describe in the following sections.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Failure domains</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">If your cluster will have fewer than 10 nodes, then focusing on failure domains should be your main concern here.</p>
+<p class="mce-root">With legacy scale-up storage, the hardware is expected to be 100% reliable; all components are redundant and the failure of a complete component, such as a system board or disk JBOD, would likely cause an outage. Therefore, there is no real knowledge of how such a failure might impact the operation of the system, just the hope that it doesn't happen! With Ceph, there is an underlying assumption that complete failure of a section of your infrastructure, be that a disk, node, or even rack, should be considered as normal and should not make your cluster unavailable.</p>
+<p class="mce-root">Let's take two Ceph clusters, both comprised of 240 disks. Cluster A is comprised of 20 x 12 disk nodes and cluster B is comprised of 4 x 60 disk nodes. Now let's take a scenario where, for whatever reason, a Ceph OSD node goes offline. This could be because of planned maintenance or unexpected failure, but that node is now down and any data on it is unavailable. Ceph is designed to handle this situation, and will, if needed, even recover from it while maintaining full data access.</p>
+<p class="mce-root">In the case of cluster A, we have now lost 5% of our disks and in the event of a permanent loss would have to reconstruct 72 TB of data. Cluster B has lost 25% of its disks and would have to reconstruct 360 TB. The latter would severely impact the performance of the cluster, and in the case of data reconstruction, this period of degraded performance could last for many days.</p>
+<p class="mce-root">Even if a decision is made to override the automated healing and leave Ceph in a degraded state while you fix or perform maintenance on a node, in the 4 x 60 disk example, taking a node offline will also reduce the I/O performance of your cluster by 25%, which may mean that client applications suffer.</p>
+<p class="mce-root">It's clear that on smaller-sized clusters, these very large, dense nodes are not a good idea. A 10 node Ceph cluster is probably the minimum size if you want to reduce the impact of node failure, and so in the case of 60-drive JBODs, you would need a cluster that at minimum is likely measured in petabytes.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Price</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">One often-cited reason for wanting to go with large, dense nodes is trying drive down the cost of the hardware purchase. This is often a false economy as dense nodes tend to require premium parts that often end up costing more per GB than less dense nodes.<br/>
+For example, a 12-disk HDD node may only require a single quad processor to provide enough CPU resources for the OSDs. A 60-bay enclosure may require dual 10-core processors or greater, which are a lot more expensive per GHz provided. You may also need larger DIMMs, which demand a premium and perhaps even increased numbers of 10 G or faster <span>NICs</span>.</p>
+<p class="mce-root">The bulk of the cost of the hardware will be made up of the CPUs, memory, networking, and disks. As we have seen, all of these hardware resource requirements scale linearly with the number and size of the disks. The only way in which larger nodes may have an advantage is the fact that they require fewer motherboards and power supplies, which is not a large part of the overall cost.</p>
+<p class="mce-root">When looking at SSD only clusters, the higher performance of SSDs dictates the use of more powerful CPUs and greatly increased bandwidth requirements. It would certainly not be a good idea to deploy a single node with 60 SSDs, as the required CPU resource would either be impossible to provide or likely cost prohibitive. The use of 1-U and 2-U servers with either 10 or 24 bays will likely provide a sweet spot in terms of cost against either performance or capacity, depending on the use case of the cluster.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Power supplies</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">Servers can be configured with either single or dual redundant power supplies. Traditional workloads normally demand dual power supplies to protect against downtime in the case of a power supply or feed failure. If your Ceph cluster is large enough, then you may be able to look into the possibility of running single PSUs in your OSD nodes and allow Ceph to provide the availability in case of a power failure. Consideration should be given to the benefits of running a single power supply versus the worst-case situation where an <span>entire</span><span> </span><span>power feed goes offline at a DC.</span></p>
+<p>If your Ceph nodes are using RAID controllers with a write back cache, then they should be protected either via a battery or flash backup device. In the case of a complete power failure, the cache's contents will be kept safe until power is restored. If the raid controller's cache is running in write-through mode, then the cache backup is not required.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">How to plan a successful Ceph implementation</h1>
+                </header>
+            
+            <article>
+                
+<p>The following are some general rules for deploying a successful Ceph cluster:</p>
+<ul>
+<li class="mce-root">Do use 10 G networking as a minimum</li>
+<li class="mce-root">Do research and test the correctly sized hardware you wish to use</li>
+<li class="mce-root">Don't use the no barrier mount option with <span>filestore</span></li>
+<li class="mce-root">Don't configure pools with a size of two or a <kbd>min_size</kbd> of one</li>
+<li class="mce-root">Don't use consumer SSDs</li>
+<li class="mce-root">Don't use raid controllers in write back mode without battery protection</li>
+<li class="mce-root">Don't use configuration options you don't understand</li>
+<li class="mce-root">Do implement some form of change management</li>
+<li class="mce-root">Do carry out power-loss testing</li>
+<li class="mce-root">Do have an agreed backup and recovery plan</li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Understanding your requirements and how they relate to Ceph</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">As we have discussed, Ceph is not always the right choice for every storage requirement. Hopefully, this chapter has given you the knowledge to help you identify your requirements and match them to Ceph's capabilities, and hopefully, Ceph is a good fit for your use case and you can proceed with the project.</p>
+<p class="mce-root">Care should be taken to understand the requirements of the project, including the following:</p>
+<ul>
+<li class="mce-root">Knowing who the key stakeholders of the project are. They will likely be the same people that will be able to detail how Ceph will be used.</li>
+<li class="mce-root">Collect the details of what systems Ceph will need to interact with. If it becomes apparent, for example, that unsupported operating systems are expected to be used with Ceph, then this needs to be flagged at an early stage.</li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Defining goals so that you can gauge whether the project is a success</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">Every project should have a series of goals that can help identify whether the project has been a success. Some of these goals may be the following:</p>
+<ul>
+<li class="mce-root">It should cost no more than <em>X</em> amount</li>
+<li class="mce-root">It should provide <em>X</em> IOPS or MB/s of performance</li>
+<li class="mce-root">It should survive certain failure scenarios</li>
+<li class="mce-root">It should reduce ownership costs of storage by <em>X</em></li>
+</ul>
+<p class="mce-root">These goals will need to be revisited throughout the life of the project to make sure that it is on track.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Joining the Ceph community</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">Whether it's by joining the Ceph mailing lists, the IRC channel, or attending community events, becoming part of the Ceph community is highly recommended. Not only will you be able to run proposed hardware and cluster configurations across a number of people who may have similar use cases, but the support and guidance provided by the community is excellent if you ever find yourself stuck.</p>
+<p class="mce-root">By being part of the community, you will also gain insight into the development process of the Ceph project and see features being shaped prior to their introduction. For the more adventurous, thought should be given to actively contributing to the project. This could include helping others on the mailing lists, filing bugs, updating documentation, or even submitting code enhancements.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Choosing your hardware</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">The infrastructure section of this chapter will have given you a good idea of the hardware requirements of Ceph and the theory behind selecting the correct hardware for the project. The second biggest cause of outages in a Ceph cluster stems from poor hardware choices, making the right choices early on in the design stage crucial.</p>
+<p class="mce-root">If possible, check with your hardware vendor to see whether they have any reference designs; these are often certified by Red Hat and will take a lot of the hard work off your shoulders in trying to determine whether your hardware choices are valid. You can also ask Red Hat or your chosen Ceph support vendor to validate your hardware; they will have had previous experience and will be able to answer any questions you may have.</p>
+<p class="mce-root">Lastly, if you are planning on deploying and running your Ceph cluster entirely in house without any third-party involvement or support, consider reaching out to the Ceph community. The Ceph user's mailing list is contributed to by individuals from vastly different backgrounds stretching right across the globe. There is a high chance that someone somewhere will be doing something similar to you and will be able to advise you on your hardware choice.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Training yourself and your team to use Ceph</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">As with all technologies, it's essential that Ceph administrators receive some sort of training. Once the Ceph cluster goes live and becomes a business dependency, inexperienced administrators are a risk to stability. Depending on your reliance on third-party support, various levels of training may be required and may also determine whether you should look for a training course or self-teach.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Running a PoC to determine whether Ceph has met the requirements</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">A <strong>proof of concept </strong>(<strong>PoC</strong>) cluster should be deployed to test the design and identify any issues early on before proceeding with full-scale hardware procurement. This should be treated as a decision point in the project; don't be afraid to revisit goals or start the design again if any serious issues are uncovered. If you have existing hardware of similar specifications, then it should be fine to use it in the <span>PoC</span>, but the aim should be to try and test hardware that is as similar as possible to what you intend to build the production cluster with, so that you can fully test the design.</p>
+<p class="mce-root">As well as testing for stability, the <span>PoC</span> cluster should also be used to forecast whether it looks likely that the goals you have set for the project will be met. Although it may be hard to directly replicate the workload requirements during a PoC, effort should be made to try and make the tests carried out match the intended production workload as best as possible.<br/>
+The <span>PoC</span> stage is also a good time to firm up your knowledge on Ceph, practice day-to-day operations, and test out features. This will be of benefit further down the line. You should also take this opportunity to be as abusive as possible to your PoC cluster. Randomly pull out disks, power off nodes, and disconnect network cables. If designed correctly, Ceph should be able to withstand all of these events. Carrying out this testing now will give you the confidence to operate Ceph at a larger scale, and will also help you understand how to troubleshoot them more easily if needed.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Following best practices to deploy your cluster</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">When deploying your cluster, you should focus on understanding the process rather than following guided examples. This will give you better knowledge of the various components that make up Ceph, and should you encounter any errors during deployment or operation, you will be much better placed to solve them. The next chapter of this book goes into more detail on deployment of Ceph, including the use of orchestration tools.</p>
+<p class="mce-root">Initially, it is recommended that the default options for both the operating system and Ceph are used. It is better to start from a known state should any issues arise during deployment and initial testing.</p>
+<p class="mce-root">RADOS pools using replication should have their replication level left at the default of three and the minimum replication level of two. This corresponds to the pool variables of <kbd>size</kbd> and <kbd>min_size</kbd> respectively. Unless there is both a good understanding and reason for the impact of lowering these values, it would be unwise to change them. The replication size determines how many copies of data will be stored in the cluster, and the effects of lowering it should be obvious in terms of protection against data loss. Less understood is the effect of <kbd>min_size</kbd> in relation to data loss, and is a common reason for it. Erasure-coded pools should be configured in a similar manner so that there is a minimum of two erasure-coded chunks for recovery. An example would be <kbd>k=4 m=2</kbd>; this would give the same durability as a size=3 replicated pool, but with double the usable capacity.</p>
+<p class="mce-root">The <kbd>min_size</kbd> variable controls how many copies the cluster must write to acknowledge the write back to a client. A <kbd>min_size</kbd> of <kbd>2</kbd> means that the cluster must at least write two copies of data before acknowledging the write; this can mean that, in a severely degraded cluster scenario, write operations are blocked if the PG has only one remaining copy and will continue to be blocked until the PG has recovered enough to have two copies of the object. This is the reason you might want to decrease <kbd>min_size</kbd> to <kbd>1</kbd>, so that, in this event, cluster operations can still continue, and if availability is more important than consistency, then this can be a valid decision. However, with a <kbd>min_size</kbd> of <kbd>1</kbd>, data may be written to only one OSD, and there is no guarantee that the number of desired copies will be met anytime soon. During that period, any additional component failure will likely result in loss of data while written in the degraded state. In summary, downtime is bad, data loss is typically worse, and these two settings will probably have one of the biggest impacts on the probability of data loss.</p>
+<p><span>The only scenario where a <kbd>min_size</kbd> setting of <kbd>1</kbd> should be used permanently is in extremely small clusters where there aren't really enough OSDs to have it set any higher, although at this scale, it is debatable whether Ceph is the correct storage platform choice.</span></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Defining a change management process</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">The biggest cause of data loss and outages with a Ceph cluster are normally human error, whether it be by accidentally running the wrong command or changing configuration options, which may have unintended consequences. These incidents will likely become more common as the number of people in the team administering Ceph grows. A good way of reducing the risk of human error causing service interruptions or data loss is to implement some form of change control. This is covered <span>in more detail </span><span>in the next chapter.</span></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Creating a backup and recovery plan</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">Ceph is highly redundant and, when properly designed, should have no single point of failure and be resilient to many types of hardware failures. However, one-in-a-million situations do occur, and as we have also discussed, human error can be very unpredictable. In both cases, there is a chance that the Ceph cluster may enter a state where it is unavailable, or where data loss occurs. In many cases, it may be possible to recover some or all of the data and return the cluster to full operation.</p>
+<p class="mce-root">However, in all cases, a full backup and recovery plan should be discussed before putting any live data onto a Ceph cluster. Many a company has gone out of business or lost the faith of its customers when it's revealed that not only has there been an extended period of downtime, but critical data has also been lost. It may be that, as a result of discussion, it is agreed that a backup and recovery plan is not required, and this is fine. As long as risks and possible outcomes have been discussed and agreed, that is the most important thing.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Summary</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">In this chapter, you learned all of the necessary steps to allow you to successfully plan and implement a Ceph project. You also learned about the available hardware choices, how they relate to Ceph's requirements, and how they affect both Ceph's performance and reliability. Finally, you also learned of the importance of the processes and procedures that should be in place to ensure a healthy operating environment for your Ceph cluster.</p>
+<p>The following chapters in this book will build on the knowledge you have learned in this chapter and help you put it to use to enable you to actually deploy, manage, and utilize Ceph storage.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Questions</h1>
+                </header>
+            
+            <article>
+                
+<ol>
+<li>What does RADOS stand for?</li>
+<li>What does CRUSH stand for?</li>
+<li>What is the difference between consumer and enterprise SSDs?</li>
+<li>Does Ceph prefer the consistency or availability of your data?</li>
+<li>Since the Luminous release, what is the default storage technology?</li>
+<li>Who created Ceph?</li>
+<li>What are block devices created on Ceph called?</li>
+<li>What is the name of the component that actually stores data in Ceph?</li>
+</ol>
+
+
+            </article>
+
+            
+        </section>
+    </body></html>

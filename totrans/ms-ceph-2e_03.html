@@ -1,0 +1,731 @@
+<html><head></head><body>
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Deploying Ceph with Containers</h1>
+                </header>
+            
+            <article>
+                
+<p>Once you have planned your Ceph project and are ready to deploy <span>either</span><span> </span><span>a test or production cluster, you will need to consider the method you wish to use to both deploy and maintain it. This chapter will demonstrate how to quickly deploy test environments for testing and development by the use of Vagrant. It will also explain why you might want to consider using an orchestration tool to deploy Ceph rather than using the supplied Ceph tools. As a popular orchestration tool, Ansible will be used to show how quickly and reliably a Ceph cluster can be deployed and the advantages that using it can bring.</span></p>
+<p>In this chapter, we will learn the following:</p>
+<ul>
+<li>How to prepare a testing environment with Vagrant and VirtualBox</li>
+<li>The differences between Ceph's deploy and orchestration tools</li>
+<li>The advantages over using orchestration tools</li>
+<li>How to install and use Ansible</li>
+<li>How to configure Ceph Ansible modules</li>
+<li>How to deploy a test cluster with Vagrant and Ansible</li>
+<li>Ideas concerning how to manage your Ceph configuration</li>
+<li>What the Rook project is and what it enables a Ceph operator to do</li>
+<li>How to deploy a basic Kubernetes cluster</li>
+<li>How to use Rook to deploy Ceph on Kubernetes</li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Technical requirements</h1>
+                </header>
+            
+            <article>
+                
+<p>In order to be able to run the Ceph environment described later in this chapter, it's important that your computer meets a number of requirements to ensure that the VM can be provided with sufficient resources. These requirements are as follows:</p>
+<ul>
+<li>Operating system compatible with Vagrant and VirtualBox, including Linux, macOS, and Windows</li>
+<li>2-core CPU</li>
+<li>8 GB ram</li>
+<li>Virtualization instructions enabled in the BIOS</li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Preparing your environment with Vagrant and VirtualBox</h1>
+                </header>
+            
+            <article>
+                
+<p>While a test cluster can be deployed on any hardware or virtual machine, for the purposes of this book a combination of Vagrant and VirtualBox will be used. This will allow rapid provision of the virtual machines and ensure a consistent environment.</p>
+<p>VirtualBox is a free and open source hypervisor currently being developed by Oracle; while its performance and features may be lacking compared to high-end hypervisors, its lightweight approach and multi-OS support lend itself to its being a prime candidate for testing.</p>
+<p>Vagrant assists in allowing an environment that may comprise many machines to be created quickly and efficiently. It works with the concepts of boxes, which are predefined templates for use with hypervisors and its Vagrantfile, which defines the environment to be built. It supports multiple hypervisors and allows a Vagrantfile to be portable across them.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">How to install VirtualBox</h1>
+                </header>
+            
+            <article>
+                
+<p>Consult the VirtualBox website for the appropriate method to install VirtualBox on your operating system: <a href="https://www.virtualbox.org/wiki/Downloads">https://www.virtualbox.org/wiki/Downloads</a>:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/6564aeef-931e-4d05-b30f-acb66cc210a0.png"/></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">How to set up Vagrant</h1>
+                </header>
+            
+            <article>
+                
+<p>Follow the installation instructions on Vagrant's website to get Vagrant installed on your chosen OS: <a href="https://www.vagrantup.com/downloads.html">https://www.vagrantup.com/downloads.html</a>:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/f6af1621-45ce-48d8-8190-bb636a65824e.png"/></p>
+<ol>
+<li>Create a new directory for your Vagrant project, for example <kbd>ceph-ansible</kbd></li>
+<li>Change to this directory and run the following commands:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>vagrant plugin install vagrant-hostmanager</strong>      </pre>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/edc06af7-db73-43f5-9928-d5eb0fa179b5.png" style="width:47.83em;height:4.92em;"/></p>
+<pre style="padding-left: 60px"><strong>vagrant box add bento/ubuntu-16.04</strong></pre>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/2d24df85-01f5-49bb-ab4c-19cd0a78f815.png" style="width:63.08em;height:19.08em;"/></p>
+<p>Now create an empty file called <kbd>Vagrantfile</kbd> and place the following into it:</p>
+<pre>nodes = [ 
+  { :hostname =&gt; 'ansible', :ip =&gt; '192.168.0.40', :box =&gt; 'xenial64' }, 
+  { :hostname =&gt; 'mon1', :ip =&gt; '192.168.0.41', :box =&gt; 'xenial64' }, 
+  { :hostname =&gt; 'mon2', :ip =&gt; '192.168.0.42', :box =&gt; 'xenial64' }, 
+  { :hostname =&gt; 'mon3', :ip =&gt; '192.168.0.43', :box =&gt; 'xenial64' }, 
+  { :hostname =&gt; 'osd1',  :ip =&gt; '192.168.0.51', :box =&gt; 'xenial64', :ram =&gt; 1024, :osd =&gt; 'yes' }, 
+  { :hostname =&gt; 'osd2',  :ip =&gt; '192.168.0.52', :box =&gt; 'xenial64', :ram =&gt; 1024, :osd =&gt; 'yes' }, 
+  { :hostname =&gt; 'osd3',  :ip =&gt; '192.168.0.53', :box =&gt; 'xenial64', :ram =&gt; 1024, :osd =&gt; 'yes' } 
+] 
+ 
+Vagrant.configure("2") do |config| 
+  nodes.each do |node| 
+    config.vm.define node[:hostname] do |nodeconfig| 
+      nodeconfig.vm.box = "bento/ubuntu-16.04" 
+      nodeconfig.vm.hostname = node[:hostname] 
+      nodeconfig.vm.network :private_network, ip: node[:ip] 
+ 
+      memory = node[:ram] ? node[:ram] : 512; 
+      nodeconfig.vm.provider :virtualbox do |vb| 
+        vb.customize [ 
+          "modifyvm", :id, 
+          "--memory", memory.to_s, 
+        ] 
+        if node[:osd] == "yes"         
+          vb.customize [ "createhd", "--filename", "disk_osd-#{node[:hostname]}", "--size", "10000" ] 
+          vb.customize [ "storageattach", :id, "--storagectl", "SATA Controller", "--port", 3, "--device", 0, "--type", "hdd", "--medium", "disk_osd-#{node[:hostname]}.vdi" ] 
+        end 
+      end 
+    end 
+    config.hostmanager.enabled = true 
+    config.hostmanager.manage_guest = true 
+  end 
+end </pre>
+<p>Run <kbd>vagrant up</kbd> to bring up the virtual machines defined in the <kbd>Vagrantfile</kbd>:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/dc46eff2-b018-4dbb-95ac-354e3a6c8d3e.png" style="width:37.58em;height:21.25em;"/></p>
+<p>Now, let's <kbd>ssh</kbd> into one of them:</p>
+<pre><strong>vagrant ssh ansible</strong></pre>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/3b09d065-1709-415a-9ab9-36540009fe10.png" style="width:35.50em;height:8.67em;"/></p>
+<div class="packt_infobox">If you are running <kbd>vagrant</kbd> on Windows, the <kbd>ssh</kbd> command will inform you that you need to use a SSH client of your choosing and provide the details to use with it. Putty would be a good suggestion for a SSH client. On Linux, the command will connect you straight onto the VM.</div>
+<p>The username and password are both <kbd>vagrant</kbd>. After logging in, you should find yourself at the bash prompt for the <kbd>ansible vm</kbd>:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/1726344c-a906-4a00-a609-2ddcb9fffd4a.png" style="width:39.25em;height:14.33em;"/></p>
+<p>Simply type exit to return to your host machine.</p>
+<p>Congratulations, you have just deployed three servers for use as Ceph monitors, three servers for use as Ceph OSDs, and an Ansible server. The <kbd>Vagrantfile</kbd> could have also contained extra steps to execute commands on the servers to configure them but for now let's shut down the servers; we can bring them back up when required by the examples later in this chapter:</p>
+<pre><strong>vagrant destroy --force</strong></pre>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Ceph-deploy</h1>
+                </header>
+            
+            <article>
+                
+<p>Ceph-deploy is the official tool for deploying Ceph clusters. It works on the principle of having an admin node with password-less SSH access to all machines in your Ceph cluster; it also holds a copy of the Ceph configuration file. Every time you carry out a deployment action, it uses SSH to connect to your Ceph nodes to carry out the necessary steps. While the Ceph-deploy tool is an entirely supported method that will leave you with a perfectly functioning Ceph cluster, ongoing management of Ceph will not be as easy as desired.</p>
+<p>Larger-scale Ceph clusters will also cause a lot of management overhead if Ceph-deploy is used. For that reason, it is recommended that Ceph-deploy be limited to test or small-scale production clusters, although as you will see an orchestration tool allows for the rapid deployment of Ceph and is probably better suited for test environments where you might need to continually be building new Ceph clusters.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Orchestration</h1>
+                </header>
+            
+            <article>
+                
+<p>One solution to make installing and managing Ceph easier is to use an orchestration tool. There are several tools available, such as Puppet, Chef, Salt, and Ansible, all of which have Ceph modules available. If you are already using an orchestration tool in your environment, then it is recommended that you stick to using that tool. For the purposes of this book, Ansible will be used. This is due a number of reasons, as follows:</p>
+<ul>
+<li>It's the deployment method that is favored by Red Hat, who are the owners of both the Ceph and Ansible projects</li>
+<li>It has a well-developed, mature set of Ceph roles and playbooks</li>
+<li>Ansible tends to be easier to learn if you have never used an orchestration tool before</li>
+<li>It doesn't require a central server to be set up, which means demonstrations are more focused on using the tool than installing it</li>
+</ul>
+<p>All tools follow the same principle, where you provide them with an inventory of hosts and a set of tasks to be carried out on the hosts. These tasks often reference variables that allow customization of the task at runtime. Orchestration tools are designed to be run on a schedule so that, if for any reason the state or configuration of a host changes, it will be correctly changed back to the intended state during the next run.</p>
+<p>Another advantage of using orchestration tools is documentation. While they are not a replacement for good documentation, the fact that they clearly describe your environment, including roles and configuration options, means that your environment starts to become self-documenting. If you ensure that any installations or changes are carried out via your orchestration tool, then the configuration file of the orchestration tool will clearly describe the current state of your environment. If this is combined with something such as a Git repository to store the orchestration configuration, you have the makings of a change control system. This is covered in more detail later in this chapter. The only disadvantages center around the extra time it takes to carry out the initial setup and configuration of the tool.</p>
+<p>So, by using an orchestration tool, not only do you get a faster and less error-prone deployment, you also get documentation and change management for free. If you haven't got the hint by now, this is something you should really be looking at.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Ansible</h1>
+                </header>
+            
+            <article>
+                
+<p>As mentioned earlier, Ansible will be the orchestration tool of choice for this book, so let's look at it in a bit more detail.</p>
+<p>Ansible is an agent-less orchestration tool written in Python that uses SSH to carry out configuration tasks on remote nodes. It was first released in 2012, has gained widespread adoption, and is known for its ease of adoption and low learning curve. Red Hat purchased the commercial company Ansible Inc. in 2015 and so has a very well developed and close-knit integration for deploying Ceph.</p>
+<p>Files called playbooks are used in Ansible to describe a list of commands, actions, and configurations to be carried out on specified hosts or groups of hosts and are stored in the <kbd>yaml</kbd> file format. Instead of having large unmanageable playbooks, Anisble roles can be created to allow a playbook to contain a single task, which may then carry out a number of tasks associated with the role.</p>
+<p>The use of SSH to connect to remote nodes and execute playbooks means that it is very lightweight and does not require either an agent or a centralized server.</p>
+<p>For testing Ansible also integrates well with Vagrant; an Ansible playbook can be specified as part of the Vagrant provisioning configuration and will automatically generate an inventory file from the VMs Vagrant that has been created and will run the playbook once the servers have booted. This allows a Ceph cluster, including its OS, to be deployed via just a single command.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Installing Ansible</h1>
+                </header>
+            
+            <article>
+                
+<p>You'll bring your Vagrant environment <span>you created earlier </span><span>back up that</span> <span>and ssh onto the Ansible server. For this example only</span> <kbd>ansible</kbd><span>,</span> <kbd>mon1</kbd><span>, and</span> <kbd>osd1</kbd> <span>will be needed:</span></p>
+<pre style="padding-left: 60px"><strong>Vagrant up ansible mon1 osd1</strong>  </pre>
+<ul>
+<li>Add the Ansible PPA:</li>
+</ul>
+<pre style="padding-left: 60px"><strong>$ sudo apt-add-repository ppa:ansible/ansible-2.6</strong>   <strong>     </strong>  </pre>
+<p class="CDPAlignCenter CDPAlign"><strong><img src="assets/feb347d6-a7f2-4501-9912-779f3cec60de.png" style="width:67.42em;height:20.58em;"/></strong></p>
+<ul>
+<li>Update <kbd>apt-get</kbd> sources and install Ansible:</li>
+</ul>
+<pre style="padding-left: 60px"><strong>$ sudo apt-get update &amp;&amp; sudo apt-get install ansible -y</strong>  <strong>      </strong>  </pre>
+<p class="CDPAlignCenter CDPAlign"><strong><img src="assets/f52965dc-038e-4003-a0a7-608c0566d546.png" style="width:32.50em;height:16.33em;"/></strong></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Creating your inventory file</h1>
+                </header>
+            
+            <article>
+                
+<p>The Ansible inventory file is used by Ansible to reference all known hosts and specify which group they belong to. A group is defined by placing its name in square brackets; groups can be nested inside other groups by the use of the children definition.</p>
+<p>Before we add hosts to the inventory file, we first need to configure the remote nodes for password-less SSH, otherwise we will have to enter a password every time Ansible tries to connect to a remote machine as follows:</p>
+<ol>
+<li>Generate a SSH key:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>$ ssh-keygen</strong></pre>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/1c87f1a8-3433-4066-be27-7ca9cf6b493d.png" style="width:39.67em;height:22.67em;"/></p>
+<ol start="2">
+<li class="CDPAlignLeft CDPAlign">Copy the key to the remote hosts:</li>
+</ol>
+<pre class="CDPAlignLeft CDPAlign" style="padding-left: 60px"><strong>$ ssh-copy-id mon1</strong></pre>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/c79eb509-7219-4122-9c33-a11fff81774b.png" style="width:65.33em;height:18.58em;"/></p>
+<p>This will need to be repeated for each host. Normally, you would include this step in your Vagrant provisioning stage, but it is useful to carry out these tasks manually the first couple of times, so that you understand the process.</p>
+<p>Now try logging in to the machine with: <kbd>ssh mon1</kbd>:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/b3f98e3b-11a6-4111-aaa1-acdce0d9343a.png" style="width:40.42em;height:13.83em;"/></p>
+<p>Type <kbd>exit</kbd> to return to the Ansible VM. Now let's create the <kbd>Ansible</kbd> inventory file. Edit the file called <kbd>hosts</kbd> in <kbd>/etc/ansible</kbd>:</p>
+<pre><strong>$ sudo nano /etc/ansible/hosts</strong></pre>
+<p>Create three groups called <kbd>osds, mgrs</kbd>, and <kbd>mons</kbd> and finally a fourth group called <kbd>ceph</kbd>. This fourth group will contain the <kbd>osds</kbd> and <kbd>mons</kbd> groups as children.</p>
+<p>Enter a list of your hosts under the correct group:</p>
+<pre><strong>[mons] 
+mon1 
+mon2 
+mon3</strong><br/><br/><strong>[mgrs]</strong><br/><strong>mon1 
+ 
+[osds] 
+osd1 
+osd2 
+osd3 
+ 
+[ceph:children] 
+mons 
+osds</strong><br/><strong>mgrs</strong> </pre>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Variables</h1>
+                </header>
+            
+            <article>
+                
+<p>Most playbooks and roles will make use of variables, which can be overridden in several ways. The simplest way is to create files in the <kbd>host_vars</kbd> and <kbd>groups_vars</kbd> folders; these allow you to override variables either based on the host or group membership, respectively.</p>
+<p>Create a <kbd>/etc/ansible/group_vars</kbd> <span>directory</span>. Create a file in <kbd>group_vars</kbd> called <kbd>mons</kbd> and place the following inside it:</p>
+<p><kbd>a_variable: "foo"</kbd></p>
+<p>Create a file in <kbd>group_vars</kbd> called <kbd>osds</kbd> and place the following inside it:</p>
+<p><kbd>a_variable: "bar"</kbd></p>
+<p>Variables follow a precedence order; you can also create an <kbd>all</kbd> file which will apply to all groups. However, a variable of the same name that is in a more specific matching group will override it. Ceph Ansible modules make use of this to allow you to have a set of default variables and then specify different values for the specific roles.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Testing</h1>
+                </header>
+            
+            <article>
+                
+<p>To verify that Ansible is working correctly and that we can successfully connect and run commands remotely, let's use ping with <span>Ansible</span><span> </span><span>to check one of our hosts. Note: this is not like a network ping; Ansible's ping confirms that it can communicate via SSH and execute commands remotely:</span></p>
+<pre><strong>$ ansible mon1 -m ping</strong>  </pre>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/fe8b4d00-26a0-419f-ae9a-de2165321a9f.png" style="width:25.25em;height:7.33em;"/></p>
+<p class="CDPAlignLeft CDPAlign">Excellent, that worked. Now let's run a simple command remotely to demonstrate Ansible's capabilities. The following command will retrieve the currently running kernel version on the specified remote node:</p>
+<pre><strong>$ ansible mon1 -a 'uname -r'</strong>  </pre>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/b8815f88-f9ce-4d8b-b952-85b81e107536.png" style="width:28.00em;height:6.08em;"/></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">A very simple playbook</h1>
+                </header>
+            
+            <article>
+                
+<p>To demonstrate how playbooks works, the following example will showcase a small playbook that also makes use of the variables we configured earlier:</p>
+<pre><strong>- hosts: mon1 osd1</strong><br/><strong>  tasks:</strong><br/><strong>  - name: Echo Variables</strong><br/><strong>    debug: msg="I am a {{ a_variable }}"</strong></pre>
+<p>And now run the playbook. Notice that the command to run a playbook differs from running ad hoc Ansible commands:</p>
+<pre><strong>$ ansible-playbook /etc/ansible/playbook.yml</strong></pre>
+<p class="CDPAlignCenter CDPAlign"><strong><img src="assets/ee0095ec-b237-4767-b8c8-3925cf90aa4e.png" style="width:54.92em;height:25.42em;"/></strong></p>
+<p>The output shows the playbook being executed on both <kbd>mon1</kbd> and <kbd>osd1</kbd> as they are in groups, which are children of the parent group, Ceph. Also note how the output of the two servers is different as they pick up the variables that you set earlier in the <kbd>group_vars</kbd> directory.</p>
+<p>Finally, the last couple of lines show the overall run status of the playbook run. You can now destroy your <kbd>Vagrant</kbd> environment again, ready for the next section:</p>
+<pre><strong>Vagrant destroy --force</strong></pre>
+<p>This concludes the introduction to Ansible, but is no means meant to be a complete guide. It's recommended that you explore other resources to gain a more in-depth knowledge of Ansible before using it in a production environment.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Adding the Ceph Ansible modules</h1>
+                </header>
+            
+            <article>
+                
+<p>We can use Git to clone the Ceph Ansible repository, as follows:</p>
+<pre class="mce-root"><strong><span class="URLPACKT">git clone </span><span class="URLPACKT">https://github.com/ceph/ceph-ansible.git<br/></span><span class="URLPACKT">git checkout stable-3.2<br/></span></strong><strong><span class="URLPACKT">sudo cp -a ceph-ansible/* /etc/ansible/</span></strong></pre>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/b937eb3f-be81-431e-8677-68134760b576.png" style="width:45.50em;height:12.67em;"/></p>
+<p>We also need to install a few extra packages that <kbd>ceph-ansible</kbd> requires:</p>
+<pre><strong>sudo apt-get install python-pip</strong></pre>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/5c0c8b9d-406f-4358-bf86-cc6d87520c83.png" style="width:56.42em;height:17.75em;"/></p>
+<pre><strong>sudo pip install notario netaddr</strong></pre>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/faceecf7-55ad-4338-b0db-b7f1e5af013e.png" style="width:62.83em;height:16.50em;"/></p>
+<p>Let's also explore some key folders in the Git repository:</p>
+<ul>
+<li><kbd>group_vars</kbd>: We've already covered what lives here and will explore possible configuration options in more detail later</li>
+<li><kbd>infrastructure-playbooks</kbd>: This directory contains pre-written playbooks to carry out some standard tasks, such as deploying clusters or adding OSDs to an existing one. The comments at the top of the playbooks give a good idea of what they do.</li>
+<li><kbd>roles</kbd>: This directory contains all the roles that make up the Ceph Ansible modules. You will see that there is a role for each Ceph component; these are called via playbooks to install, configure, and maintain Ceph.</li>
+</ul>
+<p>In order to be able to deploy a Ceph cluster with Ansible, a number of key variables need to be set in the <kbd>group_vars</kbd> directory. The following variables <span>are</span><span> </span><span>required to be set; alternatively, it's recommended you change them from their defaults. For the remaining variables, it suggested that you read the comments in the variable files. Key global variables include the following:</span></p>
+<pre><strong>    #mon_group_name: mons
+    #osd_group_name: osds
+    #rgw_group_name: rgws
+    #mds_group_name: mdss
+    #nfs_group_name: nfss
+    ...
+    #iscsi_group_name: iscsigws </strong> </pre>
+<p>These control what group name modules use to identify the Ceph host types. If you will be using Ansible in a wider setting, it might be advisable to prepend <kbd>ceph-</kbd> to the start to make it clear that these groups are related to Ceph:</p>
+<pre><strong>#ceph_origin: 'upstream' # or 'distro' or 'local' </strong> </pre>
+<p>Employ the <kbd>'upstream'</kbd> setting to use packages generated by the Ceph team, or <kbd>distro</kbd> for packages generated by your distribution maintainer. The former is recommended if you want to be able to upgrade Ceph independently of your distribution:</p>
+<pre><strong>#fsid: "{{ cluster_uuid.stdout }}"
+#generate_fsid: true </strong> </pre>
+<p>By default, a <kbd>fsid</kbd> will be generated for your cluster and stored in a file where it can be referenced again. You shouldn't need to touch this unless you want control over the <kbd>fsid</kbd> or you wish to hardcode the <kbd>fsid</kbd> in the group variable file:</p>
+<pre><strong>#monitor_interface: interface
+#monitor_address: 0.0.0.0 </strong> </pre>
+<p>One of the preceding commands should be specified. If you are using a variable in <kbd>group_vars</kbd> then you probably want to use <kbd>monitor_interface</kbd>, which is the interface name in Linux, as they will probably be the same across all <kbd>mons</kbd>. Otherwise if you specify <kbd>monitor_address</kbd> in <kbd>host_vars</kbd>, you can specify the IP of the interface, which obviously will be different across your three or more <kbd>mons</kbd>:</p>
+<pre><strong>#ceph_conf_overrides: {} </strong> </pre>
+<p>Not every Ceph variable is directly managed by Ansible, but the preceding variable is provided to allow you to pass any extra variables through to the <kbd>ceph.conf</kbd> file and its corresponding sections. An example of how this would look follows (notice the indentation):</p>
+<pre><strong>    ceph_conf_overrides:
+      global:
+        variable1: value
+      mon:
+        variable2: value
+      osd:
+        variable3: value  </strong></pre>
+<p>Key variables from the OSD variable file are as follows:</p>
+<pre><strong>    #copy_admin_key: false  </strong></pre>
+<p>If you want to be able to manage your cluster from your OSD nodes instead of just your monitors, set this to <kbd>true</kbd>, which will copy the admin key to your OSD nodes:</p>
+<pre><strong> #devices: []</strong><br/><strong> #osd_auto_discovery: false</strong><br/><strong> #journal_collocation: false</strong><br/><strong> #raw_multi_journal: false</strong><br/><strong> #raw_journal_devices: []  </strong></pre>
+<p>These are probably the most crucial set of variables in the entire configuration of Ansible. They control what disks get used as OSDs and how journals are placed. You can either manually specify the devices that you wish to use as OSDs or you can use auto discovery. The examples in this book use static device configuration.</p>
+<p>The <kbd>journal_collocation</kbd> variable sets whether you want to store the journal on the same disk as the OSD data; a separate partition will be created for it.</p>
+<p><kbd>raw_journal_devices</kbd> allows you to specify the devices you wish to use for journals. Quite often, a single SSD will be a journal for several OSDs; in this case, enable <kbd>raw_multi_journal</kbd> and simply specify the journal device multiple times; no partition numbers are needed if you want Ansible to instruct ceph-disk to create them for you.</p>
+<p>These are the main variables that you should need to consider; it is recommended you read the comments in the variable files to see if there are any others you may need to modify for your environment.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Deploying a test cluster with Ansible</h1>
+                </header>
+            
+            <article>
+                
+<p>There are several examples on the internet that contain a fully configured <kbd>Vagrantfile</kbd> and associated Ansible playbooks; this allows you to bring up a fully functional Ceph environment with just one command. As handy as this may be, it doesn't help you learn how to correctly configure and use the Ceph Ansible modules as you would if you were deploying a Ceph cluster on real hardware in a production environment. As such, this book will guide you through configuring Ansible from the start, even though it's running on Vagrant provisioned servers. Its important to note that, like Ceph itself, Ansible playbooks are constantly changing and therefore it is recommended that you review the <kbd>ceph-ansible</kbd> documentation for any breaking changes.</p>
+<p>At this point, your Vagrant environment should be up-and-running and Ansible should be able to connect to all six of your Ceph servers. You should also have a cloned copy of the Ceph Ansible module.</p>
+<p>Create a file called <kbd>/etc/ansible/group_vars/ceph</kbd>:</p>
+<pre><strong>ceph_origin: 'repository'</strong><br/><strong>ceph_repository: 'community'</strong><br/><strong><span>ceph_mirror: http://download.ceph.com</span></strong><br/><strong>ceph_stable: true # use ceph stable branch</strong><br/><strong>ceph_stable_key: https://download.ceph.com/keys/release.asc</strong><br/><strong>ceph_stable_release: mimic # ceph stable release</strong><br/><strong><span>ceph_stable_repo: "{{ ceph_mirror }}/debian-{{ ceph_stable_release }}"</span></strong><br/><strong>monitor_interface: enp0s8 #Check ifconfig</strong><br/><strong>public_network: 192.168.0.0/24</strong></pre>
+<p>Create a file called <kbd>/etc/ansible/group_vars/osds</kbd>:</p>
+<pre><strong>osd_scenario: lvm</strong><br/><strong>lvm_volumes:</strong><br/><strong>- data: /dev/sdb</strong></pre>
+<p>Create a <kbd>fetch</kbd> folder and change the owner to the <kbd>vagrant</kbd> user:</p>
+<pre><strong>sudo mkdir /etc/ansible/fetch</strong><br/><strong>sudo chown vagrant /etc/ansible/fetch</strong></pre>
+<p>Run the Ceph cluster deployment playbook:</p>
+<pre><strong>cd /etc/ansible</strong><br/><strong>sudo mv site.yml.sample site.yml</strong><br/><strong>ansible-playbook -K site.yml</strong></pre>
+<p>The <kbd>K</kbd> parameter tells Ansible that it should ask you for the <kbd>sudo</kbd> password. Now sit back and watch Ansible deploy your cluster:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/52d49e38-7c73-4c1a-8279-65c86ad8e5a7.png" style="width:62.50em;height:11.33em;"/></p>
+<p>Once this is completed, and assuming Ansible completed without errors, <kbd>ssh</kbd> into <kbd>mon1</kbd> and run:</p>
+<pre><strong>vagrant@mon1:~$ sudo ceph -s</strong></pre>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/8615022f-765a-40ee-a30e-d0723f545988.png" style="width:26.42em;height:17.17em;"/></p>
+<p>And that concludes the deployment of a fully functional Ceph cluster via Ansible.</p>
+<p>If you want to be able to stop the Vagrant Ceph cluster without losing your work so far, you can run the following command:</p>
+<pre><strong>vagrant suspend</strong></pre>
+<p>To pause all the VM's in their current state, run the following:</p>
+<pre><strong>vagrant resume</strong></pre>
+<p>This will power on the VMs; they'll resume running at the state you left them in.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Change and configuration management</h1>
+                </header>
+            
+            <article>
+                
+<p>If you deploy your infrastructure with an orchestration tool such as Ansible, managing Ansible playbooks becomes important. As we have seen, Ansible allows you to rapidly deploy both the initial Ceph cluster and also configuration updates further down the line. It must be appreciated that this power can also have devastating effects if incorrect configurations or operations are deployed. By implementing some form of configuration management, Ceph administrators will be able to see <span>clearly</span><span> </span><span>what changes have been made to the Ansible playbooks before running them.</span></p>
+<p>A recommended approach would be to store your Ceph Ansible configuration in a Git repository; this will allow you to track changes and implement some form of change control either by monitoring Git commits or by forcing people to submit merge requests into the master branch.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Ceph in containers</h1>
+                </header>
+            
+            <article>
+                
+<p>We have seen previously that by using orchestration tools such as Ansible we can reduce the <span>work</span><span> </span><span>required to deploy, manage, and maintain a Ceph cluster. We have also seen how these tools can help you discover available hardware resources and deploy Ceph to them.</span></p>
+<p>However, using Ansible to configure bare-metal servers still results in a very static deployment, possibly not best suited for today's more dynamic workloads. Designing Ansible playbooks also needs to take into account several different Linux distributions and also any changes that may occur between different releases; systemd is a great example of this. Furthermore, a lot of development in orchestration tools needs to be customized to handle discovering, deploying, and managing Ceph. This is a common theme that the Ceph developers have thought about; with the use of Linux containers and their associated orchestration platforms, they hope to improve Ceph's deployment experience.</p>
+<p>One such approach, which has been selected as the preferred option, is to join forces with a project called Rook. Rook works with the container management platform Kubernetes to automate the deployment, configuration, and consumption of Ceph storage. If you were to draw up a list of requirements and features which a custom Ceph orchestration and management framework would need to implement, you would likely design something which functions in a similar fashion to Kubernetes. So it makes sense to build functionality on top of the well-established Kubernetes project, and Rook does exactly that.</p>
+<p>One major benefit of running Ceph in containers is that is allows collocation of services on the same hardware. Traditionally in Ceph clusters it was expected that Ceph monitors would run on dedicated hardware; when utilizing containers this requirement is removed. For smaller clusters, this can amount to a large saving in the cost of running and purchasing servers. If resources permit, other container-based workloads could also be allowed to run across the Ceph hardware, further increasing the Return on Investment for the hardware purchase. The use of Docker containers reserves the required hardware resources so that workloads cannot impact each other.</p>
+<p>To better understand how these two technologies work with Ceph, we first need to cover Kubernetes in more detail and actual containers themselves.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Containers</h1>
+                </header>
+            
+            <article>
+                
+<p>Although containers in their current form are a relatively new technology, the principle of isolating sets of processes from each other has been around for a long time. What the current set of technologies enhances is the completeness of the isolation. Previous technologies maybe only isolated parts of the filesystem, whereas the latest container technologies also isolate several areas of the operating system and can also provide quotas for hardware resources. One technology in particular, Docker, has risen to become the most popular technology when talking about containers, so much so that the two words are often used interchangeably. The word <strong>container</strong> describes a technology that performs operating system-level virtualization. Docker is a software product that controls primarily Linux features such as groups and namespaces to isolate sets of Linux processes.</p>
+<p>It's important to note that, unlike full-blown virtualization solutions such as VMWare, Hyper-V, and KVM, which provides virtualized hardware and require a separate OS instance, containers utilize the operating system of the host. The full OS requirements of virtual machines may lead to several 10s of GB of storage being wasted on the operating system installation and potentially several GB of RAM as well. Containers typically consume overheads of storage and RAM measured in MB, meaning that a lot more containers can be squeezed onto the same hardware when compared to full virtualization technologies.</p>
+<p>Containers are also much easier to orchestrate as they are completely configurable from the host system; this, when combined with their ability to be started in milliseconds, means that they are very well suited to dynamically changing environments. Particularly in DevOps environments, they are becoming extremely popular where the line between infrastructure and application is starting to become blurred. The management of infrastructure, which tends to operate at a slower pace than application development, means that in an Agile development environment the infrastructure team is often always playing catch-up. With DevOps and containers, the infrastructure team can concentrate on providing a solid base and the developers can ship their application combined with the OS and middleware required to run.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Kubernetes</h1>
+                </header>
+            
+            <article>
+                
+<p>The ability to quickly and efficiently spin up 10's of containers in seconds soon makes you realize that. if VM sprawl was bad enough, with containers the problem can easily get a whole lot worse. With the arrival of Docker in the modern IT infrastructure, a need to manage all these containers arose. Enter Kubernetes.</p>
+<p>Although several container orchestration technologies are available, Kubernetes has enjoyed wide-ranging success and, as it is the product on which Rook is built, this book will focus on it.</p>
+<p>Kubernetes is an open source container-orchestration system for automating the deployment, scaling, and management of containerized applications. It was originally developed at Google to run their internal systems but has since been open sourced and seen its popularity flourish.</p>
+<p>Although this chapter will cover deploying an extremely simple Kubernetes cluster to deploy a Ceph cluster with Rook, it is not meant to be a full tutorial and readers are encouraged to seek other resources in order to learn more about Kubernetes.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Deploying a Ceph cluster with Rook</h1>
+                </header>
+            
+            <article>
+                
+<p>To deploy a Ceph cluster with Rook and Kubernetes, Vagrant will be used to create three VMs that will run the Kubernetes cluster.</p>
+<p>The first task you'll complete is the deployment of three VMs via Vagrant. If you have followed the steps at that start of this chapter and used Vagrant to build an environment for Ansible, then you should have everything you require to deploy VMs for the Kubernetes cluster.</p>
+<p>The following is the <kbd>Vagrantfile</kbd> to bring up three VMs; as before, place the contents into a file called <kbd>Vagrantfile</kbd> in a new directory and then run <kbd>vagrant up</kbd>:</p>
+<pre>nodes = [<br/>  { :hostname =&gt; 'kube1',  :ip =&gt; '192.168.0.51', :box =&gt; 'xenial64', :ram =&gt; 2048, :osd =&gt; 'yes' },<br/>  { :hostname =&gt; 'kube2',  :ip =&gt; '192.168.0.52', :box =&gt; 'xenial64', :ram =&gt; 2048, :osd =&gt; 'yes' },<br/>  { :hostname =&gt; 'kube3',  :ip =&gt; '192.168.0.53', :box =&gt; 'xenial64', :ram =&gt; 2048, :osd =&gt; 'yes' }<br/>]<br/><br/><br/>Vagrant.configure("2") do |config|<br/>  nodes.each do |node|<br/>    config.vm.define node[:hostname] do |nodeconfig|<br/>      nodeconfig.vm.box = "bento/ubuntu-16.04"<br/>      nodeconfig.vm.hostname = node[:hostname]<br/>      nodeconfig.vm.network :private_network, ip: node[:ip]<br/><br/><br/>      memory = node[:ram] ? node[:ram] : 4096;<br/>      nodeconfig.vm.provider :virtualbox do |vb|<br/>        vb.customize [<br/>          "modifyvm", :id,<br/>          "--memory", memory.to_s,<br/>        ]<br/>        if node[:osd] == "yes"        <br/>          vb.customize [ "createhd", "--filename", "disk_osd-#{node[:hostname]}", "--size", "10000" ]<br/>          vb.customize [ "storageattach", :id, "--storagectl", "SATA Controller", "--port", 3, "--device", 0, "--type", "hdd", "--medium", "disk_osd-#{node[:hostname]}.vdi" ]<br/>        end<br/>      end<br/>    end<br/>    config.hostmanager.enabled = true<br/>    config.hostmanager.manage_guest = true<br/>  end<br/>end</pre>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/59b45113-acd5-4b83-a72c-88c34f0ef2d7.png" style="width:43.92em;height:21.42em;"/></p>
+<p><span>SSH in to the first VM, <kbd>Kube1</kbd>:</span></p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/8b60c47d-783d-4180-bcc7-4090fc1c9afb.png" style="width:37.08em;height:14.08em;"/></p>
+<p>Update the kernel to a newer version; this is required for certain Ceph features in Rook to function correctly:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/5edf43c2-a86e-4ca5-8aa7-4bc2290cbbd0.png" style="width:64.83em;height:21.50em;"/></p>
+<p>Install Docker, as follows:</p>
+<pre><strong>sudo apt-get install docker.io</strong></pre>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/f166db31-a380-4785-aaf3-72f5888d7391.png" style="width:39.42em;height:15.67em;"/></p>
+<p>Enable and start the Docker service<span>, as follows</span>:</p>
+<pre><strong>sudo systemctl start docker</strong><br/><strong>sudo systemctl enable docker</strong></pre>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/5db6f822-1bfa-499a-9f04-c629487902a0.png" style="width:56.75em;height:6.83em;"/></p>
+<p>Disable swap for future boots by editing <kbd>/etc/fstab</kbd> and commenting out the swap line:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/3f56c9af-52e2-44f9-9b1f-976c8362ffd0.png" style="width:56.50em;height:15.75em;"/></p>
+<p>And also disable swap now<span>, as follows</span>:</p>
+<pre><strong>sudo swapoff -a</strong></pre>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/b14483a2-93dd-4c74-8fe5-7b2058b92481.png" style="width:21.92em;height:3.58em;"/></p>
+<p>Add the Kubernetes repository<span>, as follows</span>:</p>
+<pre><strong>sudo add-apt-repository “deb http://apt.kubernetes.io/ kubernetes-xenial main”</strong></pre>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/b7017f9c-bfd1-4a91-a072-20c8f598dca9.png"/></p>
+<p>Add the Kubernetes GPG key<span>, as follows</span>:</p>
+<pre><strong>sudo curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add</strong></pre>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/9f1e1e1e-d49d-4a24-88c9-4f2bae8a111d.png" style="width:66.58em;height:5.08em;"/></p>
+<p>Install Kubernetes<span>, as follows</span>:</p>
+<pre><strong>sudo apt-get update &amp;&amp; sudo apt-get install -y kubeadm kubelet kubectl</strong></pre>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/59bbee82-521a-4acb-a932-209b54c4012c.png" style="width:56.75em;height:23.42em;"/></p>
+<p>Repeat the installation steps for Docker and Kubernetes on both the <kbd>kube2</kbd> and <kbd>kube3</kbd> VMs.</p>
+<p>Once all the VMs have a working copy of Docker and Kubernetes, we can now initialize the Kubernetes cluster:</p>
+<pre><strong>sudo kubeadm init --apiserver-advertise-address=192.168.0.51 --pod-network-cidr=10.1.0.0/16 <span>--ignore-preflight-errors=NumCPU</span></strong></pre>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/4011cf71-ac86-43c5-91d9-49698abcd82a.png" style="width:66.25em;height:8.58em;"/></p>
+<p>At the end of the process, a command string is output; make a note of this as it is needed to join our additional nodes to the cluster. An example of this is as follows:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/d462c64b-b453-43e4-aada-b5f72764ceef.png" style="width:173.75em;height:11.00em;"/></p>
+<p>Now that we have installed Docker and Kubernetes on all our nodes and have initialized the master, let's add the remaining two nodes into the cluster. Remember that string of text you were asked to note down? Now we can run it on the two remaining nodes:</p>
+<pre><strong>sudo kubeadm join 192.168.0.51:6443 --token c68o8u.92pvgestk26za6md --discovery-token-ca-cert-hash sha256:3954fad0089dcf72d0d828b440888b6e97465f783bde403868f098af67e8f073</strong></pre>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/45f7274d-3629-4955-8fd3-a76da38d88d9.png" style="width:77.58em;height:29.67em;"/></p>
+<pre><strong>mkdir -p $HOME/.kube</strong><br/><strong>sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config</strong><br/><strong>sudo chown $(id -u):$(id -g) $HOME/.kube/config</strong></pre>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/ba167f19-0e66-41ba-bd9f-bbcbb2f67e22.png" style="width:24.83em;height:6.58em;"/></p>
+<p>We can now install some additional container networking support. Flannel, a simple networking add-on for Kubernetes, uses VXLAN as an overlay to enable container-to-container networking. First download the <kbd>yaml</kbd> file from GitHub:</p>
+<pre><strong>wget https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml</strong></pre>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/a5fb2c92-1a01-4390-afa7-e7e6eef19c79.png"/></p>
+<p>Before we install the Flannel networking component, we need to make a few changes to the <kbd>YAML</kbd> spec file:</p>
+<pre><strong>nano kube-flannel.yml</strong></pre>
+<div class="packt_tip">Don't indent with tabs, use spaces.</div>
+<p>We need to find the following lines and make the required changes, as follows:</p>
+<ul>
+<li>Line 76: <kbd>"Network": "10.1.0.0/16"</kbd>:</li>
+</ul>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/5cd9200d-2e46-4ac2-adc7-b18489214402.png" style="width:18.42em;height:10.25em;"/></p>
+<ul>
+<li>Line 126: <kbd>- --iface=eth1</kbd>:</li>
+</ul>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/eeae51a7-63e3-4e26-9a6f-106802fd377b.png" style="width:26.42em;height:12.42em;"/></p>
+<p>Now we can issue the relevant Kubernetes command to apply the specification file and install Flannel networking:</p>
+<pre><strong>kubectl apply -f kube-flannel.yml</strong></pre>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/e0e3136a-ddf5-4621-843a-3ff3474cd2ec.png" style="width:30.67em;height:10.58em;"/></p>
+<p>After networking has been installed, we can confirm everything is working and that our Kubernetes worker nodes are ready to run workloads:</p>
+<pre><strong>$ kubectl get nodes</strong></pre>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/988ac417-c9ca-47ee-b5b8-390b807b4f78.png" style="width:29.75em;height:6.50em;"/></p>
+<p>Now let's also check that all containers that support internal Kubernetes services are running:</p>
+<pre><strong>$ kubectl get pods --all-namespaces –o wide</strong></pre>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/dfe36616-5a15-45ba-ab82-1d4aec8ecbd0.png" style="width:61.58em;height:15.17em;"/></p>
+<p>Note that <span>the container networking service (Flannel) that we installed in the previous step has </span><span>automatically been deployed</span> <span> across all three nodes. At this point, we have a fully functioning Kubernetes cluster that is ready to run whatever containers we wish to run on it.</span></p>
+<p>We can now deploy Rook into the Kubernetes cluster. First, let's clone the Rook project from GitHub:</p>
+<pre><strong>$ git clone https://github.com/rook/rook.git</strong></pre>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/273847d6-4b95-4851-bbb4-15034b9dc481.png" style="width:36.75em;height:9.92em;"/></p>
+<p>Change to the <kbd>examples</kbd> directory, as follows:</p>
+<pre><strong>$ cd rook/cluster/examples/kubernetes/ceph/</strong></pre>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/2c75952e-012a-47b1-83ba-df86c60bfd12.png" style="width:30.42em;height:2.50em;"/></p>
+<p>And now finally create the Rook-powered Ceph cluster by running the following two commands:</p>
+<pre><strong>$ kubectl create -f operator.yaml</strong></pre>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/7d0417fd-0ef8-41cd-8b51-634521f47ea1.png" style="width:42.50em;height:13.92em;"/></p>
+<pre><strong>$ kubectl create -f cluster.yaml</strong></pre>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/4a40c789-6611-4a70-ba20-d01085686be0.png" style="width:45.67em;height:8.08em;"/></p>
+<p>To confirm our Rook cluster is now working, let's check the running containers under the Rook namespace:</p>
+<pre><strong>$ kubectl get pods --all-namespaces -o wide</strong></pre>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/33fa2330-3efa-4b78-b420-fa0125fcc989.png"/></p>
+<p>You will see that Rook has deployed a couple of <kbd>mons</kbd> and has also started some discover containers. These discover containers run a discovery script to locate storage devices attached to the Kubernetes physical host. Once the discovery process has completed for the first time, Kubernetes will then run a one-shot container to prepare the OSD by formatting the disk and adding the OSD into the cluster. If you wait a few minutes and re-run the <kbd>get pods</kbd> command, you should hopefully see that Rook has detected the two disks connected to <kbd>kube2</kbd> and <kbd>kube3</kbd> and created <kbd>osd</kbd> containers for them:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/13c8d2e1-72f3-4dd0-a6d8-a8fc8be85ad2.png"/></p>
+<p>To interact with the cluster, let's deploy the toolbox container; this is a simple container containing the Ceph installation and the necessary cluster keys:</p>
+<pre><strong>$ kubectl create -f toolbox.yaml</strong></pre>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/04652c84-6c80-4481-a54a-ba8745af9028.png"/></p>
+<p>Now execute <kbd>bash</kbd> in the toolbox container:</p>
+<pre><strong>kubectl -n rook-ceph exec -it $(kubectl -n rook-ceph get pod -l "app=rook-ceph-tools" -o jsonpath='{.items[0].metadata.name}') bash</strong></pre>
+<p>This will present you with a root shell running inside the Ceph toolbox container, where we can check the status of the Ceph cluster by running <kbd>ceph –s</kbd> and see the current OSDs with <kbd>ceph osd tree</kbd>:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/79cffe21-64bb-4642-a441-7a739d0c8e08.png" style="width:31.50em;height:25.92em;"/></p>
+<p>You will notice that, although we built three VMs, Rook has only deployed OSDs on <kbd>kube2</kbd> and <kbd>kube3</kbd>. This is because by default Kubernetes will not schedule containers to run on the master node; in a production cluster this is the desired behavior, but for testing we can remove this limitation.</p>
+<p>Exit back to the master Kubernetes node and run the following:</p>
+<pre><strong>kubectl taint nodes $(hostname) node-role.kubernetes.io/master:NoSchedule-</strong></pre>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/0ed75efe-b23f-4e1e-9499-02ac2a7ce963.png"/></p>
+<p>You will notice that Kubernetes will deploy a couple of new containers onto <kbd>kube1</kbd>, but it won't deploy any new OSDs; this is due to a current limitation to the effect that the <kbd>rook-ceph-operator</kbd> component only deploys new OSDs on first startup. In order to detect newly available disks and prepare them as OSDs, the <kbd>rook-ceph-operator</kbd> container needs to be deleted.</p>
+<p>Run the following command, but replace the container name with the one that is listed from the <kbd>get pods</kbd> command:</p>
+<pre><strong>kubectl -n rook-ceph-system delete pods rook-ceph-operator-7dd46f4549-68tnk</strong></pre>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/26d6e5b1-6938-47d4-a7e3-50e80e3cfd9e.png"/></p>
+<p>Kubernetes will now automatically spin up a new <kbd>rook-ceph-operator</kbd> container and in doing so will kick-start the deployment of the new <kbd>osd</kbd>; this can be confirmed by looking at the list of running containers again:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/f7eeb3cb-07bc-4736-a8e7-430888406359.png"/></p>
+<p>You can see <kbd>kube1</kbd> has run a <kbd>rook-discover</kbd> container, a <kbd>rook-ceph-osd-prepare</kbd>, and finally a <kbd>rook-ceph-osd</kbd> container, which in this case is <kbd>osd</kbd> number <kbd>2</kbd>.</p>
+<p>We can also check, by using our toolbox container as well, that the new <kbd>osd</kbd> has joined the cluster successfully:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/bedb6265-2abc-4c9b-9d25-892d01eee246.png" style="width:24.67em;height:16.33em;"/></p>
+<p>Now that Rook has deployed our full test Ceph cluster, we need to make use of it and create some RADOS pools and also consume some storage with a client container. To demonstrate this process, we will deploy a CephFS filesystem.</p>
+<p>Before we jump straight into deploying the filesystem, let's first have a look at the example <kbd>yaml</kbd> file we will be deploying. Make sure you are still in the <kbd>~/rook/cluster/examples/kubernetes/ceph</kbd> directory and use a text editor to view the <kbd>filesystem.yaml</kbd> file:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/b4371fe2-f5db-4e22-aa93-c9256587b5df.png" style="width:38.83em;height:21.42em;"/></p>
+<p>You can see that the file contents describe the RADOS pools that will be created and the MDS instances that are required for the filesystem. In this example, three pools will be deployed, two replicated and one erasure-coded for the actual data. Two MDS servers will be deployed, one running as active and the other running as a standby-replay.</p>
+<p>Exit the text editor and now deploy the CephFS configuration in the <kbd>yaml</kbd> file:</p>
+<pre><strong>$ kubectl create -f filesystem.yaml</strong></pre>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/fbb6d097-f8a4-498b-941a-4ba3b797b496.png"/></p>
+<p>Now let's jump back into our toolbox container, check the status, and see what's been created:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/7078fbe6-a088-41a8-8608-b5550f73d735.png" style="width:28.00em;height:17.08em;"/></p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/4a9d97df-9ee0-44a8-8e1f-7343260e19f5.png" style="width:18.17em;height:3.00em;"/></p>
+<p>We can see that two pools have been created, one for the CephFS metadata and one for the actual data stored on the CephFS filesystem.</p>
+<p>To give an example of how Rook can then be consumed by application containers, we will now deploy a small <span>NGINX </span>web server container that stores its HTML content on the CephFS filesystem.</p>
+<p>Place the following inside a file called <kbd>nginx.yaml</kbd>:</p>
+<pre>apiVersion: v1<br/>kind: Pod<br/>metadata:<br/> name: nginx<br/>spec:<br/> containers:<br/> - name: nginx<br/> image: nginx:1.7.9<br/> ports:<br/> - containerPort: 80<br/> volumeMounts:<br/> - name: www<br/> mountPath: /usr/share/nginx/html<br/> volumes:<br/> - name: www<br/> flexVolume:<br/> driver: ceph.rook.io/rook<br/> fsType: ceph<br/> options:<br/> fsName: myfs<br/> clusterNamespace: rook-ceph</pre>
+<p>And now use the <kbd>kubectl</kbd> command to create the <kbd><span>pod/</span>nginx</kbd>:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/77c41c5a-2fe6-4930-8bf0-736b9b01b8e8.png" style="width:23.92em;height:2.92em;"/></p>
+<p>After a while, the container will be started and will enter a running state; use the <kbd>get pods</kbd> command to verify this:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/79b79484-adba-4a97-9793-58e32fd4c3b0.png" style="width:76.83em;height:4.83em;"/></p>
+<p>We can now start a quick Bash shell on this container to confirm the CephFS mount has worked:</p>
+<pre><strong>$ kubectl exec -it nginx bash</strong></pre>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/ef51b95e-65d1-41ab-815b-4aa31ba2c286.png" style="width:75.58em;height:23.92em;"/></p>
+<p>We can see that the CephFS filesystem has been mounted into <kbd>/usr/share/nginx/html</kbd>. This has been done without having to install any Ceph components in the container and without any configuration or copying of key rings. Rook has taken care of all of this behind the scenes; once this is understood and appreciated, the real power of Rook can be seen. If the simple <span>NGINX </span>pod example is expanded to become an auto-scaling service that spins up multiple containers based on load, the flexibility given by Rook and Ceph to automatically present the same shared storage across the web farm with no additional configuration is very useful.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Summary</h1>
+                </header>
+            
+            <article>
+                
+<p>In this chapter, you learned about Ceph's various deployment methods and the differences between them. You will now also have a basic understanding of how Ansible works and how to deploy a Ceph cluster with it. It would be advisable at this point to continue investigating and practicing the deployment and configuration of Ceph with Ansible, so that you are confident enough to use it in production environments. The remainder of this book will also assume that you have fully understood the contents of this chapter in order to manipulate the configuration of Ceph.</p>
+<p>You have also learned about the exciting new developments in deploying Ceph in containers running on the Kubernetes platform. Although the Rook project is still in the early stages of development, it is clear it is already a very powerful tool that will enable Ceph to function to the best of its ability while at the same time simplifying the deployment and administration required. With the continued success enjoyed by Kubernetes in becoming the recommended container management platform, integrating Ceph with the use of Rook will result in a perfect match of technologies.</p>
+<p>It is highly recommended that the reader should continue to learn further about Kubernetes as this chapter has only scratched the surface of the functionality it offers. There are strong signs across the industry that containerization is going to be the technology for deploying and managing applications and having an understanding of both Kubernetes and how Ceph integrates with Rook is highly recommended.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Questions</h1>
+                </header>
+            
+            <article>
+                
+<ol>
+<li>What piece of software can be used to rapidly deploy test environments?</li>
+<li>Should vagrant be used to deploy production environments?</li>
+<li>What project enables the deployment of Ceph on top of Kubernetes?</li>
+<li>What is Docker?</li>
+<li>What is the Ansible file called which is used to run a series of commands?</li>
+</ol>
+
+
+            </article>
+
+            
+        </section>
+    </body></html>

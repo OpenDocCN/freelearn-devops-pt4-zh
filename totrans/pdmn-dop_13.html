@@ -1,0 +1,426 @@
+<html><head></head><body>
+		<div id="_idContainer045">
+			<h1 id="_idParaDest-193"><em class="italic"><a id="_idTextAnchor193"/>Chapter 10</em>: Troubleshooting and Monitoring Containers</h1>
+			<p>Running a container could be mistaken as the ultimate goal for a DevOps team, but instead, this is only the first step of a long journey. System administrators should ensure that their systems are working properly to keep the services up and running; in the same way, the DevOps team should ensure that their containers are working properly.</p>
+			<p>In container management activities, having the right knowledge of troubleshooting techniques could really help minimize any impact on the final services, reducing downtime. Talking of issues and troubleshooting, a good practice is to keep monitoring containers to easily intercept any issues or errors to speed up recovery.</p>
+			<p>In this chapter, we're going to cover the following main topics:</p>
+			<ul>
+				<li>Troubleshooting running containers</li>
+				<li>Monitoring containers with health checks</li>
+				<li>Inspecting our container build results</li>
+				<li>Advanced troubleshooting with <strong class="source-inline">nsenter</strong></li>
+			</ul>
+			<h1 id="_idParaDest-194"><a id="_idTextAnchor194"/>Technical requirements</h1>
+			<p>Before proceeding with the chapter information and examples, a machine with a working Podman installation is required. As stated in <a href="B17908_03_epub.xhtml#_idTextAnchor068"><em class="italic">Chapter 3</em></a>, <em class="italic">Running the First Container</em>, all the examples in the book are executed on a Fedora 34 system or later, but can be reproduced on your OS of choice.</p>
+			<p>A good understanding of the topics covered in <a href="B17908_04_epub.xhtml#_idTextAnchor083"><em class="italic">Chapter 4</em></a>, <em class="italic">Managing Running Containers</em>, and <a href="B17908_05_epub.xhtml#_idTextAnchor101"><em class="italic">Chapter 5</em></a>, <em class="italic">Implementing Storage for the Container's Data</em>, will be useful to easily grasp concepts relating to container registries.</p>
+			<h1 id="_idParaDest-195"><a id="_idTextAnchor195"/>Troubleshooting running containers</h1>
+			<p>Troubleshooting containers is<a id="_idIndexMarker910"/> an important practice that we need experience with to solve common issues and investigate any bugs we may encounter on the container layer or in the application running inside our containers.</p>
+			<p>Starting from <a href="B17908_03_epub.xhtml#_idTextAnchor068"><em class="italic">Chapter 3</em></a>, <em class="italic">Running the First Container</em>, we started working with basic Podman commands for running and then inspecting containers on our host system. We saw how we can collect logs with the <strong class="source-inline">podman logs</strong> command, and we also learned how to use the information provided by the <strong class="source-inline">podman inspect</strong> command. Finally, we should also consider<a id="_idIndexMarker911"/> taking a look at the output of the useful <strong class="source-inline">podman system df</strong> command, which will report storage usage for our containers and images, and also the useful <strong class="source-inline">podman system info</strong> command, which will show useful information on the host where we are running Podman.</p>
+			<p>In general, we should always consider that the running container is just a process on the host system so we always have available all the tools and commands for troubleshooting the underlying OS and its available resources.</p>
+			<p>A best practice for troubleshooting containers could be a top-down approach, analyzing the application layer first, then moving to the container layer, down finally to the base host system.</p>
+			<p>At the container level, many of the issues that we may encounter have been summarized by the Podman project team in a comprehensive list on the project page. We will cover some of the more useful ones in the following sections.</p>
+			<h2 id="_idParaDest-196"><a id="_idTextAnchor196"/>Permission denied while using storage volumes</h2>
+			<p>A very common issue that <a id="_idIndexMarker912"/>we may encounter during our activities on RHEL, Fedora, or any Linux distribution that uses the SELinux security subsystem is related to storage permission. The error described as follows is triggered when SELinux is set to <strong class="source-inline">Enforcing</strong> mode, which is also the suggested approach to fully guarantee the mandatory access security features of SELinux.</p>
+			<p>We can try to test this on our Fedora workstation, first creating a directory and then trying to use this as a volume in our container:</p>
+			<p class="source-code">$ mkdir ~/mycontent</p>
+			<p class="source-code">$ podman run -v ~/mycontent:/content fedora \ </p>
+			<p class="source-code">touch /content/file</p>
+			<p class="source-code">touch: cannot touch '/content/file': Permission denied</p>
+			<p>As we can see, the <strong class="source-inline">touch</strong> command reports a <strong class="source-inline">Permission denied</strong> error, because actually, it cannot write in the filesystem.</p>
+			<p>As we saw in detail in <a href="B17908_05_epub.xhtml#_idTextAnchor101"><em class="italic">Chapter 5</em></a>, <em class="italic">Implementing Storage for the Container's Data</em>, SELinux recursively applies labels to files and directories to define their context. Those labels are usually stored as<a id="_idIndexMarker913"/> extended filesystem attributes. SELinux uses contexts to manage policies and define which processes can access a specific resource.</p>
+			<p>The container we just ran got its own Linux namespace and an SELinux label that is completely different from the local user in the Fedora workstation, which is why we actually got that error before.</p>
+			<p>Without a proper label, the SELinux system prevents the processes running in the container from accessing the content. This is also because Podman does not change the labels set by the OS if not explicitly requested through a command option.</p>
+			<p>To let Podman change the label for a container, we can use either of two suffixes, <strong class="source-inline">:z</strong> or <strong class="source-inline">:Z</strong>, for the volume mount. These options tell Podman to relabel file objects on the volume.</p>
+			<p>The <strong class="source-inline">:z</strong> option is used to instruct Podman that two containers share a storage volume. So, in this case, Podman will label the content with a shared content label that will allow two or more containers to read/write content on that volume.</p>
+			<p>The <strong class="source-inline">:Z</strong> option is used to instruct Podman to label the volume's content with a private unshared label that can only be used by the current container.</p>
+			<p>The command would result in something like this:</p>
+			<p class="source-code">$ podman run -v ~/mycontent:/content:Z fedora \ </p>
+			<p class="source-code">touch /content/file</p>
+			<p>As we can see, the command didn't report any error; it worked.</p>
+			<h2 id="_idParaDest-197"><a id="_idTextAnchor197"/>Issues with the ping command in rootless containers </h2>
+			<p>On some hardened Linux systems, the <strong class="source-inline">ping</strong> command execution could be limited to only a restricted group of users. This could <a id="_idIndexMarker914"/>cause the failure of the <strong class="source-inline">ping</strong> command used in a container. </p>
+			<p>As we saw in <a href="B17908_03_epub.xhtml#_idTextAnchor068"><em class="italic">Chapter 3</em></a>, <em class="italic">Running the First Container</em>, when starting the container, the base OS will associate with it a different user ID from the one used in the container itself. The user ID associated to the container could fall outside the allowed range of user's IDs enabled to use the <strong class="source-inline">ping</strong> command.</p>
+			<p>In a Fedora workstation installation, the default configuration will allow any container to run the <strong class="source-inline">ping</strong> command without issues. To manage restrictions on the usage of the <strong class="source-inline">ping</strong> command, Fedora uses the <strong class="source-inline">ping_group_range</strong> kernel parameter, which defines the allowed system groups that can execute the <strong class="source-inline">ping</strong> command. </p>
+			<p>If we take a look at a just-installed Fedora workstation, the default range is the following one:</p>
+			<p class="source-code">$ cat /proc/sys/net/ipv4/ping_group_range</p>
+			<p class="source-code">0      2147483647</p>
+			<p>So, nothing to worry about for a brand-new Fedora system. But what about if the range is smaller than this one? </p>
+			<p>Well, we test this behavior by changing the allowed range with a simple command. In this example, we are going to restrict the range and see that the <strong class="source-inline">ping</strong> command will actually fail then:</p>
+			<p class="source-code">$ sudo sysctl -w "net.ipv4.ping_group_range=0 0"</p>
+			<p>Just in case the range is smaller than the one reported in the previous output, we can make it persistent by adding a file to <strong class="source-inline">/etc/sysctl.d</strong> that contains <strong class="source-inline">net.ipv4.ping_group_range=0 0</strong>.</p>
+			<p>The applied change in the <strong class="source-inline">ping</strong> group range will impact the mapped user privileges to run the <strong class="source-inline">ping</strong> command inside the container.</p>
+			<p>Let's start by building a Fedora-based image with the <strong class="source-inline">iputils</strong> package (not included by default) using Buildah:</p>
+			<p class="source-code">$ container=$(buildah from docker.io/library/fedora) &amp;&amp; \</p>
+			<p class="source-code">  buildah run $container -- dnf install -y iputils &amp;&amp; \</p>
+			<p class="source-code">  buildah commit $container ping_example</p>
+			<p>We can test it by running the following command inside a container:</p>
+			<p class="source-code">$ podman run --rm ping_example ping -W10 -c1 redhat.com</p>
+			<p class="source-code">PING redhat.com (209.132.183.105): 56 data bytes</p>
+			<p class="source-code">--- redhat.com ping statistics ---</p>
+			<p class="source-code">1 packets transmitted, 0 packets received, 100% packet loss</p>
+			<p>The command, executed on a system with a restricted range, produces a 100% packet loss since the <strong class="source-inline">ping</strong> command is not able to send packets over a raw socket.</p>
+			<p>The example demonstrates how a restriction in <strong class="source-inline">ping_group_range</strong> impacts the execution of <strong class="source-inline">ping</strong> inside a rootless container. By setting the range to a value large enough to include the user <a id="_idIndexMarker915"/>private group GID (or one of the user's secondary groups), the <strong class="source-inline">ping</strong> command will be able to send ICMP packets correctly.</p>
+			<p class="callout-heading">Important Note</p>
+			<p class="callout">Do not forget to restore the original <strong class="source-inline">ping_group_range</strong> before proceeding with the next examples. On Fedora, the default configuration can be restored with the <strong class="source-inline">sudo sysctl -w "net.ipv4.ping_group_range=0 2147483647"</strong> command and by removing any persistent configuration applied under <strong class="source-inline">/etc/sysctl.d</strong> during the exercise. For a base container image that we are building through a Dockerfile, we may need to add a brand-new user with a large UID/GID. This will create a large, sparse <strong class="source-inline">/var/log/lastlog</strong> file and this can cause the build to hang forever. This issue is related to the Go language, which does not correctly support sparse files, leading to the creation of this huge file in the container image.</p>
+			<p class="callout-heading">Good to Know</p>
+			<p class="callout">The <strong class="source-inline">/var/log/lastlog</strong> file is a binary and sparse file that contains information about the last time that the users logged in to the system. The apparent size of a sparse file reported by <strong class="source-inline">ls -l</strong> is larger than the actual disk usage. A sparse file attempts to use filesystem space in a more efficient way, writing the metadata that represents the empty blocks to disk instead of the empty space that should be stored in the block. This will use less disk space.</p>
+			<p>If we need to add a<a id="_idIndexMarker916"/> brand-new user to our base container image with a high UID number, the best way would be to append the <strong class="source-inline">--no-log-init</strong> option to the Dockerfile command, as shown here:</p>
+			<p class="source-code">RUN useradd --no-log-init -u 99999000 -g users myuser</p>
+			<p>This option instructs the <strong class="source-inline">useradd</strong> command to stop creating the lastlog file, solving the issue we may encounter.</p>
+			<p>As mentioned in the early paragraphs of this section, the Podman team has created a long but non-comprehensive list of common issues. We strongly suggest taking a look at it if any issues are encountered: <a href="https://github.com/containers/podman/blob/main/troubleshooting.md">https://github.com/containers/podman/blob/main/troubleshooting.md</a>.</p>
+			<p>Troubleshooting could be tricky, but the first step is always the identification of an issue. For this reason, a monitoring tool could help in alerting as soon as possible in the case of issues. Let's see how to monitor containers with health checks in the next section.</p>
+			<h1 id="_idParaDest-198"><a id="_idTextAnchor198"/>Monitoring containers with health checks</h1>
+			<p>Starting with version 1.2, Podman supports the option to add a health check to containers. We <a id="_idIndexMarker917"/>will go in depth in this section into these health checks and how to use them.</p>
+			<p>A health check is a Podman feature that can help determine the health or readiness of the process running in a container. It could be as simple as checking that the container's process is running but also more sophisticated, such as verifying that both the container and its applications are responsive using, for example, network connections.</p>
+			<p>A health check is made up of five core components. The first is the main element that will instruct Podman on the particular check to execute; the others are used for configuring the schedule of the health check. Let's see these elements in detail:</p>
+			<ul>
+				<li><strong class="bold">Command</strong>: This is the command that Podman will execute inside the target container. The health of the container and its process will be determined through the wait for either a success (return code <strong class="source-inline">0</strong>) or a failure (with other exit codes).</li>
+			</ul>
+			<p>If our container provides a web server, for example, our health check command could be something really simple, such as a <strong class="source-inline">curl</strong> command that will try to connect to the web server port to make sure it is responsive.</p>
+			<ul>
+				<li><strong class="bold">Retries</strong>: This defines the number of consecutive failed commands that Podman has to execute before the container will be marked as unhealthy. If a command executes successfully, Podman will reset the retry counter.</li>
+				<li><strong class="bold">Interval</strong>: This option defines the interval time within which Podman will run the health check command. </li>
+			</ul>
+			<p>Finding the right interval time could be really difficult and requires some trial and error. If we set it to a small value, then our system may spend a lot of time running the health checks. But if we set it to a large value, we may struggle and catch timeouts. This value can be defined with a widely used time format: <strong class="source-inline">30s</strong> or <strong class="source-inline">1h5m</strong>.</p>
+			<ul>
+				<li><strong class="bold">Start period</strong>: This describes the time after which the health checks will be started by Podman. In this period, Podman will ignore health check failures.</li>
+			</ul>
+			<p>We can consider this as a grace period that should be used to allow our application to successfully be up and start replying correctly to any clients as well as to our health checks.</p>
+			<ul>
+				<li><strong class="bold">Timeout</strong>: This defines the period of time the health check itself must complete before being considered unsuccessful.</li>
+			</ul>
+			<p>Let's take a look at a real example, supposing<a id="_idIndexMarker918"/> we want to define a health check for a container and run that health check manually:</p>
+			<p class="source-code">$ podman run -dt --name healthtest1 --healthcheck-command \</p>
+			<p class="source-code">'CMD-SHELL curl http://localhost || exit 1' \</p>
+			<p class="source-code">--healthcheck-interval=0 quay.io/libpod/alpine_nginx:latest</p>
+			<p class="source-code">Trying to pull quay.io/libpod/alpine_nginx:latest...</p>
+			<p class="source-code">Getting image source signatures</p>
+			<p class="source-code">Copying blob ac35fae19c6c done  </p>
+			<p class="source-code">Copying blob 4c0d98bf9879 done  </p>
+			<p class="source-code">Copying blob 5b0fccc9c35f done  </p>
+			<p class="source-code">Copying config 7397e078c6 done  </p>
+			<p class="source-code">Writing manifest to image destination</p>
+			<p class="source-code">Storing signatures</p>
+			<p class="source-code">1faae6c46839b9076f68bee467f9d56751db6ab45dd149f249b0790e05 c55b58</p>
+			<p class="source-code">$ podman healthcheck run healthtest1</p>
+			<p class="source-code">$ echo $?</p>
+			<p class="source-code">0</p>
+			<p>As we can see from the previous code block, we just started a brand-new container named <strong class="source-inline">checktest1</strong>, defining a <strong class="source-inline">healthcheck-command</strong> that will run the <strong class="source-inline">curl</strong> command on the <strong class="source-inline">localhost</strong> address inside the target container. Once the container started, we manually ran <strong class="source-inline">healthcheck</strong> and verified that the exit code was <strong class="source-inline">0</strong>, meaning that the check completed successfully and our container is healthy. In the previous example, we <a id="_idIndexMarker919"/>also used the <strong class="source-inline">--healthcheck-interval=0</strong> option to actually disable the run interval and make the health check manual.</p>
+			<p>Podman uses <strong class="bold">systemd</strong> timers to schedule health checks. For this reason, it is mandatory if we want to schedule a health check for our containers. Of course, if some of our systems do not use systemd as the default daemon manager, we could use different tools, such as <strong class="source-inline">cron</strong>, to schedule the health checks, but these should be set manually.</p>
+			<p>Let's inspect how this automatic integration with systemd works by creating an health check with an interval:</p>
+			<p class="source-code">$ podman run -dt --name healthtest2 --healthcheck-command 'CMD-SHELL curl http://localhost || exit 1' --healthcheck-interval=10s quay.io/libpod/alpine_nginx:latest</p>
+			<p class="source-code">70e7d3f0b4363759fc66ae4903625e5f451d3af6795a96586bc1328c1b149 ce5</p>
+			<p class="source-code">$ podman ps</p>
+			<p class="source-code">CONTAINER ID  IMAGE                               COMMAND               CREATED        STATUS                      PORTS       NAMES</p>
+			<p class="source-code">70e7d3f0b436  quay.io/libpod/alpine_nginx:latest  nginx -g daemon o...  7 seconds ago  Up 7 seconds ago (healthy)              healthtest2</p>
+			<p>As we can see from the previous code block, we just started a brand-new container named <strong class="source-inline">checktest2</strong>, defining the same <strong class="source-inline">healthcheck-command</strong> of the previous example but now specifying the <strong class="source-inline">--healthcheck-interval=10s</strong> option to actually schedule the check every 10 seconds.</p>
+			<p>After the <strong class="source-inline">podman run</strong> command, we also ran the <strong class="source-inline">podman ps</strong> command to actually inspect whether the health check is working properly, and as we can see in the output, we have the <strong class="source-inline">healthy</strong> status for our brand-new container.</p>
+			<p>But how does this integration work? Let's grab the container ID and search for it in the following directory:</p>
+			<p class="source-code">$ ls /run/user/$UID/systemd/transient/70e*</p>
+			<p class="source-code">/run/user/1000/systemd/transient/70e7d3f0b4363759fc66ae4903625 e5f451d3af6795a96586bc1328c1b149ce5.service</p>
+			<p class="source-code">/run/user/1000/systemd/transient/70e7d3f0b4363759fc66ae4903625 e5f451d3af6795a96586bc1328c1b149ce5.timer</p>
+			<p>The directory shown in <a id="_idIndexMarker920"/>the previous code block holds all the systemd resources in use for our current user. In particular, we looked into the <strong class="source-inline">transient</strong> directory, which holds temporary unit files for our current user.</p>
+			<p>When we start a container with a health check and a schedule interval, Podman will perform a transient setup of a systemd service and timer unit file. This means that these unit files are not permanent and can be lost on reboot. </p>
+			<p>Let's inspect what is <a id="_idIndexMarker921"/>defined inside these files:</p>
+			<p class="source-code">$ cat /run/user/$UID/systemd/transient/70e7d3f0b4363759fc66a e4903625e5f451d3af6795a96586bc1328c1b149ce5.service</p>
+			<p class="source-code"># This is a transient unit file, created programmatically via the systemd API. Do not edit.</p>
+			<p class="source-code">[Unit]</p>
+			<p class="source-code">Description=/usr/bin/podman healthcheck run 70e7d3f0b4363759 fc66ae4903625e5f451d3af6795a96586bc1328c1b149ce5</p>
+			<p class="source-code"> </p>
+			<p class="source-code">[Service]</p>
+			<p class="source-code">Environment="PATH=/home/alex/.local/bin:/home/alex/bin:/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/var/lib/snapd/snap/bin"</p>
+			<p class="source-code">ExecStart=</p>
+			<p class="source-code">ExecStart="/usr/bin/podman" "healthcheck" "run" "70e7d3f0b 4363759fc66ae4903625e5f451d3af6795a96586bc1328c1b149ce5"</p>
+			<p class="source-code">$ cat /run/user/$UID/systemd/transient/70e7d3f0b4363759fc66 ae4903625e5f451d3af6795a96586bc1328c1b149ce5.timer</p>
+			<p class="source-code"># This is a transient unit file, created programmatically via the systemd API. Do not edit.</p>
+			<p class="source-code">[Unit]</p>
+			<p class="source-code">Description=/usr/bin/podman healthcheck run 70e7d3f0b4363759 fc66ae4903625e5f451d3af6795a96586bc1328c1b149ce5</p>
+			<p class="source-code"> </p>
+			<p class="source-code">[Timer]</p>
+			<p class="source-code">OnUnitInactiveSec=10s</p>
+			<p class="source-code">AccuracySec=1s</p>
+			<p class="source-code">RemainAfterElapse=no</p>
+			<p>As we can see from the previous code block, the service unit file contains the Podman health check command, while<a id="_idIndexMarker922"/> the timer unit file defines the scheduling interval.</p>
+			<p>Finally, just because we may want a quick way to identify healthy or unhealthy containers, we can use the following command to quickly output them:</p>
+			<p class="source-code">$ podman ps -a --filter health=healthy</p>
+			<p class="source-code">CONTAINER ID  IMAGE                               COMMAND               CREATED         STATUS                                 PORTS       NAMES</p>
+			<p class="source-code">1faae6c46839  quay.io/libpod/alpine_nginx:latest  nginx -g daemon o...  36 minutes ago  Exited (137) 19 minutes ago (healthy)              healthtest1</p>
+			<p class="source-code">70e7d3f0b436  quay.io/libpod/alpine_nginx:latest  nginx -g daemon o...  13 minutes ago  Up 13 minutes ago (healthy)                        healthtest2</p>
+			<p>In this example, we used the <strong class="source-inline">--filter health=healthy</strong> option to display only the healthy containers with the <strong class="source-inline">podman ps</strong> command.</p>
+			<p>We learned how to troubleshoot and monitor our containers in the previous sections, but what about the container build process? Let's discover more about container build inspection in the next section.</p>
+			<h1 id="_idParaDest-199"><a id="_idTextAnchor199"/>Inspecting your container build results</h1>
+			<p>In previous chapters, we <a id="_idIndexMarker923"/>discussed in detail the container build process and learned how to create custom images using Dockerfiles/Containerfiles or Buildah-native commands. We also illustrated how the second approach helps achieve a greater degree of control of the build workflow.</p>
+			<p>This section helps provide some best practices to inspect the build results and understand potentially related issues.</p>
+			<h2 id="_idParaDest-200"><a id="_idTextAnchor200"/>Troubleshooting builds from Dockerfiles</h2>
+			<p>When using Podman or Buildah to run a build based on a Dockerfile/Containerfile, the build process prints all the instructions' outputs<a id="_idIndexMarker924"/> and related errors on the terminal stdout. For all <strong class="source-inline">RUN</strong> instructions, errors generated from the executed <a id="_idIndexMarker925"/>commands are propagated and printed for debugging purposes.</p>
+			<p>Let's now try to test some potential build issues. This is not an exhaustive list of errors; the purpose is to provide a method to analyze the root cause.</p>
+			<p>The first example shows a minimal build where a <strong class="source-inline">RUN</strong> instruction fails due to an error in the executed command. Errors in <strong class="source-inline">RUN</strong> instructions can cover a wide range of cases but the general rule of thumb is the following: the executed command returns an exit code and if this is non-zero, the build fails and the error, along with the exit status, is printed.</p>
+			<p>In the next example, we use the <strong class="source-inline">yum</strong> command to install the <strong class="source-inline">httpd</strong> package, but we have intentionally made a typo in the package name to generate an error. Here is the Dockerfile transcript:</p>
+			<p class="SC---Heading" lang="en-US" xml:lang="en-US">Chapter10/RUN_command_error/Dockerfile</p>
+			<p class="source-code">FROM registry.access.redhat.com/ubi8</p>
+			<p class="source-code"># Update image and install httpd</p>
+			<p class="source-code">RUN yum install -y <strong class="bold">htpd</strong> &amp;&amp; yum clean all –y</p>
+			<p class="source-code"># Expose the default httpd port 80</p>
+			<p class="source-code">EXPOSE 80</p>
+			<p class="source-code"># Run the httpd</p>
+			<p class="source-code">CMD ["/usr/sbin/httpd", "-DFOREGROUND"]</p>
+			<p>If we try to execute the<a id="_idIndexMarker926"/> command, we will get an<a id="_idIndexMarker927"/> error generated by the <strong class="source-inline">yum</strong> command not being able to find the missing <strong class="source-inline">htpd</strong> package:</p>
+			<p class="source-code">$ buildah build -t custom_httpd .</p>
+			<p class="source-code">STEP 1/4: FROM registry.access.redhat.com/ubi8</p>
+			<p class="source-code">STEP 2/4: RUN yum install -y htpd &amp;&amp; yum clean all –y</p>
+			<p class="source-code">Updating Subscription Management repositories.</p>
+			<p class="source-code">Unable to read consumer identity</p>
+			<p class="source-code">This system is not registered with an entitlement server. You can use subscription-manager to register.</p>
+			<p class="source-code">Red Hat Universal Base Image 8 (RPMs) - BaseOS  3.9 MB/s | 796kB     00:00    </p>
+			<p class="source-code">Red Hat Universal Base Image 8 (RPMs) - AppStre 6.2 MB/s | 2.6 MB     00:00    </p>
+			<p class="source-code">Red Hat Universal Base Image 8 (RPMs) - CodeRea 171 kB/s |  16 kB     00:00    </p>
+			<p class="source-code"><strong class="bold">No match for argument: htpd</strong></p>
+			<p class="source-code"><strong class="bold">Error: Unable to find a match: htpd</strong></p>
+			<p class="source-code"><strong class="bold">error building at STEP "RUN yum install -y htpd &amp;&amp; yum clean all -y": error while running runtime: exit status 1</strong></p>
+			<p class="source-code"><strong class="bold">ERRO[0004] exit status 1</strong>                   </p>
+			<p>The first two lines print the error message generated by the <strong class="source-inline">yum</strong> command, as in a standard command-line environment.</p>
+			<p>Next, Buildah (and, in the same way, Podman) produces a message to inform us about the step that generated the error. This message is managed in the <strong class="source-inline">imagebuildah</strong> package by the stage executor, which handles, as the name indicates, the execution of the build stages and their statuses. The source code can be inspected in the Buildah repository on GitHub: <a href="https://github.com/containers/buildah/blob/main/imagebuildah/stage_executor.go">https://github.com/containers/buildah/blob/main/imagebuildah/stage_executor.go</a>.</p>
+			<p>The message includes the Dockerfile instruction and the generated error, along with the exit status. </p>
+			<p>The last line includes the <strong class="source-inline">ERRO[0004]</strong> error code and the final exit status <strong class="source-inline">1</strong>, related to the <strong class="source-inline">buildah</strong> command execution.</p>
+			<p><strong class="bold">Solution</strong>: Use the error<a id="_idIndexMarker928"/> message to find the <strong class="source-inline">RUN</strong> instruction that contains the failing command and fix or troubleshoot the command error.</p>
+			<p>Another very common failure<a id="_idIndexMarker929"/> reason in builds is the missing parent image. It could be related to a misspelled repository name, a missing tag, or an unreachable registry.</p>
+			<p>The next example shows another variation of the previous Dockerfile, where the image repository name is mistyped and thus does not exist in the remote registry:</p>
+			<p class="SC---Heading" lang="en-US" xml:lang="en-US">Chapter10/FROM_repo_not_found/Dockerfile</p>
+			<p class="source-code">FROM registry.access.redhat.com/<strong class="bold">ubi_8</strong></p>
+			<p class="source-code"># Update image and install httpd</p>
+			<p class="source-code">RUN yum install -y httpd &amp;&amp; yum clean all –y</p>
+			<p class="source-code"># Expose the default httpd port 80</p>
+			<p class="source-code">EXPOSE 80</p>
+			<p class="source-code"># Run the httpd</p>
+			<p class="source-code">CMD ["/usr/sbin/httpd", "-DFOREGROUND"]</p>
+			<p>When running a build<a id="_idIndexMarker930"/> from this Dockerfile, we will <a id="_idIndexMarker931"/>encounter an error caused by the missing image repository, as in the next example:</p>
+			<p class="source-code">$ buildah build -t custom_httpd .</p>
+			<p class="source-code">STEP 1/4: FROM registry.access.redhat.com/ubi_8</p>
+			<p class="source-code">Trying to pull registry.access.redhat.com/ubi_8:latest...</p>
+			<p class="source-code">error creating build container: initializing source docker://registry.access.redhat.com/ubi_8:latest: reading manifest latest in registry.access.redhat.com/ubi_8: name unknown: Repo not found</p>
+			<p class="source-code"><strong class="bold">ERRO[0001] exit status 125</strong>                 </p>
+			<p>The last line produces a different error code, <strong class="source-inline">ERRO[0001]</strong>, and an exit status, <strong class="source-inline">125</strong>. This is a very easy error to troubleshoot and only requires passing a valid repository to the <strong class="source-inline">FROM</strong> instruction.</p>
+			<p><strong class="bold">Solution</strong>: Fix the repository <a id="_idIndexMarker932"/>name and relaunch the build process. Alternatively, verify that the target registry holds the wanted repository.</p>
+			<p>What happens if we misspell the image tag? The next Dockerfile snippet shows an invalid tag for the official Fedora image:</p>
+			<p class="SC---Heading" lang="en-US" xml:lang="en-US">Chapter10/FROM_tag_not_found/Dockerfile</p>
+			<p class="source-code">FROM docker.io/library/fedora:<strong class="bold">sometag</strong></p>
+			<p class="source-code"># Update image and install httpd</p>
+			<p class="source-code">RUN dnf install -y httpd &amp;&amp; dnf clean all –y</p>
+			<p class="source-code"># Expose the default httpd port 80</p>
+			<p class="source-code">EXPOSE 80</p>
+			<p class="source-code"># Run the httpd</p>
+			<p class="source-code">CMD ["/usr/sbin/httpd", "-DFOREGROUND"]</p>
+			<p>This time, when we build the image, we will get a 404 error produced by the registry, which is unable to find an associated manifest for the <strong class="source-inline">sometag</strong> tag:</p>
+			<p class="source-code">$ buildah build -t custom_httpd .</p>
+			<p class="source-code">STEP 1/4: FROM docker.io/library/fedora:sometag</p>
+			<p class="source-code">Trying to pull docker.io/library/fedora:sometag...</p>
+			<p class="source-code">error creating build container: initializing source docker://fedora:sometag: reading manifest sometag in docker.io/library/fedora: manifest unknown: manifest unknown</p>
+			<p class="source-code">ERRO[0001] exit status 125</p>
+			<p>The missing tag will generate an <strong class="source-inline">ERRO[0001]</strong> error, while the exit status will be set to <strong class="source-inline">125</strong> again.</p>
+			<p><strong class="bold">Solution</strong>: Find a valid<a id="_idIndexMarker933"/> tag to be used for the build process. Use <strong class="source-inline">skopeo list-tags</strong> to find all the available tags in a given repository.</p>
+			<p>Sometimes, the error caught<a id="_idIndexMarker934"/> from the <strong class="source-inline">FROM</strong> instruction is caused by the attempt to access a private registry without authentication. This is a very common mistake and simply requires an authenticating step on the target registry before any build action takes place.</p>
+			<p>In the next example, we have a Dockerfile that uses an image from a generic private registry running using Docker Registry v2 APIs:</p>
+			<p class="SC---Heading" lang="en-US" xml:lang="en-US">Chapter10/FROM_auth_error/Dockerfile</p>
+			<p class="source-code">FROM local-registry.example.com/ubi8</p>
+			<p class="source-code"># Update image and install httpd</p>
+			<p class="source-code">RUN yum install -y httpd &amp;&amp; yum clean all –y</p>
+			<p class="source-code"># Expose the default httpd port 80</p>
+			<p class="source-code">EXPOSE 80</p>
+			<p class="source-code"># Run the httpd</p>
+			<p class="source-code">CMD ["/usr/sbin/httpd", "-DFOREGROUND"]</p>
+			<p>Let's try to build the image and see what happens:</p>
+			<p class="source-code">$ buildah build -t test3 .</p>
+			<p class="source-code">STEP 1/4: FROM local-registry.example.com/ubi8</p>
+			<p class="source-code">Trying to pull local-registry.example.com/ubi8:latest...</p>
+			<p class="source-code">error creating build container: initializing source docker://local-registry.example.com/ubi8:latest: reading manifest latest in local-registry.example.com/ubi8: unauthorized: authentication required</p>
+			<p class="source-code">ERRO[0000] exit status 125</p>
+			<p>In this use case, the error is<a id="_idIndexMarker935"/> very clear. We are not authorized to pull the image from the target registry and thus, we need to authenticate with a <a id="_idIndexMarker936"/>valid auth token to access it.</p>
+			<p><strong class="bold">Solution</strong>: Authenticate with <strong class="source-inline">podman login</strong> or <strong class="source-inline">buildah login</strong> to the registry to retrieve the token or provide an authentication file with a valid token.</p>
+			<p>So far, we have inspected errors generated by builds with Dockerfiles. Let's now see the behavior of Buildah in the case of errors when using its command-line instructions.</p>
+			<h2 id="_idParaDest-201"><a id="_idTextAnchor201"/>Troubleshooting builds with Buildah-native commands</h2>
+			<p>When running<a id="_idIndexMarker937"/> Buildah commands, it is a <a id="_idIndexMarker938"/>common practice to put them inside a shell script or a pipeline. </p>
+			<p>In this example, we will use Bash as the interpreter. By default, Bash executes the script up to the end, regardless of intermediate errors. This behavior can generate unexpected errors if a Buildah instruction inside the script fails. For this reason, the best practice is to add the following command at the beginning of the script:</p>
+			<p class="source-code"><strong class="bold">set -euo pipefail</strong></p>
+			<p>The resulting configuration is a sort of safety net that blocks the execution of the script as soon as we encounter an error and avoids common mistakes, such as unset variables.</p>
+			<p>The <strong class="source-inline">set</strong> command is a Bash internal instruction that configures the shell for the script execution. The <strong class="source-inline">-e</strong> option inside this instruction tells the shell to exit immediately if a pipeline or a single command fails and the <strong class="source-inline">–o pipefail</strong> option tells the shell to exit with the error code of the rightmost command of a failing pipeline that produced a non-zero exit code. The <strong class="source-inline">-u</strong> option tells the shell to treat unset variables and parameters as an error during parameter expansion. This keeps us safe from the missing expansion of unset variables.</p>
+			<p>The next script embeds the logic of a simple build of an <strong class="source-inline">httpd</strong> server on top of the Fedora image:</p>
+			<p class="source-code">#!/bin/bash</p>
+			<p class="source-code">set -euo pipefail</p>
+			<p class="source-code"># Trying to pull a non-existing tag of Fedora official image</p>
+			<p class="source-code">container=$(buildah from docker.io/library/fedora:<strong class="bold">non-existing-tag</strong>)</p>
+			<p class="source-code">buildah run $container -- dnf install -y httpd; dnf clean all –y</p>
+			<p class="source-code">buildah config --cmd "httpd -DFOREGROUND" $container</p>
+			<p class="source-code">buildah config --port 80 $container</p>
+			<p class="source-code">buildah commit $container custom-httpd</p>
+			<p class="source-code">buildah tag custom-httpd registry.example.com/custom-httpd:v0.0.1</p>
+			<p>The image tag was set wrong on<a id="_idIndexMarker939"/> purpose. Let's see the results of the script execution:</p>
+			<p class="source-code">$ ./custom-httpd.sh </p>
+			<p class="source-code">Trying to pull docker.io/library/fedora:non-existing-tag...</p>
+			<p class="source-code">initializing source docker://fedora:non-existing-tag: reading manifest non-existing-tag in docker.io/library/fedora: <strong class="bold">manifest unknown: manifest unknown</strong></p>
+			<p class="source-code"><strong class="bold">ERRO[0001] exit status 125</strong></p>
+			<p>The build produces a <strong class="source-inline">manifest unknown</strong> error with the <strong class="source-inline">ERRO[0001]</strong> error code and the <strong class="source-inline">125</strong> exit status, just<a id="_idIndexMarker940"/> like the similar attempt with the Dockerfile.</p>
+			<p>From this output, we can also learn that Buildah (and Podman, which uses Buildah libraries for its build implementation) produces the same messages as a standard build with a Dockerfile/Containerfile, with the only exception of not mentioning the build step, which is obvious since we are running free commands inside a script.</p>
+			<p><strong class="bold">Solution</strong>: Find a valid tag to be used for the build process. Use <strong class="source-inline">skopeo list-tags</strong> to find all the available tags in a given repository.</p>
+			<p>In this section, we have learned how to analyze and troubleshoot build errors, but what can we do when the errors happen at runtime inside the container and we do not have the proper tools for troubleshooting inside the image? For this purpose, we have a native Linux tool that can be considered the real Swiss Army knife of namespaces: <strong class="source-inline">nsenter</strong>.</p>
+			<h1 id="_idParaDest-202"><a id="_idTextAnchor202"/>Advanced troubleshooting with nsenter</h1>
+			<p>Let's start with a dramatic <a id="_idIndexMarker941"/>sentence: troubleshooting issues at runtime can sometimes be complex. </p>
+			<p>Also, understanding and troubleshooting runtime issues inside a container implies an understanding of how containers work in GNU/Linux. We explained these concepts in <a href="B17908_01_epub.xhtml#_idTextAnchor015"><em class="italic">Chapter 1</em></a>, <em class="italic">Introduction to Container Technology</em>. </p>
+			<p>Sometimes, troubleshooting can be very easy and, as stated in the previous sections, the usage of basic commands, such as <strong class="source-inline">podman logs</strong>, <strong class="source-inline">podman inspect</strong>, and <strong class="source-inline">podman exec</strong>, along with the usage of tailored health checks, can help us to gain access to the necessary information to complete our analysis successfully. </p>
+			<p>Images nowadays tend to be as small as possible. What happens when we need more specialized troubleshooting tools, and they are not available inside the image? You could think to exec a shell process inside the container and install the missing tool but sometimes (and this is a growing security pattern), package managers are not available inside container images, sometimes not even the <strong class="source-inline">curl</strong> or <strong class="source-inline">wget</strong> commands!</p>
+			<p>We may feel a bit lost but we must remember that containers are processes executed within dedicated namespaces and cgroups. What if we had a tool that could let us exec inside one or more namespaces while keeping our access to the host tools? That tool exists and is called <strong class="source-inline">nsenter</strong> (access the manual page with <strong class="source-inline">man nsenter</strong>). It is not affiliated with any container engine or runtime and provides a simple way to execute commands inside one or multiple namespaces unshared for a process (the main container process).</p>
+			<p>Before diving into real examples, let's discuss the main <strong class="source-inline">nsenter</strong> options and arguments by running it with the <strong class="source-inline">--help</strong> option:</p>
+			<p class="source-code">$ nsenter --help </p>
+			<p class="source-code">Usage:</p>
+			<p class="source-code"> nsenter [options] [&lt;program&gt; [&lt;argument&gt;...]]</p>
+			<p class="source-code">Run a program with namespaces of other processes.</p>
+			<p class="source-code">Options:</p>
+			<p class="source-code">-a, --all              enter all namespaces</p>
+			<p class="source-code">-t, --target &lt;pid&gt;     target process to get namespaces from</p>
+			<p class="source-code">-m, --mount[=&lt;file&gt;]   enter mount namespace</p>
+			<p class="source-code">-u, --uts[=&lt;file&gt;]     enter UTS namespace (hostname etc)</p>
+			<p class="source-code">-i, --ipc[=&lt;file&gt;]     enter System V IPC namespace</p>
+			<p class="source-code">-n, --net[=&lt;file&gt;]     enter network namespace</p>
+			<p class="source-code">-p, --pid[=&lt;file&gt;]     enter pid namespace</p>
+			<p class="source-code">-C, --cgroup[=&lt;file&gt;]  enter cgroup namespace</p>
+			<p class="source-code">-U, --user[=&lt;file&gt;]    enter user namespace</p>
+			<p class="source-code">-T, --time[=&lt;file&gt;]    enter time namespace</p>
+			<p class="source-code">-S, --setuid &lt;uid&gt;     set uid in entered namespace</p>
+			<p class="source-code">-G, --setgid &lt;gid&gt;     set gid in entered namespace</p>
+			<p class="source-code">     --preserve-credentials do not touch uids or gids</p>
+			<p class="source-code">-r, --root[=&lt;dir&gt;]     set the root directory</p>
+			<p class="source-code">-w, --wd[=&lt;dir&gt;]       set the working directory</p>
+			<p class="source-code">-F, --no-fork          do not fork before exec'ing &lt;program&gt;</p>
+			<p class="source-code">-Z, --follow-context   set SELinux context according to --target PID</p>
+			<p class="source-code">-h, --help             display this help</p>
+			<p class="source-code">-V, --version          display version</p>
+			<p class="source-code">For more details see nsenter(1).</p>
+			<p>From the output of this command, it is easy to spot that there are as many options as the number of available namespaces.</p>
+			<p>Thanks to <strong class="source-inline">nsenter</strong>, we can capture the PID of the main process of a container and then exec commands (including a shell) inside the related namespaces.</p>
+			<p>To extract the <a id="_idIndexMarker942"/>container's main PID, we use can use the following command:</p>
+			<p class="source-code">$ podman inspect &lt;Container_Name&gt; --format '{{ .State.Pid }}'</p>
+			<p>The output can be inserted inside a variable for easier access:</p>
+			<p class="source-code">$ CNT_PID=$(podman inspect &lt;Container_Name&gt; \</p>
+			<p class="source-code">  --format '{{ .State.Pid }}')</p>
+			<p class="callout-heading">Hint</p>
+			<p class="callout">All namespaces associated with a process are represented inside the <strong class="source-inline">/proc/[pid]/ns</strong> directory. This directory contains a series of symbolic links mapping to a namespace type and its corresponding inode number.</p>
+			<p class="callout">The following command shows the namespaces associated with the process executed by the container: <strong class="source-inline">ls –al /proc/$CNT_PID/ns</strong>.</p>
+			<p>We are going to learn how to use <strong class="source-inline">nsenter</strong> with a practical example. In the next subsection, we will try to network troubleshoot a database client application that returns an HTTP internal server error without mentioning any useful information in the application logs.</p>
+			<h2 id="_idParaDest-203"><a id="_idTextAnchor203"/>Troubleshooting a database client with nsenter</h2>
+			<p>It is not uncommon to<a id="_idIndexMarker943"/> work on alpha applications that still do not <a id="_idIndexMarker944"/>have logging correctly implemented or that have poor handling of log messages. </p>
+			<p>The following example is a web application that extracts fields from a Postgres database and prints out a JSON object with all the occurrences. The verbosity of the application logs has been intentionally left to a minimum and no connection or query errors are produced.</p>
+			<p>For the sake of space, we<a id="_idIndexMarker945"/> will not print the application source code in the book; however, it is available at the following URL for inspection: <a href="https://github.com/PacktPublishing/Podman-for-DevOps/tree/main/Chapter10/students">https://github.com/PacktPublishing/Podman-for-DevOps/tree/main/Chapter10/students</a>.</p>
+			<p>The folder also contains <a id="_idIndexMarker946"/>a SQL script to populate a sample database. The application is built using the following Dockerfile:</p>
+			<p class="SC---Heading" lang="en-US" xml:lang="en-US">Chapter10/students/Dockerfile</p>
+			<p class="source-code">FROM docker.io/library/golang AS builder</p>
+			<p class="source-code"># Copy files for build</p>
+			<p class="source-code">RUN mkdir -p /go/src/students/models</p>
+			<p class="source-code">COPY go.mod main.go /go/src/students</p>
+			<p class="source-code">COPY models/main.go /go/src/students/models</p>
+			<p class="source-code"># Set the working directory</p>
+			<p class="source-code">WORKDIR /go/src/students</p>
+			<p class="source-code"># Download dependencies</p>
+			<p class="source-code">RUN go get -d -v ./...</p>
+			<p class="source-code"># Install the package</p>
+			<p class="source-code">RUN go build -v </p>
+			<p class="source-code"># Runtime image</p>
+			<p class="source-code">FROM registry.access.redhat.com/ubi8/ubi-minimal:latest as bin</p>
+			<p class="source-code">COPY --from=builder /go/src/students /usr/local/bin</p>
+			<p class="source-code">COPY entrypoint.sh /</p>
+			<p class="source-code">EXPOSE 8080</p>
+			<p class="source-code">ENTRYPOINT ["/entrypoint.sh"]</p>
+			<p>As usual, we are going to build the container with Buildah:</p>
+			<p class="source-code">$ buildah build -t students .</p>
+			<p>The container accepts a set of custom flags to <a id="_idIndexMarker947"/>define the database, host, port, and credentials. To see the help information, simply run the following command:</p>
+			<p class="source-code">$ podman run students students -help</p>
+			<p class="source-code">%!(EXTRA string=students)  </p>
+			<p class="source-code">-database string</p>
+			<p class="source-code">      Default application database (default "students")</p>
+			<p class="source-code">-host string     Default host running the database (default "localhost")</p>
+			<p class="source-code">-password string      Default database password (default "password"</p>
+			<p class="source-code">-port string    Default database port (default "5432")</p>
+			<p class="source-code">-username string       Default database username (default "admin")</p>
+			<p>We have been informed<a id="_idIndexMarker948"/> that the database is running on host <strong class="source-inline">pghost.example.com</strong> on port <strong class="source-inline">5432</strong>, with username <strong class="source-inline">students</strong> and password <strong class="source-inline">Podman_R0cks#</strong>.</p>
+			<p>The next command <a id="_idIndexMarker949"/>runs the <strong class="source-inline">students</strong> web application with the custom arguments:</p>
+			<p class="source-code">$ podman run --rm -d -p 8080:8080 \</p>
+			<p class="source-code">   --name students_app students \</p>
+			<p class="source-code">   students -host pghost.example.com \</p>
+			<p class="source-code">   -port 5432 \</p>
+			<p class="source-code">   -username students \</p>
+			<p class="source-code">   -password Podman_R0cks#</p>
+			<p>The container starts successfully, and the only log message printed is the following:</p>
+			<p class="source-code">$ podman logs students_app</p>
+			<p class="source-code">2021/12/27 21:51:31 Connecting to host pghost.example.com:5432, database students</p>
+			<p>It is now time to test the application and see what happens when we run a query:</p>
+			<p class="source-code">$ curl localhost:8080/students</p>
+			<p class="source-code">Internal Server Error</p>
+			<p>The application can take some time to <a id="_idIndexMarker950"/>answer but after a while, it will print an internal server error (<strong class="source-inline">500</strong>) HTTP message. We will find the reason in the following paragraphs. Logs are not useful since nothing else other than the first boot message is printed. Besides, the container was built with the UBI minimal image, which has a small footprint of pre-installed binaries and no utilities for troubleshooting. We can use <strong class="source-inline">nsenter</strong> to inspect the container behavior, especially from a networking point of view, by attaching our current shell program to the container network namespace while keeping access to our host binaries.</p>
+			<p>We can now find out the main process PID and populate a variable with its value:</p>
+			<p class="source-code">$ CNT_PID=$(podman inspect students_app --format '{{ .State.Pid }}')</p>
+			<p>The following example runs Bash in the container network namespace, while retaining all the other host namespaces (notice the <strong class="source-inline">sudo</strong> command to run it with elevated privileges):</p>
+			<p class="source-code">$ sudo nsenter -t $CNT_PID -n /bin/bash</p>
+			<p class="callout-heading">Important Note</p>
+			<p class="callout">It is possible to run any host binary directly from <strong class="source-inline">nsenter</strong>. A command such as the following is perfectly legitimate: <strong class="source-inline">$ sudo nsenter -t $CNT_PID -n ip addr show</strong>.</p>
+			<p>To demonstrate that we<a id="_idIndexMarker951"/> are really executing a shell attached<a id="_idIndexMarker952"/> to the container network namespace, we can launch the <strong class="source-inline">ip addr show</strong> command:</p>
+			<p class="source-code"># ip addr show</p>
+			<p class="source-code">1: lo: &lt;LOOPBACK,UP,LOWER_UP&gt; mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000</p>
+			<p class="source-code">    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00</p>
+			<p class="source-code">    inet 127.0.0.1/8 scope host lo</p>
+			<p class="source-code">       valid_lft forever preferred_lft forever</p>
+			<p class="source-code">    inet6 ::1/128 scope host </p>
+			<p class="source-code">       valid_lft forever preferred_lft forever</p>
+			<p class="source-code">2: tap0: &lt;BROADCAST,UP,LOWER_UP&gt; mtu 65520 qdisc fq_codel state UNKNOWN group default qlen 1000</p>
+			<p class="source-code">    link/ether fa:0b:50:ed:9d:37 brd ff:ff:ff:ff:ff:ff</p>
+			<p class="source-code">    inet 10.0.2.100/24 brd 10.0.2.255 scope global tap0</p>
+			<p class="source-code">       valid_lft forever preferred_lft forever</p>
+			<p class="source-code">    inet6 fe80::f80b:50ff:feed:9d37/64 scope link </p>
+			<p class="source-code">       valid_lft forever preferred_lft forever</p>
+			<p class="source-code"># ip route</p>
+			<p class="source-code">default via 10.0.2.2 dev tap0 </p>
+			<p class="source-code">10.0.2.0/24 dev tap0 proto kernel scope link src 10.0.2.100</p>
+			<p>The first command, <strong class="source-inline">ip addr show</strong>, prints the IP configuration, with a basic <strong class="source-inline">tap0</strong> interface connected to the host and the loopback interface. </p>
+			<p>The second command, <strong class="source-inline">ip route</strong>, shows the default routing table inside the container network namespace.</p>
+			<p>We can take a first look at the active connections using the <strong class="source-inline">ss</strong> tool, already available on our Fedora host:</p>
+			<p class="source-code"># ss –atunp</p>
+			<p class="source-code">Netid State     Recv-Q Send-Q Local Address:Port  Peer Address:PortProcess</p>
+			<p class="source-code">tcp   TIME-WAIT 0      0         10.0.2.100:50728   10.0.2.100:8080</p>
+			<p class="source-code">tcp   LISTEN    0      128                *:8080             *:*    usersL"("studen"s",pid=402788,fd=3))</p>
+			<p>We immediately spot that<a id="_idIndexMarker953"/> there are no established connections between the application and the database host, which tells us that the issue is<a id="_idIndexMarker954"/> probably related to routing, firewall rules, or name resolution causes that prevent us from reaching the host correctly.</p>
+			<p>The next step is to try to manually connect to the database with the <strong class="source-inline">psql</strong> client tool, available from the rpm <strong class="source-inline">postgresql</strong> package:</p>
+			<p class="source-code"># psql -h pghost.example.com</p>
+			<p class="source-code">psql: error: could not translate host name "pghost.example.com" to address: Name or service not known</p>
+			<p>This message is quite clear: the host is not resolved by the DNS service and causes the application to fail. To finally confirm it, we can run the <strong class="source-inline">dig</strong> command, which returns an <strong class="source-inline">NXDOMAIN</strong> error, a typical message from a DNS server to say that the domain cannot be resolved and does not exist:</p>
+			<p class="source-code"># dig pghost.example.com</p>
+			<p class="source-code">; &lt;&lt;&gt;&gt; DiG 9.16.23-RH &lt;&lt;&gt;&gt; pghost.example.com</p>
+			<p class="source-code">;; global options: +cmd</p>
+			<p class="source-code">;; Got answer:</p>
+			<p class="source-code">;; -&gt;&gt;HEADER&lt;&lt;- opcode: QUERY, status: <strong class="bold">NXDOMAIN</strong>, id: 40669</p>
+			<p class="source-code">;; flags: qr rd ra; QUERY: 1, ANSWER: 0, AUTHORITY: 0, ADDITIONAL: 1</p>
+			<p class="source-code">;; OPT PSEUDOSECTION:</p>
+			<p class="source-code">; EDNS: version: 0, flags:; udp: 4096</p>
+			<p class="source-code">;; QUESTION SECTION:</p>
+			<p class="source-code">;pghost.example.com.        IN    A</p>
+			<p class="source-code">;; Query time: 0 msec</p>
+			<p class="source-code">;; SERVER: 192.168.200.1#53(192.168.200.1)</p>
+			<p class="source-code">;; WHEN: Mon Dec 27 23:26:47 CET 2021</p>
+			<p class="source-code">;; MSG SIZE  rcvd: 47</p>
+			<p>After checking with the development<a id="_idIndexMarker955"/> team, we discovered that the database name had a missing dash that was misspelled, and the correct <a id="_idIndexMarker956"/>name was <strong class="source-inline">pg-host.example.com</strong>. We can now fix the issue by running the container with the correct name.</p>
+			<p>We expect now to see the correct results when launching the query again:</p>
+			<p class="source-code">$ curl localhost:8080/students</p>
+			<p class="source-code">{"Id":10149,"FirstName":"Frank","MiddleName":"Vincent","LastName":"Zappa","Class":"3A","Course":"Composition"}</p>
+			<p>In this example, we have focused on network namespace troubleshooting, but it is possible to attach our current shell program to multiple namespaces by simply adding the related flags.</p>
+			<p>We can also simulate <strong class="source-inline">podman exec</strong> by running the command with the <strong class="source-inline">-a</strong> option:</p>
+			<p class="source-code">$ sudo nsenter -t $CNT_PID -a /bin/bash</p>
+			<p>This command attaches <a id="_idIndexMarker957"/>the process to all the unshared namespaces, including the mount namespace, thus giving <a id="_idIndexMarker958"/>the same filesystem tree view that is seen by processes inside the container.</p>
+			<h1 id="_idParaDest-204"><a id="_idTextAnchor204"/>Summary</h1>
+			<p>In this chapter, we focused on container troubleshooting, trying to provide a set of best practices and tools to find and fix issues inside a container at build time or runtime.</p>
+			<p>We started by showing off some common use cases during container execution and build stages and their related solutions.</p>
+			<p>Afterward, we introduced the concept of health checks and illustrated how to implement solid probes on containers to monitor their statuses, while showing the architectural concepts behind them.</p>
+			<p>In the third section, we learned about a series of common error scenarios related to builds and showed how to solve them quickly.</p>
+			<p>In the final section, we introduced the <strong class="source-inline">nsenter</strong> command and simulated a web frontend application that needed network troubleshooting to find out the cause of an internal server error. Thanks to this example, we learned how to conduct advanced troubleshooting inside the container namespaces.</p>
+			<p>In the next chapter, we are going to discuss container security, a crucial concept that deserves great attention. We will learn how to secure containers with a series of best practices, the difference between rootless and rootful containers, and how to sign container images to make them publicly available.</p>
+			<h1 id="_idParaDest-205"><a id="_idTextAnchor205"/>Further reading</h1>
+			<ul>
+				<li>Podman troubleshooting guidelines: <a href="https://github.com/containers/podman/blob/main/troubleshooting.md">https://github.com/containers/podman/blob/main/troubleshooting.md</a></li>
+			</ul>
+		</div>
+	</body></html>

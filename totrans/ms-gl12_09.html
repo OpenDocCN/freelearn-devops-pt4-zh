@@ -1,0 +1,403 @@
+<html><head></head><body>
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Switching From SVN</h1>
+                </header>
+            
+            <article>
+                
+<div>
+<p><span>The shortcomings of CVS have led to the development of other systems, with one of the most well-known being <strong>Apache Subversion</strong> (<strong>SVN</strong>). In addition to the improvements it has brought, it was specially ensured that is has high compatibility with CVS. It is also open source licensed (with an Apache license, not GNU). It was started in 2000 by Collabnet Inc., but changed to an Apache project in 2009. You can find it at <a href="https://subversion.apache.org">https://subversion.apache.org</a>.</span></p>
+</div>
+<p>In this chapter, will we cover the following topics:</p>
+<ul>
+<li class="mce-root"><span>The difference between SVN and Git</span></li>
+<li><span> </span><span>Mirroring SVN with GIT</span></li>
+<li><span> Using svn2git to migrate in one cut</span></li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Technical requirements</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root"><span>To follow along with the instructions in this chapter, please download this book's GitHub repository, along with the examples from <a href="https://github.com/PacktPublishing/Mastering-GitLab-12/tree/master/Chapter07" target="_blank">https://github.com/PacktPublishing/Mastering-GitLab-12/tree/master/Chapter07</a></span>.</p>
+<p class="mce-root">The other requirements for this chapter are as follows:</p>
+<ul>
+<li><span><strong>Git</strong>: <a href="http://git-scm.org">http://git-scm.org</a></span></li>
+<li><span><strong>SVN</strong>: <a href="https://subversion.apache.org/packages.html">https://subversion.apache.org/packages.html</a></span></li>
+<li><span><strong>Git LFS</strong>: <a href="https://git-lfs.github.com">https://git-lfs.github.com</a></span></li>
+<li><span><strong>SubGit</strong>: <a href="https://subgit.com">https://subgit.com</a></span></li>
+<li><span><strong>svn2git</strong>: <a href="https://github.com/nirvdrum/svn2git">https://github.com/nirvdrum/svn2git</a></span></li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">The difference between SVN and Git</h1>
+                </header>
+            
+            <article>
+                
+<p>Like CVS, the biggest difference between Git and SVN is that SVN follows a centralized architecture, while Git uses a distributed network. There is one SVN server, and as a client you communicate your changes with it. This in different to Git, where there can be many local copies, and one copy can reside on a central server. This architecture is depicted as follows:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/bed41ed9-83d8-4683-b415-f9a4a25563bb.png"/></p>
+<p><span>With Git, there are several options to choose from regarding protocol and network settings. Most importantly, you have the choice to communicate with remotes over SSH or HTTP. Using SSH, you wrap Git commands, possibly using certificate authentication, and with HTTP, you implement Git actions using WebDAV and basic HTTP authentication</span><strong>.</strong></p>
+<p>SVN has a networking layer that is abstracted, which means that clients exhibit the same behavior, no matter what sort of server they are operating against.</p>
+<p>There are several different server options available, as follows:</p>
+<ul>
+<li><strong>The svnserver server</strong>:<strong> </strong>This one is easy to set up, does not need system accounts on a server, and is faster than WebDAV (which extends the HTTP protocol with filesystem access). One big disadvantage is that communication using this server is unencrypted by default.</li>
+</ul>
+<p class="mce-root"/>
+<ul>
+<li><strong>svnserver through SSH</strong>: This has all the advantages we mentioned previously, but is protected with SSH encryption. It works by tunneling the svnserver traffic through an SSH session.</li>
+<li><strong>The Apache web server with module dav_svn</strong>:<strong> </strong>In this situation, all traffic on the network layer is carried out over HTTP. The famous Apache web server has support for WebDAV operations, and there is a specific Apache module that handles SVN traffic (<kbd>dav_svn</kbd>). It is noticeably slower because of the overhead in the HTTP protocol, but is had the added bonus that repositories are browseable through a web browser.</li>
+</ul>
+<p>Besides their infrastructural difference, there are also several differences between your local SVN/Git client.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Security and access control</h1>
+                </header>
+            
+            <article>
+                
+<p>With SVN, you can set up your server to grant or deny permissions to users. You can even define finer-grained access rules based on paths. All of this is configured in a central location. With Git running on your client, there is no access control by default. Your server implementation or central repository that's running Git must do that for you. <span>GitLab has this functionality.</span></p>
+<div>
+<p><span>The repository's change history is kept centrally on the server in the SVN world, and to change it you need to gain access to this central place.</span></p>
+</div>
+<p>Because Git is a distributed versioning system, every developer can make changes to any part of their local repository history. Although pushing a changed history is heavily discouraged, it is possible. This can wreak havoc if other developers are depending on particular changes.</p>
+<p class="mce-root">For Git users, the complete history of a repository is saved locally and updated from and to remotes, so there is always a local copy.</p>
+<p>Making regular backups is smart to do with both Git and SVN. Even with a central server and several distributed copies, you need to stay in sync to keep all the data available.</p>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Space requirements and references</h1>
+                </header>
+            
+            <article>
+                
+<div>
+<p><span>One of the things SVN can do compared to Git is that you can check out parts of the repository. In Git, the repository can only be cloned as a whole.</span></p>
+</div>
+<p>In Git, every object has a unique ID, that is, a SHA-1; for instance, <span><kbd>921103db8259eb9de72f42db8b939895f5651422</kbd>.</span></p>
+<p> This makes it easier to reference. You can also use a shortened version (<kbd>921103d</kbd>):</p>
+<pre class="p1"><strong><span class="s1">$ git rev-parse --short 921103db8259eb9de72f42db8b939895f5651422<br/></span><span class="s1">921103d</span></strong></pre>
+<p>In SVN, a file is always the newest version. To reference changes to a file, you need to use <em>revisions</em>. That revision points to the whole repository.</p>
+<p>SVN working directories contain two copies of each file, which is why Git repositories are generally much smaller <span>– </span>they only contain one copy. A directory with a cloned Git repository contains a small index file with approximately 100 bytes of index data per tracked file.</p>
+<p class="mce-root">If a project has a lot of files, the difference in size between SVN and Git can become quite large! <span>A thing most people don't realize is that SVN can track empty directories, while Git cannot! Only file contents are tracked by Git, so empty directories will not show! The following diagram shows the way SVN handles changes:</span></p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/38d7f310-03b8-4b6f-b287-bf0fc04dccf3.png" style="width:43.58em;height:21.08em;"/></p>
+<p>Git, on the other hand, uses the graph model, which is as follows:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/50cd7fc0-4a56-4538-91e6-bba56a27df67.png" style="width:26.58em;height:24.75em;"/></p>
+<p>As we can see, the difference in size and the ways of referencing between SVN and Git is very large!</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Branching</h1>
+                </header>
+            
+            <article>
+                
+<p>Both Git and SVN support the use of branches. However, for SVN, branches are part of a possible workflow and style, while for Git the use of branches is built into the command palette and standard way of working.</p>
+<div>
+<p><span>One of the major disadvantages of SVN is the way of branching and merging. It can take a long time if you have large repositories. If you create a new branch in SVN, you create a completely new directory within the repository, which means there is repetition in that structure. When the branch is ready or no longer needed, you commit back to the trunk.</span></p>
+</div>
+<p><span>A big technical difference between Git and SVN versions before 1.5 is that Git used three-way merges as standard, while SVN used two-way merges. It couldn't perform three-way merges because it didn't store merge information. Git, by using its graph database, can check where the code bases share a common state and then merge from the diversion point, which is then technically a three-way merge. In the latest version of SVN, this is also incorporated because the meta information about branches and merges is kept after merging. Unfortunately, the basic problem still exists – a branch is a full copy (not a reference).</span></p>
+<p><span>At the same time, there can be changes on the trunk already. Your version of it won't have the changes that are in the branches of developers. This means that you could have conflicting changes, files, or structures that are missing in your branch.</span></p>
+<div>
+<p><span>The main reason developers like Git so much is the power of the branching model. Comparing it to the many repetitions in SVN, Git only creates references to a specific commit, so there's less repetition and less waste of space and I/O. Instantiating the reference by creation, deletion, or changing a branch will not affect the commits. Want to try something? Fix a bug quickly? Just create a branch, edit files, and push the commits to the central repository, then delete the branch. Create them lightheartedly!</span></p>
+</div>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Handling binaries with SVN and Git</h1>
+                </header>
+            
+            <article>
+                
+<p>Speed is often recited as the main advantage Git has over SVN. This is not exactly the case when handling binary files. If developers checkout full repositories every time and they contain changing binary files, you lose this speed advantage.</p>
+<p>In SVN, only the working tree and the latest changes are checked out to the local system. When many changes are made to binary files, checking them out in SVN takes less time than with Git.</p>
+<p>Of course, there are workarounds for storing binary files in Git repositories, the most famous being Git LFS (<a href="https://git-lfs.github.com/">https://git-lfs.github.com/</a>). This is a solution that was developed by GitHub and is an extension to Git. With it, you store a pointer inside your repository instead of in a big binary file. Still, every developer action leads to a pile of changed history data. This is going to make operations perform slower.</p>
+<p>GitLab also supports Git LFS operations. Depending on how you or your administrator configured GitLab, the location of LFS uploaded data can be on the GitLab server itself, or on shared server storage that's connected to you GitLab server. Alternatively, it can be stored on an S3-compatible service.</p>
+<p>You can install Git LFS on several platforms (<a href="https://github.com/git-lfs/git-lfs/wiki/Installation">https://github.com/git-lfs/git-lfs/wiki/Installation</a>). The main requisite is that you have installed Git version 1.8.2 or higher.</p>
+<p>Let's try using <kbd>git-lfs</kbd>:</p>
+<ol>
+<li>We will try this on macOS and install it with <kbd>brew</kbd>:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>$ brew install git-lfs</strong><br/><strong> ==&gt; Downloading https://homebrew.bintray.com/bottles/git-lfs-2.6.1.high_sierra.bottle.tar.gz</strong><br/><strong> ==&gt; Downloading from https://akamai.bintray.com/0d/0daf04ca0a32e208be0e6df07c42a1ab049a3e50c962b04ea650a626a97920bb?__gda__=exp=1545082825~hmac=321540978a32b9bda7e114cc68cdddb1c772d02d8c93ed919a0d04bff4075377&amp;respo</strong><br/><strong> ######################################################################## 100.0%</strong><br/><strong> ==&gt; Pouring git-lfs-2.6.1.high_sierra.bottle.tar.gz</strong><br/><strong> ==&gt; Caveats</strong><br/> </pre>
+<ol start="2">
+<li>Update your Git configuration to finish the installation:</li>
+</ol>
+<pre style="padding-left: 60px"><strong> $ git lfs install  </strong><br/><strong> $ git lfs install --system</strong></pre>
+<ol start="3">
+<li>When you have Git LFS installed, you need to enable the functionality for your local repository:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>$ git lfs install</strong><br/><strong> Updated git hooks.</strong><br/><strong> Git LFS initialized.</strong></pre>
+<ol start="4">
+<li>Tell Git which kind of files you consider large. After this, add the <kbd>.gitattributes</kbd> file to the commit:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>$ git lfs track "*.dmg"</strong><br/><strong> Tracking "*.dmg"</strong><br/><strong>$ git add .gitattributes</strong></pre>
+<ol start="5">
+<li>The next step it to just add and commit your changes:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>$ git add .</strong><br/><strong>$ git commit -m "Testing lfs"</strong><br/><strong> [master eb9ed7c] Testing lfs</strong><br/><strong>  2 files changed, 4 insertions(+)</strong><br/><strong>  create mode 100644 .gitattributes</strong><br/><strong>  create mode 100644 OpenRA-release-20180923.dmg</strong></pre>
+<ol start="6">
+<li>Now, when you push the repository to the remote server, you will notice a different behavior. Git LFS is handling part of the upload:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>$ git push</strong><br/><strong> Locking support detected on remote "origin". Consider enabling it with:</strong><br/><strong>   $ git config lfs.https://gitlab.com/joustie/itsmyparty_gitlab.git/info/lfs.locksverify true</strong><br/><strong> Uploading LFS objects: 100% (1/1), 35 MB | 979 KB/s, done                                                                                                                                                             </strong><br/><strong> Counting objects: 4, done.</strong><br/><strong> Delta compression using up to 16 threads.</strong><br/><strong> Compressing objects: 100% (3/3), done.</strong><br/><strong> Writing objects: 100% (4/4), 487 bytes | 0 bytes/s, done.</strong><br/><strong> Total 4 (delta 1), reused 0 (delta 0)</strong><br/><strong> To gitlab.com:joustie/itsmyparty_gitlab.git</strong><br/><strong>    6b64bcc..eb9ed7c  master -&gt; master</strong></pre>
+<p>So, even with SVN handling files faster, if you use Git LFS, you get the same advantages.</p>
+<p class="mce-root">If you compare Git LFS with SVN on a basic level, then SVN is faster when it comes to handling binary files. If you use additional Git LFS for Git, they perform approximately the same.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Mirroring SVN and GIT</h1>
+                </header>
+            
+            <article>
+                
+<p>In order to mirror SVN with Git, we will use the SubGit tool (<a href="https://subgit.com/">https://subgit.com/</a>), which is maintained and sold by TMate software. You can download a version for your operating system or choose the basic one, which is a multiplatform Java binary. If you unzip the package you downloaded, the SubGit tool can be found in the <kbd>bin</kbd> directory.</p>
+<p>SubGit should be set up on your Git server. It will scan the settings for the remote SVN repository you specify, then download SVN revisions and convert them into Git commits. SubGit keeps both repositories synchronized. When a user pushes a new commit to Git, SubGit converts and tries to update SVN. It also gets new revisions from SVN as soon as they appear. SVN and Git users see each other's commits as if they were all working on the same versioning system. SubGit makes sure that possible conflicts don't occur between the systems and maintains the integrity of the mirror.</p>
+<p>Running SubGit in mirror mode requires that you register the software at TMate software. Registration is free for open source, academic, and start-up projects:</p>
+<ol>
+<li>First, create an empty project in GitLab:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/6a906182-9e5d-470a-89e5-6bd3e2be7a73.png"/></p>
+<ol start="2">
+<li>Then, open a Terminal on the machine where your GitLab instances are running and create the following environment variables. <kbd>SVN_PROJECT_URL</kbd> should contain a link to the SVN project you want to copy/convert/mirror:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>$ export GIT_REPO_PATH=$HOME/git/pdf.git</strong><br/><strong>$ export SVN_PROJECT_URL=svn://svn.riscos.info/pdf/trunk/</strong></pre>
+<ol start="3">
+<li>Make sure that you have Java configured on the machine:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>$ apt-get install openjdk-8-jdk</strong><br/><strong>Reading package lists... Done</strong><br/><strong>Building dependency tree      </strong><br/><strong>Reading state information... Done</strong><br/><strong>...</strong><br/><strong>...</strong><br/><strong>Setting up openjdk-8-jdk:amd64 (8u191-b12-0ubuntu0.16.04.1) </strong><br/><strong>...</strong></pre>
+<ol start="4">
+<li>Now, we can start the first run of the SubGit tool, which configures everything in order for the mirroring or one-time migration to succeed (I have copied the <kbd>subgit</kbd> binary from the package to <kbd>/opt/subgit/bin</kbd>):</li>
+</ol>
+<pre style="padding-left: 60px"><strong>$ /opt/subgit/bin/subgit configure --layout auto  $SVN_PROJECT_URL $GIT_REPO_PATH</strong><br/><strong> SubGit version 3.3.5 ('Bobique') build #4042</strong><br/> <br/><strong> Configuring writable Git mirror of remote Subversion repository:</strong><br/><strong>     Subversion repository URL : svn://svn.riscos.info/pdf</strong><br/><strong>     Git repository location   : /var/opt/gitlab/git-data/repositories/root/pdf.git</strong><br/> <br/><strong> Git repository is served by GitLab, hooks will be installed into 'custom_hooks' directory.</strong><br/> <br/><strong> Peg location detected: r35 trunk</strong><br/><strong> Fetching SVN history... Done.</strong><br/><strong> Growing trees... Done.</strong><br/><strong> Project origin detected: r1 trunk</strong><br/><strong> Building branches layouts... Done.</strong><br/><strong> Combing beards... Done.</strong><br/><strong> Generating SVN to Git mapping... Done.</strong><br/> <br/><strong> CONFIGURATION SUCCESSFUL</strong></pre>
+<p>To complete SubGit installation and have it running continuously, do the following:</p>
+<ol>
+<li>Adjust Subversion to Git branch mapping if necessary in the following file:</li>
+</ol>
+<pre style="padding-left: 60px">/var/opt/gitlab/git-data/repositories/root/pdf.git/subgit/config</pre>
+<ol start="2">
+<li>Define at least one Subversion credential in the default SubGit password file, as follows:</li>
+</ol>
+<pre style="padding-left: 60px">/var/opt/gitlab/git-data/repositories/root/pdf.git/subgit/passwd</pre>
+<p style="padding-left: 60px">Alternatively, you can configure SSH or SSL credentials in the <kbd>[auth]</kbd> section of the following root:</p>
+<pre style="padding-left: 60px">/var/opt/gitlab/git-data/repositories/root/pdf.git/subgit/config</pre>
+<ol start="3">
+<li>Optionally, add custom authors mapping to the <kbd>authors.txt</kbd> file(s) in the following file:</li>
+</ol>
+<pre style="padding-left: 60px">/var/opt/gitlab/git-data/repositories/root/pdf.git/subgit/authors.txt</pre>
+<ol start="4">
+<li>Run the <kbd>subgit install</kbd> command:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>$ subgit install /var/opt/gitlab/git-data/repositories/root/pdf.git</strong></pre>
+<p>If you query the process list, you will see that the SubGit daemon is running:</p>
+<pre><strong>$ ps ax |grep subgit |grep -v grep</strong><br/><strong> 17314 ?        Ssl    0:00 /usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java -noverify -client -Djava.awt.headless=true -Djna.nosys=true -cp /var/opt/gitlab/git-data/repositories/root/pdf.git/subgit/lib/subgit-3.3.5_4042_fat.jar org.tmatesoft.translator.SubGitDaemon test --svn /var/opt/gitlab/git-data/repositories/root/pdf.git --limit 1544992584093</strong></pre>
+<p>If you view the project in GitLab directly after the installation done with SubGit, you will find that there is still nothing visible. This is because of caching the user interface. So far, we have done operations on the filesystem and we need to flush the Redis cache.</p>
+<p>You can use the following command on the GitLab server to do this:</p>
+<pre><strong>$ gitlab-rake cache:clear</strong></pre>
+<p>Now, the imported project should be visible:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/49eddeee-7317-44ae-b80f-38130aa647e7.png" style="width:68.00em;height:41.58em;"/></p>
+<p>We now have two source code repositories that are in sync. Sometimes, you only need one-way conversion, and this is what we will be covering in the next section.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">No sync, just convert</h1>
+                </header>
+            
+            <article>
+                
+<p>You can also use the SubGit tool to do a one-time migration. You don't need a license for this, and it's free. Just download the tool and run it.</p>
+<p>So, instead of using <kbd>install</kbd>, which enables synchronization, just use <kbd>import</kbd> as an argument:</p>
+<pre><strong>$ /opt/subgit/bin/subgit import $GIT_REPO_PATH</strong><br/><strong> SubGit version 3.3.5 ('Bobique') build #4042</strong><br/> <br/><strong> Translating Subversion revisions to Git commits...</strong><br/> <br/><strong>     Subversion revisions translated: 35.</strong><br/><strong>     Total time: 9 seconds.</strong><br/> <br/><strong> IMPORT SUCCESSFUL</strong></pre>
+<p>After this has completed, you can refresh the cache to see the changes being reflected in the web UI.</p>
+<p>A one-time conversion is an easy operation to perform compared to a sync, but there is another tool that can do this as well.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Using svn2git to migrate in one cut</h1>
+                </header>
+            
+            <article>
+                
+<p>As you have seen with SubGit, it is possible to create a syncing solution between SVN and Git. In reality, most of the time, when you want to migrate to a new system, you will want to do it in one go. It decreases the margin of error and is easier to reason about. So, when you do such a hard cut over, make your developers use the new repository. Setting up syncing will not help you migrate in the long run. In comparison to SubGit, you can use your own workstation to do the conversion.</p>
+<p>You can use a tool such as svn2git (<a href="https://github.com/nirvdrum/svn2git">https://github.com/nirvdrum/svn2git</a>) to do a conversion in one step. On your workstation, you can install it as a Ruby Gem if you already have Ruby and Git installed:</p>
+<pre><strong>$ sudo gem install svn2git</strong></pre>
+<p>On Debian-based Linux distributions, you can install the native packages:</p>
+<pre><strong>$ sudo apt-get install git-core git-svn ruby</strong></pre>
+<div>
+<p><span>If you need the authors in your project to display correctly, you can make sure that mapping the authors from SVN to Git is performed correctly as part of the conversion. It depends on whether you create an authors file or not. If you choose not to, then no mapping will be performed. In some situations, this can be an issue, while some users don't care at all. If you want to map users, make sure you map every author in the SVN repository. Failing to do so will result in a failed conversion, and you will have to start again.</span></p>
+</div>
+<p>By using the following command, you will get a list of authors that are present in the repository. Run the following in the SVN source repository. I have done so on my workstation:</p>
+<pre><strong>$ svn log --quiet | grep -E "r[0-9]+ \| .+ \|" | cut -d'|' -f2 | sed 's/ //g' | sort | uniq</strong><br/><strong> cgransden</strong><br/><strong> peter</strong></pre>
+<div>
+<p><span>In this case, there are only two authors. Use the following output to create the <kbd>authors.txt</kbd> file and map authors line by line:</span></p>
+</div>
+<pre>cgransden = cgransden &lt;cgransden@gitlab.joustie.nl&gt;<br/> peter = peter &lt;peter@gitlab.joustie.nl&gt;</pre>
+<p>The repository we are converting has a reasonable default structure. It has a trunk, branches, and tags. If your SVN repositories are more complicated, you have to use more options. You can find these in the svn2git documentation on the home page shown earlier, or use <kbd>svn2git --help</kbd>.</p>
+<p>Make sure that you run the <kbd>svn2git</kbd> conversion command in an empty directory.</p>
+<p>The default format of the <kbd>svn2git</kbd> command line is <kbd>https://svn.example.com/path/to/repo --authors /path/to/authors.txt</kbd>.</p>
+<p>In my example, we are not changing authors, so we'll leave them out. If your SVN repository is protected by a username and password, you can add the <kbd>--username 'password'</kbd> and <kbd>--password 'password'</kbd> options as well:</p>
+<pre><strong>$ svn2git svn://svn.riscos.info/pdf</strong><br/><strong> Initialized empty Git repository in /Users/joostevertse/svn/pdf.git/.git/</strong><br/><strong> r1 = 154856522ddf7c81f34dc80b11a41b963dcc2c13 (refs/remotes/svn/trunk)</strong><br/><strong>     A   !PDF/!sprites22,ff9</strong><br/><strong>     A   !PDF/Documents/Help.html,faf</strong><br/><strong>     A   !PDF/Documents/Licences/Copying</strong><br/><strong>     A   !PDF/Documents/Licences/BSDLicence</strong><br/><strong>     A   !PDF/Documents/Licences/README</strong><br/><strong>...</strong></pre>
+<p>The next step is to finish the conversion by pushing your migrated repository to GitLab. It's best to create an empty project in GitLab and fetch the projects HTTP or SSH location. Then, you can add it as a remote to your local repository and push it. This will contain all the commits and branches.</p>
+<p>When the conversion is complete, you can import the project into GitLab by creating a new remote locally and push the repository:</p>
+<pre><strong>$ git push --all origin</strong><br/><strong> Counting objects: 1009, done.</strong><br/><strong> Delta compression using up to 16 threads.</strong><br/><strong> Compressing objects: 100% (414/414), done.</strong><br/><strong> Writing objects: 100% (1009/1009), 1.39 MiB | 0 bytes/s, done.</strong><br/><strong> Total 1009 (delta 591), reused 1009 (delta 591)</strong><br/><strong> remote: Resolving deltas: 100% (591/591), done.</strong><br/><strong> To https://gitlab.joustie.nl:8443/root/pdf.git</strong><br/><strong>  * [new branch]      master -&gt; master</strong></pre>
+<p>If you have tags, don't forget to push them, too:</p>
+<pre><strong>$ git push --tags origin</strong><br/><strong>Everything up-to-date</strong></pre>
+<p>This finalizes the conversion using svn2git, the second tool that you can use to perform a one-off migration of SVN to Git.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Summary</h1>
+                </header>
+            
+            <article>
+                
+<div>
+<p><span>In this chapter, we started by tracing the origins of SVN and why it rose to popularity. Afterwards, we made a comparison between SVN and Git on certain aspects that are relevant for versioning systems, such as architecture, branching methods, and how to deal with binary files.</span></p>
+<p><span>The second part of this chapter deals with ways to migrate SVN projects to Git. The first tool we discussed was SubGit. It is capable not only of migration projects from SVN to Git, but can also act as a proxy and let both repositories coexist. The second tool we talked about was svn2git, which does a migration in one cut. The other notable difference between these tools is that SubGit is installed on your GitLab server, while svn2git can be run from your workstation.</span></p>
+<div>
+<p><span>In the next chapter, we will take a look at another type of source control system. This one is created by Microsoft and not open source.</span></p>
+</div>
+</div>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Questions</h1>
+                </header>
+            
+            <article>
+                
+<ol>
+<li>What is the home page of the SVN project?</li>
+<li>What is the biggest difference between SVN and Git?</li>
+<li>Name the three different ways to run a SVN server.</li>
+<li>With SVN, where is the history of a project saved?</li>
+<li>Git uses SHAs, but what does SVN use?</li>
+<li>What type of merge did SVN versions before 1.5 perform?</li>
+<li>What version of Git is needed for Git LFS?</li>
+<li>Name two ways that GitLab implements LFS as storage backend.</li>
+<li>What two mechanisms does SubGit support for migration?</li>
+<li>When you use svn2git, what is the last step of migrating to GitLab?</li>
+</ol>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Further reading</h1>
+                </header>
+            
+            <article>
+                
+<ul>
+<li><span><strong>SubGit</strong>: <a href="https://subgit.com/">https://subgit.com/</a></span></li>
+<li><span><strong>svn2git</strong>: <a href="https://github.com/nirvdrum/svn2git">https://github.com/nirvdrum/svn2git</a></span></li>
+<li><span><strong>SVN redbook</strong>: <a href="http://svnbook.red-bean.com/">http://svnbook.red-bean.com/</a></span></li>
+<li><span><strong>SVN documentation</strong>: <a href="https://subversion.apache.org/docs/">https://subversion.apache.org/docs/</a></span></li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    </body></html>

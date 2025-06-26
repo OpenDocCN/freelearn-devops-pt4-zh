@@ -1,0 +1,513 @@
+<html><head></head><body>
+        <section>
+
+                            <header>
+                    <h1 class="header-title">From Customer Wish to Test Automation - And Some More</h1>
+                </header>
+            
+            <article>
+                
+<p>Getting the hang of it by now? Well, you did get this far, right? Let's do another <em>one for the road</em>, or actually two. We'll supplement your tool box with a last duo of test tools for Microsoft Dynamics 365 Business Central. In this chapter, we'll expand on how to:</p>
+<ul>
+<li>Test a report</li>
+<li>Set up a more complex scenario</li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Test example 7 – how to test a report</h1>
+                </header>
+            
+            <article>
+                
+<p>Reports have always been a substantial part of many Business Central projects and solutions. It makes perfect sense to have a look at how to test them in an automated manner. Now, how do we go about doing that? In this example, we will work out testing the dataset being created by a report. Layout testing is another job to do, and one outside of the testability framework.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Customer wish</h1>
+                </header>
+            
+            <article>
+                
+<p>Our customer's wish describes that the <kbd>Lookup Value Code</kbd> field of the customer has to be carried over to the various sales documents. The logical consequence, even though not explicitly stated, would be that each printed version of these documents would have to be extended with this field. Note that at this point in time, we cannot extend a standard report. Extending a standard report can now only be achieved by cloning it into our extension. As sales document reports are quite comprehensive, both on the dataset and on the layout side, we take a simpler example. We'll clone report 101, <kbd>Customer - List</kbd>, and add the <kbd>Lookup Value Code</kbd> field to it as shown in the next screenshot:</p>
+<div class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-771 image-border" src="assets/a6c851b4-12ce-449a-a9e3-a6655f329107.png" style="width:97.00em;height:44.50em;"/></div>
+<p>This could be a possible translation into an ATDD test case description:</p>
+<pre><strong>[FEATURE]</strong> LookupValue Report<br/><strong>[SCENARIO #0029]</strong> Test that lookup value shows on CustomerList<br/>                 report<br/><strong>[GIVEN]</strong> 2 customers with different lookup value<br/><strong>[WHEN]</strong> Run report CustomerList<br/><strong>[THEN]</strong> Report dataset contains both customers with lookup value</pre>
+<div class="packt_infobox">Why two customers, you might wonder. As the report should be able to list multiple customers, it makes sense not to test for just one customer.</div>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Application code</h1>
+                </header>
+            
+            <article>
+                
+<p>A condensed version of the cloned report on this and next page, shows where we have added the <kbd>Lookup Value Code</kbd> field. The preceding screenshot depicts the field placed in the layout:</p>
+<pre>Report 50000 "CustomerList"<br/> {<br/>     //Converted from standard report 101 "Customer - List"<br/> <br/>     DefaultLayout = RDLC;<br/>     RDLCLayout = './Report Layouts/CustomerList.rdlc';<br/>     ApplicationArea = Basic, Suite;<br/>     Caption = 'Customer List';<br/>     UsageCategory = ReportsAndAnalysis;<br/> <br/>     dataset<br/>     {<br/>         dataitem(Customer; Customer)<br/>         {<br/>             ...<br/>             column(Customer_No_; "No.")<br/>             {<br/>                 IncludeCaption = true;<br/>             }<br/>             ...            }<br/>             column(Customer_Phone_No_; "Phone No.")<br/>             {<br/>                 IncludeCaption = true;<br/>             }<br/>             column(Customer_Lookup_Value_Code;<br/>                 "Lookup Value Code")<br/>             {<br/>                 IncludeCaption = true;<br/>             }<br/> <br/>             ...<br/>          }<br/>     }<br/> <br/>     requestpage<br/>     {<br/>         ...<br/>     }<br/> <br/>     Labels<br/>     {<br/>         ...<br/>     }<br/> <br/>     ...<br/> }</pre>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Test code</h1>
+                </header>
+            
+            <article>
+                
+<p>Have a look at our <kbd>.al</kbd> implementation of scenario <kbd>#0029</kbd>.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Create, embed, and write</h1>
+                </header>
+            
+            <article>
+                
+<p>Create the codeunit, embedding the ATDD scenario, and writing the story will result in the following:</p>
+<pre>codeunit 81008 "Lookup Value Report"<br/>{<br/>    Subtype = Test;<br/><br/>    //[FEATURE] LookupValue Report<br/><br/>    [Test]<br/>    [HandlerFunctions('CustomerListRequestPageHandler')]<br/>    procedure TestLookupValueShowsOnCustomerListReport();<br/>    var<br/>        Customer: array[2] of Record Customer;<br/>    begin<br/>        //[SCENARIO #0029] Test that lookup value shows on<br/>        //                 CustomerList report<br/>        Initialize();<br/>        //[GIVEN] 2 customers with different lookup value<br/>        CreateCustomerWithLookupValue(Customer[1]);<br/>        CreateCustomerWithLookupValue(Customer[2]);<br/>        //[WHEN] Run report CustomerList<br/>        CommitAndRunReportCustomerList();<br/>        //[THEN] Report dataset contains both customers with <br/>        //       lookup value<br/>        VerifyCustWithLookupValueOnCustListReport(<br/>            Customer[1]."No.", Customer[1]."Lookup Value Code");<br/>        VerifyCustWithLookupValueOnCustListReport(<br/>            Customer[2]."No.", Customer[2]."Lookup Value Code");<br/>    end;<br/>}</pre>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Construct the real code</h1>
+                </header>
+            
+            <article>
+                
+<p>See, how the helper functions look like.</p>
+<p><kbd>Initialize</kbd> makes sure our report only picks up the two newly created customers by deleting all customer records that exist in the database; as the test will be run in isolation, this deletion will be reverted:</p>
+<pre>local procedure Initialize()<br/>var<br/>    Customer: record Customer;<br/>begin<br/>    if isInitialized then<br/>        exit;<br/>    Customer.DeleteAll();<br/>    isInitialized := true;<br/>    Commit();<br/>end;</pre>
+<p><kbd>CreateCustomerWithLookupValue</kbd> and <kbd>CreateLookupValueCode</kbd> are becoming our next door <span>neighbors</span><span> </span><span>to help us out in almost all of our scenarios:</span></p>
+<pre>local procedure CreateCustomerWithLookupValue(<br/>    var Customer: Record Customer)<br/>begin<br/>    LibrarySales.CreateCustomer(Customer);<br/>    with Customer do begin<br/>        Validate("Lookup Value Code",CreateLookupValueCode());<br/>        Modify();<br/>    end;<br/>end;<br/><br/>local procedure CreateLookupValueCode(): Code[10]<br/>var<br/>    LookupValue: Record LookupValue;<br/>begin<br/>    //for implementation see test example 1; this smells like<br/>    //duplication ;-) again<br/>end;</pre>
+<p>Testing a report dataset is about browsing its XML structure, therefore, <kbd>CommitAndRunReportCustomerList</kbd> calls <kbd>RunReportAndLoad</kbd> in codeunit <kbd>Library - Report Dataset</kbd> (131007) to stream the dataset in a temporary <kbd>TempBlob</kbd> record (table 99008535) to be used in the verification part:</p>
+<pre>local procedure CommitAndRunReportCustomerList()<br/>var<br/>    CustomerListReport: Report CustomerList;<br/>    RequestPageXML: Text;<br/>begin<br/>    Commit(); // close open write transaction to be able to<br/>              // run the report<br/>    RequestPageXML := Report.RunRequestPage(<br/>        Report::CustomerList,<br/>        RequestPageXML);<br/>    LibraryReportDataset.RunReportAndLoad(<br/>        Report::CustomerList,<br/>        '',<br/>        RequestPageXML);<br/>end;<br/><br/>[RequestPageHandler]<br/>procedure CustomerListRequestPageHandler(<br/>            var CustomerListRequestPage:<br/>            TestRequestPage CustomerList)<br/>begin<br/>    // Empty handler used to close the request page, default<br/>    // settings are used<br/>end;</pre>
+<p>In <kbd>VerifyCustWithLookupValueOnCustListReport</kbd>, we see that <kbd>FindRow</kbd> reads the customer number (column <kbd>Customer_No_</kbd>) and our lookup value (column <kbd>Customer_Lookup_Value_Code</kbd>) and determines their row position:</p>
+<pre>local procedure VerifyCustWithLookupValueOnCustListReport(<br/>                    No: Code[20]; LookupValueCode: Code[10])<br/>var<br/>    Row: array[2] of Integer;<br/>begin<br/>    Row[1] := LibraryReportDataset.FindRow(<br/>                'Customer_No_',<br/>                No);<br/>    Row[2] := LibraryReportDataset.FindRow(<br/>                'Customer_Lookup_Value_Code',<br/>                LookupValueCode);<br/>    Assert.AreEqual(<br/>        13, Row[2] - Row[1],<br/>        'Delta between columns Customer_No_ and<br/>         Customer_Lookup_Value_Code')<br/> end;</pre>
+<p>A few<span> </span><span>notes more:</span></p>
+<ul>
+<li>Elements in the definition of the report dataset are referred to as <em>columns</em>.  In the <kbd>Library - Report Dataset</kbd> codeunit, and thus in the test, for the same the term row is used which refers to the row in the xml of the dataset that has been generated.</li>
+<li>Notice that the delta between the rows is verified to be <kbd>13</kbd>, meaning, referring to the previous note, that the column <kbd>Customer_Lookup_Value_Code</kbd> is the 13th column in the dataset after the column <kbd>Customer_No_</kbd>.  </li>
+<li>For valid reasons, you could wonder if this is a relevant check; it will for sure error when the row math does not work out right anymore, as we will see later.</li>
+<li>You might have noticed: global variables declaration has been omitted.</li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Test execution</h1>
+                </header>
+            
+            <article>
+                
+<p><span>I</span>t's becoming a habit: green, green, green!</p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-772 image-border" src="assets/494128a7-eddb-486c-b419-f4e4a35d61f3.png" style="width:97.00em;height:36.25em;"/></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Test the test</h1>
+                </header>
+            
+            <article>
+                
+<p>Come on! We control it ourselves. Let's do it.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Adjust the test so the verification errs</h1>
+                </header>
+            
+            <article>
+                
+<p>How about changing…</p>
+<ul>
+<li>The hardcoded <kbd>13</kbd> in <kbd>VerifyCustWithLookupValueOnCustListReport</kbd> to <kbd>56</kbd>, or</li>
+<li>Its <kbd>LookupValueCode</kbd> parameter when being called from the test function</li>
+</ul>
+<p>These will throw the following errors, respectively:</p>
+<pre><span>Assert.AreEqual failed. Expected:&lt;56&gt; (Integer). Actual:&lt;13&gt; (Integer). Delta between columns Customer_No_ and Customer_Lookup_Value_Code.<br/><br/></span><br/>Assert.AreEqual failed. Expected:&lt;13&gt; (Integer). Actual:&lt;-4&gt; (Integer). Delta between columns Customer_No_ and Customer_Lookup_Value_Code.</pre>
+<p>The latter might be kind of unexpected, as it doesn't show something comparable as before, stating <kbd>LUC</kbd> as the expected value and so on. Here, our verification is done by the <kbd>FindRow</kbd> method, and as <kbd>LUC</kbd> is not in the dataset, <kbd>FindRow</kbd> will return <kbd>a -1</kbd>, and as <kbd>Customer_No_</kbd> is on Row [3], the math will result in <kbd>-4</kbd>.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Test example 8 – how to construct an extensive scenario</h1>
+                </header>
+            
+            <article>
+                
+<p>To achieve your goals as an end-user in Dynamics 365 Business Central, being the ERP package it is, you often end up exercising a substantial chain of consecutive actions. How do you go about constructing a suite of tests for that? How to create reusable parts? And how to make use of already existing helper functions in the Microsoft test libraries?</p>
+<p>To illustrate this, we elaborate on another part of our customer wish.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Customer wish</h1>
+                </header>
+            
+            <article>
+                
+<p>In the business logic description of our customer wish it is mentioned that:</p>
+<div class="packt_quote">When creating a warehouse shipment from a sales order, the Lookup Value Code field should be inherited from the Sales Header to the Warehouse Shipment Line.</div>
+<p>This is expressed in the following two scenarios:</p>
+<pre><strong>[FEATURE]</strong> LookupValue Warehouse Shipment<br/><strong>[SCENARIO #0030]</strong> Create warehouse shipment from sales order with<br/>                 lookup value<br/><strong>[GIVEN]</strong> A lookup value<br/><strong>[GIVEN]</strong> A location with require shipment<br/><strong>[GIVEN]</strong> A warehouse employee for current user<br/><strong>[WHEN] </strong>Create warehouse shipment from released sales order with<br/><strong>       </strong>lookup value and with line with require shipment location<br/><strong>[THEN] </strong>Warehouse shipment line has lookup value code field<br/>       populated<br/><br/><strong>[SCENARIO #0031]</strong> Get sales order with lookup value on warehouse<br/>                 shipment<br/><strong>[GIVEN]</strong> A lookup value<br/><strong>[GIVEN]</strong> A location with require shipment<br/><strong>[GIVEN]</strong> A warehouse employee for current user<br/><strong>[GIVEN]</strong> A released sales order with lookup value and with line<br/><strong>       </strong> with require shipment location<br/><strong>[GIVEN]</strong> A warehouse shipment without lines<br/><strong>[WHEN] </strong>Get sales order with lookup value on warehouse shipment<br/><strong>[THEN] </strong>Warehouse shipment line has lookup value code field<br/>       populated</pre>
+<p>This, however, implies that the <kbd>Lookup Value</kbd> field already exists on both the <kbd>Warehouse Shipment Line</kbd> and <kbd>Posted Whse. Shipment Line</kbd> tables, which is defined by the following three fundamental scenarios on our list, we have skipped so far:</p>
+<pre><strong>[SCENARIO #0015]</strong> Assign lookup value to warehouse shipment line<br/><strong>[GIVEN] </strong>A lookup value<br/><strong>[GIVEN] </strong>A location with require shipment<br/><strong>[GIVEN] </strong>A warehouse employee for current user<br/><strong>[GIVEN] </strong>A warehouse shipment from released sales order with line<br/><strong>        </strong>with require shipment location<br/><strong>[WHEN] </strong>Set lookup value on warehouse shipment line<br/><strong>[THEN] </strong>Warehouse shipment line has lookup value code field<br/><strong>        </strong>populated<br/><br/><strong>[SCENARIO #0016]</strong> Assign non-existing lookup value on warehouse<br/>                 shipment line<br/><strong>[GIVEN]</strong> A non-existing lookup value<br/><strong>[GIVEN]</strong> A warehouse shipment line record variable<br/><strong>[WHEN] </strong>Set non-existing lookup value to warehouse shipment line<br/><strong>[THEN] </strong>Non existing lookup value error was thrown<br/><br/><strong>[SCENARIO #0017]</strong> Assign lookup value to warehouse shipment line on<br/>                 warehouse shipment document page<br/><strong>[GIVEN]</strong> A lookup value<br/><strong>[GIVEN]</strong> A location with require shipment<br/><strong>[GIVEN]</strong> A warehouse employee for current user<br/><strong>[GIVEN]</strong> A warehouse shipment from released sales order with line<br/><strong>       </strong> with require shipment location<br/><strong>[WHEN] </strong>Set lookup value on warehouse shipment line on warehouse<br/><strong>       </strong>shipment document page<br/><strong>[THEN] </strong>Warehouse shipment line has lookup value code field<br/>       populated</pre>
+<p>As the scenarios are related, it won't be a surprise to find congruous parts. It's a message happily notifying us that we will be able to construct reusable parts and save time when working out all five scenarios.</p>
+<p>These are the obvious ones:</p>
+<pre><strong>[GIVEN]</strong> A lookup value<br/><strong>[GIVEN]</strong> A location with require shipment<br/><strong>[GIVEN]</strong> A warehouse employee for current user</pre>
+<p>But you can often find hints inline. Compare the following taken from four of the five scenarios:</p>
+<pre><strong>[SCENARIO #0015]</strong><br/><strong>[GIVEN] </strong>A warehouse shipment from released sales order with line<br/><strong>        </strong>with require shipment location<br/><br/><strong>[SCENARIO #0017]</strong><br/><strong>[GIVEN]</strong> A warehouse shipment from released sales order with line<br/><strong>       </strong> with require shipment location<br/><strong><br/>[SCENARIO #0030]</strong><br/><strong>[WHEN] </strong>Create warehouse shipment from released sales order with<br/><strong>       </strong>lookup value and with line with require shipment location<br/><br/><strong>[SCENARIO #0031]</strong><br/><strong>[GIVEN]</strong> A released sales order with lookup value and with line<br/><strong>       </strong> with require shipment location</pre>
+<p>This tells us that, in all these cases, we will need a released sales order with a lookup value.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Application code</h1>
+                </header>
+            
+            <article>
+                
+<p>On account of scenarios <kbd>#0015</kbd>, <kbd>#00016</kbd> and <kbd>#0017</kbd>, the extension of the <kbd>Warehouse Shipment Line</kbd> and <kbd>Posted Whse. Shipment Line</kbd> tables and their related pages, is implemented with the next code (again in a bare minimum to save space):</p>
+<pre>tableextension 50007 "WhseShipmentLineTableExt"<br/>                         extends "Warehouse Shipment Line"<br/>{<br/>    fields<br/>    {<br/>        field(50000; "Lookup Value Code"; Code[10]){}<br/>    }<br/>}<br/><br/>tableextension 50008 "PstdWhseShipmentLineTableExt"<br/>                         extends "Posted Whse. Shipment Line"<br/>{<br/>    fields<br/>    {<br/>        field(50000; "Lookup Value Code"; Code[10]){}<br/>    }<br/>}<br/><br/>pageextension 50034 "WhseShipmentSubformPageExt" <br/>                         extends "Whse. Shipment Subform"<br/>{<br/>    layout<br/>    {<br/>        addlast(Control1)<br/>        {<br/>            field("Lookup Value Code"; "Lookup Value Code"){}<br/>        }<br/>    }<br/>}<br/><br/>pageextension 50036 "PstdWhseShipmentSubformPageExt"<br/>                         extends "Posted Whse. Shipment Subform"<br/>{<br/>    layout<br/>    {<br/>        addlast(Control1)<br/>        {<br/>            field("Lookup Value Code"; "Lookup Value Code"){}<br/>        }<br/>    }<br/>}<br/><br/>pageextension 50035 "WhseShipmentLinesPageExt"<br/>                         extends "Whse. Shipment Lines"<br/>{<br/>    layout<br/>    {<br/>        addlast(Control1)<br/>        {<br/>            field("Lookup Value Code"; "Lookup Value Code"){}<br/>        }<br/>    }<br/>}</pre>
+<p>To enable scenarios <kbd>#0030</kbd> and <kbd>#0031</kbd>, the standard application only needs to be extended with the following code:</p>
+<pre>codeunit 50002 "WhseCreateSourceDocumentEvent"<br/>{<br/>    [EventSubscriber(ObjectType::Codeunit,<br/>        Codeunit::"Whse.-Create Source Document",<br/>        'OnBeforeCreateShptLineFromSalesLine', '', false, false)]<br/>    local procedure OnBeforeCreateShptLineFromSalesLineEvent(<br/>        var WarehouseShipmentLine:<br/>            Record "Warehouse Shipment Line";<br/>        WarehouseShipmentHeader:<br/>            Record "Warehouse Shipment Header";<br/>        SalesLine: Record "Sales Line";<br/>        SalesHeader: Record "Sales Header")<br/>    begin<br/>        with WarehouseShipmentLine do<br/>            "Lookup Value Code" :=<br/>                SalesHeader."Lookup Value Code";<br/>    end;<br/>}</pre>
+<p>The subscriber <kbd>OnBeforeCreateShptLineFromSalesLineEvent</kbd> assures that the value of the <kbd>Lookup Value Code</kbd> field on a sales document is copied to the <kbd>Lookup Value Code</kbd> field on the warehouse shipment line.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Test code</h1>
+                </header>
+            
+            <article>
+                
+<p>Let's implement the four overlapping scenarios <kbd>#0015</kbd>, <kbd>#0017</kbd>, <kbd>#0030</kbd>, and <kbd>#0031</kbd>.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Create, embed, and write</h1>
+                </header>
+            
+            <article>
+                
+<pre>codeunit 81005 "LookupValue Posting"<br/>{<br/>    Subtype = Test;<br/><br/>    //[FEATURE] LookupValue Warehouse Shipment<br/><br/>    [Test]<br/>    procedure AssignLookupValueToWarehouseShipmentLine()<br/>    begin<br/>        //[SCENARIO #0015] Assign lookup value to warehouse<br/>        //                 shipment line on warehouse shipment<br/>        //                 page<br/>        //[GIVEN] A lookup value<br/>        //[GIVEN] A location with require shipment<br/>        //[GIVEN] A warehouse employee for current user<br/>        Initialize();<br/>        //[GIVEN] A warehouse shipment from released sales order<br/>        //        with line with require shipment location<br/>        SalesOrderNo := <br/>            CreateWarehouseShipmentFromSalesOrder(<br/>                DefaultLocation, <br/>                UseNoLookupValue());<br/>        //[WHEN] Set lookup value on warehouse shipment line on<br/>        //       warehouse shipment page<br/>        FindAndSetLookupValueOnWarehouseShipmentLine(<br/>            SalesOrderNo, <br/>            LookupValueCode);<br/>        //[THEN] Warehouse shipment line has lookup value code<br/>        //       field populated<br/>        VerifyLookupValueOnWarehouseShipmentLine(<br/>            SalesOrderNo, <br/>            LookupValueCode);<br/>    end;<br/><br/>    [Test]<br/>    procedure<br/>        AssignLookupValueToLineOnWarehouseShipmentDocument()<br/>    begin<br/>        //[SCENARIO #0017] Assign lookup value to warehouse<br/>        //                 shipment line on warehouse shipment<br/>        //                 page<br/>        //[GIVEN] A lookup value<br/>        //[GIVEN] A location with require shipment<br/>        //[GIVEN] A warehouse employee for current user<br/>        Initialize();<br/>        //[GIVEN] A warehouse shipment from released sales order<br/>        //        with line with require shipment location<br/>        SalesOrderNo := <br/>            CreateWarehouseShipmentFromSalesOrder(<br/>                DefaultLocation, <br/>                UseNoLookupValue());<br/>        //[WHEN] Set lookup value on warehouse shipment line on<br/>        //       warehouse shipment document page<br/>        SetLookupValueOnLineOnWarehouseShipmentDocumentPage(<br/>            SalesOrderNo);<br/>        //[THEN] Warehouse shipment line has lookup value code<br/>        //       field populated<br/>        VerifyLookupValueOnWarehouseShipmentLine(<br/>            SalesOrderNo, <br/>            LookupValueCode);<br/>    end;<br/><br/>    [Test]<br/>    procedure<br/>        CreateWarehouseShipmentFromSalesOrderWithLookupValue()<br/>    begin<br/>        //[SCENARIO #0030] Create warehouse shipment from sales<br/>        //                 order with lookup value<br/>        //[GIVEN] A lookup value<br/>        //[GIVEN] A location with require shipment<br/>        //[GIVEN] A warehouse employee for current user<br/>        Initialize();<br/>        //[WHEN] Create warehouse shipment from released sales<br/>        //       order with lookup value and with line with<br/>        //       require shipment location<br/>        SalesOrderNo :=<br/>            CreateWarehouseShipmentFromSalesOrder(<br/>                DefaultLocation, <br/>            UseLookupValue());<br/>        //[THEN] Warehouse shipment line has lookup value code<br/>        //       field populated<br/>        VerifyLookupValueOnWarehouseShipmentLine(<br/>                SalesOrderNo, <br/>            LookupValueCode);<br/>    end;<br/><br/>    [Test]<br/>    procedure GetSalesOrderWithLookupValueOnWarehouseShipment()<br/>    begin<br/>        //[SCENARIO #0031] Get sales order with lookup value on<br/>        //                 warehouse shipment<br/>        //[GIVEN] A lookup value<br/>        //[GIVEN] A location with require shipment<br/>        //[GIVEN] A warehouse employee for current user<br/>        Initialize();<br/>        //[GIVEN] A released sales order with lookup value and<br/>        //        with line with require shipment location<br/>        CreateAndReleaseSalesOrder(<br/>            SalesHeader, <br/>            DefaultLocation, <br/>            UseLookupValue());<br/>        //[GIVEN] A warehouse shipment without lines<br/>        WarehouseShipmentNo := <br/>            CreateWarehouseShipmentWithOutLines(<br/>                DefaultLocation."Code");<br/>        //[WHEN] Get sales order with lookup value on warehouse<br/>        //       shipment<br/>        GetSalesOrderShipment(WarehouseShipmentNo);<br/>        //[THEN] Warehouse shipment line has lookup value code<br/>        //       field populated<br/>        VerifyLookupValueOnWarehouseShipmentLine(<br/>            SalesHeader."No.", <br/>            LookupValueCode);<br/>    end;<br/>}</pre>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Construct the real code</h1>
+                </header>
+            
+            <article>
+                
+<p>With the code on GitHub, we leave it to you to have a look at the major part of the implementation of these tests. Here, however, we'll study closer scenario <kbd>#0030</kbd>, wherein both the <kbd>[GIVEN]</kbd> and <kbd>[THEN]</kbd> parts are shared with the other three scenarios. Paraphrasing the question with which we started this last <span>test</span><span> </span><span>example, the goal here is to show you how:</span></p>
+<ul>
+<li>A complex scenario could be build up creating and using reusable parts</li>
+<li>To find as much as possible reusable parts in the standard libraries</li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Initialize</h1>
+                </header>
+            
+            <article>
+                
+<p>With <kbd>Initialize</kbd> being the first reusable that is shared, part of the data setup is being handled:</p>
+<pre><strong>[GIVEN]</strong> A lookup value<br/><strong>[GIVEN]</strong> A location with require shipment<br/><strong>[GIVEN]</strong> A warehouse employee for current user</pre>
+<p>In code:</p>
+<pre>local procedure Initialize()<br/>var<br/>    WarehouseEmployee: Record "Warehouse Employee";<br/>begin<br/>    if isInitialized then<br/>        exit;<br/><br/>    LookupValueCode := CreateLookupValueCode();<br/>    LibraryWarehouse.CreateLocationWMS(<br/>        DefaultLocation, false, false, false, false, true);<br/>    LibraryWarehouse.CreateWarehouseEmployee(<br/>        WarehouseEmployee, DefaultLocation."Code", false);<br/><br/>    isInitialized := true;<br/>    Commit();<br/>end;</pre>
+<p>The structure of <kbd>Initialize</kbd> by now should look familiar, including the usage of the global Boolean variable <kbd>isInitialized</kbd>, the global <kbd>Code[10]</kbd> variable <kbd>LookupValueCode</kbd>, and local helper function <kbd>CreateLookupValueCode</kbd>, and why <kbd>CreateLookupValueCode</kbd> can be part of the lazy setup.</p>
+<p>The creation of a location (with <em>require shipment</em>) and a warehouse employee can also be embedded in <kbd>Initialize</kbd> as these can easily be shared between the four scenarios. For this, <kbd>DefaultLocation</kbd> is set up as a global record variable (based on the <kbd>Location</kbd> table). The warehouse employee does not need to be stored as it will be retrieved from the database.</p>
+<p>As you can see, use is made of two helper functions through a library codeunit variable <kbd>LibraryWarehouse</kbd> based on the standard codeunit called <kbd>Library - Warehouse</kbd>. Using the simple and quick file search method as mentioned in <a href="fdf2b65f-be7c-4710-a3a9-39f4cc34ee5c.xhtml" target="_blank">Chapter 3</a>, <em>The Test Tool and Standard Tests</em>, I hunted for a helper function to create a location, search string CreateLocation, and one to create a warehouse employee, search string CreateWarehouseEmployee.</p>
+<div class="packt_infobox">Running the test functions, we eventually will have implemented the scenarios <kbd>#0015</kbd>, <kbd>#0017</kbd>, <kbd>#0030</kbd>, and <kbd>#0031</kbd> unambiguously, which shows that making use of the <kbd>Initialize</kbd> function is not only a matter of creating code that is easier to maintain and understand, it's also much faster and, as such, a must for automated tests.<br/>
+<br/>
+Having run all four tests 10 times individually (and thus triggering <kbd>Initialize</kbd> as if it were a fresh setup), and also having run the four tests in one go 10 times (now triggering <kbd>Initialize</kbd> to get a shared setup), it shows that the latter is more than 30% faster.<br/>
+<br/>
+Note that in both cases, scenario <kbd>#0015</kbd> is just as fast because it always makes <kbd>Initialize</kbd> run fully.</div>
+<div class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-773 image-border" src="assets/64112f97-0cae-40d2-bd09-6cad40acc690.png" style="width:33.67em;height:8.75em;"/></div>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">VerifyLookupValueOnWarehouseShipmentLine</h1>
+                </header>
+            
+            <article>
+                
+<p>With <kbd>VerifyLookupValueOnWarehouseShipmentLine</kbd>, the second reusable part is found. It closely resembles the various <kbd>VerifyLookupValueOn</kbd> helper functions in the previous examples. Hence, with practicing the Business Central developer's virtue, it's a quick task to code <kbd>VerifyLookupValueOnWarehouseShipmentLine</kbd>: copy, paste, and adjust. We leave that to you.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">CreateWarehouseShipmentFromSalesOrder</h1>
+                </header>
+            
+            <article>
+                
+<p>If you have experience with the warehouse shipping feature of Business Central, you know that a series of steps have to be performed to get a warehouse shipment created. It's not as single fold an operation as creating a purchase invoice.</p>
+<p>The below process schema displays the tasks that need to be performed for the <kbd>[WHEN]</kbd> part of scenario <kbd>#0030</kbd>:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-774 image-border" src="assets/23668512-6d19-4899-b799-868ed2a72d24.png" style="width:159.25em;height:126.92em;"/></p>
+<p>Based on this, the <kbd>.al</kbd> implementation becomes:</p>
+<pre>local procedure CreateWarehouseShipmentFromSalesOrder(<br/>                    Location: Record Location; <br/>                    WithLookupValue: Boolean): Code[20]<br/>var<br/>    SalesHeader: Record "Sales Header";<br/>begin<br/>    CreateAndReleaseSalesOrder(<br/>        SalesHeader, <br/>        Location, <br/>        WithLookupValue);<br/>    LibraryWarehouse.CreateWhseShipmentFromSO(SalesHeader);<br/>    exit(SalesHeader."No.");<br/>end;<br/><br/>local procedure CreateAndReleaseSalesOrder(<br/>        var SalesHeader: record "Sales Header"; Location: Record Location; WithLookupValue: Boolean)<br/>var<br/>    SalesLine: record "Sales Line";<br/>begin<br/>    LibrarySales.CreateSalesDocumentWithItem(<br/>         SalesHeader, SalesLine, SalesHeader."Document Type"::Order,<br/>         '', '', 1, Location."Code", 0D);<br/> <br/>    with SalesHeader do<br/>        if WithLookupValue then begin<br/>            Validate("Lookup Value Code", LookupValueCode);<br/>            Modify();<br/>        end;<br/><br/>    LibrarySales.ReleaseSalesDocument(SalesHeader);<br/>end;</pre>
+<p>Next to the already encountered global codeunit variable <kbd>LibraryWarehouse</kbd>, we are using <kbd>LibrarySales</kbd>, based on standard codeunit <kbd>Library - Sales</kbd> and <kbd>LibraryRandom</kbd>, based on standard codeunit <kbd>Library - Random</kbd>. All three were the result of the search:</p>
+<table style="border-collapse: collapse;width: 100%" border="1">
+<tbody>
+<tr>
+<td><strong>A Helper method that</strong></td>
+<td><strong>Is found with Search string</strong></td>
+</tr>
+<tr>
+<td>Creates a warehouse shipment from sales order</td>
+<td>Procedure <em>CreateWhseShipmentFrom</em></td>
+</tr>
+<tr>
+<td>Creates a sales document with an item and location</td>
+<td>Procedure <em>CreateSalesDocumentWith</em></td>
+</tr>
+<tr>
+<td>Release a sales document</td>
+<td>Procedure <em>ReleaseSalesDoc</em></td>
+</tr>
+<tr>
+<td>Generates a random number</td>
+<td>Procedure <em>Random</em>, followed by procedure <em>Rand</em></td>
+</tr>
+</tbody>
+</table>
+<div class="packt_infobox">We have created well readable, reusable, minimalistic functions. <kbd>CreateWarehouseShipmentFromSalesOrder</kbd> is being used by scenarios <kbd>#0015</kbd>, <kbd>#0017</kbd>, and <kbd>#0030</kbd>. <kbd>CreateAndReleaseSalesOrder</kbd> is directly being used by scenario <kbd>#0031</kbd> and indirectly by <kbd>#0015</kbd>, <kbd>#0017</kbd>, and <kbd>#0030</kbd>.</div>
+<div class="packt_infobox">
+<p>The two empty strings in the call to <kbd>LibrarySales.CreateSalesDocumentWithItem</kbd> trigger the creation of a customer and item.</p>
+</div>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Test execution</h1>
+                </header>
+            
+            <article>
+                
+<p>Run, run, runnnnn. Grrrrrrrreeeeeeen!</p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-775 image-border" src="assets/9c7f007d-a3ac-4ea3-aadb-c5d4de500d62.png" style="width:97.17em;height:43.50em;"/></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Test the test</h1>
+                </header>
+            
+            <article>
+                
+<p>Now that we have worked our way through this bigger challenge, let's, for the last time, test the test.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Adjust the test so the verification errs</h1>
+                </header>
+            
+            <article>
+                
+<p>Let us now adjust the test by providing another value for the expected result in scenarios <kbd>#0015</kbd>, <kbd>#0017</kbd>, <kbd>#0030</kbd>, and <kbd>#0031</kbd>: <kbd>LUC</kbd>:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-776 image-border" src="assets/3acfe2a6-6841-462f-986a-099e0689d8c3.png" style="width:96.92em;height:43.75em;"/></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Refactoring</h1>
+                </header>
+            
+            <article>
+                
+<p>In this chapter, and actually the whole of section 3, we discussed various aspects of designing and coding automated tests for Dynamics 365 Business Central. We talked about and applied best practices, such as <em>reusability</em>, <em>readability</em>, and <em>minimalism</em>, but we did not apply it to the full extent. You might recall that at a couple of spots it was mentioned that some code part <em>smells like duplication</em>. This typically was a hint to refactor this code to make it reusable. We're not going to act on it within the confinement of this book. But the completed code that you can find on GitHub has been refactored resulting, among others, in the creation of two libraries with reusable helper methods. It also includes all scenarios that complete the full customer wish, as discussed at the start of <a href="56634efe-664c-421a-9582-b2a6ae69722a.xhtml" target="_blank">Chapter 5</a>, <em>From Customer Wish to Test Automation - The Basics</em>, but they have not been used as examples in the book.</p>
+<p>At the same time: be challenged and go and refactor the code you have created yourself so far while implementing the previous eight test examples. Having a complete set of application and test code in place allows you to refactor whatever you need to refactor, be it application or test code. But only one or the other. If refactoring application code leads to failing tests that used to succeed before, improve your refactored code and make all tests pass. If refactoring test code makes them fail where they didn't previously, revert and do it better.</p>
+<p>Except for time shortage, and maybe a lazy mood, there is no reason not to refactor at this point. Get the best out of your code right now.</p>
+<div class="packt_tip">In case of code that is not yet covered by tests, write tests before doing any refactoring. If you don’t, the chances of breaking something and not noticing are very high.</div>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Summary</h1>
+                </header>
+            
+            <article>
+                
+<p>In this chapter, we learned how to test a report dataset and how to build more extensive scenarios in such a way that the test code is readable, reusable, and, not least important, minimalistic, the latter by making use of standard helper functions.</p>
+<p>In the next chapter, <a href="e9d66b9a-2c01-4581-acf0-986fa1407e31.xhtml" target="_blank">Chapter 8</a>, <em>How to Integrate Test Automation in Daily Development Practice</em>, we step into the last part of this book in which we will discuss how to integrate your test automation in your day-to-day development practice, including the tests provided by Microsoft.</p>
+
+
+            </article>
+
+            
+        </section>
+    </body></html>

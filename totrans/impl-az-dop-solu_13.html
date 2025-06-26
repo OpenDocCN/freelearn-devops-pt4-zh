@@ -1,0 +1,747 @@
+<html><head></head><body>
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Application Monitoring</h1>
+                </header>
+            
+            <article>
+                
+<p>In the previous chapters, you learned about applying DevOps principles to software delivery. You learned how to create a pipeline from source control all the way to production. You also learned how to ensure that your delivery is compliant and secure, without sacrificing speed or a focus on the delivery of business value. In this chapter, you will learn how to start transforming this pipeline into a DevOps loop, a continuous process of delivering new software, and then measure how your application performs. This is a continuous journey, as you evaluate how your application fares in production and learn how to proceed next.</p>
+<p>To do this, this chapter starts by introducing a means for gathering application crashes. Almost every application will, at some point, throw an unhandled exception and crash. Ensuring that application crashes are gathered and reported will enable you to investigate the causes and to address them. Next, attention shifts to instrumenting applications. Instrumentation is the practice of gathering logs and metrics that help you understand how your application performs in production. You can use them to get alerts when things go wrong or, hopefully, before they go wrong. The chapter concludes by exploring several options for integrating with other tools.</p>
+<p>The following topics are covered in this chapter:</p>
+<ul>
+<li>Investigating application crashes</li>
+<li>Instrumenting web applications</li>
+<li>Integrating with other tools</li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Technical requirements</h1>
+                </header>
+            
+            <article>
+                
+<p>To experiment with the techniques described in this chapter, you will need one or more of the following:</p>
+<ul>
+<li>An App Center account for gathering mobile application crashes</li>
+<li>A Raygun subscription for gathering desktop application crashes</li>
+<li>An Azure subscription for instrumenting web applications</li>
+</ul>
+<p>Free-trial options are available for all of these.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Investigating application crashes</h1>
+                </header>
+            
+            <article>
+                
+<p>No matter how well an application is engineered, at some point, it will crash due to an unexpected condition. To learn from these crashes and to try and prevent them in the future, it helps to add code to applications to gather crash reports and send them to a central location. Here, they can be analyzed and grouped to identify application improvements. How to do this differs depending on the type of application.</p>
+<p>The following sections discuss how this process for mobile and desktop applications works. Regarding web applications, gathering crash reports can be done using the same tool as for instrumentation; we will discuss this in the <em>Instrumenting web applications</em> section later on.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Gathering crash reports for mobile applications</h1>
+                </header>
+            
+            <article>
+                
+<p>One of the many tools available for gathering crash reports and errors from mobile applications is Visual Studio App Center. Besides distributing mobile applications, App Center also allows applications to submit their crashes and errors for analysis.</p>
+<p>To get started with crash reporting using App Center, the application first needs to be defined. This is called an app definition and how to work with it was discussed in <a href="8ab4597a-becd-4855-9b45-89045982c14a.xhtml">Chapter 4</a>, <em>Continuous Deployment</em>. With this app definition, an app secret is created, which is needed to configure the application to send out crash reports. To start sending crash reports, the following steps need to be performed:</p>
+<ol>
+<li>Install the <kbd>Microsoft.AppCenter.Crashes</kbd> NuGet package on the project.</li>
+<li>Add the following code to the application initialization:</li>
+</ol>
+<pre style="padding-left: 90px">AppCenter.Start("ios={appSecret};android={appSecret };uwp={appSecret}", typeof(Crashes));</pre>
+<p style="padding-left: 60px">Besides crashes, it is also possible to track other errors that are of interest to developers. This can be done using the following code:</p>
+<pre style="padding-left: 90px">Crashes.TrackError(ex);</pre>
+<p style="padding-left: 60px">Now, all the unhandled exceptions are automatically caught and sent back to App Center. Here, they become available for analysis, as in the following screenshot:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1081 image-border" src="assets/f4aca831-a120-44e4-97fe-a70eedfaec1f.png" style="width:113.92em;height:66.58em;"/></p>
+<ol start="3">
+<li>Click on any of the reported errors or crashes to open a detailed view, as shown:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1082 image-border" src="assets/1ee587c6-a5fe-4492-8152-41e45a97463e.png" style="width:114.50em;height:62.92em;"/></p>
+<p>A dashboard with the most important information is shown for each crash or error. This includes the number of reports and the number of affected users. Also, the impacted device types and operating systems are shown. At the top of the page, the stack traces are shown, which can be used by developers to investigate and, hopefully, fix the issue.</p>
+<p>This covers gathering crash reports and errors from mobile applications. The next section introduces the same concepts for desktop applications.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Gathering crash reports for desktop applications</h1>
+                </header>
+            
+            <article>
+                
+<p>Crash reporting is also available for desktop applications. There are, again, many solutions available for desktop applications and most of them work in roughly the same way. One of these solutions is Raygun. Raygun is a commercial offering available for .NET applications, but works for many other languages and platforms as well.</p>
+<p>To gather crashes using Raygun, follow these three steps:</p>
+<ol>
+<li>Sign up for a Raygun account.</li>
+<li>Install the <kbd>Mindscape.Raygun4Net</kbd> NuGet package on the solution.</li>
+<li>Catch unhandled exceptions and forward them to Raygun.</li>
+</ol>
+<p>The following example shows you how to catch and forward unhandled exceptions to Raygun:</p>
+<pre> class Program<br/>    {<br/>        private static readonly RaygunClient _raygunClient = new RaygunClient("myKey");<br/> <br/>        static void Main(string[] args)<br/>        {<br/>            AppDomain.CurrentDomain.UnhandledException += HandleEx;<br/>            throw new Exception("Boom!");<br/>        }<br/> <br/>        private static void HandleEx(object sender, UnhandledExceptionEventArgs e)<br/>        {<br/>            _raygunClient.Send(e.ExceptionObject as Exception);<br/>        }<br/>    }</pre>
+<p>Once this is done, all the exceptions can be explored in the Raygun web interface. Here, exceptions are automatically grouped if stack traces are sufficiently similar. They can also be grouped and browsed individually, but in most cases, it makes sense to <span>only</span><span> </span><span>focus on the larger groups of exceptions.</span></p>
+<p><span>The following screenshot shows how these groups can be browsed in Raygun:</span></p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-347 image-border" src="assets/f11e73bb-a904-4bb6-b4be-5e5cecf9b3df.png" style="width:88.83em;height:44.08em;"/></p>
+<p>Clicking on the exception message in this interface shows the complete stack trace and all the shared properties of any instance of the exception that has occurred.</p>
+<p>This completes our look into gathering crash reports from mobile and desktop applications. Doing so allows you to find and investigate issues that customers face in production. In the following section, instrumentation for web applications is introduced to further enhance our insight into how applications behave in production.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Instrumenting web applications</h1>
+                </header>
+            
+            <article>
+                
+<p>Web applications are different from mobile and desktop applications in many ways—for instance, the fact that large parts of the application do not run on a client, but on a server. This allows developers to collect information on how the application is run for web applications more easily than for other types of applications. Doing so is called instrumenting an application.</p>
+<p>Logs are text messages that are saved by the system to describe the execution path that the server follows. This helps developers go back in time and explore what has happened by examining the logging output. Structured logging is quickly becoming the standard for trace logging. Structured logging is a technique where logs are no longer only text messages. Instead, logs are parameterized text messages with a set of values for each parameter. This has two advantages—logs can be better compressed and they can be searched more quickly.</p>
+<p>Metrics are values that are recorded for an application. They take the form of a timestamp, metric name, and value. One example is recording the percentage of CPU in use every second.</p>
+<p>When instrumenting an application, it is easy to focus on many server-level types of logs and metrics. For example, many operators will, by default, start collecting metrics such as CPU usage, memory pressure, and I/O operations. While there is nothing wrong with these metrics, they are not always indicative of an application's performance from a user's point of view. Other metrics, such as response times or queue message processing delays, might yield better insights into the user experience. While there is nothing wrong with measuring system metrics (they are often great indicators of future issues), you should also try to gather user-centric metrics.</p>
+<p>Azure offers the Application Insights service for instrumenting applications, with a focus on web applications. An Application Insights workspace can be created using the Azure portal, which opens up a workspace as in the following screenshot. One of the important things here is <span class="packt_screen">Instrumentation Key</span>, which will be used in later sections. Even though this field is plainly shown, it is recommended that you treat this as an application secret:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1218 image-border" src="assets/29134293-71b6-495b-91b5-d6b2d63a373c.png" style="width:114.92em;height:51.83em;"/></p>
+<p>If you want to experiment with Application Insights and Azure Monitor using a ready-made application, there is a link to an example at the end of this chapter in the <em>Further reading</em> section. The example is a simple URL shortning application that uses multiple application components and has logging and monitoring built-in and can be used to start experimenting with the concepts introduced in this section within minutes.</p>
+<p>The following subsections will go into detail about logging, metrics, and investigating individual requests.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Logging</h1>
+                </header>
+            
+            <article>
+                
+<p>One of the most basic types of instrumentation is adding logging statements to application code. In the past, these logs were saved to the disk of the server that ran the application. Retrieving and investigating these logs then took a lot of time and effort.</p>
+<p>In modern hosting environments, logs are no longer saved on the local filesystem but instead stored remotely. With transient infrastructure and servers added or removed on the fly, it is no longer possible to store logs on the server and be sure that they can be retrieved later. For this reason, they are transmitted over HTTP to specialized log stores, such as Application Insights.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Emitting logs</h1>
+                </header>
+            
+            <article>
+                
+<p>To write log entries to a log store, such as Application Insights, from an ASP.NET application, two things must be done:</p>
+<ol>
+<li>Log entries need to be emitted from application code, where applicable, using the <kbd>ILogger</kbd> interface. This interface is available from the <kbd>Microsoft.Extensions.Logging.Abstractions</kbd> NuGet package.</li>
+<li>The Application Insights NuGet package (<kbd>Microsoft.ApplicationInsights.AspNetCore</kbd>) needs to be installed and Application Insights needs to be registered as <kbd>LoggingProvider</kbd>. This way, all logs sent to the preceding interface are forwarded to the Application Insights code. In turn, this code forwards all the logs to the Application Insights service.</li>
+</ol>
+<p>The following example code shows you how to use the <kbd>ILogger</kbd> interface from a class to emit a structured log entry:</p>
+<pre>public class Example<br/>{<br/>    private readonly ILogger&lt;Example&gt; _logger;<br/> <br/>    public Example(ILogger&lt;Example&gt; logger)<br/>    {<br/>        _logger = logger;<br/>    }<br/> <br/>    public void DoSomething(User user)<br/>    {<br/>      _logger.LogWarning(<br/>        "Doing something for user with id '{userId}' and username '{username}'", <br/>        user.Id, <br/>        user.Username);<br/>    }<br/>}</pre>
+<div class="packt_infobox">There should be no dollar sign (<kbd>$</kbd>) at the start of the log entry. There is no string interpolation used here, but two placeholders are inserted into the text message. The structured logging entry will recognize these and when showing the entry, insert the provided values.</div>
+<p>With log entries emitted, a logging provider should be registered to capture these logs. This is done using the .NET Core built-in dependency injection.</p>
+<p>After installing the Application Insights NuGet package, the following code needs to be added to the <kbd>CreateWebHostBuilder</kbd> method:</p>
+<pre>public static IWebHostBuilder CreateWebHostBuilder(string[] args) <br/>{<br/>  return WebHost.CreateDefaultBuilder(args)<br/>    .UseStartup&lt;Startup&gt;()<br/>    .ConfigureLogging(builder =&gt; {<br/>        builder.AddApplicationInsights(“myKey”);<br/>    }<br/>}</pre>
+<p>When using version 2.7.0-beta3 (or later) of the Application Insights NuGet package and using Application Insights for metrics, the preceding configuration is no longer needed.</p>
+<p>After starting the application, all log entries of level warning and higher are automatically forwarded to Application Insights. To change which entries are forwarded and which aren't, filters can be configured. A link to more details on configuring Application Insights in detail is provided at the end of this chapter.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Searching logs</h1>
+                </header>
+            
+            <article>
+                
+<p>Within a few minutes of emitting a log entry to Application Insights, it becomes available on the interface for querying. To do this, open the Application Insights instance and navigate to <span class="packt_screen">Logs (Analytics)</span> on the left-hand side menu (<span class="packt_screen">1</span>). This opens the view shown in the following screenshot:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1083 image-border" src="assets/f220ec5b-f232-4cff-9b39-180f80791a21.png" style="width:139.08em;height:66.75em;"/></p>
+<p>Here, it is possible to write queries (<span class="packt_screen">2</span>) that search the recorded logs in <strong>Kusto Query Language</strong> (<strong>KQL</strong>). Application Insights is optimized for handling large amounts of data and most queries return results within a second or less, even when searching millions of log entries.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Alerting on logs</h1>
+                </header>
+            
+            <article>
+                
+<p>Gathering and searching logs is useful when troubleshooting specific situations or bugs in response to a user complaint. However, there are situations where it is better to be notified automatically when a certain condition arises. This is called alerting.</p>
+<p>Within Azure, it is possible to create alert rules that notify developers whenever a certain condition is met. Alerting functionality is provided by the Azure Monitor offering that is integrated with many Azure services, including Application Insights.</p>
+<p>To create a new alert rule, follow these steps:</p>
+<ol>
+<li>Navigate to Azure Monitor using the portal.</li>
+<li>Now, choose <span class="packt_screen">Alerts</span>. This opens the view shown in the following screenshot:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1159 image-border" src="assets/d3366681-8a38-4547-af41-060ee38b8ee4.png" style="width:124.92em;height:79.75em;"/></p>
+<p style="padding-left: 60px">If there are any alerts that need attention, they are shown here.</p>
+<ol start="3">
+<li>To add new alert rules, use the button at the top-left hand side of the screen. Doing so opens another view, as in the following screenshot. Here, the alerting conditions can be configured:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1158 image-border" src="assets/a964d411-6bf6-43f4-9429-bef7d22d199f.png" style="width:126.58em;height:80.00em;"/></p>
+<p>In the preceding screenshot, the view that opens for configuring alerts is shown on the left. Here, it is necessary to make several selections to create an alert:</p>
+<ol>
+<li>This is the resource that is the subject for the alert. This can be any type of resource and, in this instance, the alert will be on an Application Insights workspace.</li>
+<li>These are the conditions to alert under. To select these, the popup on the right opens. Here, a choice can be made between different types of alerts. Pick the <span class="packt_screen">Log Search</span> alert type to open the detailed view shown here. Here, the following selections must be made:
+<ul>
+<li><strong>A query on the trace logs</strong> (refer to <span class="packt_screen">2a</span> in the previous screenshot): In this example, the trace log is queried for entries that have a severity of <kbd>4</kbd> or up, which means that they are emitted using the <kbd>LogWarning</kbd> or <kbd>LogCritical</kbd> methods.</li>
+<li><strong>A condition and operator for triggering the alert</strong> (<span class="packt_screen">2b</span>): In this case, the alert is triggered whenever there is one or more matches.</li>
+<li><strong>The interval to evaluate the alert condition over </strong>(<span class="packt_screen">2c</span>): When specifying a query that matches a specific number, this determines the interval in which this amount must be met.</li>
+<li><strong>How often to evaluate the alert condition</strong> (<span class="packt_screen">2d</span>)<strong>:</strong> Evaluating an alert condition too frequently can result in too many alerts opening and closing in a fast series. Evaluating an alert condition too infrequently can result in alerts coming in too late. Experimentation will help you understand how to configure this.</li>
+</ul>
+</li>
+<li>This is the action to execute when the alert condition is met. Since there might be a lot of alerts that have to invoke the same group of actions, actions can be grouped, and these action groups can be referenced here. Some examples of actions are calling a webhook or sending an SMS message or email.</li>
+<li>The alert configuration is completed by putting in a name and description.</li>
+<li>Finally, the alert can be saved.</li>
+</ol>
+<p>After the alert is created and activated, which is done automatically, within a few minutes, the alert is ready to inspect application logs and signal whenever the alert condition is met.</p>
+<p>Logging is a great method of gaining deep knowledge about what happened with a request and how an error came to be. Another technique for learning more about an application's behavior is by using metrics.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Metrics</h1>
+                </header>
+            
+            <article>
+                
+<p>Besides logs, an application can also emit one or more metrics. A metric is a series of values over time that describes one or more aspects of a system. Some examples of metrics are as follows:</p>
+<ul>
+<li>The number of users currently logged in</li>
+<li>The number of products viewed by users</li>
+<li>The number of database transactions</li>
+</ul>
+<p>Gathering metrics such as these can provide insight into how a system is used and how it currently operates<span>. Metrics are often used for creating dashboards and alerts.</span></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Emitting metrics</h1>
+                </header>
+            
+            <article>
+                
+<p>To start working with metrics, they first have to be emitted by an application and stored in a centralized location. Besides logging, Application Insights can be used for metrics as well.</p>
+<p>To use Application Insights for metrics, the following steps need to be taken:</p>
+<ol>
+<li>Metrics need to be emitted from application code where applicable, using the <kbd>TelemetryClient</kbd> class. This interface is available from the <kbd>Microsoft.Extensions.Logging.Abstractions</kbd> NuGet package.</li>
+<li>Install the <kbd>Microsoft.ApplicationInsights.AspNetCore</kbd> Application Insights NuGet package.</li>
+<li>Register <kbd>TelemetryClient</kbd> with the <kbd>Dependency</kbd> container. Do this by using the extension method on the container builder, as in the following code snippet:</li>
+</ol>
+<pre style="padding-left: 90px">builder.RegisterType&lt;TelemetryClient&gt;().SingleInstance();</pre>
+<ol start="4">
+<li>Once this is done, the application is ready to start emitting metrics. This is done using the <kbd>TelemetryClient</kbd> class:</li>
+</ol>
+<pre style="padding-left: 90px">public class Example<br/>{<br/> private readonly TelemetryClient _telemetryClient;<br/><br/> public Example(TelemetryClient telemetryClient)<br/> {<br/>     _telemetryClient = telemetryClient;<br/> }<br/> <br/> public void DoSomething()<br/> {<br/>     _telemetryClient.GetMetric(“doSomethingCalledCounter”).TrackValue(1.0);<br/> }<br/>}</pre>
+<p>Emitting a metric involves two steps. First, a reference to the metric is retrieved using the <kbd>GetMetric()</kbd> method. Next, a value is submitted using the <kbd>TrackValue</kbd> method. Submitted values should be doubles or allow an implicit conversion to a double.</p>
+<p>Once the metrics are emitted, they can be used to create graphs and metrics. However, before moving on to these topics, first, another type of metric is discussed—namely, Azure platform metrics.</p>
+<p>Besides, the metrics that an application emits, there are also numerous metrics that can be recorded from the Azure platform that the system is running on. Some examples are as follows:</p>
+<ul>
+<li>The percentage of CPU used</li>
+<li>The number of messages on a service bus</li>
+<li>The number of database transactions per second</li>
+<li>The amount of free disk space</li>
+</ul>
+<p>These metrics are often closely related to how an application performs and may even be leading indicators. For example, when the amount of free disk space reaches 0, most web servers stop working.</p>
+<p>In Azure, each service emits a series of metrics by default. These are called platform metrics. Which metrics are emitted differs from service to service and cannot be influenced by the user. Azure Monitor gathers these metrics automatically as well, and these metrics can be used in the same way for graphing and alerting as metrics are emitted by an application. The first one—graphing—is explored in the next section.</p>
+<p>Platform metrics are built-in and free of charge and are retained for 93 days.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Graphing metrics</h1>
+                </header>
+            
+            <article>
+                
+<p>All metrics that are gathered, either in Application Insights or in Azure Monitor, can be used to build graphs and dashboards that visualize the metric. Graphs can be created using the <span class="packt_screen">Metrics</span> tab that is available on every Azure resource. Graphs can also be created using the Azure Monitor offering. This way, graphs for multiple resources can be combined on a single canvas. To do this, do the following:</p>
+<ol>
+<li>Open Azure Monitor, which is available from the menu on the left.</li>
+<li>Navigate to the <span class="packt_screen">Metrics</span> menu. This opens the view shown in the following screenshot:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1219 image-border" src="assets/9285c483-99c6-4df1-8e06-edafd069a3ff.png" style="width:136.33em;height:76.83em;"/></p>
+<ol start="3">
+<li>Once the canvas opens, one or more graphs can be added to it. A graph is built using the graph builder at the top. Four selections have to be made here:
+<ul>
+<li>The resource that a graph needs to be drawn for.</li>
+<li>The metrics namespace belonging to that resource that a graph needs to be drawn for: For every Azure resource type, there is only a single namespace. The only exception is Application Insights, for which there are two—one with default metrics and one with application metrics that are emitted using <kbd>TelemetryClient</kbd>.</li>
+<li>The metric to draw: For custom metrics, this refers back to the name chosen in the <kbd>GetMetric()</kbd> method from the previous section.</li>
+<li>The mathematical operation to combine multiple measurements into a single point on the graph: This can be the minimum, maximum, average, or sum count.</li>
+<li>To add multiple graph lines to the same graph, choose <span class="packt_screen">Add Metric</span> at the top. Repeat the preceding four selections to configure the new graph.</li>
+</ul>
+</li>
+</ol>
+<ol start="4">
+<li>To make this graph part of a dashboard for easy reuse, click the <span class="packt_screen">Pin to dashboard</span> button at the top.</li>
+<li>Dashboards can then be accessed directly using the menu on the right.</li>
+</ol>
+<p>Having a graph of a metric, or even multiple graphs in a dashboard, is great for investigating issues. However, no one likes to continuously watch dashboards to see how things are going. For that reason, it is also possible to configure alerts on metrics.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Alerting on metrics</h1>
+                </header>
+            
+            <article>
+                
+<p>Just as with log entries, it is possible to be alerted by Azure Monitor when a metric goes above or below a certain threshold. Log entries that require a follow up could be related to only a single user or customer that is having trouble. Metrics, on the other hand, are useful for detecting situations where all users are impacted by an issue, or situations where infrastructure no longer works or will stop working soon.</p>
+<p>Creating alerts for metrics works in a way that is very similar to creating alerts from logs. To create a new alert rule, navigate to Azure Monitor using the portal and then choose <span class="packt_screen">Alerts</span>. Next, click on the <span class="packt_screen">New Alert Rule</span> <span>button</span><span> </span><span>to open the view shown in the following screenshot:</span></p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1084 image-border" src="assets/f5f81d34-9588-4b27-b86c-f8e8bed53dc1.png" style="width:138.33em;height:82.08em;"/></p>
+<p>In this screenshot, the following selections have to be made to create an alert on a metric:</p>
+<ol>
+<li>Select the resource that is the subject for the alert. This can be any type of resource that outputs metrics—in this instance, an Application Insights workspace has been selected.</li>
+<li>Configure the condition to raise the alert under. For this, a new window opens on the right. To get to the view in the preceding screenshot, select a <span class="packt_screen">Metric</span> alert type and from the list that populates, choose the correct alert. Next, the view changes to what is shown in the preceding screenshot. Here, the following selections must be made:
+<ul>
+<li>Select the threshold for the alert to raise (refer to <span class="packt_screen">2a</span> in the previous screenshot). Static thresholds are the default and require the configuration of an operator, aggregation type, and value.</li>
+<li>Pick the granularity interval that the alert should be evaluated over (<span class="packt_screen">2b</span>).</li>
+<li>Pick the frequency of evaluation (<span class="packt_screen">2c</span>). The more often an alert is evaluated, the shorter the delay between an occurrence and the alert that is sent out.</li>
+<li>Save the alert condition (<span class="packt_screen">2d</span>).</li>
+</ul>
+</li>
+<li>Select one or more action groups that need to be triggered when the alert condition has been met.</li>
+<li>Configure an alert rule name and description.</li>
+<li>Save the alert.</li>
+</ol>
+<p>The alert becomes active within minutes after saving. Now, whenever an alert condition is met, the developers are notified using the methods configured in the alert group.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Investigating requests</h1>
+                </header>
+            
+            <article>
+                
+<p>When using Application Insights for logging and metrics, there are many more built-in capabilities of Application Insights that you can use. One of these capabilities is the possibility to execute search queries against all types of data collected by Application Insights from one view, called <span class="packt_screen">Search</span>.</p>
+<p>Here, it is possible to search all the information collected by Application Insights, including the following:</p>
+<ul>
+<li>Logs emitted by the application code, which includes NuGet packages and the .NET framework.</li>
+<li>All dependency calls: These are calls to databases and other systems that are automatically detected by Application Insights. Application Insights records the target system and duration.</li>
+<li>All exceptions: All exceptions that occur in an application are recorded by Application Insights, even if properly handled by the application code.</li>
+<li>Requests: Every user request that comes in over HTTP is logged. Important properties, such as the URL, duration, and HTTP verb, are also included.</li>
+</ul>
+<p>To open the search view, navigate to the correct Application Insights instance and navigate to the <span class="packt_screen">Search</span> tab (<span class="packt_screen">1</span>) to get the view shown in the following screenshot:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1085 image-border" src="assets/90ab0619-d7cc-45c4-8584-51e9628f9335.png" style="width:138.92em;height:81.92em;"/></p>
+<p>In the <span class="packt_screen">Search</span> view, several search parameters can be configured (<em><span class="packt_screen">2</span></em>):</p>
+<ul>
+<li>An interval to search within: This defaults to the last 24 hours.</li>
+<li>The types of events to search in: This can be requests, log entries, page views, exceptions, dependency calls, and more.</li>
+<li>Any text to search for.</li>
+</ul>
+<p>Within seconds, all matching results are shown in a bar chart. Each bar stands for a time period and shows how many matches there are within that time frame. Below this chart, all the individual matches are shown. These are a mix of all of the types of events available.</p>
+<p class="mce-root"/>
+<p>Clicking on any of the results opens a new view that shows the selected record in relation to all the other types, grouped per request. This allows you to quickly navigate to all the logs, dependency calls, and exceptions that are gathered by Application Insights during the execution of a single user request. The results can be displayed as a list and as a timeline. This allows you to very quickly see what the server was doing when performing the user request:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1086 image-border" src="assets/d38bddfb-25c8-4d85-bccb-5b6de1b664ad.png" style="width:123.83em;height:61.33em;"/></p>
+<p>With all of these means to investigate applications and be notified regarding events, it is important to decide which alerts to create and which not to, not only in order to create a healthy working environment, but also to balance monitoring with new work. This is the topic of the next section.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Optimizing alerting</h1>
+                </header>
+            
+            <article>
+                
+<p>Once teams start instrumenting their applications and adding alerts to metrics that they find important, it will not be long before the first alerts start coming in. At this point, it is important to not only respond to the alerts, but also to investigate them and then close the alert. Alerts should also be evaluated and viewed as an opportunity for learning.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Optimizing alerts</h1>
+                </header>
+            
+            <article>
+                
+<p>An important thing to do after creating a series of alerts is to re-evaluate them on a regular basis. Two things that might come out of an evaluation such as this are as follows:</p>
+<ul>
+<li><strong>Changes in the alerting threshold</strong><span>: Evaluating alerts regularly involves taking a look at the metric over time and seeing where the alerting threshold is at now. This might lead to the conclusion that the threshold is too low or too high.</span></li>
+<li><strong>Removing duplicates</strong><span>: Looking at alerts that have been raised over the month(s), it is very likely to identify one or more groups of alerts that are always raised at the same time. For example, a set of alerts set on a specific web server can be so related that they are always raised at the same time. A common example is the CPU usage and the average response time for an HTTP request; these two often rise at the same time. If this is the case, it is worth considering either removing one of them or downgrading one of them to be a warning only. Duplicate alerts increase the number of items that need an immediate reaction, leading to increased pressure on the team without a clear benefit.</span></li>
+</ul>
+<p>Constantly optimizing the set of alerts not only helps to reduce waste, but also prevents so-called alert fatigue.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Alert fatigue</h1>
+                </header>
+            
+            <article>
+                
+<p>If alert rules are not constantly reviewed and updated, they could negatively influence a team, especially when alert rules trigger too easily or too frequently as people will no longer respond to them properly. If there are too many alerts, it will wear people out and they will become numb to the effect of an alert. It does not even matter whether these are false alerts or real alerts; just the number of alerts can be enough to get people into a state where they do not care anymore.</p>
+<p>If a situation such as this is observed within a team, it is time to drastically change the way alerts are generated and responded to. If this does not happen, team members might fall ill or leave the company altogether.</p>
+<p>One of the ways to prevent this situation is by implementing a healthy on-call schedule.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Which metrics to capture</h1>
+                </header>
+            
+            <article>
+                
+<p>One question that comes up frequently when talking about metrics is about what metrics to emit and monitor. There are many possible metrics and even more opinions on this subject. As a good starting point, the following metrics are often gathered for web applications:</p>
+<ul>
+<li>Requests per minute, transactions per minute, or something similar: This is a metric that is intended to capture the current load or throughput on a web application.</li>
+<li>The average response time: This metric captures the response time for all requests within a time window.</li>
+<li>The error rate: This metric captures the percentage of all requests that result in an error. As a guideline for an error, often, all HTTP response codes of <kbd>400</kbd> and up are taken.</li>
+</ul>
+<p>When these three metrics are captured and graphed together in one graph, they provide the first step toward understanding the behavior of an application. Let's explore a few examples:</p>
+<ul>
+<li>When the average response time goes up but the throughput (requests per minute) stays the same, this might be an indication that the infrastructure that hosts the application is having issues.</li>
+<li>When both the throughput and the average response times go up, this might be an indication that traffic is increasing and that the current infrastructure is not capable of sustaining that throughput at the same response times.</li>
+<li>When the error rate goes up but the other metrics stay the same, this might be an indication that a deployment has gone wrong or that a specific code path is starting to generate (more) errors.</li>
+</ul>
+<p>Of course, these are just examples and there are many more possible scenarios. Other metrics can help to rule out a specific scenario or try to avoid them. For example, also starting to monitor the database load as a percentage can help detect a specific instance of the second scenario. If the database load gets close to 100%, it might be time to scale the database up to a higher performance tier to help to sustain the higher throughput at the same response times as before.</p>
+<p>To conclude this section, there is one final recommendation—when starting with monitoring, there is often a tendency to focus on the systems that host the application. As an alternative, also consider monitoring metrics that have a direct business impact or metrics that are an indication of user satisfaction in terms of the usability of an application. This comes much closer to measuring business value than when only you watch systems.</p>
+<p>Some examples of this are as follows:</p>
+<ul>
+<li>In an online shop, the number of books sold per minute can be a very valuable business metric. Just imagine the impact it can have on a business if this metric is available in near real time using Azure Monitor and custom metrics from the application code.</li>
+<li>For an online reading platform, the number of virtual page turns can be a valuable metric that signals whether users are happily working with the service. As soon as this number sees a sharp drop or rapidly increases, this might be an indication that something is going wrong.</li>
+</ul>
+<p>To find out which metrics make sense in a given scenario, it might help to talk to the business or subject matter experts.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Having an on-call schedule</h1>
+                </header>
+            
+            <article>
+                
+<p>Once alerts are configured and start to be raised, it does not make sense to configure them to not trigger before 8 AM and after 5 PM. In other words, it is necessary to make sure that alerts of a certain severity are followed up even outside of business hours.</p>
+<p>In many companies where having alerts is new, there is some form of implicit expectation that some people will be available outside of office hours (alongside their regular duties) to handle these alerts. Sometimes, when an alert is raised only once or twice a year, and there are no agreements about response times, this might not even be a problem at all.</p>
+<p>However, in many organizations—especially over time—there is an expectation that these alerts are responded to within a certain period of time. Besides that, the number of alerts may increase as systems become larger and more complex or the number of systems grows.</p>
+<p>The way to cope with this is by creating an on-call schedule and formal agreements on what is expected of engineers and how the organization will reward them for their efforts. This allows them to set clear expectations and allows engineers to guard their free time based on these agreements. Having enough downtime helps the engineers relax between periods of higher stress. This allows them to stay alert when they are on call, ready to react when this is expected of them.</p>
+<p>There is much material available on what constitutes a healthy on-call schedule and what doesn't, and the keyword here is <em>healthy</em>. Some general pointers are as follows:</p>
+<ul>
+<li>Those who are on call during non-business hours should not be on call during business hours as well.</li>
+<li>Provide engineers who are on call with reasonable compensation for being close to a phone, not under the influence, and so on. What is reasonable differs from situation to situation, but the more demanding being on call is, the higher the compensation should be.</li>
+<li>Provide the proper tools for being on call. For example, when a response time of 30 minutes or less is expected, provide those on call with a backpack with a laptop, phone, and means to connect to the internet.</li>
+<li>Ensure that every employee is not on call at least 75% of the time.</li>
+<li>Allow employees to take time off in lieu, so they can be late for work if they had to respond to an alert overnight.</li>
+</ul>
+<p>After every disturbance of the normal operation of a system, whether this is during business hours or after, a live site incident review can be performed to learn what happened and how to reduce the chance of it happening again.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Live site reviews</h1>
+                </header>
+            
+            <article>
+                
+<p>After an alert is triggered and the team has responded and remediated the situation, it is time to evaluate what happened. This is called a live site incident review. Here, the whole team gathers to address the following:</p>
+<ol>
+<li>What happened—to start, a timeline should be constructed from the time the incident was discovered to the point that normal operations were restored. Next, the timeline is expanded with the events that led to the situation that triggered the incident.</li>
+<li>Next, the series of events is evaluated to learn what worked well in the response. If one member of the team used a new tool to quickly diagnose a problem, this can benefit other members of the team as well.</li>
+<li>Only then is it time to look at the possible points of improvement and translate these points into high-priority work for the team. Possible fail-safes are identified and scheduled for implementation or new alerts are identified that send an alert before a similar problem occurs again.</li>
+<li>The alert or group of alerts that triggered the initial response is evaluated to determine whether they are adequate or possibly contain duplicates.</li>
+</ol>
+<p>The best time for a live site incident review is as soon after the incident itself as possible. In practice, this means giving everyone enough time to rest and recuperate and plan a meeting for the next business day.</p>
+<p>This completes our overview of Application Insights and the Azure Monitor capabilities for instrumenting web applications. The following section describes several approaches for integrating Application Insights and Azure Monitor with other tools.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Integrating with other tools</h1>
+                </header>
+            
+            <article>
+                
+<p>Azure Monitor and Application Insights are excellent tools for gathering application logs and metrics, as well as storing them and making them searchable. However, there could be reasons why development teams or businesses prefer to work with other tools to visualize application performance or responding to alerts. One important driver for integration is often the primary tool used by a person or team. If a team operates mainly in ServiceNow or Grafana, it is often useful to integrate these with Azure Monitor instead of forcing these teams to work with multiple tools.</p>
+<p>Many possible integrations exist; some examples are detailed in the following subsections.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">IT service management applications</h1>
+                </header>
+            
+            <article>
+                
+<p>Action groups were introduced in the previous section where we looked at instrumenting web applications. Action groups are groups of actions to be performed in response to an alert.</p>
+<p>Next to the rich built-in capabilities, it is also possible to automatically raise an alert in an existing <strong>IT Service Management</strong> (<strong>ITSM</strong>) solution. If there is already an ITSM solution in place within a company, it makes sense not to create a separate alerting channel using Azure Monitor. Instead, using an ITSM connector from Azure Monitor allows you to manage all the company-wide alerts from one solution.</p>
+<p>Currently, there are integrations available with ServiceNow, Provance, System Center Service Manager, and more. These connections are created through the ITSM connector.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Azure Boards</h1>
+                </header>
+            
+            <article>
+                
+<p>In many development teams, Azure DevOps is the tool that developers spend most of their time with. This is also where they perform their backlog management using Azure Boards.</p>
+<p>Meanwhile, operators (and hopefully, developers, too) perform investigative work in Application Insights to determine the cause of user errors and to drill down into the reasons for failure. This investigative work could result in new work that needs to be backlogged in Azure DevOps.</p>
+<p>To facilitate this, integration between Application Insights and Azure DevOps can be configured from<span> Application Insights </span>by taking the following steps:</p>
+<ol>
+<li>Navigate to the <span class="packt_screen">Work Items</span> option on the left-hand side menu (<span class="packt_screen">1</span>). This opens the view shown on the left in the following screenshot. Here, a connection to Azure Boards can be configured:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1215 image-border" src="assets/88cc179b-182f-4fee-8030-7b2a2c4b411e.png" style="width:126.50em;height:67.33em;"/></p>
+<p>To configure the connection, the following details need to be filled out:</p>
+<ol start="1">
+<li>Enter the Azure DevOps link. Here, the name of the organization needs to be appended.</li>
+<li>Select the Azure DevOps project to use. This can be selected from the dropdown.</li>
+</ol>
+<ol start="3">
+<li>Select a product area where new items will be created. By default, this is the same as the name of the project, unless you change it.</li>
+<li>Provide the name of a user as the default owner of new work items.</li>
+</ol>
+<p>After configuring this connection, a new <span class="packt_screen">Create work item </span><span>button</span><span> </span><span>is visible on the relevant pages in Application Insights. This button allows you to create a bug with all the relevant information directly on the backlog.</span></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Grafana</h1>
+                </header>
+            
+            <article>
+                
+<p>Azure Monitor allows you to build simple, easy-to-use dashboards. The advantage of using Azure Monitor dashboards is that they integrate perfectly with all the other Azure practices, such as <strong>Role-Based Access Controls</strong> (<strong>RBAC</strong>) and Azure Resource Manager templates.</p>
+<p>However, teams may <span>have</span><span> </span><span>already adopted other tools for visualization, such as Grafana. Grafana is a well-known platform that works well for operational dashboards. Grafana can be configured to connect using Azure Monitor and can query metrics for graphing. Grafana also </span><span>has</span><span> </span><span>alerting capabilities. It does not, however, support querying logs.</span></p>
+<p>To connect Grafana to Azure Monitor, the following steps need to be taken:</p>
+<ol>
+<li>Create a new app registration in the Azure Active Directory account that is used by your Azure subscription. Take note of the <span class="packt_screen">Tenant Id</span>, <span class="packt_screen">Client Id</span>, <span class="packt_screen">Subscription Id</span>, and <span class="packt_screen">Client Secret</span> properties of this app registration.</li>
+<li>Create a new RBAC role assignment for the app registration, with at least the <span class="packt_screen">Reader</span> permissions set on the resources to monitor.</li>
+<li>Configure a new data source in Grafana of the <span class="packt_screen">Azure Monitor</span> type. Insert the properties collected in <em>step 1</em> for authenticating to Azure.</li>
+<li>Add a new graph to the dashboard, selecting <span class="packt_screen">Azure Monitor</span> as a data source.</li>
+</ol>
+<p>By taking the preceding steps, a Grafana-to-Azure Monitor connection can be set up within a matter of minutes.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Summary</h1>
+                </header>
+            
+            <article>
+                
+<p>In this chapter, you learned how to start completing the DevOps loop. You also learned how to work with crash reports and gather them from all types of applications, as well as how to instrument web applications. You now know how to use Application Insights to centralize logs and metrics and to get insight into requests and dependency calls. You also learned how you can integrate Azure Monitor with other tools to further streamline your development processes.</p>
+<p>With this knowledge, you can now start learning about how your applications operate in production. By doing so, you can not only deliver your software faster but also learn from its usage and start improving from there.</p>
+<p>In the next chapter, you will learn about gathering user feedback to complement what you have learned from your system logs and metrics. You will also learn how to measure the end user satisfaction of your application and new features.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Questions</h1>
+                </header>
+            
+            <article>
+                
+<p>As we conclude, here is a list of questions for you to test your knowledge regarding this chapter's material. You will find the answers in the <em>Assessments</em> section of the Appendix:</p>
+<ol>
+<li>True or false – it is possible to capture custom metrics from the Azure platform offerings using Application Insights.</li>
+<li>How long are platform metrics retained for in Azure Monitor?</li>
+<li>True or false – it is possible to capture custom metrics from your own application code using Application Insights.</li>
+<li>What do you call a situation where engineers start ignoring alerts as they are worn down by too many of them?</li>
+<li>True or false – it is possible to call a webhook when an alert fires in Azure.</li>
+</ol>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Further reading</h1>
+                </header>
+            
+            <article>
+                
+<ul>
+<li>More information about the App Center SDK can be found at <a href="https://docs.microsoft.com/en-us/appcenter/sdk/">https://docs.microsoft.com/en-us/appcenter/sdk/</a>.</li>
+<li>More information on Raygun can be found at <a href="https://raygun.com">https://raygun.com</a>.</li>
+<li>A complete example application that uses Application Insights and Azure Monitor is available at <a href="https://github.com/henrybeen/MonitoringLogging.UrlShortnerDemo2">https://github.com/henrybeen/MonitoringLogging.UrlShortnerDemo2</a>.</li>
+<li>More detailed information on configuring Application Insights is available at <a href="https://docs.microsoft.com/en-us/azure/azure-monitor/app/app-insights-overview">https://docs.microsoft.com/en-us/azure/azure-monitor/app/app-insights-overview</a>.</li>
+<li>The KQL reference page can be found at <a href="https://docs.microsoft.com/en-us/sharepoint/dev/general-development/keyword-query-language-kql-syntax-reference">https://docs.microsoft.com/en-us/sharepoint/dev/general-development/keyword-query-language-kql-syntax-reference</a>.</li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    </body></html>

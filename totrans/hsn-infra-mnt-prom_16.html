@@ -1,0 +1,622 @@
+<html><head></head><body>
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Choosing the Right Service Discovery</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">When tackling dynamic environments, manually maintaining a file of targets is not an option. Service discovery handles the complexity of an ever-changing infrastructure for you, making sure that no service or host slips through the cracks. This chapter focuses on how to take advantage of Prometheus service discovery to decrease the infrastructure management toil regarding coping with constant change.</p>
+<p>In brief, the following topics will be covered in this chapter:</p>
+<ul>
+<li>Test environment for this chapter</li>
+<li>Running through the service discovery options</li>
+<li>Using a built-in service discovery</li>
+<li>Building a custom service discovery</li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Test environment for this chapter</h1>
+                </header>
+            
+            <article>
+                
+<p>In this chapter, we'll be focusing on service discovery. For this, we'll be deploying two new instances to simulate a scenario where Prometheus generates targets dynamically using a popular service discovery software. This approach will allow us to not only expose the required configurations, but also validate how everything works together.</p>
+<p>The setup we'll be using resembles the following diagram:</p>
+<div class="CDPAlignCenter CDPAlign"><img src="assets/0046acd0-7265-423c-aab8-96f281292177.png" style="width:36.92em;height:25.17em;"/></div>
+<div class="CDPAlignCenter CDPAlign packt_figref">Figure 12.1: Test environment for this chapter</div>
+<p>The usual deployment pattern for Consul is to have an agent running in client mode on every node in the infrastructure, which will then contact Consul instances running in server mode. Furthermore, client instances act as API proxies, so it is common practice for Prometheus Consul service discovery to be configured using the localhost. However, to make their different responsibilities clear, we've opted to just have a Prometheus instance in one VM and a Consul running as a server in another in our test environment.</p>
+<p>In the next section, we will explain how to get the test environment up and running.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Deployment</h1>
+                </header>
+            
+            <article>
+                
+<p>To launch a new test environment, move into this chapter's path, relative to the repository root:</p>
+<pre><strong>cd ./chapter12/</strong></pre>
+<p>Ensure that no other test environments are running and spin up this chapter's environment:</p>
+<pre><strong>vagrant global-status</strong><br/><strong>vagrant up</strong></pre>
+<p>You can validate the successful deployment of the test environment using the following command:</p>
+<pre><strong>vagrant status</strong></pre>
+<p>This will provide you with the following output:</p>
+<pre><strong>Current machine states:</strong><br/><br/><strong>prometheus                running (virtualbox)</strong><br/><strong>consul                    running (virtualbox)</strong><br/><br/><strong>This environment represents multiple VMs. The VMs are all listed above with their current state. For more information about a specific VM, run `vagrant status NAME`.</strong></pre>
+<p>When the deployment tasks end, you'll be able to validate the following endpoints on your host machine using your favorite JavaScript-enabled web browser:</p>
+<table border="1" style="border-collapse: collapse;width: 100%">
+<tbody>
+<tr>
+<td>
+<p><strong>Service</strong></p>
+</td>
+<td>
+<p><strong>Endpoint</strong></p>
+</td>
+</tr>
+<tr>
+<td>
+<p>Prometheus</p>
+</td>
+<td>
+<p><kbd>http://192.168.42.10:9090</kbd></p>
+</td>
+</tr>
+<tr>
+<td>
+<p>Consul</p>
+</td>
+<td>
+<p><kbd>http://192.168.42.11:8500</kbd></p>
+</td>
+</tr>
+</tbody>
+</table>
+<p> </p>
+<p>You should be able to access the desired instance by using one of the following commands:</p>
+<table border="1" style="border-collapse: collapse;width: 100%">
+<tbody>
+<tr>
+<td>
+<p><strong>Instance</strong></p>
+</td>
+<td>
+<p><strong>Command</strong></p>
+</td>
+</tr>
+<tr>
+<td>
+<p>Prometheus</p>
+</td>
+<td>
+<p><kbd>vagrant ssh prometheus</kbd></p>
+</td>
+</tr>
+<tr>
+<td>
+<p>Consul</p>
+</td>
+<td>
+<p><kbd>vagrant ssh consul</kbd></p>
+</td>
+</tr>
+</tbody>
+</table>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Cleanup</h1>
+                </header>
+            
+            <article>
+                
+<p>When you've finish testing, just make sure you're inside <kbd>./chapter12/</kbd> and execute the following:</p>
+<pre><strong>vagrant destroy -f</strong></pre>
+<p>Don't worry too much <span>–</span> you can easily spin up the environment again if you need to.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Running through the service discovery options</h1>
+                </header>
+            
+            <article>
+                
+<p>Prometheus comes with several discovery integrations available out of the box. These cover most of the mainstream data sources for application and machine inventories, such as public and private cloud compute APIs, VM and container orchestration systems, standalone service registration and discovery systems, among others. For those discovery mechanisms that aren't directly supported by Prometheus, integration can be done through a generic discovery system using the filesystem and some glue code, as we'll see later in this chapter.</p>
+<p>Every integration works in the same way – <span>by </span>setting all the discovered addresses as targets and their associated metadata as temporary labels (not persisted without some relabeling to keep them). For each discovered target, the <kbd>__address__</kbd> label is usually set to the service address and port. This is relevant, because this label is the one Prometheus uses to connect to the scrape target; the <kbd>instance</kbd> label defaults to use the <kbd>__address__</kbd> value when not explicitly defined, but it can be set to anything else that makes it easier to identify the target.</p>
+<p>Metadata labels provided by service discovery integrations follow the pattern of <kbd>__meta_&lt;service discovery name&gt;_&lt;key&gt;</kbd>. There are also some labels added by Prometheus, such as <kbd>__scheme__</kbd> and <kbd>__metrics_path__</kbd>, which define whether the scrape should be performed using HTTP or <span>HTTPS </span>and the configured endpoint to scrape, respectively. </p>
+<div class="packt_tip">URL parameters are not supported in the <kbd>metrics_path</kbd> scrape configuration. Instead, these need to be set in the <kbd>params</kbd> configuration.  This is covered in <a href="12e775c2-bee9-4ebe-ad73-2f9313eeeeee.xhtml" target="_blank"/><a href="12e775c2-bee9-4ebe-ad73-2f9313eeeeee.xhtml" target="_blank">Chapter 5</a>, <em>Running a Prometheus Server</em>.</div>
+<p>The following sections provide an overview of the available discovery options, and also present some examples on how to configure them, accompanied by screenshots of their generated data.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Cloud providers</h1>
+                </header>
+            
+            <article>
+                
+<p>With the rise of cloud infrastructure, it is increasingly common to have workloads running in these environments. This brings new sets of challenges; for example, ephemeral and highly dynamic infrastructure provisioning. The ease of scalability is also something to keep in mind: in the past, it might have taken months to negotiate, agree on support contracts, buy, deploy, and configure new hardware; nowadays, it's a matter of seconds to have a new fleet of instances up and running. With technology such as auto-scaling, which deploys new instances without you even knowing, change is hard to keep up with. To ease the burden of keeping tabs on this cloud-native dynamic infrastructure, Prometheus integrates out of the box with some of the big players in the <strong>Infrastructure as a Service</strong> (<strong>IaaS</strong>) market, such as Amazon Web Services, Microsoft Azure Cloud, Google Cloud Platform, OpenStack, and Joyent.</p>
+<p>Using Amazon <strong>Elastic Compute </strong>(<strong>EC2</strong>) as an example for virtual machine discovery, the scrape job configuration can be as simple as the following:</p>
+<pre>scrape_configs:<br/> - job_name: ec2_sd<br/>   ec2_sd_configs:<br/>    - region: eu-west-1<br/>      access_key: ACCESSKEYTOKEN<br/>      secret_key: 'SecREtKeySecREtKey+SecREtKey+SecREtKey'</pre>
+<p>Other cloud providers will have different settings, but the logic is pretty much the same. Basically, we need to set the appropriate level of credentials to query the cloud provider API so that Prometheus discovery integration can consume all the data required to produce our targets, as well as their associated metadata. The following screenshot illustrates how a configuration similar to the one listed previously but with actual credentials translates into a set of targets:</p>
+<div class="CDPAlignCenter CDPAlign"><img src="assets/2fba1ca1-18c8-4268-8237-3f5ab2c62fbd.png"/></div>
+<div class="packt_figref CDPAlignCenter CDPAlign">Figure 12.2: Prometheus <em>/</em>service-discovery endpoint depicting ec2_sd data</div>
+<p>As we can see in the preceding screenshot, EC2 discovery attaches a fair amount of metadata labels to each discovered target. These are available during the relabeling phase so that you can use them to only scrape targets that are running, change scraping from the private IP address to the public one, or rename the instance label to a friendlier name.</p>
+<p>This information, which is collected from the discovery process, is either periodically refreshed (the refresh interval is configurable at the service discovery level) or, automatically refreshed via watches, allowing Prometheus to become aware of targets being created or deleted.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Container orchestrators</h1>
+                </header>
+            
+            <article>
+                
+<p>Container orchestrators are a perfect place to extract what services are running and where, as it's their job to manage exactly that information. As such, the Prometheus discovery mechanism supports some of the most widely used container orchestration platforms, such as Kubernetes and Marathon, the container orchestration platform for Mesos and DC/OS. Since we've been using Kubernetes for most of our examples throughout this book, we're going to focus on this platform to explain how these types of systems work.</p>
+<p>Like Prometheus, Kubernetes is a graduated project from the <strong>Cloud Native Computing Foundation</strong> (<strong>CNCF</strong>). While that doesn't mean one was created specifically to work with the other, the connection between the two is undeniable. Borg and Borgmon, Google's container orchestration and monitoring systems, are definitely the inspiration for Kubernetes and Prometheus, respectively. To tackle the monitoring of cloud-native platforms such as Kubernetes, where the rate of change is almost overwhelming, a special set of features is required. Prometheus fits these requirements, such as efficiently handling the ephemeral nature of containers.</p>
+<p>The Prometheus service discovery integration retrieves all the required data via the Kubernetes API, keeping up to date with the state of the cluster. Due to the number of API objects available to query, the discovery configuration for Prometheus has the concept of role, which can be either <kbd>node</kbd>, <kbd>service</kbd>, <kbd>pod</kbd>, <kbd>endpoint</kbd>, or <kbd>ingress</kbd>. While explaining Kubernetes core concepts is out of scope for this book, we can quickly go through what each of these roles is used to discover: <kbd>node</kbd> is used to collect the actual nodes that form the Kubernetes cluster (for example, the VMs that run the kubelet agent), and thus can be used to monitor the cluster itself, as well as its underlying infrastructure; the service object in Kubernetes acts like a load balancer, and <kbd>service</kbd> will give you just that <span>–</span> a single endpoint per port of each configured service, whether it is backed by one or several application instances <span>– </span>and is only used for blackbox monitoring; <kbd>pod</kbd> is used to discover individual pods, independently of whether they belong to a service or not; <kbd>endpoint</kbd> discovers the main process in a pod that is backing a given service; and finally, <kbd>ingress</kbd>, similar to <kbd>service</kbd>, returns the external-facing load balancer for a set of application instances and thus should only be used for end-to-end probing.</p>
+<p>The following code snippet provides an example of how to query pods, matching the ones that have a label, <kbd>app</kbd>, that matches the value <kbd>hey</kbd>:</p>
+<pre>scrape_configs:<br/>  - job_name: kubernetes_sd<br/>    kubernetes_sd_configs:<br/>      - role: pod<br/>    relabel_configs:<br/>      - action: keep<br/>        regex: hey<br/>        source_labels:<br/>          - __meta_kubernetes_pod_label_app</pre>
+<p>The preceding configuration generates the data depicted in the following screenshot, where we can see all the metadata that was gathered via the Kubernetes API:</p>
+<div class="CDPAlignCenter CDPAlign"><img src="assets/cd652109-78b2-4fea-9769-d636a2398e68.png"/></div>
+<div class="packt_figref CDPAlignCenter CDPAlign">Figure 12.3: Prometheus /service-discovery endpoint depicting kubernetes_sd data</div>
+<p>This is a very small example of what can be done. Configurations that use the Kubernetes service discovery usually make extensive use of <kbd>relabel_configs</kbd> to filter targets, rewrite the <kbd>job</kbd> label to match container names, and to generally do clever auto-configuration based on conventions around Kubernetes annotations.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Service discovery systems</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">As the number of services grows, it becomes harder and harder to tie everything together – both in terms of services being correctly configured to contact each other, as well as operators having visibility of how the system is behaving. A common solution to these problems is to implement a service discovery system that acts as registry and that can then be consulted by software clients, as well as the monitoring system.</p>
+<p>Prometheus integrates seamlessly with a few mainstream service discovery systems and currently supports <span>Consul, </span>Nerve, and ServerSets. Integrating directly with discovery services allows Prometheus to always have an up-to-date view of what is running and where, allowing service instances to be monitored automatically as soon as they are created, up until they are destroyed.</p>
+<p>Consul is by far the most popular, as it provides a full set of features to implement service discovery and powerful yet simple-to-use command-line tools and APIs, and is easy to scale. Let's use the following for our example:</p>
+<pre>scrape_configs:<br/>  - job_name: 'consul_sd'<br/>    consul_sd_configs:<br/>      - server: http://consul.prom.inet:8500<br/>        datacenter: dc1<br/>    relabel_configs:<br/>      - source_labels: [__meta_consul_service]<br/>        target_label: job<br/>      - source_labels: [job, __address__]<br/>        regex: "consul;([^:]+):.+"<br/>        target_label: __address__<br/>        replacement: ${1}:9107</pre>
+<p>The preceding example translates into the following screenshot, where we can see not only the generated labels, but also the definitions of the targets:</p>
+<div class="CDPAlignCenter CDPAlign packt_figref"><img src="assets/1e139a67-bffa-4703-8efa-3715a6c9ad83.jpg"/></div>
+<div class="CDPAlignCenter CDPAlign packt_figref">Figure 12.4: Prometheus /service-discovery endpoint depicting consul_sd data</div>
+<p>The preceding example shows a working configuration for gathering data from all the available services registered within a Consul server, using <kbd>relabel_configs</kbd> to rewrite the target's <kbd>job</kbd> label to be the service name instead of the <kbd>job_name</kbd>. This means that every application instance registered in Consul would be automatically picked up as a scrape target and correctly assigned the proper job name. Additionally, the last relabel rule changes the target port to <kbd>9107</kbd> when the service is named Consul, thus changing the target from Consul itself to an exporter for it.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">DNS-based service discovery</h1>
+                </header>
+            
+            <article>
+                
+<p>This type of service discovery relies on DNS to gather data. It works by defining a list of domain names that will be queried regularly to obtain targets. The name servers that are used for resolution are looked up in <kbd>/etc/resolv.conf</kbd>. This discovery integration, besides supporting A and AAAA DNS records, is also able to query SRV records, which also provide the port for the service:</p>
+<pre>~$ dig SRV hey.service.example.inet<br/>...<br/>;; QUESTION SECTION:<br/>;hey.service.example.inet. IN SRV<br/><br/>;; ANSWER SECTION:<br/>hey.service.example.inet. 0 IN SRV 1 1 <strong>8080</strong> <strong>server01.node.example.inet.</strong><br/><br/>;; ADDITIONAL SECTION:<br/>server01.node.example.inet. 0 IN A 192.168.42.11<br/>server01.node.example.inet. 0 IN TXT "squad=purple"<br/>...</pre>
+<p>We can see that, by querying the SRV record for <kbd>hey.service.example.inet</kbd> in this example, we get the service location <kbd>server01.node.example.inet</kbd> and port <kbd>8080</kbd>. We also get the A record with the service IP address and a TXT record with some metadata.</p>
+<p>The following snippet illustrates a sample scrape configuration using this DNS service discovery integration. It does this by using the domain <kbd>hey.service.example.inet</kbd> from before:</p>
+<pre>scrape_configs:<br/>  - job_name: 'dns_sd'<br/>    dns_sd_configs:<br/>      - names:<br/>        - hey.service.example.inet</pre>
+<p>The returned SRV records will be converted into new targets. Prometheus doesn't support the advanced DNS-SD specified in RFC 6763, which allows metadata to be transmitted in associated TXT records (as seen in the <kbd>dig</kbd> command previously). This means that only the service address and port can be discovered using this method. We can see what discovered labels are available in the following screenshot:</p>
+<div class="CDPAlignCenter CDPAlign"><img src="assets/261b8bcc-e022-46fc-95dc-b4b0c45c0ab5.png"/></div>
+<div class="CDPAlignCenter CDPAlign packt_figref">Figure 12.5: Prometheus <em>/service-discovery</em> endpoint depicting <em>dns_sd</em> data</div>
+<p>From all the discovery integrations, this is the one with the low amount of provided metadata. Adding to that, using DNS for service discovery is hard to get right <span>– </span>planning for slow convergence, considering several different cache layers that may or may not respect record TTLs, among other concerns. This should only be considered for advanced cases.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">File-based service discovery</h1>
+                </header>
+            
+            <article>
+                
+<p>Similar to the webhook notifier being the solution for integrating with unsupported notification systems (as explained in <a href="db658650-14d2-4a7e-9ae0-1c003e63109c.xhtml">Chapter 11</a>, <em>Understanding and Extending Alertmanager</em>), file-based integration provides the same type of solution for service discovery. It works by loading a list of valid JSON or YAML files, which in turn are used to generate the required targets and their labels. Reloading or restarting Prometheus after discovery files change is not necessary as they are watched for changes and automatically reread, depending on the operating system. Additionally, and as a fallback, the discovery files are also read on a schedule (every 5 minutes, by default).</p>
+<p>The following JSON snippet shows a valid Prometheus discovery file. As we can see, there is a label list and a targets array that the labels apply to:</p>
+<pre>[<br/>    {<br/>        "labels": {<br/>            "job": "node"<br/>        },<br/>        "targets": [<br/>            "192.168.42.11:9100"<br/>        ]<br/>    }<br/>]</pre>
+<p>The following scrape configuration uses the <kbd>file_sd</kbd> discovery, which loads the <kbd>file_sd.json</kbd> that has the content we showed previously:</p>
+<pre>scrape_configs:<br/>  - job_name: 'file_sd'<br/>    file_sd_configs:<br/>      - files:<br/>        - file_sd.json</pre>
+<div class="packt_tip">The <kbd>files</kbd> list also allows globing on the last element of the path, at the file level.</div>
+<p>The discovered target from this configuration can be seen in the following screenshot, where we can check the metadata provided by our file, as well as the labels that were generated automatically by Prometheus:</p>
+<div class="CDPAlignCenter CDPAlign"><img src="assets/04711801-62dc-4225-8c1d-78288a7c1091.png" style="width:27.83em;height:15.00em;"/></div>
+<div class="CDPAlignCenter CDPAlign packt_figref">Figure 12.6: Prometheus /service-discovery endpoint depicting file_sd data</div>
+<p>It is easy to see how this integration opens up a world of possibilities: these files can be created through a daemon that's constantly running or a cron job, using shell scripts (even a simple wget) or full-fledged programming languages, or simply put in place by configuration management. We will explore this topic later in this chapter when we discuss how to build a custom service discovery.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Using a built-in service discovery</h1>
+                </header>
+            
+            <article>
+                
+<p>To understand how the integration between Prometheus and a service discovery provider works, we're going to rely on our test environment. Going even further, we'll provide a working example of Prometheus running in Kubernetes, relying on its native service discovery for this platform. These hands-on examples will showcase how everything ties together, helping you figure out not only the benefits but, above all, the simplicity of these mechanics.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Using Consul service discovery</h1>
+                </header>
+            
+            <article>
+                
+<p>For this chapter, we configured Consul as an example service discovery system in our virtual machine-based test environment <span>– </span>Consul is quite simple to set up, which makes it perfect for our example. The way it works is by having an agent running in client mode in each node and an odd number of agents running in server mode that maintain the service catalog. The services that are available on the client nodes are communicated to the server nodes directly, while cluster membership is propagated using a gossip protocol (random peer-to-peer message passing) between every node in the cluster. Since our main objective is to showcase the Prometheus service discovery using Consul, we configured our test environment with an agent running in development mode, which enables an in-memory server to play around with. This, of course, has complete disregard for security, scalability, data safety, and resilience; documentation regarding how to properly configure Consul can be found at <a href="https://learn.hashicorp.com/consul/">https://learn.hashicorp.com/consul/</a>, and should be taken into account when deploying and maintaining Consul in production environments.</p>
+<p>To poke around how this is set up in the test environment, we need to connect to the instance running Consul:</p>
+<pre><strong>vagrant ssh consul</strong></pre>
+<p>From here, we can start to explore how Consul is set up. For example, the following snippet shows the systemd unit file being used, where we can see the configuration flags being used <span>– </span>it's configured to run as an agent in development mode, and has to bind its ports to the instance's external-facing IP address:</p>
+<pre><strong>vagrant@consul:~$ systemctl cat consul.service </strong><br/><strong>...</strong><br/><strong>[Service]</strong><br/><strong>User=consul</strong><br/><strong>ExecStart=/usr/bin/consul agent \</strong><br/><strong>            -dev \</strong><br/><strong>            -bind=192.168.42.11 \</strong><br/><strong>            -client=192.168.42.11 \</strong><br/><strong>            -advertise=192.168.42.11</strong><br/><strong>...</strong></pre>
+<p>If we run <kbd>ss</kbd> and filter its output to only show lines belonging to Consul, we can find all the ports it's using:</p>
+<pre><strong>vagrant@consul:~$ sudo /bin/ss -lnp | grep consul</strong><br/><strong>udp UNCONN 0 0 192.168.42.11:8301 0.0.0.0:* users:(("consul",pid=581,fd=8))</strong><br/><strong>udp UNCONN 0 0 192.168.42.11:8302 0.0.0.0:* users:(("consul",pid=581,fd=6))</strong><br/><strong>udp UNCONN 0 0 192.168.42.11:8600 0.0.0.0:* users:(("consul",pid=581,fd=9))</strong><br/><strong>tcp LISTEN 0 128 192.168.42.11:8300 0.0.0.0:* users:(("consul",pid=581,fd=3))</strong><br/><strong>tcp LISTEN 0 128 192.168.42.11:8301 0.0.0.0:* users:(("consul",pid=581,fd=7))</strong><br/><strong>tcp LISTEN 0 128 192.168.42.11:8302 0.0.0.0:* users:(("consul",pid=581,fd=5))</strong><br/><strong>tcp LISTEN 0 128 192.168.42.11:8500 0.0.0.0:* users:(("consul",pid=581,fd=11))</strong><br/><strong>tcp LISTEN 0 128 192.168.42.11:8502 0.0.0.0:* users:(("consul",pid=581,fd=12))</strong><br/><strong>tcp LISTEN 0 128 192.168.42.11:8600 0.0.0.0:* users:(("consul",pid=581,fd=10))</strong></pre>
+<p>As we can see, Consul listens on a lot of ports, both TCP and UDP. The port we're interested in is the one serving the HTTP API, which defaults to TCP port <kbd>8500</kbd>. If we open a web browser to <kbd>http://192.168.42.11:8500</kbd>, we will see something similar to the following:</p>
+<p class="mce-root"/>
+<div class="CDPAlignCenter CDPAlign"><img src="assets/e34662e2-2048-4bba-b590-7753c24c4dec.png" style="width:38.67em;height:20.50em;"/></div>
+<div class="CDPAlignCenter CDPAlign packt_figref">Figure 12.7: Consul web interface displaying its default configuration</div>
+<p>There's a single service configured by default, which is the Consul service itself.</p>
+<p>To make this example more interesting, we also have <kbd>consul_exporter</kbd> (an exporter provided by the Prometheus project) deployed in the <kbd>consul</kbd> instance. This exporter doesn't require any additional configuration on Consul's side, so it should just work. We can find the configuration used to run this service in the systemd unit file, like so:</p>
+<pre><strong>vagrant@consul:~$ systemctl cat consul-exporter.service </strong><br/><strong>...</strong><br/><strong>[Service]</strong><br/><strong>User=consul_exporter</strong><br/><strong>ExecStart=/usr/bin/consul_exporter --consul.server=consul:8500</strong><br/><strong>...</strong></pre>
+<div class="packt_infobox">The source code and installation files for the <kbd>consul_exporter</kbd> are available at <a href="https://github.com/prometheus/consul_exporter">https://github.com/prometheus/consul_exporter</a>.</div>
+<p>To validate that the exporter is correctly contacting Consul and parsing its metrics, we can run the following instruction:</p>
+<pre>vagrant@consul:~$ curl -qs localhost:9107/metrics | grep "^consul"<br/>consul_catalog_service_node_healthy{node="consul",service_id="consul",service_name="consul"} 1<br/><strong>consul_catalog_services</strong> 1<br/>consul_exporter_build_info{branch="HEAD",goversion="go1.10.3",revision="75f02d80bbe2191cd0af297bbf200a81cbe7aeb0",version="0.4.0"} 1<br/>consul_health_node_status{check="serfHealth",node="consul",status="critical"} 0<br/>consul_health_node_status{check="serfHealth",node="consul",status="maintenance"} 0<br/>consul_health_node_status{check="serfHealth",node="consul",status="passing"} 1<br/>consul_health_node_status{check="serfHealth",node="consul",status="warning"} 0<br/>consul_raft_leader 1<br/>consul_raft_peers 1<br/>consul_serf_lan_members 1<br/><strong>consul_up</strong> 1</pre>
+<p>The exporter sets the <kbd>consul_up</kbd> metric to <kbd>1</kbd> when it can successfully connect and collect metrics from Consul. We can also see the <kbd>consul_catalog_services</kbd> metric, which is telling us that Consul knows about one service, matching what we've seen in the web interface.</p>
+<p>We can now disconnect from the <kbd>consul</kbd> instance and connect to the <kbd>prometheus</kbd> one using the following commands:</p>
+<pre><strong>exit</strong><br/><strong>vagrant ssh prometheus</strong></pre>
+<p>If we take a look at the Prometheus server configuration, we will find the following:</p>
+<pre><strong>vagrant@prometheus:~$ cat /etc/prometheus/prometheus.yml </strong><br/><strong>...</strong><br/><br/><strong>  - job_name: 'consul_sd'</strong><br/><strong>    consul_sd_configs:</strong><br/><strong>      - server: http://consul:8500</strong><br/><strong>        datacenter: dc1</strong><br/><strong>    relabel_configs:</strong><br/><strong>      - source_labels: [__meta_consul_service]</strong><br/><strong>        target_label: job</strong><br/><strong>...</strong></pre>
+<p>This configuration allows Prometheus to connect to the Consul API address (available at <kbd>http://192.168.42.11:8500</kbd>) and, by means of <kbd>relabel_configs</kbd>, rewrite the <kbd>job</kbd> label so that it matches the service name (as exposed in the <kbd>__meta_consul_service</kbd> label). If we inspect the Prometheus web interface, we can find the following information:</p>
+<div class="CDPAlignCenter CDPAlign"><img src="assets/2db261a5-76d8-4f3e-ad1f-30889debfefc.png"/></div>
+<div class="CDPAlignCenter CDPAlign packt_figref">Figure 12.8: Prometheus /service-discovery endpoint showing Consul default service</div>
+<p>Now, the fun part: let's add a scrape target for <kbd>consul_exporter</kbd> automatically by defining it as a service in Consul. A JSON payload with a Consul service configuration is provided in this chapter's resources, so we can add it via the Consul API. The payload can be found at the following path:</p>
+<pre><strong>vagrant@prometheus:~$ cat /vagrant/chapter12/configs/consul_exporter/payload.json </strong><br/><strong>{</strong><br/><strong>  "ID": "consul-exporter01",</strong><br/><strong>  "Name": "consul-exporter",</strong><br/><strong>  "Tags": [</strong><br/><strong>    "consul",</strong><br/><strong>    "exporter",</strong><br/><strong>    "prometheus"</strong><br/><strong>  ],</strong><br/><strong>  "Address": "consul",</strong><br/><strong>  "Port": 9107</strong><br/><strong>}</strong></pre>
+<p>Using the following instruction, we'll add this new service to Consul's service catalogs via the HTTP API:</p>
+<pre><strong>vagrant@prometheus:~$ curl --request PUT \</strong><br/><strong>--data @/vagrant/chapter12/configs/consul_exporter/payload.json \</strong><br/><strong>http://consul:8500/v1/agent/service/register</strong></pre>
+<p>After running this command, we can validate that the new service was added by having a look at the Consul web interface, which will show something like the following:</p>
+<div class="CDPAlignCenter CDPAlign"><img src="assets/0250a371-7438-4945-b9b1-b19b321477d4.png" style="width:34.17em;height:18.50em;"/></div>
+<div class="CDPAlignCenter CDPAlign packt_figref">Figure 12.9: Consul web interface showing the consul-exporter service</div>
+<p class="mce-root"/>
+<p>Finally, we can inspect the Prometheus <kbd>/service-discovery</kbd> endpoint and check that we have a new target, proving that the Consul service discovery is working as expected:</p>
+<div class="CDPAlignCenter CDPAlign"><img src="assets/6953826d-6c14-489b-9767-5af2237bc548.png" style="width:43.42em;height:49.67em;"/></div>
+<div class="CDPAlignCenter CDPAlign packt_figref">Figure 12.10: Prometheus /service-discovery endpoint showing consul-exporter target</div>
+<p>If we consult the <kbd>consul_catalog_services</kbd> metric once again, we can see that it has changed to 2. Since we're now collecting the <kbd>consul_exporter</kbd> metrics in Prometheus, we can query its current value using <kbd>promtool</kbd>:</p>
+<pre>vagrant@prometheus:~$ <strong>promtool query instant http://localhost:9090 'consul_catalog_services'</strong><br/>consul_catalog_services{instance="consul:9107", job="consul-exporter"} =&gt; <strong>2</strong> @[1555252393.681]</pre>
+<p>Consul tags can be used to do scrape job configuration using <kbd>relabel_configs</kbd> for services that have different requirements, such as changing the metrics path when a given tag is present, or having a tag to mark whether to scrape using HTTPS. The <kbd>__meta_consul_tags</kbd> label value has the comma separator at the beginning and end to make matching easier; this way, you don't need to special-case your regular expression, depending on the position in the string of the tag you're trying to match. An example of this at work could be:</p>
+<pre>...<br/>    relabel_configs: <br/>      - source_labels: [__meta_consul_tags]<br/>        regex: .*,exporter,.*<br/>        action: keep<br/>...</pre>
+<p>This would only keep services registered in Consul with the <kbd>exporter</kbd> tag, discarding everything else.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Using Kubernetes service discovery</h1>
+                </header>
+            
+            <article>
+                
+<p>In this example, we're stepping away from the Prometheus Kubernetes Operator we've been using in previous chapters so that we can focus on the Prometheus native service discovery integration for this container orchestration platform. The manifests for getting Prometheus up and running in our Kubernetes test environment can be found, relative to the code repository root path, at the following path:</p>
+<pre><strong>cd ./chapter12/provision/kubernetes/</strong></pre>
+<p class="mce-root">The following steps will ensure a new Kubernetes environment with all the required software provisioned so that we can then focus on the service discovery component.</p>
+<p>Validate that no other environment is running:</p>
+<pre><strong>minikube status</strong><br/><strong>minikube delete</strong></pre>
+<p>Start an empty Kubernetes environment:</p>
+<pre>minikube start \<br/>  --cpus=2 \<br/>  --memory=3072 \<br/>  --kubernetes-version="v1.14.0" \<br/>  --vm-driver=virtualbox \<br/>  --extra-config=kubelet.authentication-token-webhook=true \<br/>  --extra-config=kubelet.authorization-mode=Webhook</pre>
+<p>The extra configuration we're providing to minikube is needed so that Prometheus is able to interact with <kbd>kubelets</kbd> using service account tokens. When the previous command finishes, a new Kubernetes environment will be ready to be used. We can then proceed to deploy our configurations using the following instructions:</p>
+<pre><strong>kubectl apply -f ./bootstrap/</strong><br/><strong>kubectl rollout status deployment/prometheus-deployment -n monitoring</strong></pre>
+<p>The previous command applies several manifests, which, among other things, create a namespace called <kbd>monitoring</kbd>, a ServiceAccount, and all the required RBAC configurations so that Prometheus can query the Kubernetes API. A <kbd>ConfigMap</kbd> with the Prometheus server configuration is also included, which can be found at <kbd>bootstrap/03_prometheus-configmap.yaml</kbd>. It defines several scrape jobs for Kubernetes components that are targeted through the use of service discovery, as we can see in the following snippet:</p>
+<pre><strong>$ cat bootstrap/03_prometheus-configmap.yaml</strong><br/><strong>...</strong><br/><strong>data:</strong><br/><strong>  prometheus.yml: |</strong><br/><strong>    scrape_configs:</strong><br/><strong>...</strong><br/><strong>    - job_name: kubernetes-pods</strong><br/><strong>      kubernetes_sd_configs:</strong><br/><strong>      - role: pod</strong><br/><strong>      relabel_configs:</strong><br/><strong>      - action: keep</strong><br/><strong>        regex: hey</strong><br/><strong>        source_labels:</strong><br/><strong>        - __meta_kubernetes_pod_label_app</strong><br/><strong>...</strong></pre>
+<p>We can open the Prometheus web interface by issuing the following command:</p>
+<pre><strong>minikube service prometheus-service -n monitoring</strong></pre>
+<p>By moving into the service discovery section available on the <kbd>/service-discovery</kbd> endpoint, we can see that, even though several pods were discovered, none of them matched the label value <kbd>hey</kbd> for the <kbd>app</kbd> label, and as such are being dropped:</p>
+<div class="CDPAlignCenter CDPAlign"><img src="assets/17bff879-85f8-4b7b-b064-e3584277df90.png" style="width:37.92em;height:49.42em;"/></div>
+<div class="CDPAlignCenter CDPAlign packt_figref">Figure 12.11: Prometheus /service-discovery endpoint showing dropped targets for the kubernetes-pods job</div>
+<p class="mce-root"/>
+<p>It's now time to add some new pods with the correct label/value pair to trigger our service discovery configuration. We can proceed by running the following commands, which will be deploying the <kbd>hey</kbd> application, and then follow the status of the deployment:</p>
+<pre><strong>kubectl apply -f ./services/</strong><br/><strong>kubectl rollout status deployment/hey-deployment -n default</strong></pre>
+<p>After a successful deployment, we can go, once again, to the Prometheus web interface at the <kbd>/service-discovery</kbd> endpoint, where we can see that there are now three active targets in the <kbd>kubernetes-pods</kbd> scrape job. The following screenshot depicts one of those targets and all the labels provided by the Kubernetes API:</p>
+<div class="CDPAlignCenter CDPAlign"><img src="assets/b49d8dc0-ea63-4617-a91c-9020c6e8b6d1.png" style="width:25.58em;height:30.33em;"/></div>
+<div class="CDPAlignCenter CDPAlign packt_figref">Figure 12.12: Prometheus /service-discovery endpoint showing the discovered targets for the kubernetes-pods job</div>
+<p class="mce-root">When you're finished testing, you can delete this Kubernetes-based environment by issuing the following command:</p>
+<pre><strong>minikube delete</strong></pre>
+<p>This approach to service discovery allows us to keep track of several Kubernetes objects automatically, without forcing us to change the Prometheus configuration manually. This environment allows us to test all sorts of settings and provides the basis for tailoring the Kubernetes service discovery to our specific needs.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Building a custom service discovery</h1>
+                </header>
+            
+            <article>
+                
+<p>Even with all the available service discovery options, there are numerous other systems/providers that are not supported out of the box. For those cases, we've got a couple of options:</p>
+<ul>
+<li style="font-weight: 400">Open a feature request for Prometheus to support that particular service discovery, and rely on the community and/or maintainers to implement it.</li>
+<li style="font-weight: 400">Implement the service discovery integration yourself in Prometheus and either maintain a fork or contribute it back to the project.</li>
+<li style="font-weight: 400">Figure out a way to get the targets you require into your Prometheus instances with minimal maintenance work and time cost, and without relying on the Prometheus roadmap to get the job done.</li>
+</ul>
+<p>The first two options aren't great, as they are either outside of our control or are cumbersome to maintain. Furthermore, adding additional service discovery integrations to Prometheus without fairly large interest and backing communities places an undue support burden on the maintainers, who aren't currently accepting any new integrations. Luckily, there is a way to easily integrate with any type of service or instance catalog, without needing to maintain costly forks or creative hacks. In the following section, we'll be tackling how to integrate our own service discovery with Prometheus.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Custom service discovery fundamentals</h1>
+                </header>
+            
+            <article>
+                
+<p>The recommended way to integrate a custom service discovery is by relying on the file-based service discovery, <kbd>file_sd</kbd>. The way this integration should be implemented is to have a process (local or remote, scheduled or permanently running) query a data source (catalogue/API/database/<strong>configuration management database</strong> (<strong>CMDB</strong>)) and then write a JSON- or YAML-formatted file with all the targets and their respective labels on a path that's accessible by Prometheus. The file is then read by Prometheus either automatically through disk watches or on a schedule, which in turn allows you to dynamically update the targets that are available for scraping.</p>
+<p>The following diagram illustrates the aforementioned workflow:</p>
+<div class="CDPAlignCenter CDPAlign"><img src="assets/aedacf33-2fb8-4089-b3c2-81c1062d1ec8.png" style="width:42.92em;height:21.17em;"/></div>
+<div class="CDPAlignCenter CDPAlign packt_figref">Figure 12.13: Custom service discovery flow</div>
+<p class="mce-root">This type of approach is generic enough to comply with most, if not all, required use cases, making it possible to build a custom service discovery mechanism in a straightforward manner.</p>
+<div class="packt_tip">Community-driven <kbd>file_sd</kbd> integrations can be found at <a href="https://prometheus.io/docs/operating/integrations/#file-service-discovery">https://prometheus.io/docs/operating/integrations/#file-service-discovery</a>.</div>
+<p>Now that we know how this type of integration should work, let's dive right in and start building our own.</p>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Recommended approach</h1>
+                </header>
+            
+            <article>
+                
+<p>As we've explained so far, building a custom service discovery seems like a manageable enough endeavor. We're required to query something for data and write that data into a file, following a standard format. To make our lives easier, the Prometheus team made an adapter available that removes a big chunk of the boilerplate for creating a new service discovery integration. This adapter is only provided for the Go programming language, as it reuses some code from Prometheus itself. The adapter was made this way so that some less-maintained service discovery integrations could be migrated out to standalone services without too much effort, as well as easing the migration into the main Prometheus binary of external discovery integrations that are built using the adapter, all of which have proven themselves. Note that nothing prevents you from using the language of your choice to build such integrations, but for the sake of following the recommended approach, we'll be sticking with Go and the discovery adapter. Explaining how to program in Go is outside the scope of this book.</p>
+<p>In the main Prometheus repository, we can find the code for the adapter, as well as an example using Consul, which, curiously enough, we've already set up in our test environment. As we know by now, Consul integration is supported natively in Prometheus; however, let's pretend it's not and that we need to integrate with it. In the following topics, we'll go over how to put everything together and build a custom service discovery.</p>
+<div class="packt_infobox">The code for the custom service discovery example is available at <a href="https://github.com/prometheus/prometheus/tree/v2.9.1/documentation/examples/custom-sd">https://github.com/prometheus/prometheus/tree/v2.9.1/documentation/examples/custom-sd</a>.</div>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">The service discovery adapter</h1>
+                </header>
+            
+            <article>
+                
+<p>As a high-level overview, the adapter takes care of launching and managing our custom service discovery code, consuming the groups of targets it produces, converting them into <kbd>file_sd</kbd> format, and ensuring that the JSON data is written to a file when required. When writing a service discovery integration using this adapter, no change is needed in its code, and so it can just be imported as a library. To give a bit more context about what the adapter is doing, we're going to explain some of the lower-level details so that its behaviors are clear when we implement our own discovery using it.</p>
+<p>The following snippet illustrates the <kbd>Run</kbd> function of the adapter that we will need to invoke from our code. This function will take care of starting a <kbd>discovery.Manager</kbd> in its own goroutine (<kbd>a.manager.Run</kbd>), instructing it to run our discovery implementation (<kbd>a.disc</kbd>), and, finally, running the adapter itself in another goroutine (<kbd>a.runCustomSD</kbd>):</p>
+<pre>// Run starts a Discovery Manager and the custom service discovery implementation.<br/>func (a *Adapter) Run() {<br/>    go a.manager.Run()<br/>    a.manager.StartCustomProvider(a.ctx, a.name, a.disc)<br/>    go a.runCustomSD(a.ctx)<br/>}</pre>
+<p class="mce-root">After starting, the adapter consumes from a channel provided by the <kbd>Manager</kbd> that updates the target groups that our code will produce. When an update arrives, it will convert the target groups into <kbd>file_sd</kbd> format and verify whether there were any changes since the last update. If there are changes, it will store the new target groups for future comparisons and write them out as JSON to the output file. This implies that the full list of target groups should be sent in every update; groups that are not sent through the channel will get removed from the produced discovery file.</p>
+<div class="packt_infobox">The <kbd>file_sd</kbd> adapter source code can be found at <a href="https://github.com/prometheus/prometheus/blob/v2.9.2/documentation/examples/custom-sd/adapter/adapter.go">https://github.com/prometheus/prometheus/blob/v2.9.2/documentation/examples/custom-sd/adapter/adapter.go</a>.</div>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Custom service discovery example</h1>
+                </header>
+            
+            <article>
+                
+<p>Now that we have an idea of how the adapter works, let's take a look at what we need to implement to have our custom service discovery working. As we saw previously, the adapter uses a <kbd>discovery.Manager</kbd>, so we need to provide it with an implementation of the <kbd>Discoverer</kbd> interface so that it can run our discovery. The interface looks like this:</p>
+<pre>type Discoverer interface {<br/>    Run(ctx context.Context, up chan&lt;- []*targetgroup.Group)<br/>}</pre>
+<div class="packt_infobox">The <kbd>Discoverer</kbd> interface documentation can be found at <a href="https://godoc.org/github.com/prometheus/prometheus/discovery#Discoverer">https://godoc.org/github.com/prometheus/prometheus/discovery#Discoverer</a>.</div>
+<p>This means that we only need to implement the <kbd>Run</kbd> function, where we will run the logic of our discovery on a loop, generating the appropriate target groups and sending them through the <kbd>up</kbd> channel to the adapter. The <kbd>ctx</kbd> context is there so that we know when we need to stop. The code we implement will then be regularly gathering all the available targets/metadata from our data source. In this example, we're using Consul, which requires us to get a list of services first and then, for each one of them, query which instances are backing it and their metadata to generate labels. If something fails, we won't be sending any updates via the channel, because it's better to serve stale data than incomplete or incorrect data.</p>
+<p>Finally, in our <kbd>main</kbd> function, we just need to instantiate a new adapter, and feed it a background context, the name of the output file, the name of our discovery implementation, the discovery object that implements the <kbd>Discoverer</kbd> interface, and a <kbd>log.Logger</kbd> instance:</p>
+<pre>func main() {<br/>...<br/>  sdAdapter := adapter.NewAdapter(ctx, *outputFile, "exampleSD", disc, logger)<br/>  sdAdapter.Run()<br/>...<br/>}</pre>
+<div class="packt_infobox">The working example of this adapter implementation can be found at <a href="https://github.com/prometheus/prometheus/blob/v2.9.2/documentation/examples/custom-sd/adapter-usage/main.go">https://github.com/prometheus/prometheus/blob/v2.9.2/documentation/examples/custom-sd/adapter-usage/main.go</a>.</div>
+<p>The next step is to deploy and integrate this newly created service discovery provider with Prometheus, so that's what we'll do in the following section.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Using the custom service discovery</h1>
+                </header>
+            
+            <article>
+                
+<p>To see for ourselves how a custom service discovery behaves, we'll rely on our test environment. The <kbd>custom-sd</kbd> binary, which recreates the Consul discovery integration as an example of a custom service discovery, is deployed alongside Prometheus and is ready to be used. Together with the Consul deployment, we have all the required components in the test environment to see how everything fits together.</p>
+<div class="packt_infobox"><kbd>custom-sd</kbd> can be built on a machine with a Go development environment set up by issuing the following command: <kbd>go get github.com/prometheus/prometheus/documentation/examples/custom-sd/adapter-usage</kbd>.</div>
+<p>First, we need to ensure that we are connected to the <kbd>prometheus</kbd> instance. We can use the following command:</p>
+<pre><strong>vagrant ssh prometheus</strong></pre>
+<p>We can then proceed to change the Prometheus configuration to use <kbd>file_sd</kbd> as our integration. For this, we must replace the scrape job configured to use <kbd>consul_sd</kbd> with a new one. To make things easier, we placed a configuration file with this change already made in <kbd>/etc/prometheus/</kbd>. To use it, you just need to replace the current configuration with the new one:</p>
+<pre><strong>vagrant@prometheus:~$ sudo mv /etc/prometheus/prometheus_file_sd.yml /etc/prometheus/prometheus.yml</strong></pre>
+<p>The scrape job we are interested in is as follows:</p>
+<pre>- job_name: 'file_sd'<br/>    file_sd_configs:<br/>      - files:<br/>        - custom_file_sd.json</pre>
+<p>To make Prometheus aware of these changes, we must reload it:</p>
+<pre><strong>vagrant@prometheus:~$ sudo systemctl reload prometheus</strong></pre>
+<p>We should also make sure that the Consul server has the configuration for <kbd>consul-exporter</kbd>, which we added previously. If, by any chance, you missed that step, you may add it now by simply running the following code:</p>
+<pre><strong>vagrant@prometheus:~$ curl --request PUT \</strong><br/><strong>--data @/vagrant/chapter12/configs/consul_exporter/payload.json \</strong><br/><strong>http://consul:8500/v1/agent/service/register</strong></pre>
+<p>If we take a look in the Prometheus web interface, we will see something similar to the following:</p>
+<div class="CDPAlignCenter CDPAlign"><img src="assets/c1006783-1072-469f-9c55-4cea4df74adf.png" style="width:12.92em;height:8.08em;"/></div>
+<div class="CDPAlignCenter CDPAlign packt_figref">12.14: Prometheus /service-discovery endpoint without any file_sd targets</div>
+<p>We're now ready to try out the <kbd>custom-sd</kbd> application. We'll need to specify the Consul API address and the path to the output file, which the Prometheus server is configured to read from. The following command will take care of that, and also ensure that the right user is creating the file, so that the Prometheus process is able to access it:</p>
+<pre><strong>vagrant@prometheus:~$ sudo -u prometheus -- custom-sd --output.file="/etc/prometheus/custom_file_sd.json" --listen.address="consul:8500"</strong></pre>
+<p>We now have the custom service discovery running. If we go back to the web interface of Prometheus in the <kbd>/service-discovery</kbd> endpoint, we'll be able to see the discovered target:</p>
+<div class="CDPAlignCenter CDPAlign"><img src="assets/63410416-ab64-4dd4-8180-69d269bc10dc.png" style="width:19.67em;height:21.17em;"/></div>
+<div class="CDPAlignCenter CDPAlign packt_figref">12.15: Prometheus /service-discovery endpoint depicting the discovered target</div>
+<p>We can also inspect the file that was created by our <kbd>custom-sd</kbd>, and validate its contents, as follows (the output has been made compact for brevity):</p>
+<pre><strong>vagrant@prometheus:~$ sudo cat /etc/prometheus/custom_file_sd.json </strong><br/><strong>[</strong><br/><strong>    {</strong><br/><strong>        "targets": ["consul:9107"],</strong><br/><strong>        "labels": {</strong><br/><strong>            "__address__": "consul:9107",</strong><br/><strong>            "__meta_consul_address": "192.168.42.11",</strong><br/><strong>            "__meta_consul_network_segment": "",</strong><br/><strong>            "__meta_consul_node": "consul",</strong><br/><strong>            "__meta_consul_service_address": "consul",</strong><br/><strong>            "__meta_consul_service_id": "consul-exporter01",</strong><br/><strong>            "__meta_consul_service_port": "9107",</strong><br/><strong>            "__meta_consul_tags": ",consul,exporter,prometheus,"</strong><br/><strong>        }}]</strong></pre>
+<p>And that's it! You now have a custom service discovery up and running, fully integrated with Prometheus using the file-based service discovery mechanism. A more serious deployment would have the <kbd>custom-sd</kbd> service running as a daemon. If you're more comfortable with a scripting language, you could choose to write a service discovery script that produces the discovery file and exits, in which case running it as a cron job would be an option. As a last suggestion, you could have your configuration management software produce the discovery file dynamically on a schedule.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Summary</h1>
+                </header>
+            
+            <article>
+                
+<p>In this chapter, we had the opportunity to understand why service discovery is essential for managing ever-growing infrastructure in a sane way. Prometheus leverages several service discovery options out of the box, which can kick-start your adoption in a very quick and friendly manner. We went through the available options Prometheus provides for service discovery, and showed you what to expect from them. We then stepped into a couple of examples using Consul and Kubernetes to materialize the concepts we exposed previously. Finally, we went through how to integrate a custom service discovery with Prometheus by using the recommended approach and relying on <kbd>file_sd</kbd>.</p>
+<p>In the next chapter, we'll go through how to scale and federate Prometheus.</p>
+<p class="mce-root"/>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Questions</h1>
+                </header>
+            
+            <article>
+                
+<ol>
+<li>Why should you use a service discovery mechanism in Prometheus?</li>
+<li>When you're using a cloud provider service discovery, what is the major requirement for setting the integration?</li>
+<li>What are the types of records supported by the DNS-based service discovery integration?</li>
+<li>What purpose does the concept of role serve in the Kubernetes service discovery integration?</li>
+<li>When you're building a custom service discovery, what available integration will you be relying upon?</li>
+<li>Do you need to reload Prometheus when a target file configured in <kbd>file_sd</kbd> is updated?</li>
+<li>What is the recommended way of building your own custom service discovery?</li>
+</ol>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Further reading</h1>
+                </header>
+            
+            <article>
+                
+<ul>
+<li><strong>Prometheus service discovery configuration</strong>: <a href="https://prometheus.io/docs/prometheus/latest/configuration/configuration">https://prometheus.io/docs/prometheus/latest/configuration/configuration</a></li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    </body></html>

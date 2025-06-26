@@ -1,0 +1,435 @@
+<html><head></head><body>
+		<div id="_idContainer034">
+			<h1 id="_idParaDest-149"><em class="italic"><a id="_idTextAnchor149"/>Chapter 8</em>: Choosing the Container Base Image</h1>
+			<p>The fastest and easiest way to learn about and get some experience with containers is to start working with pre-built container images, as we saw in the previous chapters. After a deep dive into container management, we discovered that sometimes, the available service, its configuration, or even the application version is not the one that our project requires. Then, we introduced Buildah and its feature for building custom container images. In this chapter, we are going to address another important topic that is often questioned in <a id="_idIndexMarker723"/>community and enterprise projects: the choice of a <strong class="bold">container base image</strong>.</p>
+			<p>Choosing the right container base image is an important task of the container journey: a container base image is the underlying operating system layer that our system's service, application, or code will rely on. Due to this, we should choose one that fits our best practices concerning security and updates.</p>
+			<p>In this chapter, we're going to cover the following main topics:</p>
+			<ul>
+				<li>The Open Container Initiative image format</li>
+				<li>Where do container images come from?</li>
+				<li>Trusted container image sources</li>
+				<li>Introducing Universal Base Image</li>
+			</ul>
+			<h1 id="_idParaDest-150"><a id="_idTextAnchor150"/>Technical requirements</h1>
+			<p>To complete this chapter, you will need a machine with a working Podman installation. As stated in <a href="B17908_03_epub.xhtml#_idTextAnchor068"><em class="italic">Chapter 3</em></a>, <em class="italic">Running the First Container</em>, all the examples in this book have been executed on a Fedora 34 system or later but can be reproduced on an operating system of your choice.</p>
+			<p>Having a good understanding of the topics that we covered in <a href="B17908_04_epub.xhtml#_idTextAnchor083"><em class="italic">Chapter 4</em></a>, <em class="italic">Managing Running Containers</em>, will help you easily grasp concepts regarding container images.</p>
+			<h1 id="_idParaDest-151"><a id="_idTextAnchor151"/>The Open Container Initiative image format</h1>
+			<p>As we described in <a href="B17908_01_epub.xhtml#_idTextAnchor015"><em class="italic">Chapter 1</em></a>, <em class="italic">Introduction to Container Technology</em>, back in 2013, Docker <a id="_idIndexMarker724"/>was introduced in the container landscape and became very popular rapidly.</p>
+			<p>At a high level, the Docker team introduced the concept of container images and container registries, which was a game-changer. Another important step was being able to <em class="italic">extract</em> containerd projects from Docker and donate them to the <strong class="bold">Cloud Native Computing Foundation</strong> (<strong class="bold">CNCF</strong>). This<a id="_idIndexMarker725"/> motivated the open source community to start working seriously on container engines that could be injected into an orchestration layer, such as Kubernetes. </p>
+			<p>Similarly, in 2015, Docker, with the help of many other companies (Red Hat, AWS, Google, Microsoft, IBM, and others), started <a id="_idIndexMarker726"/>the <strong class="bold">Open Container Initiative</strong> (<strong class="bold">OCI</strong>) under the Linux Foundation umbrella.</p>
+			<p>These contributors developed the Runtime Specification (runtime-spec) and the Image Specification (image-spec) to describe how the API and the architecture for new container engines should be created in the future. </p>
+			<p>After a few months of work, the OCI team released its first implementation of a container engine that adhered to the OCI's specifications; the project was named <strong class="source-inline">runc</strong>.</p>
+			<p>It's worth looking at the container image specification in detail and going over some theory behind the practice, which we introduced in <a href="B17908_02_epub.xhtml#_idTextAnchor044"><em class="italic">Chapter 2</em></a>, <em class="italic">Comparing Podman and Docker</em>.</p>
+			<p>The specification defines an OCI container image that consists of the following:</p>
+			<ul>
+				<li><strong class="bold">Manifest</strong>: This <a id="_idIndexMarker727"/>contains the metadata of the contents and dependencies of the image. This also includes the ability to identify one or more filesystem archives that will be unpacked to get the final runnable filesystem.</li>
+				<li><strong class="bold">Image Index (optional)</strong>: This<a id="_idIndexMarker728"/> represents a list of manifests and descriptors that can provide different implementations of the image, depending on the target platform.</li>
+				<li><strong class="bold">Set of Filesystem Layers</strong>: The<a id="_idIndexMarker729"/> actual set of layers that should be merged to build the final container filesystem.</li>
+				<li><strong class="bold">Configuration</strong>: This<a id="_idIndexMarker730"/> contains all the information that's required by the container runtime engine to effectively run the application, such as arguments, environment variables, and so on.</li>
+			</ul>
+			<p>We will not deep dive into every element of the OCI Image Specification, but the Image Manifest deserves a closer look.</p>
+			<h2 id="_idParaDest-152"><a id="_idTextAnchor152"/>OCI Image Manifest</h2>
+			<p>The Image Manifest <a id="_idIndexMarker731"/>defines a set of layers and the configuration for a single container image that is built for a specific architecture and an operating system.</p>
+			<p>Let's explore the details of the OCI Image Manifest by looking at the following example:</p>
+			<p class="source-code">{</p>
+			<p class="source-code">  "schemaVersion": 2,</p>
+			<p class="source-code">  "config": {</p>
+			<p class="source-code">    "mediaType": "application/vnd.oci.image.config.v1+json",</p>
+			<p class="source-code">    "size": 7023,</p>
+			<p class="source-code">    "digest": "sha256:b5b2b2c507a0944348e0303114d8d93aaaa081732b86451d9bce1f 432a537bc7"</p>
+			<p class="source-code">  },</p>
+			<p class="source-code">  "layers": [</p>
+			<p class="source-code">    {</p>
+			<p class="source-code">      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",</p>
+			<p class="source-code">      "size": 32654,</p>
+			<p class="source-code">      "digest": "sha256:9834876dcfb05cb167a5c24953eba58c4ac89b1adf57f28f2f9d09a f107ee8f0"</p>
+			<p class="source-code">    }</p>
+			<p class="source-code">  ],</p>
+			<p class="source-code">  "annotations": {</p>
+			<p class="source-code">    "com.example.key1": "value1",</p>
+			<p class="source-code">    "com.example.key2": "value2"</p>
+			<p class="source-code">  }</p>
+			<p class="source-code">}</p>
+			<p>Here, we are <a id="_idIndexMarker732"/>using the following keywords:</p>
+			<ul>
+				<li><strong class="source-inline">schemaVersion</strong>: A property that must be set to a value of <strong class="source-inline">2</strong>. This ensures backward compatibility with Docker.</li>
+				<li><strong class="source-inline">config</strong>: A property that references a container's configuration through a digest:<ul><li><strong class="source-inline">mediaType</strong>: This property defines the actual configuration format (just one currently).</li></ul></li>
+				<li><strong class="source-inline">layers</strong>: This property provides an array of descriptor objects:<ul><li><strong class="source-inline">MediaType</strong>: In this case, this descriptor should be one of the media types that's allowed for the layer's descriptors.</li></ul></li>
+				<li><strong class="source-inline">annotations</strong>: This property defines additional metadata for the image manifest.</li>
+			</ul>
+			<p>To summarize, the main goal of the specification is to make interoperable tools for building, transporting, and preparing a container image to be run.</p>
+			<p>The Image Manifest Specification <a id="_idIndexMarker733"/>has three main goals:</p>
+			<ul>
+				<li>To enable hashing for the image's configuration, thereby generating a unique ID </li>
+				<li>To allow multi-architecture images due to its high-level manifest (image index) that references platform-specific versions of the image manifest </li>
+				<li>To be able to <a id="_idIndexMarker734"/>easily translate the container image into the OCI Runtime Specification</li>
+			</ul>
+			<p>Now, let's learn where these container images come from.</p>
+			<h1 id="_idParaDest-153"><a id="_idTextAnchor153"/>Where do container images come from?</h1>
+			<p>In the <a id="_idIndexMarker735"/>previous chapters, we used pre-built images to run, build, or manage a container, but where do these container images come from?</p>
+			<p>How can we dig into their source commands or into the Dockerfile/ContainerFile that's used to build it?</p>
+			<p>Well, as we've mentioned previously, Docker introduced the concept of container image and Container Registry for storing these images – even publicly. The most famous Container Registry is Docker Hub but after Docker's introduction, other cloud container registries were released too.</p>
+			<p>We can choose between the following cloud container registries:</p>
+			<ul>
+				<li><strong class="bold">Docker Hub</strong>: This<a id="_idIndexMarker736"/> is the hosted registry solution<a id="_idIndexMarker737"/> by Docker Inc. This registry also hosts official repositories and security verified images for some popular open source projects.</li>
+				<li><strong class="bold">Quay</strong>: This <a id="_idIndexMarker738"/>is the hosted registry solution that<a id="_idIndexMarker739"/> was born under the CoreOS company, though it is now part of Red Hat. It offers private and public repositories, automated scanning for security purposes, image builds, and integration with popular Git public repositories.</li>
+				<li><strong class="bold">Linux Distribution Registries</strong>: Popular<a id="_idIndexMarker740"/> Linux distributions are<a id="_idIndexMarker741"/> typically community-based, such as Fedora Linux, or enterprise-based, such as <strong class="bold">Red Hat Enterprise Linux</strong> (<strong class="bold">RHEL</strong>). They<a id="_idIndexMarker742"/> usually offer public container registries, though these are often only available for projects or packages that have already been provided as system packages. These <a id="_idIndexMarker743"/>registries are not available to end <a id="_idIndexMarker744"/>users and they are fed by the Linux distributions' maintainers.</li>
+				<li><strong class="bold">Public Cloud Registries</strong>: Amazon, Google, Microsoft, and other public cloud providers <a id="_idIndexMarker745"/>offer private container <a id="_idIndexMarker746"/>registries for their customers.</li>
+			</ul>
+			<p>We will explore these registries in more detail in <a href="B17908_09_epub.xhtml#_idTextAnchor167"><em class="italic">Chapter 9</em></a>, <em class="italic">Pushing Images to a Container Registry</em>.</p>
+			<p>Docker Hub, as well as Quay.io, are public container registries where we can find container images that have been created by anyone. These registries are full of useful custom images that we can use as starting points for testing container images quickly and easily.</p>
+			<p>Just downloading and running a container image is not always the best thing to do – we could hit very old and outdated software that could be vulnerable to some known public vulnerability or, even worse, we could download and execute some malicious code that could compromise our whole infrastructure.</p>
+			<p>For this reason, Docker Hub and Quay.io usually offer features to underline where such images come from. Let's inspect them.</p>
+			<h2 id="_idParaDest-154"><a id="_idTextAnchor154"/>Docker Hub container registry service</h2>
+			<p>As we<a id="_idIndexMarker747"/> introduced earlier, Docker Hub is the most famous Container Registry available. It hosts multiple container images for community and enterprise products.</p>
+			<p>By looking at the detail page of a container image, we can easily discover all the required information about that project and its container images. The following screenshot shows Alpine Linux's Docker Hub page:</p>
+			<div>
+				<div id="_idContainer029" class="IMG---Figure">
+					<img src="image/B17908_08_01.jpg" alt="Figure 8.1 – Alpine Linux container image on Docker Hub&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 8.1 – Alpine Linux container image on Docker Hub</p>
+			<p>As you can <a id="_idIndexMarker748"/>see, at the top of the page, we can find helpful information, the latest tags, the supported architectures, and useful links to the project's documentation and the issue-reporting system.</p>
+			<p>On the Docker Hub page, we can find the <em class="italic">Official Image</em> tag, just after the image's name, when that image is part of Docker's Official Images program. The images in this program are curated directly by the Docker team in collaboration with the upstream projects' maintainers. </p>
+			<p class="callout-heading">Important note</p>
+			<p class="callout">If you want to look at this <a id="_idIndexMarker749"/>page in more depth, point your web browser to <a href="https://hub.docker.com/_/alpine">https://hub.docker.com/_/alpine</a>.</p>
+			<p>Another<a id="_idIndexMarker750"/> important feature that's offered by Docker Hub (not only for official images) is the ability to look into the Dockerfile that was used to create a certain image.</p>
+			<p>If we click on one of the available tags on the container image page, we can easily look at the Dockerfile of that container image tag.</p>
+			<p>Clicking on the tag named <strong class="source-inline">20210804, edge</strong> on that page will redirect us to the GitHub page of the <strong class="source-inline">docker-alpine</strong> project, which is defined as the following Dockerfile: <a href="https://github.com/alpinelinux/docker-alpine/blob/edge/x86_64/Dockerfile">https://github.com/alpinelinux/docker-alpine/blob/edge/x86_64/Dockerfile</a>.</p>
+			<p>We should always pay attention and prefer official images. If an official image is not available or it does not fit our needs, then we need to inspect the Dockerfile that the content creator published, as well as the container image.</p>
+			<h2 id="_idParaDest-155"><a id="_idTextAnchor155"/>Quay container registry service</h2>
+			<p>Quay is a <a id="_idIndexMarker751"/>container registry service that was acquired by CoreOS in 2014 and is now part of the Red Hat ecosystem. </p>
+			<p>The registry allows its users to be more cautious once they've chosen a container image by providing security scanning software. </p>
+			<p>Quay adopts the Clair project, a leading container vulnerability scanner that displays reports on the repository tags web page, as shown in the following screenshot:</p>
+			<div>
+				<div id="_idContainer030" class="IMG---Figure">
+					<img src="image/B17908_08_02.jpg" alt="Figure 8.2 – Quay vulnerability Security Scan page&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 8.2 – Quay vulnerability Security Scan page</p>
+			<p>On this <a id="_idIndexMarker752"/>page, we can click on <strong class="bold">Security Scan</strong> to inspect the details of that security scan. If you want to learn more about this feature, please go to <a href="https://quay.io/repository/openshift-release-dev/ocp-release?tab=tags">https://quay.io/repository/openshift-release-dev/ocp-release?tab=tags</a>.</p>
+			<p>As we've seen, using a public registry that offers every user the security scan feature could help ensure that we choose the right and most secure flavor of the container image we are searching for.</p>
+			<h2 id="_idParaDest-156"><a id="_idTextAnchor156"/>Red Hat Ecosystem Catalog</h2>
+			<p>The Red Hat Ecosystem Catalog<a id="_idIndexMarker753"/> is the default container<a id="_idIndexMarker754"/> registry for <strong class="bold">Red Hat Enterprise Linux</strong> (<strong class="bold">RHEL</strong>) and <a id="_idIndexMarker755"/>Red Hat <strong class="bold">OpenShift Container Platform</strong> (<strong class="bold">OCP</strong>) users. The web interface of this registry is publicly accessible to any users, whether they are authenticated or not, although almost all the images that are provided are reserved for paid users (RHEL or OCP users).</p>
+			<p>We are talking about this registry because it combines all the features we talked about previously. This registry<a id="_idIndexMarker756"/> offers the following to its users:</p>
+			<ul>
+				<li>Official container images by Red Hat</li>
+				<li>ContainerFile/Dockerfile sources to inspect the content of the image</li>
+				<li>Security reports (index) about every container image that's distributed</li>
+			</ul>
+			<p>The<a id="_idIndexMarker757"/> following screenshot shows what this information<a id="_idIndexMarker758"/> looks like on the <strong class="bold">Red Hat Ecosystem Catalog</strong> page:</p>
+			<div>
+				<div id="_idContainer031" class="IMG---Figure">
+					<img src="image/B17908_08_03.jpg" alt="Figure 8.3 – MariaDB container image description page on the Red Hat Ecosystem Catalog&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 8.3 – MariaDB container image description page on the Red Hat Ecosystem Catalog</p>
+			<p>As we can see, the page shows the description of the container image we have selected (MariaDB database), the version, the available architectures, and various tags that can be selected from the respective drop-down menu. Some tabs also mention the keywords we are interested in: <em class="italic">Security</em> and <em class="italic">Dockerfile</em>.</p>
+			<p>By clicking on the <strong class="bold">Security</strong> tab, we can see the status of the vulnerability scan that was executed for that image tag, as shown in the following screenshot:</p>
+			<div>
+				<div id="_idContainer032" class="IMG---Figure">
+					<img src="image/B17908_08_04.jpg" alt="Figure 8.4 – MariaDB container image Security page on the Red Hat Ecosystem Catalog&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 8.4 – MariaDB container image Security page on the Red Hat Ecosystem Catalog</p>
+			<p>As we can see, at the<a id="_idIndexMarker759"/> time of writing, for this latest image tag, a security vulnerability has already been identified that's affecting three packages. To the right, we can find the Red Hat Advisory ID, which is linked to<a id="_idIndexMarker760"/> the public <strong class="bold">Common Vulnerabilities and Exposures</strong> (<strong class="bold">CVEs</strong>).</p>
+			<p>By clicking on the <strong class="bold">Dockerfile</strong> tab, we can look at the source ContainerFile that was used to build that container image:</p>
+			<div>
+				<div id="_idContainer033" class="IMG---Figure">
+					<img src="image/B17908_08_05.jpg" alt="Figure 8.5 – MariaDB container image Dockerfile page on Red Hat Ecosystem Catalog&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 8.5 – MariaDB container image Dockerfile page on Red Hat Ecosystem Catalog</p>
+			<p>As we can see, we <a id="_idIndexMarker761"/>can look at the source ContainerFile that was used to build the container image we are going to pull and run. This is a great feature that we can access by clicking on the same description page of the container image we are looking for.</p>
+			<p>If we take a closer look at the preceding screenshot, we can see that the MariaDB container image was built using a very special container base image: UBI8. </p>
+			<p><strong class="bold">UBI</strong> stands <a id="_idIndexMarker762"/>for <strong class="bold">Universal Base Image</strong>. It is an initiative that was launched by Red Hat that lets every user (Red Hat customers or not) open Red Hat container images. This allows the Red Hat ecosystem to expand by leveraging all the previously mentioned services that are offered by the Red Hat Ecosystem Catalog, as well as by leveraging the updated packages that are directly from Red Hat.</p>
+			<p>We will talk more about UBI and its container images later in this chapter.</p>
+			<h1 id="_idParaDest-157"><a id="_idTextAnchor157"/>Trusted container image sources</h1>
+			<p>In the <a id="_idIndexMarker763"/>previous section, we defined the central role of the image registry as a source of truth for valid, usable images. In this section, we want to stress the importance of adopting trusted images that come from trusted sources.</p>
+			<p>An OCI image is used to package binaries and runtimes in a structured filesystem with the purpose of delivering a specific service. When we pull that image and run it on our systems without any kind of control, we implicitly trust the author to not have tampered with its content by using malicious components. But nowadays, trust is something that cannot be granted so easily.</p>
+			<p>As we<a id="_idIndexMarker764"/> will see in <a href="B17908_11_epub.xhtml#_idTextAnchor206"><em class="italic">Chapter 11</em></a>, <em class="italic">Securing Containers</em>, there are many attack use cases and malicious behaviors that can be conducted from a container: privilege escalation, data exfiltration, and miners are just a few examples. These behaviors can be amplified when containers that are run inside Kubernetes clusters (many thousands of clusters) can spawn malicious pods across the infrastructure easily.</p>
+			<p>To help security teams mitigate this, the MITRE Corporation periodically releases <strong class="bold">MITRE ATT&amp;CK</strong> matrices <a id="_idIndexMarker765"/>to identify all the possible attack strategies and their related techniques, with real-life use cases, and their detection and mitigation best practices. One of these matrixes is dedicated to containers, where many techniques are implemented based on insecure images where malicious behaviors can be conducted successfully.</p>
+			<p class="callout-heading">Important Note</p>
+			<p class="callout">You should prefer images that come from a registry that supports vulnerability scans. If the scan results are available, check them carefully and avoid using images that spot critical vulnerabilities. </p>
+			<p>With this in mind, what is the first step for creating a secure cloud-native infrastructure? The answer is choosing images that only come from trusted sources, and the first step is to configure trusted registries and patterns to block disallowed ones. We will cover this in the following subsection.</p>
+			<h2 id="_idParaDest-158"><a id="_idTextAnchor158"/>Managing trusted registries</h2>
+			<p>As <a id="_idIndexMarker766"/>shown in <a href="B17908_03_epub.xhtml#_idTextAnchor068"><em class="italic">Chapter 3</em></a>, <em class="italic">Running the First Container</em>, in the <em class="italic">Preparing your environment</em> section, Podman can manage trusted registries with config files.</p>
+			<p>The <strong class="source-inline">/etc/containers/registries.conf</strong> file (overridden by the user-related <strong class="source-inline">$HOME/.config/containers/registries.conf</strong> file, if present) manages a list of trusted registries that Podman can safely contact to search and pull images. </p>
+			<p>Let's look at <a id="_idIndexMarker767"/>an example of this file:</p>
+			<p class="source-code">unqualified-search-registries = ["docker.io", "quay.io"]</p>
+			<p class="source-code"> </p>
+			<p class="source-code">[[registry]]</p>
+			<p class="source-code">location = "registry.example.com:5000"</p>
+			<p class="source-code">insecure = false</p>
+			<p>This file helps us define the trusted registries that can be used by Podman, so it deserves a detailed analysis. </p>
+			<p>Podman accepts both <strong class="bold">unqualified</strong> and <strong class="bold">fully-qualified</strong> images. The difference is quite simple and can be illustrated as follows:</p>
+			<ul>
+				<li>A fully-qualified image<a id="_idIndexMarker768"/> includes a registry server FQDN, namespace, image name, and tag. For example, <strong class="source-inline">docker.io/library/nginx:latest</strong> is a fully-qualified image. It has a full name that cannot be confused with any other Nginx image.</li>
+				<li>An unqualified image <a id="_idIndexMarker769"/>only includes the image's name. For example, the <strong class="source-inline">nginx</strong> image can have multiple instances in the searched registries. The majority of the images that result from the basic <strong class="source-inline">podman search nginx</strong> command will not be official and should be analyzed in detail to ensure they're trusted. The output can be filtered by the <strong class="source-inline">OFFICIAL</strong> flag and by the number of <strong class="source-inline">STARS</strong> (more is better).</li>
+			</ul>
+			<p>The first global setting of the registries configuration file is the <strong class="source-inline">unqualified-search-registry</strong> array, which defines the search list of registries for unqualified images. When the user runs the <strong class="source-inline">podman search &lt;image_name&gt;</strong> command, Podman will search across the registries defined in this list.</p>
+			<p>By removing a registry from the list, Podman will stop searching the registry. However, Podman will still be able to pull a fully qualified image from a foreign registry.</p>
+			<p>To manage single registries and create matching patterns for specific images, we can use the <strong class="source-inline">[[registry]]</strong> <strong class="bold">Tom's Obvious, Minimal Language</strong> (<strong class="bold">TOML</strong>) tables. The main settings of<a id="_idIndexMarker770"/> these tables are as follows:</p>
+			<ul>
+				<li><strong class="source-inline">prefix</strong>: This is used to define the image names and can support multiple formats. In general, we can define images by following the <strong class="source-inline">host[:port]/namespace[/_namespace_…]/repo(:_tag|@digest)</strong> pattern, though simpler patterns such as <strong class="source-inline">host[:port]</strong>, <strong class="source-inline">host[:port]/namespace</strong>, and even <strong class="source-inline">[*.]host</strong> can be applied. Following this approach, users can define a generic prefix for a registry or a more detailed prefix to match a specific image or tag. Given a fully qualified image, if two <strong class="source-inline">[[registry]]</strong> tables have a prefix with a partial match, the longest matching pattern will be used.</li>
+				<li><strong class="source-inline">insecure</strong>: This is a Boolean (<strong class="source-inline">true</strong> or <strong class="source-inline">false</strong>) that allows unencrypted HTTP connections or TLS connections based on untrusted certificates. </li>
+				<li><strong class="source-inline">blocked</strong>: This is a Boolean (<strong class="source-inline">true</strong> or <strong class="source-inline">false</strong>) that's used to define blocked registries. If it's set to true, the registries or images that match the prefix are blocked.</li>
+				<li><strong class="source-inline">location</strong>: This field defines the registry's location. By default, it is equal to <strong class="source-inline">prefix</strong>, but it can have a different value. In that case, a pattern that matches a custom prefix namespace will resolve to the <strong class="source-inline">location</strong> value.</li>
+			</ul>
+			<p>Along with the<a id="_idIndexMarker771"/> main <strong class="source-inline">[[registry]]</strong> table, we can define an array of <strong class="source-inline">[[registry.mirror]]</strong> TOML tables to provide alternate paths to the main registry or registry namespace. </p>
+			<p>When multiple mirrors are provided, Podman will search across them first and then fall back to the location that's defined in the main <strong class="source-inline">[[registry]]</strong> table.</p>
+			<p>The following example extends the previous one by defining a namespaced registry entry and its mirror:</p>
+			<p class="source-code">unqualified-search-registries = ["docker.io", "quay.io"]</p>
+			<p class="source-code">[[registry]]</p>
+			<p class="source-code">location = "registry.example.com:5000/foo"</p>
+			<p class="source-code">insecure = false</p>
+			<p class="source-code">[[registry.mirror]]</p>
+			<p class="source-code">location = "mirror1.example.com:5000/bar"</p>
+			<p class="source-code">[[registry.mirror]]</p>
+			<p class="source-code">location = "mirror2.example.com:5000/bar"</p>
+			<p>According to this example, if a user tries to pull the image tagged as <strong class="source-inline">registry.example.com:5000/foo/app:latest</strong>, Podman will try <strong class="source-inline">mirror1.example.com:5000/bar/app:latest</strong>, then <strong class="source-inline">mirror2.example.com:5000/bar/app:latest</strong>, and fall back to <strong class="source-inline">registry.example.com:5000/foo/app:latest</strong> in case a failure occurs.</p>
+			<p>Using a <a id="_idIndexMarker772"/>prefix provides even more flexibility. In the following example, all the images that match <strong class="source-inline">example.com/foo</strong> will be redirected to mirror locations and fall back to the main location at the end:</p>
+			<p class="source-code">unqualified-search-registries = ["docker.io", "quay.io"]</p>
+			<p class="source-code">[[registry]]</p>
+			<p class="source-code">prefix = "example.com/foo"</p>
+			<p class="source-code">location = "registry.example.com:5000/foo"</p>
+			<p class="source-code">insecure = false</p>
+			<p class="source-code">[[registry.mirror]]</p>
+			<p class="source-code">location = "mirror1.example.com:5000/bar"</p>
+			<p class="source-code">[[registry.mirror]]</p>
+			<p class="source-code">location = "mirror2.example.com:5000/bar"</p>
+			<p>In this example, when we pull the <strong class="source-inline">example.com/foo/app:latest</strong> image, Podman will attempt <strong class="source-inline">mirror1.example.com:5000/bar/app:latest</strong>, followed by <strong class="source-inline">mirror2.example.com:5000/bar/app:latest</strong> and <strong class="source-inline">registry.example.com:5000/foo/app:latest</strong>.</p>
+			<p>It is possible to use mirroring in a more advanced way, such as replacing public registries with private mirrors in disconnected environments. The following example remaps the <strong class="source-inline">docker.io</strong> and <strong class="source-inline">quay.io</strong> registries <a id="_idIndexMarker773"/>to a private mirror with different namespaces:</p>
+			<p class="source-code">[[registry]]</p>
+			<p class="source-code">prefix="quay.io"</p>
+			<p class="source-code">location="mirror-internal.example.com/quay"</p>
+			<p class="source-code">[[registry]]</p>
+			<p class="source-code">prefix="docker.io"</p>
+			<p class="source-code">location="mirror-internal.example.com/docker"</p>
+			<p class="callout-heading">Important Note</p>
+			<p class="callout">Mirror registries should be kept up-to-date with mirrored repositories. For this reason, administrators or SRE teams should implement an image sync policy to keep the repositories updated.</p>
+			<p>Finally, we are going to learn how to block a source that is not considered trusted. This behavior could impact a single image, a namespace, or a whole registry.</p>
+			<p>The following example tells Podman to not search for or pull images from a blocked registry:</p>
+			<p class="source-code">[[registry]]</p>
+			<p class="source-code">location = "registry.rogue.io"</p>
+			<p class="source-code">blocked = true</p>
+			<p>It is possible to refine the blocking policy by passing a specific namespace without blocking the whole registry. In the following example, every image search or pull that matches the <strong class="source-inline">quay.io/foo</strong> namespace pattern defined in the <strong class="source-inline">prefix</strong> field is blocked:</p>
+			<p class="source-code">[[registry]]</p>
+			<p class="source-code">prefix = "quay.io/foo/"</p>
+			<p class="source-code">location = "docker.io"</p>
+			<p class="source-code">blocked = true</p>
+			<p>According to this pattern, if the user tries to pull an image called <strong class="source-inline">quay.io/foo/nginx:latest</strong> or <strong class="source-inline">quay.io/foo/httpd:v2.4</strong>, the prefix is matched, and the pull is blocked. No blocking action occurs when the <strong class="source-inline">quay.io/bar/fedora:latest</strong> image is pulled.</p>
+			<p>Users can<a id="_idIndexMarker774"/> also define a very specific blocking rule for a single image or even a single tag by using the same approach that was described for namespaces. The following example blocks a specific image tag:</p>
+			<p class="source-code">[[registry]]</p>
+			<p class="source-code">prefix = "internal-registry.example.com/dev/app:v0.1"</p>
+			<p class="source-code">location = "internal-registry.example.com "</p>
+			<p class="source-code">blocked = true</p>
+			<p>It is possible to combine many blocking rules and add mirror tables on top of them. </p>
+			<p class="callout-heading">Important Note</p>
+			<p class="callout">In a complex infrastructure with many machines running Podman (for example, developer workstations), a clever idea would be to keep the registry's configuration file updated using configuration management tools and declaratively apply the registry's filters.</p>
+			<p>Fully qualified image names can become quite long if we sum up the registry FQDN, namespace(s), repository, and tags. It is possible to create aliases using the <strong class="source-inline">[aliases]</strong> table to allow short image names to be used. This approach can simplify image management and reduce human error. However, aliases do not handle image tags or digests.</p>
+			<p>The following example defines a series of aliases for commonly used images:</p>
+			<p class="source-code">[aliases]</p>
+			<p class="source-code">"fedora" = "registry.fedoraproject.org/fedora"</p>
+			<p class="source-code">"debian" = "docker.io/library/debian"</p>
+			<p>When an alias matches a short name, it is immediately used without the registries defined in the <strong class="source-inline">unqualified-search-registries</strong> list being searched.</p>
+			<p class="callout-heading">Important Note</p>
+			<p class="callout">We can create custom files inside the <strong class="source-inline">/etc/containers/registries.conf.d/</strong> folder to define aliases without bloating the main configuration file.</p>
+			<p>With that, we <a id="_idIndexMarker775"/>have learned how to manage trusted sources and block unwanted images, registries, or namespaces. This is a security best practice but it does not relieve us from the responsibility of choosing a valid image that fits our needs while being trustworthy and having the lowest attack surface possible. This is also true when we're building a new application, where base images must be lightweight and secure. Red Hat UBI images can be a helpful solution for this problem.</p>
+			<h1 id="_idParaDest-159"><a id="_idTextAnchor159"/>Introducing Universal Base Image</h1>
+			<p>When <a id="_idIndexMarker776"/>working on enterprise environments, many users and companies adopt RHEL as the operating system of choice to execute workloads reliably and securely. RHEL-based container images are available too, and they take advantage of the same package versioning as the OS release. All the security updates that are released for RHEL are immediately applied to OCI images, making them wealthy, secure images to build production-grade applications with.</p>
+			<p>Unfortunately, RHEL images are not publicly available without a Red Hat subscription. Users who have activated a valid subscription can use them freely on their RHEL systems and build custom images on top of them, but they are not freely redistributable without breaking the Red Hat enterprise agreement.</p>
+			<p>So, why worry? There are plenty of commonly used images that can replace them. This is true, but when it comes to reliability and security, many companies choose to stick to an enterprise-grade solution and this is not an exception for containers.</p>
+			<p>For these reasons, and to address the redistribution limitations of RHEL images, Red Hat created the <strong class="bold">Universal Base Image</strong>, also known as <strong class="bold">UBI</strong>. UBI images are freely redistributable, can be used to build containerized applications, middleware, and utilities, and are constantly maintained and upgraded by Red Hat.</p>
+			<p>UBI images are based on the currently supported versions of RHEL: at the time of writing, the <strong class="bold">UBI7</strong> and <strong class="bold">UBI8</strong> images <a id="_idIndexMarker777"/>are currently <a id="_idIndexMarker778"/>available (based on RHEL7 and RHEL8, respectively), along with<a id="_idIndexMarker779"/> the <strong class="bold">UBI9-beta</strong> image, which is based on RHEL9-beta. In general, we can consider UBI images as a subset of the RHEL operating system. </p>
+			<p>All UBI images are available<a id="_idIndexMarker780"/> on the public Red Hat registry (<a href="http://registry.access.redhat.com">registry.access.redhat.com</a>) and Docker Hub (<a href="http://docker.io">docker.io</a>).</p>
+			<p>There are currently four different flavors of UBI images, each one specialized for a particular use case:</p>
+			<ul>
+				<li><strong class="bold">Standard</strong>: This is the <a id="_idIndexMarker781"/>standard UBI image. It has the most features and packages availability.</li>
+				<li><strong class="bold">Minimal</strong>: This<a id="_idIndexMarker782"/> is a stripped-down version of the standard image with minimalistic package management.</li>
+				<li><strong class="bold">Micro</strong>: This is a <a id="_idIndexMarker783"/>UBI version with a smaller footprint, without a package manager.</li>
+				<li><strong class="bold">Init</strong>: This is a <a id="_idIndexMarker784"/>UBI image that includes the <strong class="source-inline">systemd</strong> init system so that you can manage the execution of multiple services in a single container.</li>
+			</ul>
+			<p>All of these are <strong class="bold">free to use and redistribute</strong> inside custom images. Let's describe each in detail, starting with the UBI Standard image.</p>
+			<h2 id="_idParaDest-160"><a id="_idTextAnchor160"/>The UBI Standard image</h2>
+			<p>The UBI Standard image <a id="_idIndexMarker785"/>is the most complete UBI image version and the closest one to standard RHEL images. It includes<a id="_idIndexMarker786"/> the <strong class="bold">YUM</strong> package manager, which is available in RHEL, and can be customized by installing the packages that are available in its dedicated software repositories; that is, <em class="italic">ubi-8-baseos</em> and <em class="italic">ubi-8-appstream</em>.</p>
+			<p>The following example shows a Dockerfile/ContainerFile that uses a standard UBI8 image to build a minimal <strong class="source-inline">httpd</strong> server:</p>
+			<p class="source-code">FROM registry.access.redhat.com/ubi8</p>
+			<p class="source-code"># Update image and install httpd</p>
+			<p class="source-code">RUN yum update -y &amp;&amp; yum install -y httpd &amp;&amp; yum clean all –y</p>
+			<p class="source-code"># Expose the default httpd port 80</p>
+			<p class="source-code">EXPOSE 80</p>
+			<p class="source-code"># Run the httpd</p>
+			<p class="source-code">CMD ["/usr/sbin/httpd", "-DFOREGROUND"]</p>
+			<p>The <a id="_idIndexMarker787"/>UBI Standard image was designed for generic applications and packages that are available on RHEL and already includes a curated list of basic system tools (including <strong class="source-inline">curl</strong>, <strong class="source-inline">tar</strong>, <strong class="source-inline">vi</strong>, <strong class="source-inline">sed</strong>, and <strong class="source-inline">gzip</strong>) and OpenSSL libraries while still retaining a small size (around 230 MiB): fewer packages means more lightweight images and a smaller attack surface.</p>
+			<p>If the UBI Standard image is still considered too big, the UBI Minimal image might be a good fit.</p>
+			<h2 id="_idParaDest-161"><a id="_idTextAnchor161"/>The UBI Minimal image </h2>
+			<p>The UBI Minimal image<a id="_idIndexMarker788"/> is a stripped-down version of the UBI Standard image and was designed for self-consistent applications and their runtimes (Python, Ruby, Node.js, and so on). For this reason, it's smaller in size, has a small selection of packages, and doesn't include the YUM package manager; this has been replaced with a minimal tool called <strong class="source-inline">microdnf</strong>. The UBI Minimal image is smaller than the UBI Standard image and is roughly half its size.</p>
+			<p>The following example shows a Dockerfile/ContainerFile using a UBI 8 Minimal image to build a proof-of-concept Python web server:</p>
+			<p class="source-code"># Based on the UBI8 Minimal image</p>
+			<p class="source-code">FROM registry.access.redhat.com/ubi8-minimal</p>
+			<p class="source-code"> </p>
+			<p class="source-code"># Upgrade and install Python 3.6</p>
+			<p class="source-code">RUN microdnf upgrade &amp;&amp; microdnf install python3</p>
+			<p class="source-code"> </p>
+			<p class="source-code"># Copy source code</p>
+			<p class="source-code">COPY entrypoint.sh http_server.py /</p>
+			<p class="source-code"> </p>
+			<p class="source-code"># Expose the default httpd port 80</p>
+			<p class="source-code">EXPOSE 8080</p>
+			<p class="source-code"># Configure the container entrypoint</p>
+			<p class="source-code">ENTRYPOINT ["/entrypoint.sh"]</p>
+			<p class="source-code"> </p>
+			<p class="source-code"># Run the httpd</p>
+			<p class="source-code">CMD ["/usr/bin/python3", "-u", "/http_server.py"]</p>
+			<p>By looking at the source code of the Python web server that's been executed by the container, we can <a id="_idIndexMarker789"/>see that the web server handler prints a <em class="italic">Hello World!</em> string when an HTTP GET request is received. The server also manages signal termination using the Python <strong class="source-inline">signal</strong> module, allowing the container to be stopped gracefully:</p>
+			<p class="source-code">#!/usr/bin/python3</p>
+			<p class="source-code">import http.server</p>
+			<p class="source-code">import socketserver</p>
+			<p class="source-code">import logging</p>
+			<p class="source-code">import sys</p>
+			<p class="source-code">import signal</p>
+			<p class="source-code">from http import HTTPStatus</p>
+			<p class="source-code">port = 8080</p>
+			<p class="source-code">message = b'Hello World!\n'</p>
+			<p class="source-code">logging.basicConfig(</p>
+			<p class="source-code">  stream = sys.stdout, </p>
+			<p class="source-code">  level = logging.INFO</p>
+			<p class="source-code">)</p>
+			<p class="source-code">def signal_handler(signum, frame):</p>
+			<p class="source-code">  sys.exit(0)</p>
+			<p class="source-code">class Handler(http.server.SimpleHTTPRequestHandler):</p>
+			<p class="source-code">  def do_GET(self):</p>
+			<p class="source-code">    self.send_response(HTTPStatus.OK)</p>
+			<p class="source-code">    self.end_headers()</p>
+			<p class="source-code">    self.wfile.write(message)</p>
+			<p class="source-code"> </p>
+			<p class="source-code">if __name__ == "__main__":</p>
+			<p class="source-code">  signal.signal(signal.SIGTERM, signal_handler)</p>
+			<p class="source-code">  signal.signal(signal.SIGINT, signal_handler)</p>
+			<p class="source-code">  try:</p>
+			<p class="source-code">    httpd = socketserver.TCPServer(('', port), Handler)</p>
+			<p class="source-code">    logging.info("Serving on port %s", port)</p>
+			<p class="source-code">    httpd.serve_forever()</p>
+			<p class="source-code">  except SystemExit:</p>
+			<p class="source-code">    httpd.shutdown()</p>
+			<p class="source-code">    httpd.server_close()</p>
+			<p>Finally, the Python executable is called by a minimal entry point script:</p>
+			<p class="source-code">#!/bin/bash</p>
+			<p class="source-code">set -e</p>
+			<p class="source-code">exec $@</p>
+			<p>The script launches <a id="_idIndexMarker790"/>the command that's passed by the array in the <strong class="source-inline">CMD</strong> instruction. Also, notice the <strong class="source-inline">-u</strong> option that's passed to the Python executable in the command array. This enables unbuffered output and has the container print access logs in real time.</p>
+			<p>Let's try to build and run the container to see what happens:</p>
+			<p class="source-code">$ buildah build -t python_httpd .</p>
+			<p class="source-code">$ podman run -p 8080:8080 python_httpd</p>
+			<p class="source-code">INFO:root:Serving on port 8080</p>
+			<p>With that, our minimal Python <strong class="source-inline">httpd</strong> server is ready to operate and serve a lot of barely useful but warming <em class="italic">Hello World!</em> responses. </p>
+			<p>UBI Minimal works best for these kinds of use cases. However, an even smaller image may be necessary. This is the perfect use case for the UBI Micro image.</p>
+			<h2 id="_idParaDest-162"><a id="_idTextAnchor162"/>The UBI Micro image</h2>
+			<p>The UBI Micro image <a id="_idIndexMarker791"/>is the latest arrival to the UBI family. Its basic idea was to provide a distroless image, a stripped-down package manager without all the unnecessary packages, to provide a very small image that could also offer a minimal attack surface. Reducing the attack surface is required to achieve secure, minimal images that are more complex to exploit.</p>
+			<p>The UBI 8 Micro image is great in multi-stage builds, where the first stage creates the finished artifact(s) and the second stage copies them inside the final image. The following example shows a basic multi-stage Dockerfile/ContainerFile where a minimal Golang application is being built inside a UBI Standard container while the final artifact is copied inside<a id="_idIndexMarker792"/> a UBI Micro image:</p>
+			<p class="source-code"># Builder image</p>
+			<p class="source-code"><strong class="bold">FROM registry.access.redhat.com/ubi8-minimal AS builder</strong></p>
+			<p class="source-code"># Install Golang packages</p>
+			<p class="source-code">RUN microdnf upgrade &amp;&amp; \</p>
+			<p class="source-code">    microdnf install golang &amp;&amp; \</p>
+			<p class="source-code">    microdnf clean all</p>
+			<p class="source-code"># Copy files for build</p>
+			<p class="source-code">COPY go.mod /go/src/hello-world/</p>
+			<p class="source-code">COPY main.go /go/src/hello-world/</p>
+			<p class="source-code"># Set the working directory</p>
+			<p class="source-code">WORKDIR /go/src/hello-world</p>
+			<p class="source-code"># Download dependencies</p>
+			<p class="source-code">RUN go get -d -v ./...</p>
+			<p class="source-code"># Install the package</p>
+			<p class="source-code">RUN go build -v ./...</p>
+			<p class="source-code"># Runtime image</p>
+			<p class="source-code"><strong class="bold">FROM registry.access.redhat.com/ubi8/ubi-micro:latest</strong></p>
+			<p class="source-code">COPY --from=builder /go/src/hello-world/hello-world /</p>
+			<p class="source-code">EXPOSE 8080</p>
+			<p class="source-code">CMD ["/hello-world"]</p>
+			<p>The build's output results in an image that's approximately 45 MB in size. </p>
+			<p>The UBI Micro image<a id="_idIndexMarker793"/> has no built-in package manager, but it is still possible to install additional packages using Buildah native commands. This works effectively on an RHEL system, where all the Red Hat GPG certificates are installed.</p>
+			<p>The following example shows a build script that can be executed on RHEL 8. Its purpose is to install additional Python packages using the host's <strong class="source-inline">yum</strong> package manager, on top of a UBI Micro image:</p>
+			<p class="source-code">#!/bin/bash</p>
+			<p class="source-code">set -euo pipefail</p>
+			<p class="source-code">if [ $UID -ne 0 ]; then</p>
+			<p class="source-code">    echo "This script must be run as root"</p>
+			<p class="source-code">    exit 1</p>
+			<p class="source-code">fi</p>
+			<p class="source-code">container=$(buildah from registry.access.redhat.com/ubi8/ubi-micro)</p>
+			<p class="source-code">mount=$(buildah mount $container)</p>
+			<p class="source-code">yum install -y \</p>
+			<p class="source-code">  --installroot $mount \</p>
+			<p class="source-code">  --setopt install_weak_deps=false \</p>
+			<p class="source-code">  --nodocs \ </p>
+			<p class="source-code">  --noplugins \</p>
+			<p class="source-code">  --releasever 8 \</p>
+			<p class="source-code">  python3</p>
+			<p class="source-code">yum clean all --installroot $mount</p>
+			<p class="source-code">buildah umount $container</p>
+			<p class="source-code">buildah commit $container micro_httpd</p>
+			<p>Notice that the <strong class="source-inline">yum install</strong> command is executed by passing the <strong class="source-inline">--installroot $mount</strong> option, which tells the installer to use the working container mount point as the temporary root to install the packages. </p>
+			<p>UBI Minimal <a id="_idIndexMarker794"/>and UBI Micro images are great for implementing microservices architectures where we need to orchestrate multiple containers together, with each running a specific microservice.</p>
+			<p>Now, let's look at the UBI Init image, which allows us to coordinate the execution of multiple services inside a container.</p>
+			<h2 id="_idParaDest-163"><a id="_idTextAnchor163"/>The UBI Init image</h2>
+			<p>A <a id="_idIndexMarker795"/>common pattern in container development is to create highly specialized images with a single component running inside them. </p>
+			<p>To implement multi-tier applications, such as those with a frontend, middleware, and a backend, the best practice is to create and orchestrate multiple containers, each one running a specific component. The goal is to have minimal and very specialized containers, each one running its own service/process while following the <strong class="bold">Keep It Simple, Stupid</strong> (<strong class="bold">KISS</strong>) philosophy, which <a id="_idIndexMarker796"/>has been implemented in UNIX systems since their inception.</p>
+			<p>Despite being great for most use cases, this approach does not always suit certain special scenarios where many processes need to be orchestrated together. An example is when we need to share all the container namespaces across processes, or when we just want a single, <em class="italic">uber</em> image. </p>
+			<p>Container images are normally created without an init system and the process that's executed inside the container (invoked by the <strong class="source-inline">CMD</strong> instruction) usually<a id="_idIndexMarker797"/> gets <strong class="bold">PID 1</strong>. </p>
+			<p>For this reason, Red Hat introduced the UBI Init image, which runs a<a id="_idIndexMarker798"/> minimal <strong class="bold">Systemd</strong> init process inside the container, allowing multiple Systemd units that are governed by the Systemd process with a PID of <strong class="source-inline">1</strong> to be executed.</p>
+			<p>The UBI Init image<a id="_idIndexMarker799"/> is slightly smaller than the Standard image but has more packages available than the Minimal image.</p>
+			<p>The default CMD is set to <strong class="source-inline">/sbin/init</strong>, which corresponds to the Systemd process. Systemd ignores the <strong class="source-inline">SIGTERM</strong> and <strong class="source-inline">SIGKILL</strong> signals, which are used by Podman to stop running containers. For this reason, the image is configured to send <strong class="source-inline">SIGRTMIN+3</strong> signals for termination by passing the <strong class="source-inline">STOPSIGNAL SIGRTMIN+3</strong> instruction inside the image Dockerfile.</p>
+			<p>The following example shows a Dockerfile/ContainerFile that installs the <strong class="source-inline">httpd</strong> package and configures a <strong class="source-inline">systemd</strong> unit to run the <strong class="source-inline">httpd</strong> service:</p>
+			<p class="source-code">FROM registry.access.redhat.com/ubi8/ubi-init</p>
+			<p class="source-code">RUN yum -y install httpd &amp;&amp; \</p>
+			<p class="source-code">         yum clean all &amp;&amp; \ </p>
+			<p class="source-code">         systemctl enable httpd</p>
+			<p class="source-code">RUN echo "Successful Web Server Test" &gt; /var/www/html/index.html</p>
+			<p class="source-code">RUN mkdir /etc/systemd/system/httpd.service.d/ &amp;&amp; \</p>
+			<p class="source-code">         echo -e '[Service]\nRestart=always' &gt; /etc/systemd/system/httpd.service.d/httpd.conf</p>
+			<p class="source-code">EXPOSE 80</p>
+			<p class="source-code">CMD [ "/sbin/init" ]</p>
+			<p>Notice the <strong class="source-inline">RUN</strong> instruction, where we create the <strong class="source-inline">/etc/systemd/system/httpd.service.d/</strong> folder and the Systemd unit file. This minimal example could be replaced with a <strong class="source-inline">COPY</strong> of pre-edited unit files, which is particularly useful when multiple services must be created.</p>
+			<p>We can<a id="_idIndexMarker800"/> build and run the image and inspect the behavior of the <strong class="source-inline">init</strong> system inside the container using the <strong class="source-inline">ps</strong> command:</p>
+			<p class="source-code">$ buildah build -t init_httpd .</p>
+			<p class="source-code">$ podman run -d --name httpd_init -p 8080:80 init_httpd </p>
+			<p class="source-code">$ podman exec -ti httpd_init /bin/bash</p>
+			<p class="source-code">[root@b4fb727f1907 /]# ps aux</p>
+			<p class="source-code">USER         PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND</p>
+			<p class="source-code">root           1  0.1  0.0  89844  9404 ?        Ss   10:30   0:00 /sbin/init</p>
+			<p class="source-code">root          10  0.0  0.0  95552 10636 ?        Ss   10:30   0:00 /usr/lib/systemd/systemd-journald</p>
+			<p class="source-code">root          20  0.1  0.0 258068 10700 ?        Ss   10:30   0:00 /usr/sbin/httpd -DFOREGROUND</p>
+			<p class="source-code">dbus          21  0.0  0.0  54056  4856 ?        Ss   10:30   0:00 /usr/bin/dbus-daemon --system --address=systemd: --nofork --nopidfile --systemd-activation --syslog-only</p>
+			<p class="source-code">apache        23  0.0  0.0 260652  7884 ?        S    10:30   0:00 /usr/sbin/httpd -DFOREGROUND</p>
+			<p class="source-code">apache        24  0.0  0.0 2760308 9512 ?        Sl   10:30   0:00 /usr/sbin/httpd -DFOREGROUND</p>
+			<p class="source-code">apache        25  0.0  0.0 2563636 9748 ?        Sl   10:30   0:00 /usr/sbin/httpd -DFOREGROUND</p>
+			<p class="source-code">apache        26  0.0  0.0 2563636 9516 ?        Sl   10:30   0:00 /usr/sbin/httpd -DFOREGROUND</p>
+			<p class="source-code">root         238  0.0  0.0  19240  3564 pts/0    Ss   10:30   0:00 /bin/bash</p>
+			<p class="source-code">root         247  0.0  0.0  51864  3728 pts/0    R+   10:30   0:00 ps aux</p>
+			<p>Note that the <strong class="source-inline">/sbin/init</strong> process is executed with a PID of <strong class="source-inline">1</strong> and that it spawns the <strong class="source-inline">httpd</strong> processes. The container also executed <strong class="source-inline">dbus-daemon</strong>, which is used by Systemd to <a id="_idIndexMarker801"/>expose its API, along with <strong class="source-inline">systemd-journald</strong> to handle logs.</p>
+			<p>Following this approach, we can add multiple services that are supposed to work together in the same container and have them orchestrated by Systemd.</p>
+			<p>So far, we have looked at the four currently available UBI images and demonstrated how they can be used to create custom applications. Many public Red Hat images are based on UBI. Let's take a look.</p>
+			<h2 id="_idParaDest-164"><a id="_idTextAnchor164"/>Other UBI-based images</h2>
+			<p>Red Hat uses UBI images<a id="_idIndexMarker802"/> to produce many pre-built specialized images, especially for runtimes. They are usually expected to not have redistribution limitations.</p>
+			<p>This allows runtime images to be created for languages, runtimes, and frameworks such as Python, Quarkus, Golang, Perl, PDP, .NET, Node.js, Ruby, and OpenJDK.</p>
+			<p>UBI is also used as the base image for <a id="_idIndexMarker803"/>the <strong class="bold">Source-to-Image</strong> (<strong class="bold">s2i</strong>) framework, which is used to build applications natively in OpenShift without the use of Dockerfiles. With s2i, it is possible to assemble images from user-defined custom scripts and, obviously, application source code.</p>
+			<p>Last but not least, Red Hat's supported releases of Buildah, Podman, and Skopeo are packaged using UBI 8 images.</p>
+			<p>Moving beyond Red Hat's offering, other vendors use UBI images to release their images too – Intel, IBM, Isovalent, Cisco, Aqua Security, and many others adopt UBI as the base for their official<a id="_idIndexMarker804"/> images on Red Hat Marketplace.</p>
+			<h1 id="_idParaDest-165"><a id="_idTextAnchor165"/>Summary</h1>
+			<p>In this chapter, we learned about the OCI image specifications and the role of container registries. </p>
+			<p>After that, we learned how to adopt secure image registries and how to filter out those registries using custom policies that allow us to block specific registries, namespaces, and images.</p>
+			<p>Finally, we introduced UBI as a solution to create lightweight, reliable, and redistributable images based on RHEL packages.</p>
+			<p>With the knowledge you've gained in this chapter, you should be able to understand OCI image specifications in more detail and manage image registries securely.</p>
+			<p>In the next chapter, we will explore the difference between private and public registries and how to create a private registry locally. Finally, we will learn how to manage container images with the specialized <strong class="bold">Skopeo</strong> tool.</p>
+			<h1 id="_idParaDest-166"><a id="_idTextAnchor166"/>Further reading</h1>
+			<p>To learn more about the topics that were covered in this chapter, take a look at the following resources:</p>
+			<ul>
+				<li>MITRE ATT&amp;CK® Matrix: <a href="https://attack.mitre.org/matrices/enterprise/containers/">https://attack.mitre.org/matrices/enterprise/containers/</a></li>
+				<li>Things You Should Know on Kubernetes Threat Matrix: <a href="https://cloud.redhat.com/blog/2021-kubernetes-threat-matrix-updates-things-you-should-know">https://cloud.redhat.com/blog/2021-kubernetes-threat-matrix-updates-things-you-should-know</a></li>
+				<li>How to manage Linux container registries: <a href="https://www.redhat.com/sysadmin/manage-container-registries">https://www.redhat.com/sysadmin/manage-container-registries</a></li>
+				<li>Introducing the Red Hat Universal Base Image: <a href="https://www.redhat.com/en/blog/introducing-red-hat-universal-base-image">https://www.redhat.com/en/blog/introducing-red-hat-universal-base-image</a></li>
+				<li>Introduction to Red Hat's UBI Micro: <a href="https://www.redhat.com/en/blog/introduction-ubi-micro">https://www.redhat.com/en/blog/introduction-ubi-micro</a></li>
+			</ul>
+		</div>
+	</body></html>

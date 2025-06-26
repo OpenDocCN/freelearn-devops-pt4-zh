@@ -1,0 +1,1147 @@
+<html><head></head><body>
+        <section>
+
+                            <header>
+                    <h1 class="header-title">From Customer Wish to Test Automation - The Basics</h1>
+                </header>
+            
+            <article>
+                
+<p>We are technically fully set to start writing tests at this point. This is because we know how the testability framework functions, we know the test toolkit, we know about the existence of the standard test libraries, and we have been provided with various patterns to allow us to design efficient and effective tests.</p>
+<p>But what are we going to test? What's our business case? What are the customer wishes we are going to implement?</p>
+<p>In this chapter, we will start applying the principles and techniques discussed in the previous chapters and we will build a number of basic automated tests.</p>
+<p>As such, this chapter covers the following topics:</p>
+<ul>
+<li>Test example 1 – A first headless test</li>
+<li>Test example 2 – A first positive-negative test</li>
+<li>Test example 3 – A first UI test</li>
+<li>Headless versus UI</li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">From customer wish to test automation</h1>
+                </header>
+            
+            <article>
+                
+<p>Our customer wishes to extend standard Dynamics 365 Business Central with an elementary feature: the addition of a lookup field to the <kbd>Customer</kbd> table to be populated by the user. This field has to be carried over to the whole bunch of sales documents and also needs to be included in the warehouse shipping.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Data model</h1>
+                </header>
+            
+            <article>
+                
+<p>Even though the purpose of such a field will be very specific, we will generically name it <kbd>Lookup Value Code</kbd>. As with any other lookup field in Business Central, this <kbd>Lookup Value Code</kbd> field will have a table relation (foreign key) with another table, in our case a new table called <kbd>Lookup Value</kbd>.</p>
+<p>The following relational diagram schematically describes the data model of this new feature, with the new table in the middle and the extended standard tables on the left and right sides:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-752 image-border" src="assets/0944f2d1-a2c6-48f2-81e9-a322779925cf.png" style="width:41.67em;height:21.42em;"/></p>
+<p>The <kbd>Lookup Value Code</kbd> field has to be editable on all tables except for the posted document header tables, that is, <kbd>Sales Shipment Header</kbd>, <kbd>Sales Invoice Header</kbd>, <kbd>Sales Cr.Memo Header</kbd>, <kbd>Return Receipts Header</kbd>, and <kbd>Posted Whse. Shipment Line</kbd>.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Business logic</h1>
+                </header>
+            
+            <article>
+                
+<p>In compliance with standard Business Central behavior, the following business logic applies:</p>
+<ul>
+<li>When creating a customer from a customer template, the <kbd>Lookup Value Code</kbd> field should be inherited from <kbd>Customer Template</kbd> to <kbd>Customer</kbd></li>
+<li>When selecting a customer in the <kbd>Sell-to Customer</kbd> field on a sales document, the <kbd>Lookup Value Code</kbd> field should be inherited from the <kbd>Customer</kbd> to <kbd>Sales Header</kbd></li>
+<li>When posting a sales document, it is mandatory that the <kbd>Lookup Value Code</kbd> field is populated</li>
+<li>When posting a sales document, the <kbd>Lookup Value Code</kbd> field should be inherited from <kbd>Sales Header</kbd> to the header of the posted document. That is,
+<ul>
+<li><kbd>Sales Shipment Header</kbd></li>
+<li><kbd>Sales Invoice Header</kbd></li>
+<li><kbd>Sales Cr.Memo Header</kbd></li>
+<li><kbd>Return Receipt Header</kbd></li>
+</ul>
+</li>
+<li>When archiving a sales document, the <kbd>Lookup Value Code</kbd> field should be inherited from <kbd>Sales Header</kbd> to <kbd>Sales Header Archive</kbd></li>
+<li>When creating a warehouse shipment from a sales order, the <kbd>Lookup Value Code</kbd> field should be inherited from <kbd>Sales Header</kbd> to <kbd>Warehouse Shipment Line</kbd></li>
+<li>When posting a warehouse shipment, the <kbd>Lookup Value Code</kbd> field should be inherited from <kbd>Warehouse Shipment Line</kbd> to <kbd>Posted Whse. Shipment Line</kbd></li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">LookupValue extension</h1>
+                </header>
+            
+            <article>
+                
+<p>Based on these requirements, the <kbd>LookupValue</kbd> extension will be built, including automated tests.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Implementing a defined customer wish</h1>
+                </header>
+            
+            <article>
+                
+<p>Now that we have a clearly defined customer wish, we can start to implement it. As already introduced in the previous chapter, we will <em>kill five birds in one stroke</em>, that is, break down each wish into a list of tests for the following purposes:</p>
+<ol>
+<li>Detailing of <strong>customer wish</strong></li>
+<li>Implementation of <strong>application code</strong></li>
+<li>Structured execution of <strong>manual tests</strong></li>
+<li>Coding of <strong>test automation</strong></li>
+<li>Up-to-date <strong>documentation</strong> of solution</li>
+</ol>
+<p>Consequently, in the next basic test case examples, and the ones following in <a href="0f8efb81-438e-48ed-9f7f-bcfa5caa8e92.xhtml" target="_blank">Chapter 6</a>, <em>From Customer Wish to Test Automation - Next Level</em>, and <a href="bb9ee41e-4c60-4a27-8fad-5343adfcd86a.xhtml" target="_blank">Chapter 7</a>, <em>From Customer Wish to Test Automation - And Some More</em>, we will describe the <em>customer wish</em> by means of the <strong>Acceptance Test-Driven Development</strong> (<strong>ATDD</strong>) pattern. Using the <kbd>FEATURE</kbd>, <kbd>SCENARIO</kbd>, <kbd>GIVEN</kbd>, <kbd>WHEN</kbd>, and <kbd>THEN</kbd> tags, we will discuss the <strong>application code</strong> implementation and elaborate more extensively on the coding of the <strong>test automation</strong>.</p>
+<p><strong>Manual test</strong> and <strong>documentation</strong> is out of the scope of the book.</p>
+<div class="packt_infobox">The <kbd>LookupValue</kbd> extension can be found on GitHub: <a href="https://github.com/PacktPublishing/Automated-Testing-in-Microsoft-Dynamics-365-Business-Central" target="_blank">https://github.com/PacktPublishing/Automated-Testing-in-Microsoft-Dynamics-365-Business-Central</a>.<a href="https://github.com/PacktPublishing/Automated-Testing-in-Microsoft-Dynamics-365-Business-Central" target="_blank"><br/>
+<br/></a> This repository also includes an Excel file containing a listing of all ATDD scenarios that apply to the <kbd>LookupValue</kbd> extension. Even though we will pick out specific scenarios as examples to elaborate on, note that the whole list of scenarios has been conceived upfront describing in full the extent of the customer wish.
+<p>Details on how to use this repository and how to set up VS Code are discussed in <a href="bbbc6672-5043-422a-b54e-a09df933c909.xhtml" target="_blank">Appendix B</a>, <em>Setting Up VS Code and Using the GitHub Project</em>.</p>
+</div>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Test example 1 – a first headless test</h1>
+                </header>
+            
+            <article>
+                
+<p>Now, with our backpack full of tools handed over in the previous chapters, and the customer wish defined, we're set to start creating our first automated test.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Customer wish</h1>
+                </header>
+            
+            <article>
+                
+<p>Let's pick up the fundamental part of our complete customer wish: the extension of the <kbd>Customer</kbd> table with a <kbd>Lookup Value Code</kbd> field.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">FEATURE</h1>
+                </header>
+            
+            <article>
+                
+<p>The feature we are building with our extension is called <kbd>LookupValue</kbd> and the specific part we are now working on is the <kbd>Customer</kbd> table. This leads to the following <kbd>[FEATURE]</kbd> tag:</p>
+<pre><strong>[FEATURE]</strong> LookupValue Customer</pre>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">SCENARIO</h1>
+                </header>
+            
+            <article>
+                
+<p>The specific scenario to be implemented and tested is the assignment of a lookup value to a customer, so the <kbd>[SCENARIO]</kbd> tag would be as follows:</p>
+<pre><strong>[SCENARIO #0001]</strong> Assign lookup value to customer</pre>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">GIVEN</h1>
+                </header>
+            
+            <article>
+                
+<p>The fixtures we need in order to assign a lookup value are a lookup value record and a customer record. Thus, we need the following two <kbd>[GIVEN]</kbd> tags:</p>
+<pre><strong>[GIVEN]</strong> A lookup value<br/><strong>[GIVEN]</strong> A customer</pre>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">WHEN</h1>
+                </header>
+            
+            <article>
+                
+<p>Given the fixture, we can set the lookup value code on the <kbd>Customer</kbd> record and therefore define our <kbd>[WHEN]</kbd> tag as follows:</p>
+<pre><strong>[WHEN]</strong> Set lookup value on customer</pre>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">THEN</h1>
+                </header>
+            
+            <article>
+                
+<p>Now that the action under test has been exercised, it is time to verify the result. Did the lookup value code field indeed get the lookup value from our fixture assigned to the customer record? This leads to the following <kbd>[THEN]</kbd> tag:</p>
+<pre><strong>[THEN]</strong> Customer has lookup value code field populated</pre>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Complete scenario</h1>
+                </header>
+            
+            <article>
+                
+<p>So, the complete scenario definition would then be to allow us to copy it later when creating our test code<span>:</span></p>
+<pre><strong>[FEATURE]</strong> LookupValue Customer <strong><br/>[SCENARIO #0001]</strong> Assign lookup value to customer<br/><strong>[GIVEN]</strong> A lookup value<br/><strong>[GIVEN]</strong> A customer<br/><strong>[WHEN]</strong> Set lookup value to customer<br/><strong>[THEN]</strong> Customer has lookup value code field populated</pre>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Application code</h1>
+                </header>
+            
+            <article>
+                
+<p>The first part of the customer wish, that is, <kbd>[SCENARIO #0001]</kbd>, defines the need for a <kbd>LookupValue</kbd>, which is a new table, from which a value can be assigned to a customer by means of a so-called <kbd>Lookup Value Code</kbd> field. This has been implemented by means of the following <kbd>.al</kbd> objects:</p>
+<pre>table 50000 "LookupValue"<br/>{<br/>    LookupPageId = "LookupValues";<br/><br/>    fields<br/>    {<br/>        field(1; Code; Code[10]){}<br/>        field(2; Description; Text[50]){}<br/>    }<br/> <br/>    keys<br/>    {<br/>        key(PK; Code)<br/>        {<br/>            Clustered = true;<br/>        }<br/>    }<br/>}</pre>
+<pre>page 50000 "LookupValues"<br/>{<br/>    PageType = List;<br/>    SourceTable = "LookupValue";<br/><br/>    layout<br/>    {<br/>        area(content)<br/>        {<br/>            repeater(RepeaterControl)<br/>            {<br/>                field("Code"; "Code"){}<br/>                field("Description"; "Description"){}<br/>            }<br/>        }<br/>    }<br/>}</pre>
+<pre>tableextension 50000 "CustomerTableExt" extends Customer<br/>{<br/>    fields<br/>    {<br/>        field(50000; "Lookup Value Code"; Code[10])<br/>        {<br/>            TableRelation = "LookupValue";<br/>        }<br/>    }<br/>}</pre>
+<pre>pageextension 50000 "CustomerCardPageExt" extends "Customer Card"<br/>{<br/>    layout<br/>    {<br/>        addlast(General)<br/>        {<br/>            field("Lookup Value Code"; "Lookup Value Code"){}<br/>        }<br/>    }<br/>}</pre>
+<div class="packt_infobox">In the application code, the bare minimum has been included to save space. Properties like <kbd>Caption</kbd>, <kbd>ApplicationArea</kbd>, <kbd>DataClassification</kbd>, <kbd>UsageCategory</kbd>, and <kbd>ToolTip</kbd> have been left out. Download the <kbd>LookupValue</kbd> extension from GitHub to get the complete objects.</div>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Test code</h1>
+                </header>
+            
+            <article>
+                
+<p>With the first part of the customer wish clear, we have a neat structure to start writing our first test.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Steps to take</h1>
+                </header>
+            
+            <article>
+                
+<p><span>The following are the steps to take:</span></p>
+<ol>
+<li>Create a test codeunit, with a name based on <kbd>[FEATURE]</kbd> tag</li>
+<li>Embed the customer wish into a test function with a name based on <kbd>[SCENARIO]</kbd> tag</li>
+<li>Write your test story, based upon <kbd>[GIVEN]</kbd>, <kbd>[WHEN]</kbd>, and <kbd>[THEN]</kbd> tags</li>
+<li>Construct your real code</li>
+</ol>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Create a test codeunit</h1>
+                </header>
+            
+            <article>
+                
+<p>Using <kbd>[FEATURE]</kbd> tag name the basic structure of our codeunit will be like this:</p>
+<pre>codeunit 81000 "LookupValue UT Customer"<br/>{<br/>    Subtype = Test;<br/><br/>    //[FEATURE] LookupValue UT Customer<br/>}</pre>
+<p>As you can see, the UT added to the <kbd>[FEATURE]</kbd> tag stands for Unit Test, marking that the tests are unit tests and not functional tests.</p>
+<div class="packt_infobox">
+<p>As an easy start: codeunit 81000 already exists in the <kbd>LookupValue</kbd> extension on GitHub.</p>
+</div>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Embed the customer wish into a test function</h1>
+                </header>
+            
+            <article>
+                
+<p>Now, we create a test function with a name based on the <kbd>SCENARIO</kbd> description and embed the customer wish, <kbd>GIVEN</kbd>-<kbd>WHEN</kbd>-<kbd>THEN</kbd>, in this function.</p>
+<p>I call this "embedding the <em>green</em>", being the out-commented <kbd>GIVEN</kbd>-<kbd>WHEN</kbd>-<kbd>THEN</kbd> sentences, before you start programming the <em>black</em>, being the <kbd>.al</kbd> test code. Look at what the codeunit has now become:</p>
+<pre>codeunit 81000 "LookupValue UT Customer"<br/> {<br/>     Subtype = Test;<br/> <br/>     //[FEATURE] LookupValue UT Customer<br/> <br/>     [Test]<br/>     procedure AssignLookupValueToCustomer()<br/>     begin<br/>         //[SCENARIO #0001] Assign lookup value to customer<br/>         //[GIVEN] A lookup value<br/>         //[GIVEN] A customer<br/>         //[WHEN] Set lookup value on customer<br/>         //[THEN] Customer has lookup value code field populated<br/>     end;<br/> }</pre>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Write your test story</h1>
+                </header>
+            
+            <article>
+                
+<p>For me, writing the first <em>black</em> parts is about writing pseudo-English, defining what I need to achieve with my test. It makes my test readable by any non-technical peer in the project, and, if I need their support, the threshold for them to read the test is substantially lower than when I would have immediately started to write the <em>real</em> thing. And, maybe an even stronger argument—I will have my code embedded in reusable helper functions.</p>
+<p>So here we go, let's write the <em>black</em> parts<span>:</span></p>
+<pre>codeunit 81000 "LookupValue UT Customer"<br/> {<br/>     Subtype = Test;<br/> <br/>     //[FEATURE] LookupValue UT Customer<br/> <br/>     [Test]<br/>     procedure AssignLookupValueToCustomer()<br/>     begin<br/>         //[SCENARIO #0001] Assign lookup value to customer<br/>         //[GIVEN] A lookup value<br/>         CreateLookupValueCode();<br/>         //[GIVEN] A customer<br/>         CreateCustomer();<br/> <br/>         //[WHEN] Set lookup value on customer<br/>         SetLookupValueOnCustomer();<br/> <br/>         //[THEN] Customer has lookup value code field populated<br/>         VerifyLookupValueOnCustomer();<br/>     end;<br/> }</pre>
+<p>With this story, I have been designing four helper functions with no argument(s) and return value yet. These will be defined in the next step.</p>
+<div class="packt_infobox">Note how close the names of the helper functions are to the description of the tag it belongs to.</div>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Construct the real code</h1>
+                </header>
+            
+            <article>
+                
+<p>If you're a developer, I might have been challenging you with my pseudo code up until this point, using no real code but only a structure. Now, ready yourself as the real part starts right now, and I hope, for you and your peers, you will do the same with the tests you will be coding yourself in the future.</p>
+<p>While inspecting our first test function, I already concluded that I need the following four helper functions:</p>
+<ol>
+<li><kbd>CreateLookupValueCode</kbd></li>
+<li><kbd>CreateCustomer</kbd></li>
+<li><kbd>SetLookupValueOnCustomer</kbd></li>
+<li><kbd>VerifyLookupValueOnCustomer</kbd></li>
+</ol>
+<p>Let's construct and discuss these.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">CreateLookupValueCode</h1>
+                </header>
+            
+            <article>
+                
+<p><kbd>CreateLookupValueCode</kbd> is a manifold reusable helper function to create a pseudo-random<span> </span><kbd>LookupValue</kbd><span> </span>record <span>as follows</span>. In a later stage, we could promote this to a to be created library codeunit:</p>
+<pre>local procedure CreateLookupValueCode(): Code[10]<br/>var<br/>    LookupValue: Record LookupValue;<br/>begin<br/>    with LookupValue do begin<br/>        Init();<br/>        Validate(<br/>            Code,<br/>            LibraryUtility.GenerateRandomCode(FIELDNO(Code),<br/>            Database::LookupValue));<br/>        Validate(Description, Code);<br/>        Insert();<br/>        exit(Code);<br/>   end;<br/>end;</pre>
+<p><span>To populate the <kbd>PK</kbd> field, we make use of the <kbd>GenerateRandomCode</kbd> function from the standard test library <kbd>Library - Utility</kbd>, codeunit 131000. The</span> <kbd>LibraryUtility</kbd> <span>variable</span><span> </span><span>will be declared globally as Microsoft does in their test codeunits, making it reusable in other helper functions.</span></p>
+<div class="packt_infobox"><br/>
+Pseudo-random means that, whenever our test is executed in the same context, the <kbd>GenerateRandomCode</kbd> function will yield the same value, contributing to a reproducible test.<br/>
+<br/>
+The <kbd>Description</kbd> field is populated by the same value as the <kbd>Code</kbd> field as the specific value of <kbd>Description</kbd> is of no meaning, and this way it is the most effective.<br/>
+<br/>
+I'll be using the <kbd>with…do</kbd> construct very often in my helper functions; this allows easy reusability of helper functions for similar purposes but applied to other tables as we only need to update the record variable (and the table it is referencing).</div>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">CreateCustomer</h1>
+                </header>
+            
+            <article>
+                
+<p>Using the <kbd>CreateCustomer</kbd> function in the standard library codeunit <kbd>Library - Sales</kbd>, codeunit 130509, our <kbd>CreateCustomer</kbd> creates a useable customer record and makes this helper function a straightforward exercise<span>:</span></p>
+<pre>local procedure CreateCustomer(var Customer: record Customer)<br/>begin<br/>    LibrarySales.CreateCustomer(Customer);<br/>end;</pre>
+<p>As with the preceding <kbd>LibraryUtility</kbd> variable, we will declare the <kbd>LibrarySales</kbd> variable globally.</p>
+<p>You might wonder why we create a helper function that only has one statement line. As mentioned, using helper functions makes the test readable for non-technical peers as well as making it reusable. However, it also makes it more maintainable/extendable. If we need to add an update to the customer record created by the <kbd>CreateCustomer</kbd> function in the <kbd>Library - Sales</kbd> codeunit, we only need to add that to our local <kbd>CreateCustomer</kbd> function.</p>
+<div class="packt_infobox"><br/>
+As a general rule, I never call library functions directly from test functions. This comes with some exceptions, as we will see later.</div>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">SetLookupValueOnCustomer</h1>
+                </header>
+            
+            <article>
+                
+<p>Have a look at the implementation of <kbd>SetLookupValueOnCustomer</kbd>:</p>
+<pre>local procedure SetLookupValueOnCustomer(var Customer: record Customer;<br/>    LookupValueCode: Code[10])<br/>begin<br/>    with Customer do begin<br/>        Validate("Lookup Value Code", LookupValueCode);<br/>        Modify();<br/>    end;<br/>end;</pre>
+<p><span>Calling </span><kbd>Validate</kbd><span> is essential here. </span><kbd>SetLookupValueOnCustomer</kbd><span> is not just about assigning a value to the </span><kbd>Lookup Value Code</kbd> <span>field, but also about making sure it is validated against the existing values in the</span> <kbd>LookupValue</kbd> <span>table</span><span>. Note from the following that the </span><kbd>OnValidate</kbd> <span>trigger of the</span> <kbd>Lookup Value Code</kbd> <span>field does not contain code.</span></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">VerifyLookupValueOnCustomer</h1>
+                </header>
+            
+            <article>
+                
+<p><span>As mentioned in <a href="db955f66-11f4-4d9a-90c7-5af04058ebbe.xhtml" target="_blank">Chapter 4</a>, <em>Test Design</em>, </span><em>a test without verification is no test at all</em>, we <span>need to verify that the lookup value code assigned to the </span><kbd>Lookup Value Code</kbd><span> field of the customer record is indeed the value that was created in the </span><kbd>Lookup Value</kbd><span> table. We, therefore, retrieve the record from the database as follows:</span></p>
+<pre>local procedure VerifyLookupValueOnCustomer(CustomerNo: Code[20];<br/>    LookupValueCode: Code[10])<br/>var<br/>    Customer: Record Customer;<br/>    FieldOnTableTxt: Label '%1 on %2';<br/>begin<br/>    with Customer do begin<br/>        Get(CustomerNo);<br/>        Assert.AreEqual(<br/>            LookupValueCode,<br/>            "Lookup Value Code",<br/>            StrSubstNo(<br/>                FieldOnTableTxt<br/>                FieldCaption("Lookup Value Code"),<br/>                TableCaption())<br/>            );<br/>    end;<br/>end;</pre>
+<div>
+<p>To verify that the expected value (first argument) and the actual value (second argument) are equal, we make use of the <kbd>AreEqual</kbd> function in the standard library codeunit <kbd>Assert</kbd>, 130000. Of course, we could build our own verification logic using the <kbd>Error</kbd> system function, and that's what <kbd>AreEqual</kbd> is doing. Have a look:</p>
+<pre>[External] procedure AreEqual(Expected: Variant;Actual: Variant;Msg: Text)<br/> begin<br/>     if not Equal(Expected,Actual) then<br/>         Error(<br/>             AreEqualFailedMsg, <br/>             Expected, <br/>             TypeNameOf(Expected), <br/>             Actual, <br/>             TypeNameOf(Actual), <br/>             Msg)<br/> end;</pre>
+<p>By using the <kbd>AreEqual</kbd> function, we ensure that we get a standardized error message in case the expected and actual values are not equal. Over time, by reading the error of any failing test where the verification helper functions are making using of the <kbd>Assert</kbd> library, you will be able to recognize easily what kind of error occurred.</p>
+<p>Our complete test codeunit would look like the following code that is ready for execution. Notice the variables and arguments added to the test codeunit and functions:</p>
+<pre>codeunit 81000 "LookupValue UT Customer"<br/>{<br/>    Subtype = Test;<br/>    var<br/>        Assert: Codeunit Assert;<br/>        LibraryUtility: Codeunit "Library - Utility";<br/>        LibrarySales: Codeunit "Library - Sales";<br/><br/>    //[FEATURE] LookupValue UT Customer<br/><br/>    [Test]<br/>    procedure AssignLookupValueToCustomer()<br/>    var<br/>        Customer: Record Customer;<br/>        LookupValueCode: Code[10];<br/>    begin<br/>        //[SCENARIO #0001] Assign lookup value to customer<br/>        //[GIVEN] A lookup value<br/>        LookupValueCode := CreateLookupValueCode();<br/>        //[GIVEN] A customer<br/>        CreateCustomer(Customer);<br/><br/>        //[WHEN] Setlookup value on customer<br/>        SetLookupValueOnCustomer(Customer, LookupValueCode);<br/><br/>        //[THEN] Customer has lookup value code field populated<br/>        VerifyLookupValueOnCustomer(<br/>            Customer."No.",<br/>            LookupValueCode);<br/>    end;<br/><br/>    local procedure CreateLookupValueCode(): Code[10]<br/>    var<br/>        LookupValue: Record LookupValue;<br/>    begin<br/>        with LookupValue do begin<br/>            Init();<br/>            Validate(<br/>                Code,<br/>                LibraryUtility.GenerateRandomCode(FIELDNO(Code),<br/>                Database::LookupValue));<br/>                Validate(Description, Code);<br/>            Insert();<br/>            exit(Code);<br/>        end;<br/>    end;<br/><br/>    local procedure CreateCustomer(var Customer: record Customer)<br/>    begin<br/>        LibrarySales.CreateCustomer(Customer);<br/>    end;<br/><br/>    local procedure SetLookupValueOnCustomer(<br/>        var Customer: record Customer; LookupValueCode: Code[10])<br/>    begin<br/>        with Customer do begin<br/>            Validate("Lookup Value Code", LookupValueCode);<br/>            Modify();<br/>        end;<br/>    end;<br/><br/>    local procedure VerifyLookupValueOnCustomer(<br/>        CustomerNo: Code[20]; LookupValueCode: Code[10])<br/>    var<br/>        Customer: Record Customer;<br/>        FieldOnTableTxt: Label '%1 on %2';<br/>    begin<br/>        with Customer do begin<br/>            Get(CustomerNo);<br/>            Assert.AreEqual(<br/>                LookupValueCode,<br/>                "Lookup Value Code",<br/>                StrSubstNo(<br/>                    FieldOnTableTxt,<br/>                    FieldCaption("Lookup Value Code"),<br/>                    TableCaption())<br/>                );<br/>        end;<br/>    end;<br/>}</pre></div>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Test execution</h1>
+                </header>
+            
+            <article>
+                
+<p>Now that we are ready with our first test, we can deploy the <kbd>LookupValue</kbd> extension to our Dynamics 365 Business Central installation. If we set the test tool page as the start object in the <kbd>launch.json</kbd>, we can immediately add our test codeunit to the <kbd>DEFAULT</kbd> suite <span>as follows:</span></p>
+<pre>"startupObjectType": "Page",<br/> "startupObjectId": 130401</pre>
+<p>Running the test by selecting the<span> </span><span class="packt_screen">Run</span><span> </span>action will show that it executes successfully. </p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-753 image-border" src="assets/cd822a48-df32-40e8-ad0a-bf4858f64466.png" style="width:97.08em;height:37.08em;"/></p>
+<p>Congratulations, we have implemented our first successful test as the preceding screenshot shows!</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Test the test</h1>
+                </header>
+            
+            <article>
+                
+<p>During my workshop, some skeptical minds would challenge me and cause me to ask: "Indeed the test result is successful, but how do I know success is a real success? How can I test the test?"</p>
+<p>You have the following two options to test it:</p>
+<ul>
+<li>Test the data being created</li>
+<li>Adjust the test so the verification errs</li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Test the data being created</h1>
+                </header>
+            
+            <article>
+                
+<p>Testing the data being created can be done in two ways:</p>
+<ol>
+<li>Run the test outside of a test isolation and have a look at the <kbd>Customer</kbd> table. Find out that a new customer has been created with the <kbd>Lookup Value Code</kbd> field populated, and, of course, a related record in the <kbd>Lookup Value</kbd> table</li>
+<li>Debug your test and, using SQL Server Management Studio, run SQL queries on the <kbd>Customer</kbd> and <kbd>Lookup Value</kbd> table. Make sure that you read uncommitted data to find the same records before the test is finished.</li>
+</ol>
+<p>The latter is my preferred method as it makes it possible to run tests in isolation, thus not changing the database irreversibly. It also allows us to see what data is being created.</p>
+<div class="packt_tip packt_infobox">Note that the second option <span class="packt_screen">Debug your test and run SQL queries</span> is only possible in an on-premises or containerized installation of Dynamics 365 Business Central.</div>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Adjust the test so the verification errs</h1>
+                </header>
+            
+            <article>
+                
+<p>This is maybe the easiest and most robust option: make sure the verification fails by providing another value for the expected result. In the case of our test, for example, your own name<span>:</span></p>
+<pre>//[THEN] Customer has lookup value code field populated<br/> VerifyLookupValueOnCustomer(<br/>     Customer."No.",<br/>     'LUC');</pre>
+<p>As shown in the next screenshot the test indeed fails on the verification part:</p>
+<div class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-754 image-border" src="assets/9710545a-fbdf-42e0-ac63-19961e8fcc84.png" style="width:96.92em;height:37.00em;"/></div>
+<p>The error thrown tells us that the expected value is<span> </span><kbd>LUC</kbd><span> </span>while the actual value is<span> </span><kbd>GU00000000</kbd>:</p>
+<pre>Assert.AreEqual failed. Expected:&lt;LUC&gt; (Text). Actual:&lt;GU00000000&gt; (Text). Lookup Value Code on Customer.</pre>
+<p class="mce-root">As mentioned before, <span class="packt_screen">First Error</span> is a FlowField into which you can drill down. It will open the <span class="packt_screen">CAL Test Result</span> window, which displays the whole test run history for a specific test. As the next screenshot displays, in case of the current test, it shows two lines being the results of the two runs we did for <kbd>AssignLookupValueToCustomer</kbd> so far:</p>
+<div class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-755 image-border" src="assets/70e45ea8-33b9-48da-a29b-4c71b4448071.png" style="width:99.75em;height:37.00em;"/></div>
+<p class="mce-root">Note that the <span class="packt_screen">Clear Results</span> feature on the <span class="packt_screen">Test Tool</span> window, as shown in the following screenshot, does not have an effect on the test run history as it will only clear the results displayed in the <span class="packt_screen">Test Tool</span> window:</p>
+<div class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-756 image-border" src="assets/feb4bf03-302e-427a-9afb-b7c32af73441.png" style="width:99.75em;height:42.75em;"/></div>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Test example 2 – a first positive-negative test</h1>
+                </header>
+            
+            <article>
+                
+<p>This test example does not relate to a new customer wish and no new application code, but is complementary to our first test. It is a rainy path version of the same customer wish leading to a new scenario<span>:</span></p>
+<pre><strong>[FEATURE] </strong>LookupValue UT Customer<strong><br/>[SCENARIO #0002]</strong> Assign non-existing lookup value to customer<br/><strong>[GIVEN]</strong> A non-existing lookup value<br/><strong>[GIVEN]</strong> A customer<br/><strong>[WHEN]</strong> Set non-existing lookup value on customer<br/><strong>[THEN]</strong> Non existing lookup value error thrown</pre>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Test code</h1>
+                </header>
+            
+            <article>
+                
+<p>Let's reuse the recipe applied for test example 1.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Steps to take</h1>
+                </header>
+            
+            <article>
+                
+<p>You might already recall these are the steps to take:</p>
+<ol>
+<li>Create a test codeunit, with a name based on the <kbd>[FEATURE]</kbd> tag</li>
+<li>Embed the customer wish into a test function with a name based on the <kbd>[SCENARIO]</kbd> tag</li>
+<li>Write your test story, based on <kbd>[GIVEN]</kbd>, <kbd>[WHEN]</kbd>, and <kbd>[THEN]</kbd> tags</li>
+<li>Construct your real code</li>
+</ol>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Create a test codeunit</h1>
+                </header>
+            
+            <article>
+                
+<p>Sharing the same <kbd>[FEATURE]</kbd> tag values as test example 1, our new test case will share the same test codeunit, that is, codeunit 81000 <kbd>LookupValue UT Customer</kbd>.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Embed the customer wish into a test function</h1>
+                </header>
+            
+            <article>
+                
+<p><em>Embedding the green</em> results in the following new test function in codeunit 81000:</p>
+<pre>procedure AssignNonExistingLookupValueToCustomer()<br/>begin<br/>    //[SCENARIO #0002] Assign non-existing lookup value to<br/>    //                 customer<br/>    //[GIVEN] A non-existing lookup value<br/>    //[GIVEN] A customer<br/>    //[WHEN] Set non-existing lookup value on customer<br/>    //[THEN] Non existing lookup value error thrown<br/>end;</pre>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Write your test story</h1>
+                </header>
+            
+            <article>
+                
+<p>Filling in the first <em>black</em> "story elements" leads to the following typical choices:</p>
+<ul>
+<li>Creating a non-existing lookup value is achieved by just providing a string constant that has no related record in the <kbd>Lookup Value</kbd> table.</li>
+<li>To assign this value to the <kbd>Lookup Value Code</kbd> field on a customer, we do not need a customer record in the database. A local variable suffices to trigger the error we want to happen.</li>
+<li>Setting the lookup value on the customer can be achieved by using the <kbd>SetLookupValueOnCustomer</kbd> from test example 1.</li>
+</ul>
+<p>As a consequence, the <em>test story</em> already has some more details than our previous test:</p>
+<pre>procedure AssignNonExistingLookupValueToCustomer()<br/>var<br/>    Customer: Record Customer;<br/>    LookupValueCode: Code[10];<br/>begin<br/>    //[SCENARIO #0002] Assign non-existing lookup value to<br/>    //                 customer<br/>    //[GIVEN] A non-existing lookup value<br/>    LookupValueCode := 'SC #0002';<br/>    //[GIVEN] A customer record variable<br/>    // See local variable Customer<br/><br/>    //[WHEN] Set non-existing lookup value on customer<br/>    asserterror SetLookupValueOnCustomer(<br/>                    Customer,<br/>                    LookupValueCode);<br/><br/>    //[THEN] Non existing lookup value error thrown<br/>    VerifyNonExistingLookupValueError(LookupValueCode);<br/>end;</pre>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Construct the real code</h1>
+                </header>
+            
+            <article>
+                
+<p>Reusing the <kbd>SetLookupValueOnCustomer</kbd> function, we only need to create one new helper function.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">VerifyNonExistingLookupValueError</h1>
+                </header>
+            
+            <article>
+                
+<p>Like in our first verification function, we make use of a function from the standard library codeunit <kbd>Assert</kbd> (130000) called <kbd>ExpectedError</kbd>. We only need to provide <kbd>ExpectedError</kbd> the expected error text. The actual error will be retrieved by <kbd>ExpectedError</kbd> using the <kbd>GetLastErrorText</kbd> system function as follows:</p>
+<pre>local procedure VerifyNonExistingLookupValueError(<br/>                    LookupValueCode: Code[10])<br/>var<br/>    Customer: Record Customer;<br/>    LookupValue: Record LookupValue;<br/>    ValueCannotBeFoundInTableTxt: Label<br/>            'The field %1 of table %2 contains a value (%3) that<br/>             cannot be found in the related table (%4).';<br/>begin<br/>    with Customer do<br/>        Assert.ExpectedError(<br/>            StrSubstNo(<br/>                ValueCannotBeFoundInTableTxt <br/>                FieldCaption("Lookup Value Code"),<br/>                TableCaption(),<br/>                LookupValueCode,<br/>                LookupValue.TableCaption()));<br/>end;</pre>
+<p>Note how the expected error text is constructed by using the <kbd>StrSubstNo</kbd> system method in conjunction with the <kbd>ValueCannotBeFoundInTableTxt</kbd> label.</p>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Test execution</h1>
+                </header>
+            
+            <article>
+                
+<p>Let's redeploy our extension and add the second test to the test tool by selecting <span class="packt_screen">Actions</span> | <span class="packt_screen">Functions</span> | <span class="packt_screen">Get Test Methods</span>. <span class="packt_screen">Get Test Methods</span> will update the selected test codeunit by adding all current test functions residing in the codeunit as lines to the test tool. Note that the <span class="packt_screen">Result</span> column will be cleared. Now, run the test codeunit and see that both tests are successful<span>:</span></p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-757 image-border" src="assets/417eba3e-1a53-4ee9-bfec-0f2dddc130a4.png" style="width:97.08em;height:39.08em;"/></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Test the test</h1>
+                </header>
+            
+            <article>
+                
+<p>How to verify that <em>the success is a real success</em>? We can do this in a similar way as we did with test example 1: provide a different expected value to the verification function of our test case. So let's do it.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Adjust the test so the verification errs</h1>
+                </header>
+            
+            <article>
+                
+<p>Let’s adjust the verification in a similar way as we did in test example 1:</p>
+<pre>//[THEN] Non existing lookup value error thrown<br/> VerifyNonExistingLookupValueError('LUC');</pre>
+<p><span>The output is shown in the following screenshot:</span></p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-758 image-border" src="assets/029e3190-2e5a-4756-99dc-13663ecd0b35.png" style="width:96.75em;height:39.17em;"/></p>
+<p><span>The error thrown tells us that the expected value is </span><kbd>LUC</kbd><span> while the actual value is </span><kbd>SC #0002</kbd><span> </span><span>as follows:</span></p>
+<pre>Assert.ExpectedError failed.<br/> Expected: The field Lookup Value Code of table Customer contains a value (LUC) that cannot be found in the related table (Lookup Value)..<br/> Actual: The field Lookup Value Code of table Customer contains a value (SC #0002) that cannot be found in the related table (Lookup Value)..</pre>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Removing asserterror</h1>
+                </header>
+            
+            <article>
+                
+<p>With rainy path scenarios, we typically use an <kbd>asserterror</kbd> to wrap the <kbd>[WHEN]</kbd> part to catch the error, but we have another way to <em>test the test</em>: by removing the <kbd>asserterror</kbd> and running the test again. Now, you will get to see the real error<span>:</span></p>
+<pre>The field Lookup Value Code of table Customer contains a value (SC #0002) that cannot be found in the related table (Lookup Value).</pre>
+<div class="packt_infobox">This error message allows us to build a text label in .al to construct the expected error.<br/>
+<br/>
+The <kbd>Modify</kbd> in <kbd>SetLookupValueOnCustomer</kbd> strictly is not possible in test example 2 as we do not retrieve a customer record from the database. The error thrown by the <kbd>Validate</kbd>, however, will prevent the <kbd>Modify</kbd> from being called.<br/>
+<br/>
+Test example 2 is built upon the assumption that the <kbd>TableRelation</kbd> set on the <kbd>Lookup Value Code</kbd> field on the <kbd>Customer</kbd> table uses the default setting of the <kbd>ValidateTableRelation</kbd> property on that field.</div>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Test example 3 – a first UI test</h1>
+                </header>
+            
+            <article>
+                
+<p>The field <kbd>Lookup Value Code</kbd> had been implemented on the <kbd>Customer</kbd> table and tested. But, of course, to allow users to manage it, it needs to be made accessible in the UI. Consequently, it needs to be placed on the <kbd>Customer Card</kbd>.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Customer wish</h1>
+                </header>
+            
+            <article>
+                
+<p>The next stage of the customer wish is very close to the previous part defined by <kbd>[SCENARIO #0001]</kbd>. The main difference is that we now want to access a customer by means of the UI element <kbd>Customer Card</kbd>. By mimicking end users, our scenario describes creating a new <kbd>Customer Card</kbd> (see second <kbd>[GIVEN]</kbd>). Have a look:</p>
+<pre><strong>[FEATURE]</strong> LookupValue UT Customer<br/><strong>[SCENARIO #0003]</strong> Assign lookup value on customer card<br/><strong>[GIVEN]</strong> A lookup value<br/><strong>[GIVEN]</strong> A customer card<br/><strong>[WHEN]</strong> Set lookup value on customer card<br/>[<strong>THEN]</strong> Customer has lookup value code field populated</pre>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Application code</h1>
+                </header>
+            
+            <article>
+                
+<p>Based on the last addition to the customer wish, the <kbd>Customer Card</kbd> needs to be extended with the <kbd>Lookup Value Code</kbd> field as per the following <kbd>.al</kbd> object<span>:</span></p>
+<pre>pageextension 50000 "CustomerCardPageExt" extends "Customer Card"<br/>{<br/>    layout<br/>    {<br/>        addlast(General)<br/>        {<br/>            field("Lookup Value Code"; "Lookup Value Code"){}<br/>        }<br/>    }<br/>}</pre>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Test code</h1>
+                </header>
+            
+            <article>
+                
+<p>Consecutively, let's step through our <em>how-to-implement-test-code</em> recipe.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Create a test codeunit</h1>
+                </header>
+            
+            <article>
+                
+<p>Again, sharing the same <kbd>[FEATURE]</kbd> tag values as in our previous tests, we can place our new test case in the same test codeunit, that is, codeunit 81000 <kbd>LookupValue UT Customer</kbd>.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Embed the customer wish into a test function</h1>
+                </header>
+            
+            <article>
+                
+<p>Wrap the <em>green</em> into a new test function in codeunit 81000 <span>as follows:</span></p>
+<pre>[Test]<br/>procedure AssignLookupValueToCustomerCard()<br/>begin<br/>    //[SCENARIO #0003] Assign lookup value on customer card<br/>    //[GIVEN] A lookup value<br/>    //[GIVEN] A customer card<br/>    //[WHEN] Set lookup value on customer card<br/>    //[THEN] Customer has lookup value field populated<br/>end;</pre>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Write your test story</h1>
+                </header>
+            
+            <article>
+                
+<p>A straightforward version of the new test story, in parallel to test example 1, would be:</p>
+<pre>[Test]<br/>procedure AssignLookupValueToCustomerCard()<br/>begin<br/>    //[SCENARIO #0003] Assign lookup value on customer card<br/>    //[GIVEN] A lookup value<br/>    CreateLookupValueCode();<br/>    //[GIVEN] A customer card<br/>    CreateCustomerCard();<br/><br/>    //[WHEN] Set lookup value on customer card<br/>    SetLookupValueOnCustomerCard();<br/><br/>    //[THEN] Customer has lookup value field populated<br/>    VerifyLookupValueOnCustomer();<br/>end;</pre>
+<p>Adding variables and arguments, the code becomes:</p>
+<pre>[Test]<br/>procedure AssignLookupValueToCustomerCard()<br/>var<br/>    CustomerCard: TestPage "Customer Card";<br/>    CustomerNo: Code[20];<br/>    LookupValueCode: Code[10];<br/>begin<br/>    //[SCENARIO #0003] Assign lookup value on customer card<br/>    //[GIVEN] A lookup value<br/>    LookupValueCode := CreateLookupValueCode();<br/>    //[GIVEN] A customer card<br/>    CreateCustomerCard(CustomerCard);<br/><br/>    //[WHEN] Set lookup value on customer card<br/>    CustomerNo := SetLookupValueOnCustomerCard(<br/>                    CustomerCard,<br/>                    LookupValueCode);<br/><br/>    //[THEN] Customer has lookup value field populated<br/>    VerifyLookupValueOnCustomer(CustomerNo, LookupValueCode);<br/>end;</pre>
+<p>To access the UI in automated tests, we need to make use of the 5th pillar: the <kbd>TestPage</kbd>. As you can see in the specific case of our test function <kbd>AssignLookupValueToCustomerCard</kbd>, the test page object is based on the <kbd>Customer Card</kbd> page.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Construct the real code</h1>
+                </header>
+            
+            <article>
+                
+<p>We can make use of the already existing helper functions <kbd>CreateLookupValueCode</kbd> and <kbd>VerifyLookupValueOnCustomer</kbd>, but we also need to construct the following two new helper functions:</p>
+<ol>
+<li><kbd>CreateCustomerCard</kbd></li>
+<li><kbd>SetLookupValueOnCustomerCard</kbd></li>
+</ol>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title"> CreateCustomerCard</h1>
+                </header>
+            
+            <article>
+                
+<p>To create a new customer card we just call the <kbd>OpenNew</kbd> method that any editable <kbd>TestPage</kbd> has to its availability:</p>
+<pre>local procedure CreateCustomerCard(<br/>                   var CustomerCard: TestPage "Customer Card")<br/>begin<br/>    CustomerCard.OpenNew();<br/>end;</pre>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">SetLookupValueOnCustomerCard</h1>
+                </header>
+            
+            <article>
+                
+<p>Using the control method <kbd>SetValue</kbd> we set the value of the <kbd>Lookup Value Code</kbd> field:</p>
+<pre>local procedure SetLookupValueOnCustomerCard(<br/>                   var CustomerCard: TestPage "Customer Card";<br/>                   LookupValueCode: Code[10]) CustomerNo: Code[20]<br/>begin<br/>    with CustomerCard do begin<br/>        "Lookup Value Code".SetValue(LookupValueCode);<br/>        CustomerNo := "No.".Value();<br/>        Close();<br/>    end;<br/>end;</pre>
+<p>As <kbd>SetValue</kbd> mimics the user setting a value, it will trigger the validation of the field. If a non-existing value is entered, it will validate the value against the existing records in the <kbd>Lookup Value</kbd> table as we tested in test example 2. To retrieve the value of the <kbd>No.</kbd> field, we use the control method <kbd>Value</kbd>. We do need to close the page to trigger the system so save the changes to the record to the database.</p>
+<div class="packt_infobox">Note that <kbd>Value</kbd> has a twofold purpose. It can be used to get or set the value of a field (control). The difference between setting the value using <kbd>Value</kbd> or <kbd>SetValue</kbd> is that <kbd>Value</kbd> always takes a string as an argument, while the argument of <kbd>SetValue</kbd> should be the same data type as the data type of the field (control).</div>
+<p>We're almost ready to run the new test. There is, however, one major thing failing in the <kbd>SetLookupValueOnCustomerCard</kbd> helper function. It will operate fine, but it does not take account for, in my opinion, a design flaw: <kbd>SetLookupValueOnCustomerCard</kbd> will run successfully, even when the <kbd>Lookup Value Code</kbd> field is not editable. Both <kbd>SetValue</kbd> and <kbd>Value</kbd> do not check on this. As the whole purpose of our test is to check whether the user can set the <kbd>Lookup Value Code</kbd> field, we need to add a small verification to determine whether the field is editable. Because of this, the <kbd>SetLookupValueOnCustomerCard</kbd> function needs to be updated to the following using another function from the <kbd>Assert</kbd> codeunit <kbd>IsTrue</kbd>:</p>
+<pre>local procedure SetLookupValueOnCustomerCard(<br/>                   var CustomerCard: TestPage "Customer Card";<br/>                   LookupValueCode: Code[10]) CustomerNo: Code[20]<br/>begin<br/>    with CustomerCard do begin<br/>        Assert.IsTrue("Lookup Value Code".Editable(), 'Editable');<br/>        "Lookup Value Code".SetValue(LookupValueCode);<br/>        CustomerNo := "No.".Value();<br/>        Close();<br/>    end;<br/>end;</pre>
+<div class="packt_infobox">
+<p>Note that both <kbd>Value</kbd> and <kbd>SetValue</kbd> will error when we try to apply them to a non-visible field.</p>
+</div>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Test execution</h1>
+                </header>
+            
+            <article>
+                
+<p>Let's again redeploy the extension, add the new test function using the <span class="packt_screen">Get Test Methods</span> feature, and run the tests.  See the next screenshot:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-759 image-border" src="assets/6ba2373f-620d-406f-b723-5628d195a530.png" style="width:97.00em;height:40.17em;"/></p>
+<p>Shoot, an error has occurred. Error? Let’s read it and try to understand:</p>
+<pre>Unexpected CLR exception thrown.: Microsoft.Dynamics.Framework.UI. FormAbortException: Page New - Customer Card has to close ---&gt; Microsoft. Dynamics.Nav.Types.Exceptions.NavNCLMissingUIHandlerException: Unhandled UI: ModalPage 1340 ---&gt; System.Reflect</pre>
+<p>I must confess I always get a bit nervous of those techie <span class="packt_screen">CLR exception thrown</span> messages, but I have learned to scan for the things that relate to what I know. Here are two things:</p>
+<ul>
+<li><kbd>NavNCLMissingUIHandlerException</kbd></li>
+<li><kbd>Unhandled UI: ModalPage 1340</kbd></li>
+</ul>
+<p>Apparently there is a <kbd>ModalPage</kbd> occurrence that is not handled by our test. More specifically it is page 1340 that's called modally and not handled. Page 1340? It's the <kbd>Config Templates</kbd> page, the one that pops up when you are going to create a new customer, as shown in the screenshot:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-760 image-border" src="assets/18c83597-8529-4680-b7ac-d9c7c73a09a8.png" style="width:96.83em;height:46.92em;"/></p>
+<p>So, we need to construct a <kbd>ModalPageHandler</kbd> and link that to our third test<span>:</span></p>
+<pre>[ModalPageHandler]<br/> procedure HandleConfigTemplates(<br/>             var ConfigTemplates: TestPage "Config Templates")<br/> begin<br/>     ConfigTemplates.OK.Invoke();<br/> end;</pre>
+<p>Set the <kbd>HandlerFunctions</kbd> tag to the test function with reference to the <kbd>ModalPageHandler</kbd><span>:</span></p>
+<pre>[Test]<br/>[HandlerFunctions('HandleConfigTemplates')]<br/>procedure AssignLookupValueToCustomerCard()</pre>
+<p>Now the test runs successfully.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Test the test</h1>
+                </header>
+            
+            <article>
+                
+<p>Let's <em>test the test</em> and verify that it is a good test.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Adjust the test so the verification errs</h1>
+                </header>
+            
+            <article>
+                
+<p>A proven method can be achieved in exactly the same way as we have done for test example 1.</p>
+<p>Next to that note, we have added another verification to our code<span>:</span></p>
+<pre>Assert.IsTrue("Lookup Value Code".Editable(), 'Editable');</pre>
+<p>Change <kbd>IsTrue</kbd> into <kbd>IsFalse</kbd>. You will see that the test fails as the <kbd>Lookup Value Code</kbd> field is editable. The <kbd>IsTrue</kbd> verification ensures that, when the <kbd>Lookup Value Code</kbd> field is turned to non-editable, the test will fail.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Headless versus UI</h1>
+                </header>
+            
+            <article>
+                
+<p>As mentioned before, headless testing is the preferred mode for automated tests as it is faster than UI testing. With test example 1 and 3, we did implement the same kind of test: check that a lookup value can be assigned to a customer. Test example 1 in headless mode, while test example 3 uses the UI. Running both tests indeed shows that UI tests are slower than headless tests. Have a look at the graph of execution duration (in seconds).</p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-761 image-border" src="assets/739c78b8-542d-4e35-ae8a-918cf7229288.png" style="width:58.92em;height:37.33em;"/></p>
+<p>The average execution duration for the UI tests is 1.35 seconds, while the headless average is almost 7 times faster: 0.20 seconds.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Summary</h1>
+                </header>
+            
+            <article>
+                
+<p>In this chapter, we got to build our first automated tests. We utilized the ATDD test case pattern to design each test and used it as a base structure in our <em>4-steps recipe</em> to create a test codeunit, embed the customer wishes into a test, write a test story, and finally construct your real code.</p>
+<p>In the next chapter, we will continue to use ATDD and the 4-steps recipe to create some more advanced tests.</p>
+
+
+            </article>
+
+            
+        </section>
+    </body></html>

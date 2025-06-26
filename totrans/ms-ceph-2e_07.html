@@ -1,0 +1,829 @@
+<html><head></head><body>
+        <section>
+
+                            <header>
+                    <h1 class="header-title">RADOS Pools and Client Access</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root"><span>Ceph provides a variety of different pool types and configurations. It also supports several different data-storage types to offer storage to clients. This chapter will look at the differences between replicated and erasure-coded pools, giving examples of the creation and maintenance of both. We will then move on to how to use these pools for the three data-storage methods: <strong>RADOS Block Device</strong> (<strong>RBD</strong>), object, and CephFS. Finally, we will finish with a look at how to take snapshots of the different types of storage methods. The following topics are covered in this chapter:</span></p>
+<ul>
+<li>Pools</li>
+<li>Ceph storage types</li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Pools</h1>
+                </header>
+            
+            <article>
+                
+<p>RADOS pools are the core part of a Ceph cluster. Creating a RADOS pool is what drives the creation and distribution of the placement groups, which themselves are the autonomous part of Ceph. Two types of pools can be created, replicated, and erasure-coded, offering different usable capacities, durability, and performance. RADOS pools can then be used to provide different storage solutions to clients via RBS, CephFS, and RGW, or they can be used to enable tiered performance overlaying other RADOS pools.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Replicated pools</h1>
+                </header>
+            
+            <article>
+                
+<p>Replicated RADOS pools are the default pool type in Ceph; data is received by the primary OSD from the client and then replicated to the remaining OSDs. The logic behind the replication is fairly simple and requires minimal processing to calculate and replicate the data between OSDs. However, as the data is replicated in whole, there is a large write penalty, as the data has to be written multiple times across the OSDs. By default, Ceph will use a replication factor of 3x, so all data will be written three times; this does not take into account any other write amplification that may be present further down in the Ceph stack. This write penalty has two main drawbacks: It obviously puts further I/O load on your Ceph cluster, as there is more data to be written, and in the case of SSDs, these extra writes will wear out the flash cells more quickly. However, as we will see in the section, <em>Erasure-code pools</em>, for smaller I/Os, the simpler replication strategy actually results in lower total required operations—there is always a fixed 3x write penalty, no matter the I/O size.</p>
+<p>It should also be noted that although all replicas of an object are written to during a client write operation, when an object is read, only the primary OSD holding a copy of the object is involved. A client also only sends the write operation to the primary OSD, which then sends the operation to the remaining replicas. There are a number of reasons for this behavior, but they largely center around ensuring the consistency of reads.</p>
+<p>As mentioned, the default replication size is 3, with a required minimum size of two replicas to accept client I/O. Decreasing either of these values is not recommended, and increasing them will likely have minimal effects on increasing data durability, as the chance of losing three OSDs that all share the same PG is highly unlikely. As Ceph will prioritize the recovery of PGs that have the fewest copies, this further minimizes the risk of data loss, therefore, increasing the number of replica copies to four is only beneficial when it comes to improving data availability, where two OSDs sharing the same PG can be lost and allow Ceph to keep servicing client I/O. However, due to the storage overhead of four copies, it would be recommended to look at erasure coding at this point. <span>With the introduction of NVMes, which due to their faster performance reduce rebuild times, using a replica size of 2 can still offer reasonable data durability.</span></p>
+<p>To create a replicated pool, issue a command, such as the one in the following example:</p>
+<pre><strong>ceph osd pool create MyPool 128 128 replicated</strong></pre>
+<p>This would create a replicated pool with <kbd>128</kbd> placement groups, called <kbd>MyPool</kbd>.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Erasure code pools</h1>
+                </header>
+            
+            <article>
+                
+<p>Ceph's default replication level provides excellent protection against data loss by storing three copies of your data on different OSDs. However, storing three copies of data vastly increases both the purchase cost of the hardware and the associated operational costs, such as power and cooling. Furthermore, storing copies also means that for every client write, the backend storage must write three times the amount of data. In some scenarios, either of these drawbacks may mean that Ceph is not a viable option.</p>
+<p>Erasure codes are designed to offer a solution. Much like how RAID 5 and 6 offer increased usable storage capacity over RAID 1, erasure coding allows Ceph to provide more usable storage from the same raw capacity. However, also like the parity-based RAID levels, erasure coding brings its own set of disadvantages.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">What is erasure coding?</h1>
+                </header>
+            
+            <article>
+                
+<p><strong>Erasure coding</strong><span> </span>allows Ceph to achieve either greater usable storage capacity or increase resilience to disk failure for the same number of disks, versus the standard replica method. Erasure coding achieves this by splitting up the object into a number of parts and then also calculating a type of<span> </span><strong>cyclic redundancy check</strong><span> </span>(<strong>CRC</strong>), the<span> </span>erasure<span> </span>code, and then storing the results in one or more extra parts. Each part is then stored on a separate OSD. These parts are referred to as<span> </span><em>K</em><span> </span>and<span> </span><em>M</em><span> </span>chunks, where<span> </span><em>K</em><span> </span>refers to the number of data shards and<span> </span><em>M</em><span> </span>refers to the number of erasure code shards. As in RAID, these can often be expressed in the form<span> </span><em>K+M,</em> or<span> </span><em>4+2</em>, for example.</p>
+<p>In the event of an OSD failure that contains an object's shard, which is one of the calculated erasure codes, data is read from the remaining OSDs that store data with no impact. However, in the event of an OSD failure that contains the data shards of an object, Ceph can use the erasure codes to mathematically recreate the data from a combination of the remaining data and erasure code shards.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">K+M</h1>
+                </header>
+            
+            <article>
+                
+<p>The more<span> </span>erasure<span> </span>code shards you have, the more OSD failures you can tolerate and still successfully read data. Likewise, the ratio of<span> </span><em>K</em><span> </span>to<span> </span><em>M</em><span> </span>shards each object is split into has a direct effect on the percentage of raw storage that is required for each object.</p>
+<p>A<span> </span><em>3+1</em><span> </span>configuration will give you 75% usable capacity but only allows for a single OSD failure, and so would not be recommended. In comparison, a three-way replica pool only gives you 33% usable capacity.</p>
+<p><em>4+2</em><span> </span>configurations would give you 66% usable capacity and allows for two OSD failures. This is probably a good configuration for most people to use.</p>
+<p>At the other end of the scale,<span> </span><em>18+2</em><span> </span>would give you 90% usable capacity and still allow for two OSD failures. On the surface, this sounds like an ideal option, but the greater total number of shards comes at a cost. A greater number of total shards has a negative impact on performance and also an increased CPU demand. The same 4 MB object that would be stored as a whole single object in a replicated pool would now be split into 20 x 200-KB chunks, which have to be tracked and written to 20 different OSDs. Spinning disks will exhibit faster bandwidth, measured in MBps with larger I/O sizes, but bandwidth drastically tails off at smaller I/O sizes. These smaller shards will generate a large amount of small I/O and cause an additional load on some clusters.</p>
+<p>Also, it's important not to forget that these shards need to be spread across different hosts according to the CRUSH map rules: no shard belonging to the same object can be stored on the same host as another shard from the same object. Some clusters may not have a sufficient number of hosts to satisfy this requirement. If a CRUSH rule cannot be satisfied, the PGs will not become active, and any I/O destined for these PGs will be halted, so it's important to understand the impact on a cluster's health of making CRUSH modifications.</p>
+<p>Reading back from these high-chunk pools is also a problem. Unlike in a replica pool, where Ceph can read just the requested data from any offset in an object, in an erasure pool, all shards from all OSDs have to be read before the read request can be satisfied. In the<span> </span><em>18+2</em><span> </span>example, this can massively amplify the amount of required disk read ops, and average latency will increase as a result. This behavior is a side-effect that tends to only cause a performance impact with pools that use a lot of shards. A<span> </span><em>4+2</em><span> </span>configuration in some instances will get a performance gain compared to a replica pool, from the result of splitting an object into shards. As the data is effectively striped over a number of OSDs, each OSD has to write less data, and there are no secondary and tertiary replicas to write.</p>
+<p>Erasure coding can also be used to improve durability rather than to maximize available storage space. Take, for example, a <em>4+4</em> pool: it has a storage efficiency of 50%, so it's better than a 3x replica pool, yet it can sustain up to four OSD losses without data loss.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">How does erasure coding work in Ceph?</h1>
+                </header>
+            
+            <article>
+                
+<p>As with replication, Ceph<span> </span>has<span> </span>a concept of a primary OSD, which also<span> </span>exists<span> </span>when using erasure-coded pools. The primary OSD has the responsibility of communicating with the client, calculating the erasure shards, and sending them out to the remaining OSDs in the PG set. This is illustrated in the following diagram:</p>
+<div class="CDPAlignCenter CDPAlign"><img class="aligncenter size-full wp-image-133 image-border" src="assets/b1032823-151a-4466-bde2-59b24bea067e.png" style="width:15.83em;height:19.50em;"/></div>
+<p>If an OSD in the set is down, the primary OSD can use the remaining data and erasure shards to reconstruct the data, before sending it back to the client. During read operations, the primary OSD requests all OSDs in the PG set to send their shards. The primary OSD uses data from the data shards to construct the requested data, and the erasure shards are discarded. There is a fast read option that can be enabled on erasure pools, which allows the primary OSD to reconstruct the data from erasure shards if they return quicker than data shards. This can help to lower average latency at the cost of a slightly higher CPU usage. The following diagram shows how Ceph reads from an erasure-coded pool:</p>
+<div class="CDPAlignCenter CDPAlign"><img class="aligncenter size-full wp-image-135 image-border" src="assets/97d94d63-67ce-4fc9-b7b1-bb08b63ad9fb.png" style="width:14.42em;height:18.00em;"/></div>
+<p class="NormalPACKT">The following diagram shows how Ceph reads from an erasure pool when one of the data shards is unavailable. Data is reconstructed by reversing the erasure algorithm, using the remaining data and erasure shards:</p>
+<div class="CDPAlignCenter CDPAlign"><img class="aligncenter size-full wp-image-136 image-border" src="assets/d5c21792-0be1-42df-9b94-b32ed1e635bc.png" style="width:15.75em;height:18.25em;"/></div>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Algorithms and profiles</h1>
+                </header>
+            
+            <article>
+                
+<p class="NormalPACKT">There are a number of different<span> </span>erasure<span> </span>plugins you can use to create your erasure-coded pool.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Jerasure</h1>
+                </header>
+            
+            <article>
+                
+<p class="NormalPACKT">The default erasure plugin in Ceph is the<span> j</span>erasure<span> </span>plugin, which is a highly-optimized<span> </span>open source erasure-coding library. The library has a number of different techniques that can be used to calculate the erasure codes. The default is<span> </span>Reed-Solomon,<span> </span>and this provides good<span> </span>performance<span> </span>on modern processors, which can accelerate the instructions that the technique uses.<span> </span></p>
+<p class="NormalPACKT">There are also a number of other<span> jerasure </span>techniques<span> </span>that can be used, which all have a fixed number of<span> </span><em>M</em><span> </span>shards. If you are intending on only having two<span> </span><em>M</em><span> </span>shards, they can be a good candidate, as their fixed size means that optimizations are possible, lending to increased performance. Each optimized technique, aside from only supporting two erasure shards, also tends to have certain requirements around the total number of shards. Here is a brief description of each optimized technique:</p>
+<ul>
+<li><span class="n"><kbd>reed_sol_van</kbd>: The default technique, complete flexibility on number of <em>k+m</em> shards, also the slowest.</span></li>
+</ul>
+<ul>
+<li><span class="n"><kbd>reed_sol_r6_op</kbd>: Optimized version of default technique for use cases where <em>m=2</em>. Although it is much faster than the unoptimized version, it's not as fast as other versions. However, the number of <em>k</em> shards is flexible.</span></li>
+<li><span class="n"><kbd>cauchy_orig</kbd>: Better than the default, but it's better to use <kbd>cauchy_good</kbd>. </span></li>
+<li><span class="n"><kbd>cauchy_good</kbd>: Middle-of-the-road performance while maintaining full flexibility of the shard configuration.</span></li>
+<li><span class="n"><kbd>liberation</kbd>: Total number of shards must be equal to a prime number and <em>m=2</em>, so <em>3+2</em>, <em>5+2</em>, or <em>9+2</em> are all good candidates, excellent performance.</span></li>
+<li><span class="n"><kbd>liber8tion</kbd>: Total number of shards must be equal to <em>8</em> and <em>m=2</em>, only <em>6+2</em> is possible, but excellent performance.</span></li>
+<li><span class="n"><kbd>blaum_roth</kbd>: Total number of shards must be one less than a prime number and <em>m=2</em>, so the ideal is <em>4+2</em>, excellent performance.</span></li>
+</ul>
+<p><span>As always, benchmarks should be</span><span> </span>conducted<span> </span><span>before storing any production data on an erasure-coded pool to identify which technique best suits your workload.</span></p>
+<p class="NormalPACKT">In general, the jerasure profile should be preferred in most cases, unless another profile has a major advantage, as it offers well-balanced performance and is well-tested.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">ISA</h1>
+                </header>
+            
+            <article>
+                
+<p class="NormalPACKT">The<span> </span>ISA library<span> </span>is designed to work with<span> </span>Intel<span> </span>processors and offers enhanced performance. It supports both the Reed-Solomon and Cauchy techniques.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">LRC</h1>
+                </header>
+            
+            <article>
+                
+<p>One of the disadvantages of using erasure coding in a distributed storage<span> </span>system<span> </span>is that recovery can be very intensive on networking between hosts. As each shard is stored on a separate host, recovery operations require multiple hosts to participate in the process. When the CRUSH topology spans multiple racks, this can put pressure on the inter-rack networking links. The<span> </span><strong>Locally Repairable erasure Code</strong><span> </span>(<strong>LRC</strong>) erasure<span> </span>plugin<span> </span>adds an additional parity shard, which is local to each OSD node. This allows recovery operations to remain local to the node where an OSD has failed and remove the need for nodes to receive data from all other remaining shard-holding nodes.</p>
+<p>However, the addition of these local recovery codes does impact the amount of usable storage for a given number of disks. In the event of multiple disk failures, the LRC plugin has to resort to using global recovery, as would happen with the jerasure plugin.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">SHEC</h1>
+                </header>
+            
+            <article>
+                
+<p>The SHEC profile is designed with similar goals to the LRC plugin, in that it reduces the networking requirements during recovery. However, instead of creating extra parity shards on each node, SHEC shingles the shards across OSDs in an overlapping fashion. The shingle part of the plugin name represents the way the data distribution resembles shingled tiles on a roof of a house. By overlapping the parity shards across OSDs, the SHEC plugin reduces recovery resource requirements for both single and multiple disk failures.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Overwrite support in erasure-coded pools</h1>
+                </header>
+            
+            <article>
+                
+<p>Although erasure-coded pool support has been in Ceph for several releases now, before the arrival of BlueStore in the Luminous release, it had not supported partial writes. This limitation meant that erasure pools could not directly be used with RBD and CephFS workloads. With the introduction of BlueStore in Luminous, it provided the groundwork for partial write support to be implemented. With partial write support, the number of I/O types that erasure pools can support almost matches replicated pools, enabling the use of erasure-coded pools directly with RBD and CephFS workloads. This dramatically lowers the cost of storage capacity for these use cases.</p>
+<p>For full-stripe writes, which occur either for new objects or when the entire object is rewritten, the write penalty is greatly reduced. A client writing a 4 MB object to a 4+2 erasure-coded pool would only have to write 6 MB of data, 4 MB of data chunks, and 2 MB of erasure-coded chunks. This is compared to 12 MB of data written in a replicated pool. It should, however, be noted that each chunk of the erasure stripe will be written to a different OSD. For smaller erasure profiles, such as <em>4+2</em>, this will tend to offer a large performance boost for both spinning disks and SSDs, as each OSD is having to write less data. However, for larger erasure stripes, the overhead of having to write to an ever-increasing number of OSDs starts to outweigh the benefit of reducing the amount of data to be written, particularly on spinning disks whose latency does not have a linear relationship to the I/O size.</p>
+<p>Ceph's userspace clients, such as <kbd>librbd</kbd> and <kbd>libcephfs</kbd>, are clever enough to try to batch together smaller I/Os and submit a full stripe write if possible; this can help when the application residing previously is submitting sequential I/O but not aligned to the 4 MB object boundaries. </p>
+<p>Partial write support allows overwrites to be done to an object; this introduces a number of complexities, as, when a partial write is done, the erasure chunks also require updating to match the new object contents. This is very similar to the challenges faced by RAID 5 and 6, although having to coordinate this process across several OSDs in a consistent manor increases the complexity. When a partial write is performed, Ceph first reads the entire existing object off the disk, and then it must merge in memory the new writes, calculate the new erasure-coded chunks, and write everything back to the disk. So, not only is there both a read and a write operation involved, but each of these operations will likely touch several disks making up the erasure stripe. As you can see, a single I/O can end up having a write penalty several times higher than that of a replicated pool. For a <em>4+2</em> erasure-coded pool, a small 4 KB write could end up submitting 12 I/Os to the disks in the cluster, not taking into account any additional Ceph overheads.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Creating an erasure-coded pool</h1>
+                </header>
+            
+            <article>
+                
+<p class="NormalPACKT">Let's bring our test cluster up again and switch into<span> </span>super-user<span> </span>mode in Linux, so we don't have to keep <span class="fontstyle0">prepending</span><span> </span><kbd>sudo</kbd><span> </span>to our commands.</p>
+<p class="NormalPACKT">Erasure-coded pools are controlled by the<span> </span>use<span> </span>of erasure profiles; these<span> </span>control<span> </span>how many shards each object is broken up into including the split between data and erasure shards. The profiles also include configuration to determine what erasure code plugin is used to calculate the hashes.</p>
+<p>The following plugins are available to use:</p>
+<ul>
+<li>Jerasure</li>
+<li>ISA</li>
+<li>LRC</li>
+<li><strong>Shingled Erasure Coding</strong><span> </span><span>(</span><strong>SHEC</strong><span>)</span></li>
+</ul>
+<p>To see a list of the erasure profiles, run the following command:</p>
+<pre><strong>    # ceph osd erasure-code-profile ls</strong></pre>
+<p>You can see there is a<span> </span><kbd>default</kbd><span> </span>profile in the fresh installation of Ceph:</p>
+<div class="CDPAlignCenter CDPAlign"><img class="aligncenter size-full wp-image-137 image-border" src="assets/04266842-af2a-4313-839b-15d8cf69ac32.png" style="width:33.83em;height:3.08em;"/></div>
+<p class="NormalPACKT">Let's see what configuration options it contains, using the following command:</p>
+<pre><strong>    # ceph osd erasure-code-profile get default</strong></pre>
+<p>The<span> </span><kbd>default</kbd><span> </span>profile specifies that it will use the jerasure plugin with the Reed-Solomon error-correcting codes and will split objects into<span> </span><kbd>2</kbd><span> </span>data shards and<span> </span><kbd>1</kbd><span> </span>erasure shard:</p>
+<div class="CommandLinePACKT CDPAlignCenter CDPAlign"><img class="aligncenter size-full wp-image-138 image-border" src="assets/d3cf99f8-389a-44a6-908d-f48074281008.png" style="width:39.25em;height:6.67em;"/></div>
+<p class="NormalPACKT">This is almost perfect for our test cluster; however, for the purpose of this exercise, we will create a new profile, using the following commands:</p>
+<pre class="CommandLinePACKT"><strong>    # ceph osd erasure-code-profile set example_profile k=2 m=1<br/>    plugin=jerasure technique=reed_sol_van<br/></strong><strong>    # ceph osd erasure-code-profile ls</strong></pre>
+<p class="CommandLinePACKT">You can see our new<span> </span><kbd>example_profile</kbd><span> </span>has been created:</p>
+<div class="CDPAlignCenter CDPAlign"><img class="aligncenter size-full wp-image-139 image-border" src="assets/d829a26e-70ca-436d-a2d1-8fe412d219b0.png" style="width:28.50em;height:3.67em;"/></div>
+<p>Now, let's create our erasure-coded pool with this profile:</p>
+<pre><strong>    # ceph osd pool create ecpool 128 128 erasure example_profile</strong></pre>
+<p><span>The preceding command gives the following output:</span></p>
+<div class="CDPAlignCenter CDPAlign"><img class="aligncenter size-full wp-image-140 image-border" src="assets/53812e80-e75b-4db6-a858-41fa2525fec5.png" style="width:55.50em;height:2.75em;"/></div>
+<p>The preceding command instructs Ceph to create a new pool called<span> </span><kbd>ecpool</kbd><span> </span>with<span> </span><kbd>128</kbd><span> </span>PGs. It should be an erasure-coded pool and should use the<span> </span><kbd>example_profile</kbd><span> </span>we previously created.</p>
+<p class="mce-root"/>
+<p>Let's create an object with a small text string inside it and then prove the data has been stored by reading it back:</p>
+<pre class="CommandLinePACKT"><strong>    # echo "I am test data for a test object" | rados --pool<br/>    ecpool put Test1 –<br/>    # rados --pool ecpool get Test1 -</strong></pre>
+<p class="CommandLinePACKT">That proves that the erasure-coded pool is working, but it's hardly the most exciting of discoveries:</p>
+<div class="CDPAlignCenter CDPAlign"><img class="aligncenter size-full wp-image-141 image-border" src="assets/f808d9cd-9a8c-4487-ab88-5ed84d88be1d.png" style="width:57.42em;height:3.00em;"/></div>
+<p class="NormalPACKT">Let's check whether we can see what's happening at a lower level.</p>
+<p class="NormalPACKT">First, find out what PG is holding the object we just created:</p>
+<pre><strong>    # ceph osd map ecpool Test1</strong></pre>
+<p>The result of the preceding command tells us that the object is stored in PG<span> </span><kbd>3.40</kbd><span> </span>on OSDs<span> </span><kbd>1</kbd>,<span> </span><kbd>2</kbd>, and<span> </span><kbd>0</kbd><span> </span>in this example Ceph cluster. That's pretty obvious, as we only have three OSDs, but in larger clusters, that is a very useful piece of information:</p>
+<div class="CommandLinePACKT CDPAlignCenter CDPAlign"><img class="aligncenter size-full wp-image-142 image-border" src="assets/5c8c544c-1120-43d9-85a3-85989b886ea4.png" style="width:50.00em;height:2.75em;"/></div>
+<div class="packt_tip">
+<p>The PGs will likely be different on your test cluster, so make sure the PG folder structure matches the output of the preceding<span> </span><kbd>ceph osd map</kbd><span> </span>command.<br/>
+<br/>
+<span>If you are using BlueStore, the file structure of the OSD is no longer viewable by default. However, you can use the following command on a stopped OSD to mount the BlueStore OSD as a Linux filesystem.</span></p>
+</div>
+<p class="mce-root packt_figref">We can now look at the folder structure of the OSDs and see how the object has been split using the following commands:</p>
+<pre><strong><span>ceph-objectstore-tool --op fuse --data-path /var/lib/ceph/osd/ceph-0 --mountpoint /mnt</span></strong></pre>
+<p>The following examples are shown using filestore; if using BlueStore, replace the OSD path with the contents of the <kbd>/mnt</kbd> mount point from the preceding command:</p>
+<pre class="CommandLinePACKT"><strong>    ls -l /var/lib/ceph/osd/ceph-2/current/1.40s0_head/</strong></pre>
+<p class="CommandLinePACKT">The preceding command gives the following output:</p>
+<div class="CDPAlignCenter CDPAlign"><img class="aligncenter size-full wp-image-144 image-border" src="assets/e5e200a4-b91d-4e5e-a3ae-0e1a2f8da532.png" style="width:57.00em;height:5.33em;"/></div>
+<pre class="CommandLinePACKT"><strong>    # ls -l /var/lib/ceph/osd/ceph-1/current/1.40s1_head/</strong></pre>
+<p class="CommandLinePACKT"><span>The preceding command gives the following output:</span></p>
+<div class="CDPAlignCenter CDPAlign"><img class="aligncenter size-full wp-image-145 image-border" src="assets/8fee619e-8c24-4c96-b76e-ebf2efa9cc68.png" style="width:48.67em;height:4.42em;"/></div>
+<pre><strong>    # ls -l /var/lib/ceph/osd/ceph-0/current/1.40s2_head/<br/></strong><strong>    total 4</strong></pre>
+<p><span>The preceding command gives the following output:</span></p>
+<div class="CDPAlignCenter CDPAlign"><img class="aligncenter size-full wp-image-146 image-border" src="assets/87dd434f-0b55-418c-ba3f-02886db550bd.png" style="width:50.17em;height:4.83em;"/></div>
+<p class="NormalPACKT">Notice how the PG directory names have been appended to the shard number and that replicated pools just have the PG number as their directory name. If you examine the contents of the object files, you will see our text string that we entered into the object when we created it. However, due to the small size of the text string, Ceph has padded out the second shard with null characters and the erasure shard; hence, it will contain the same as the first. You can repeat this example with a new object that contains larger amounts of text to<span> </span>see<span> </span>how Ceph splits the text into the shards and calculates the erasure code.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Troubleshooting the 2147483647 error</h1>
+                </header>
+            
+            <article>
+                
+<p>This small section is included within the erasure-coding<span>, </span>rather than in <a href="bf50389d-8256-4cbf-ae32-01a494ab4189.xhtml">Chapter 11</a>, <em>Troubleshooting</em>, of this book, as it's commonly seen with erasure-coded pools and so is very relevant to this chapter. An example of this error is shown in the following screenshot, when running the<span> </span><kbd>ceph health detail</kbd><span> </span>command:</p>
+<div class="CDPAlignCenter CDPAlign"><img class="aligncenter size-full wp-image-151 image-border" src="assets/6fbcd7e7-fa12-465d-a4fe-49c8dc76d430.png" style="width:57.67em;height:8.33em;"/></div>
+<p class="NormalPACKT">If you see<span> </span><kbd>2147483647</kbd><span> </span>listed as one of the OSDs for an erasure-coded pool, this normally means that CRUSH was unable to find a sufficient number of OSDs to complete the PG peering process. This is normally due to the number of K+M shards being larger than the number of hosts in the<span> </span>CRUSH<span> </span>topology. However, in some cases, this error can still occur even when the number of hosts is equal to or greater than the number of shards. In this scenario, it's important to understand how CRUSH picks OSDs as candidates for data placement. When CRUSH is used to find a candidate OSD for a PG, it applies the CRUSH map to find an appropriate location in the CRUSH topology. If the result comes back as the same as a previously-selected OSD, Ceph will retry to generate another mapping by passing slightly different values into the CRUSH algorithm. In some cases, if there is a similar number of hosts to the number of erasure shards, CRUSH may run out of attempts before it can suitably find the correct OSD mappings for all the shards. Newer versions of Ceph have mostly fixed these problems by increasing the CRUSH tuneable, <kbd>choose_total_tries</kbd>.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Reproducing the problem</h1>
+                </header>
+            
+            <article>
+                
+<p>To aid our<span> </span>understanding<span> </span>of the problem in more detail, the following steps will demonstrate how to create an <kbd>erasure-code-profile</kbd> that will require more shards than our three-node cluster can support.</p>
+<p>Like earlier in the chapter, create a new erasure profile but modify the K/M parameters to be<span> </span><kbd>k=3</kbd><span> </span>and<span> </span><kbd>m=1</kbd>:</p>
+<pre><strong>    $ ceph osd erasure-code-profile set broken_profile k=3 m=1<br/>    plugin=jerasure technique=reed_sol_van</strong></pre>
+<p>Now create a pool with it:</p>
+<pre><strong>    $ ceph osd pool create broken_ecpool 128 128 erasure broken_profile</strong></pre>
+<p>If we look at the output from<span> </span><kbd>ceph -s</kbd>, we will see that the PGs for this new pool are stuck in the creating state:</p>
+<div class="CDPAlignCenter CDPAlign"><img class="aligncenter size-full wp-image-153 image-border" src="assets/b122237f-d54b-43f4-9ea8-42b4f99ce063.png" style="width:59.75em;height:18.50em;"/></div>
+<p>The output of<span> </span><kbd>ceph health detail</kbd><span> </span>shows the reason, and we see the<span> </span><kbd>2147483647</kbd><span> </span>error:</p>
+<div class="CDPAlignCenter CDPAlign"><img class="aligncenter size-full wp-image-154 image-border" src="assets/058ca850-483c-48c4-8095-5a8c589faa9c.png" style="width:60.83em;height:9.50em;"/></div>
+<p>If you encounter this error and it is a result of your erasure profile being larger than your number of hosts or racks, depending on how you have designed your CRUSH map, then the only real solution is to either drop the number of shards or increase the number of hosts.</p>
+<p>To create an erasure-coded pool, issue a command, as shown in the following example:</p>
+<pre><strong>ceph osd pool create MyECPool 128 128 erasure MyECProfile</strong></pre>
+<p>This would create an erasure-coded pool with 128 placement groups, called <kbd>MyECPool</kbd>, using the erasure-coding profile, called <kbd>MyECProfile</kbd>. </p>
+<p><span>Although partial writes bring erasure-coded pools to near parity with replicated pools in terms of supported features, they still cannot store all the required data for RBDs. Therefore, when creating an RBD, you must place the RBD header object on a replicated RADOS pool and then specify that the data objects for that RBD should be stored in the erasure-coded pool.</span></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Scrubbing</h1>
+                </header>
+            
+            <article>
+                
+<p>To protect against bit-rot, Ceph periodically runs a process called scrubbing to verify the data stored across the OSDs. The scrubbing process works at the PG level and compares the contents of each of the PGs across all of the participating OSDs to check that each OSD has identical contents. If an OSD is found to have an object copy that differs to the others or is even missing the object, the PG is marked as inconsistent. Inconsistent PGs can be repaired by instructing Ceph to repair the PG; this is covered in further detail in <a href="bf50389d-8256-4cbf-ae32-01a494ab4189.xhtml">Chapter 11</a>, <em>Troubleshooting</em>.</p>
+<p>There are two types of scrubbing: normal and deep. Normal scrubbing simply checks for the existence of the object and that its metadata is correct; deep scrubbing is when the actual data is compared. Deep scrubbing tends to be much more I/O-intensive than normal scrubbing.</p>
+<p>Although BlueStore now supports checksums, the need for scrubbing is not completely redundant. BlueStore only compares the checksums against the data being actively read, and so for cold data that is very rarely written, data loss or corruption could occur and only the scrubbing process would detect this.</p>
+<p>There are a number of scrubbing tuning options that are covered later in <a href="5c0bf2de-c75e-4aa7-b3d9-8a1e038e3735.xhtml">Chapter 9</a>, <em>Tuning Ceph</em>; they influence the scheduling of when scrubbing takes place and the impact on client I/O.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Ceph storage types</h1>
+                </header>
+            
+            <article>
+                
+<p>Although Ceph provides basic object storage via the RADOS layer, on its own this is not very handy, as the scope of applications that could consume RADOS storage directly is extremely limited. Therefore, Ceph builds on the base RADOS capabilities and provides higher-level storage types that can be more easily consumed by clients.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">RBD</h1>
+                </header>
+            
+            <article>
+                
+<p>RBD for short, is how Ceph storage can be presented as standard Linux block devices. RBDs are composed of a number of objects, 4 MB by default, which are concatenated together. A 4 GB RBD would contain a 1,000 objects by default.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Thin provisioning</h1>
+                </header>
+            
+            <article>
+                
+<p>Due to the way RADOS works, RBDs are thin provisioned;  that is to say, the underlying objects are only provisioned once data is written to the logical block address that corresponds to that object. There are no safeguards around this; Ceph will quite happily let you provision a 1 PB block device on a 1 TB disk, and, as long as you never place more than 1 TB of data on it, everything will work as expected. If used correctly, thin provisioning can greatly increase the usable capacity of a Ceph cluster as VMs, which are typically one of the main use cases for RBDs, likely have a large amount of whitespace contained within them. However care should be taken to monitor the growth of data on the Ceph cluster; if the underlying usable capacity is filled, the Ceph cluster will effectively go offline until space is freed.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Snapshots and clones</h1>
+                </header>
+            
+            <article>
+                
+<p>RBDs support having snapshots taken of them. Snapshots are a read-only copy of the RBD image that persists its state from the point in time in which it was taken. Multiple snapshots can be taken to retain the RBDs history through time, if desired. The process of taking a snapshot of an RBD is extremely quick, and there is no performance penalty for reads going to the source RBD. However, when a write hits the source RBD for the first time, the existing contents of the object will be cloned for us by the snapshot, further I/O will have no further impact. This process is called <strong>copy-on-write</strong> and is a standard way of performing snapshots in storage products. It should be noted that this process is greatly accelerated in BlueStore, as a full object copy is not required as it was in filestore, although care should still be taken to make sure that RBDs that experience heavy write I/O are not left with open snapshots for long periods of time. As well as snapshots that require extra I/O during writes—as the copy-on-write process creates clones of the objects, additional cluster space is consumed—care should be taken to monitor space consumption when snapshots are in use.</p>
+<p>During the removal of a snapshot, the PGs containing snapshot objects enter a snaptrim state. In this state, the objects that had been cloned as part of the copy-on-write process are removed. Again, on BlueStore, this process has much less impact on the cluster load.</p>
+<p>RBDs also support snapshot layering; this is a process where a writable clone is made of an existing snapshot, which is itself a snapshot of an existing RBD. This process is typically used to create cloned VMs of master images; an initial RBD is created for a VM, to which an OS is installed. Snapshots are then taken throughout the master image's life to capture changes. These snapshots are then used as the basis for cloning new VMs. When an RBD snapshot is cloned initially, non objects of the objects in the RBD are required to be duplicated, as since they are identical to the source, they can simply be referenced by the clone. Once the cloned RBD starts getting data written to it, each object that is modified is then written out as a new object that belongs to the clone.</p>
+<p>This process of object referencing means that a large number of VMs that share the same OS template will likely consume less space than if each VM was individually deployed to fresh RBDs. In some cases, it may be desired to force a full clone where all the RBDs objects are duplicated; this process in Ceph is called flattening a clone.</p>
+<p>First, create a snapshot, called <kbd>snap1</kbd>, of a RBD image, called <kbd>test</kbd>, in the default RBD pool:</p>
+<pre><strong>rbd snap create rbd/test@snap1</strong></pre>
+<p>Confirm that the snapshot has been created by viewing all snapshots of the RBD:</p>
+<pre><strong>rbd snap ls rbd/test</strong></pre>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/09816dc7-d16f-4ac6-a7a4-9895670f13c5.png" style="width:27.67em;height:4.50em;"/></p>
+<p>For the snapshot to be cloned, it needs to be protected. As the clones are dependent on the snapshot, any modification to the snapshot would likely cause corruption in the clones:</p>
+<pre><strong>rbd snap protect rbd/test@snap1</strong></pre>
+<p>View the info of the snapshot; it can be seen that the snapshot is now protected:</p>
+<pre><strong>rbd info rbd/test@snap1</strong></pre>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/fd766cb7-32f3-42c5-a839-2003e0ab1409.png" style="width:42.58em;height:12.25em;"/></p>
+<p>Now a clone of the snapshot can be taken:</p>
+<pre><strong>rbd clone rbd/test@snap1 rbd/CloneOfTestSnap1</strong></pre>
+<p>You can confirm the relationship of the clone to the snapshot by viewing the <kbd>rbd info</kbd> of the clone:</p>
+<pre><strong>rbd info rbd/CloneOfTestSnap1</strong></pre>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/8a95445c-e8f1-4297-85ca-14a928663d78.png" style="width:40.17em;height:13.75em;"/></p>
+<p>Or you can do so by viewing the list of children of the snapshot:</p>
+<pre><strong>rbd children rbd/test@snap1</strong></pre>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/de66919a-b6fa-4e4e-a60e-18e58c14a65e.png" style="width:17.92em;height:3.50em;"/></p>
+<p>Now flatten the clone; this will make it a completely independent RBD image no longer dependent on the snapshot:</p>
+<pre><strong>rbd flatten rbd/CloneOfTestSnap1</strong></pre>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/9711ece6-7bc2-4121-98cd-ac953ebcd144.png" style="width:20.17em;height:3.17em;"/></p>
+<p>Confirm that the clone is now no longer attached to the snapshot; note the parent field is now missing:</p>
+<pre><strong>r<span>bd info rbd/CloneOfTestS</span><span>nap1</span></strong></pre>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/0250c040-ec7c-40c8-8741-308abd4c247d.png" style="width:47.75em;height:13.75em;"/></p>
+<p>Unprotect the snapshot:</p>
+<pre><strong>rbd snap unprotect rbd/test@snap1</strong></pre>
+<p>And finally delete it:</p>
+<pre><strong>rbd snap rm <span>rbd/test@snap1</span></strong></pre>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Object maps</h1>
+                </header>
+            
+            <article>
+                
+<p>As RBDs support thin provisioning and are composed of a large number of 4 MB objects, tasks such as determining what space the RBD is consuming, or cloning the RBD, would involve a large number of read requests to determine whether a certain object that is part of the RBD exists. To solve this problem, RBDs support object maps; these maps indicate which logical blocks of an RBD have been allocated and so greatly speed up the process of calculating which objects exist. The object map is stored as an object itself in the RADOS pool and should not be manipulated directly.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Exclusive locking</h1>
+                </header>
+            
+            <article>
+                
+<p>To try to prevent corruption from two clients writing to the same RBD at the same time, exclusive locking allows the client to acquire a lock to disallow any other client from writing to the RBD. It's important to note that clients can always request the lock to be transferred to themselves and so the lock is only to protect the RBD device itself; a non-clustered filesystem will still likely be corrupted if two clients try to mount it, regardless of the exclusive locking.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">CephFS</h1>
+                </header>
+            
+            <article>
+                
+<p>CephFS is a POSIX-compatible filesystem that sits on top of RADOS pools. Being POSIX-compliment means that it should be able to function as a drop-in replacement for any other Linux filesystem and still function as expected. There is both a kernel and userspace client to mount the filesystem on to a running Linux system. The kernel client, although normally faster, tends to lag behind the userspace client in terms of supported features and will often require you to be running the latest kernel to take advantage of certain features and bug fixes. A CephFS filesystem can also be exported via NFS or Samba to non-Linux-based clients, both software have direct support for talking to CephFS. This subject will be covered in more detail in the next chapter.</p>
+<p>CephFS stores each file as one or more RADOS objects. If an object is larger than 4 MB, it will be striped across multiple objects. This striping behavior can be controlled by the use of XATTRs, which can be associated with both files and directories, and can control the object size, stripe width, and stripe count. The default striping policy effectively concatenates multiple 4 MB objects together, but by modifying the stripe count and width, a RAID 0 style striping can be achieved.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">MDSes and their states</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">CephFS requires an additional component to coordinate client access and metadata; this component is called the <strong>Metadata</strong> <strong>Server</strong>, or <strong>MDS</strong> for short. Although the MDS is used to serve metadata requests to and from the client, the actual data read and written still goes directly via the OSDs. This approach minimizes the impact of the MDS on the filesystem's performance for more bulk data transfers, although smaller I/O-intensive operations can start to be limited by the MDS performance. The MDS currently runs as a single-threaded process and so it is recommended that the MDS is run on hardware with the highest-clocked CPU as possible.</p>
+<p class="mce-root">The MDS has a local cache for storing hot portions of the CephFS metadata to reduce the amount of I/O going to the metadata pool; this cache is stored in local memory for performance and can be controlled by adjusting the MDS cache memory-limit configuration<strong> </strong>option, which defaults to 1 GB.</p>
+<p><span>CephFS utilizes a journal stored in RADOS mainly for consistency reasons. The journal stores the stream of metadata updates from clients and then flushes them into the CephFS metadata store. If an MDS is terminated, the MDS that takes over the active role can then replay these metadata events stored in the journal. This process of replaying the journal is an essential part of the MDS becoming active and therefore will block until the process is completed. The process can be sped up by having a standby-replay MDS that is constantly replaying the journal that is ready to take over the primary active role in a much shorter amount of time. If you have multiple active MDSes, whereas a pure standby MDS can be a standby for any active MDS, standby-replay MDSes have to be assigned to a specific MDS rank.</span></p>
+<p>As well as the active and replaying states, an MDS can also be in several other states; the ones you are likely to see in the ceph status are listed for reference for when operating a Ceph cluster with a CephFS filesystem. The states are split into two parts: the part on the left side of the colon shows whether the MDS is up or down. The part on the right side of the colon represents the current operational state:</p>
+<ul>
+<li><kbd>up:active</kbd>: This is the normal desired state, as long as one MDS is in this state, clients can access the CephFS filesystem.</li>
+<li><kbd>up:standby</kbd>: This can be a normal state as long as one MDS is <kbd>up:active</kbd>. In this state, an MDS is online but not playing any active part in the CephFS infrastructure. It will come online and replay the CephFS journal in the event that the active MDS goes online.</li>
+<li><kbd>up:standby_replay</kbd>: Like the <kbd>up:standby</kbd> state, an MDS in this state is available to become active in the event of an active MDS going offline. However, a <kbd>standby_replay</kbd> MDS is continuously replaying the journal of MDS it has been configured to follow, meaning the failover time is greatly reduced. It should be noted that while a standby MDS can replace any active MDS, a <kbd>standby_replay</kbd> MDS can only replace the one it has been configured to follow.</li>
+<li><kbd>up:replay</kbd>: In this state, an MDS has begun taking over the active role and is currently replaying the metadata stored in the CephFS journal.</li>
+<li><kbd>up:reconnect</kbd>: If there were active client sessions active when the active MDS went online, the recovering MDS will try to re-establish client connections in this state until the client timeout is hit.</li>
+</ul>
+<p>Although there are other states an MDS can be in, it is likely that during normal operations they will not be seen and so have not been included here. Please consult the official Ceph documentation for more details on all available states.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Creating a CephFS filesystem</h1>
+                </header>
+            
+            <article>
+                
+<p>To create a CephFS filesystem, two RADOS pools are required: one to store the metadata and another to store the actual data objects. Although technically any existing RADOS pools can be used, it's highly recommended that dedicated pools are created. The metadata pool will typically contain only a small percentage of data when compared to the data pool and, so the number of PGs required when provisioning this pool can typically be set in the 64 - 128 range. The data pool should be provisioned much like an RBD pool and the number of PGs calculated to match the number of OSDs in the cluster and the share of data that the CephFS filesystem will store.</p>
+<p>At least one MDS will also need to be deployed, but it is recommended that, for any production deployment, at least two MDSes are deployed with one running as a standby or standby-replay.</p>
+<p>Edit the <kbd>/etc/ansible/hosts</kbd> file and add the server that will hold the mds role. The following example is using the <kbd>mon2</kbd> VM from the test lab in <a href="dd1d6803-6e40-4bfb-8150-b605bcc08d59.xhtml">Chapter 2</a>, <em>Deploying Ceph with Containers</em>:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/d106caf0-a351-43bd-9e28-cfe260bbbd5f.png" style="width:13.75em;height:8.17em;"/></p>
+<p>Now run the Ansible playbook again and it will deploy the <kbd>mds</kbd>:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/dac4ad29-1645-4124-b9a0-c124bf6a8fe1.png" style="width:36.33em;height:6.67em;"/></p>
+<p>Once the playbook has finished running, check that the <kbd>mds</kbd> is up and running; this can be viewed via the <kbd>ceph-s</kbd> output:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/8d112c02-1355-4cb9-8a5e-a9a42fe7b5df.png" style="width:29.25em;height:14.08em;"/></p>
+<p>Ansible should have provisioned data pools and metadata pools as part of the deployment process; this can be confirmed by running the following command from one of the monitor nodes:</p>
+<pre><strong>sudo ceph osd lspools</strong></pre>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/803785b4-7cc2-4033-9b9b-bb9940a5037b.png" style="width:36.08em;height:8.67em;"/></p>
+<p>From the preceding screenshot, we can see that pools 6 and 7 have been created for CephFS. If the pools have not been created, follow the steps at the start of this chapter on how to create RADOS pools. While the data pools may be created as erasure-coded pools, the metadata pool must be of the replicated type.</p>
+<p>The final step in creating a CephFS filesystem is to instruct Ceph to use the two created RADOS pools to build the filesystem. However, as in the previous steps, the Ansible deployment should have handled this. We can confirm by running the following command:</p>
+<pre><strong>sudo ceph fs status </strong></pre>
+<p>It will show the following if the CephFS filesystem has been created and is ready for service:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/5fd5e8f1-28fd-496a-aace-4296852540ce.png" style="width:46.00em;height:19.58em;"/></p>
+<p>If the CephFS filesystem was not created, use the following command to create it:</p>
+<pre><strong>sudo ceph fs create &lt;Filesystem Name&gt; &lt;Metadata Pool&gt; &lt;Data Pool&gt;</strong></pre>
+<p>Now that the CephFS filesystem is active, it can be mounted to a client and used like any other Linux filesystem. When mounting a CephFS fileystem, the <kbd>cephx</kbd> user key needs to be passed via the mount command. This can be retrieved from the keyrings stored in the <kbd>/etc/ceph/</kbd> directory. In the following example, we will use the admin keyring; in production scenarios, it is recommended that a specific <kbd>cephx</kbd> user is created:</p>
+<pre><strong>cat /etc/ceph/ceph.client.admin.keyring</strong></pre>
+<p class="mce-root CDPAlignCenter CDPAlign"><img src="assets/25b59cfe-f61a-475c-bf3c-64501f059b2d.png" style="width:33.67em;height:7.58em;"/></p>
+<p>The hashed key is what is required to mount the CephFS filesystem:</p>
+<pre><strong>sudo mount -t ceph 192.168.0.41:6789:/ /mnt -o name=admin,secret=AQC4Q85btsqTCRAAgzaNDpnLeo4q/c/q/0fEpw==</strong></pre>
+<div class="packt_tip">In this example, only a single monitor was specified; in production settings, it is recommended to supply all three monitor address in a comma-separated format to ensure failover.</div>
+<p>Here is confirmation that the filesystem is mounted:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/48e8b038-cf30-4601-a695-ab8df9fca54e.png" style="width:34.50em;height:11.67em;"/></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">How is data stored in CephFS?</h1>
+                </header>
+            
+            <article>
+                
+<p>To understand better how CephFS maps a POSIX-compatible filesystem over the top of an object store, we can look more closely at how Ceph maps file inodes to objects.</p>
+<p>First, let's look at a file called <kbd>test</kbd>, which is stored on a CephFS filesystem mounted under <kbd>/mnt/tmp</kbd>. The following command uses the familiar Unix <kbd>ls</kbd> command, but with some extra parameters to show more details, including the file inode number:</p>
+<pre><strong>ls -lhi /mnt/tmp/test</strong></pre>
+<p>The following screenshot is the output of the preceding command:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/cde14e6f-4e3f-4199-99e0-5927e18c382b.png"/></p>
+<p>The output shows that the file is 1 G in size and that the inode number is the long number at the far left.</p>
+<p>Next, by listing the objects stored in the CephFS data pool and greping for that number, we can find the object responsible for holding the filesystem details for that file. Before we can proceed; however, we need to convert the inode number that is stored in decimal into hex, as that is how CephFS stores the inode numbers as object names:</p>
+<pre><strong>printf "%x\n" 1099511784612</strong></pre>
+<p><span>The following screenshot is the output of the preceding command:</span></p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/db179865-0b16-46bf-bad7-173f7bb54c00.png"/></p>
+<p>Now we can find the object in the pool; note that this may take a long time on a CephFS pool with lots of data, as it will be listing every object in the background:</p>
+<pre class="mce-root"><strong>rados -p cephfs_data ls | grep 100000264a4 | wc -l</strong></pre>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/f1fdc352-b0c2-4c43-a853-7bb66f1bac50.png" style="width:37.17em;height:2.75em;"/></p>
+<p>Note that 256 objects were found. By default, CephFS breaks larger files up into 4 MB objects, 256 of which would equal the size of the 1 G file.</p>
+<p>The actual objects store the exact same data as the files viewable in the CephFS filesystem. If a text file is saved on a CephFS filesystem, its contents could be read by matching the underlying object to the inode number and using the <kbd>rados</kbd> command to download the object. </p>
+<p>The <kbd>cephfs_metadata</kbd> pool stores all the metadata for the files stored on the CephFS filesystem; this includes values such as modified time, permissions, file names, and file locations in the directory tree. Without this metadata, the data objects stored in the data pool are literally just randomly-named objects; the data still exists but is fairly meaningless to human operators. The loss of CephFS metadata therefore does not lead to actual data loss, but still makes it more-or-less unreadable. Therefore, care should be taken to protect metadata pools just like any other RADOS pool in your Ceph cluster. There are some advanced recovery steps that may assist in metadata loss, which are covered in <a href="953d93b9-5cc3-4ca2-abea-24b7dc802c37.xhtml">Chapter 12</a>, <em>D<span>isaster Recovery</span></em>.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">File layouts</h1>
+                </header>
+            
+            <article>
+                
+<p>CephFS allows you to alter the way files are stored across the underlying objects by using settings that are known as file layouts. File layouts allow you to control the stripe size and width and also which RADOS pool the data objects will reside in. The file layouts are stored as extended attributes on files and directories. A new file or directory will inherit its parent's file layouts settings; however, further changes to a parent directory's layout will not affect existing files.</p>
+<p class="mce-root">Adjusting the file striping will normally be done for performance reasons to increase the parallelism of reading larger files as a section of data will end up being spread across more OSDs. By default, there is no striping and a large file stored in CephFS will simply span across multiple objects of 4 MB in size. </p>
+<p>File layouts can also be used to alter which data pool the objects for a file are stored in. This may be useful to allow different directories to be used for hot and cold data, where the hot files may reside on a 3x SSD pool and the cold files on an erasure-coded pool backed by spinning disks. A good example of this is possibly having a sub directory called <kbd>Archive/</kbd>, where users can copy files that are no longer expected to be in daily use. Any file copied into this directory would be stored on the erasure-coded pool.</p>
+<p>File layouts can be viewed and edited by using the <kbd>setfattr</kbd> and <kbd>getfattr</kbd> tools:</p>
+<pre><strong>getfattr -n ceph.file.layout /mnt/test</strong></pre>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/8fac0a4a-84c6-4797-b871-f5a09db3e044.png"/></p>
+<p>It can be seen that the default file layout is storing the data objects for the test file in the <kbd>cephfs_data</kbd> pool. It can also be seen that the file is split into 4 MB objects and, due to the <kbd>stripe_unit</kbd> also being 4 MB and <kbd>stripe_count</kbd> being equal to 1, that no striping is being used.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Snapshots</h1>
+                </header>
+            
+            <article>
+                
+<p>CephFS also supports snapshots down to a per-directory level; the snapshot doesn't need to include the whole CephFS filesystem. Each directory on a CephFS filesystem contains a hidden <kbd>.snap</kbd> directory; when a new sub directory is created inside, a snapshot is effectively taken and the view inside this new sub directory will represent the state of the original directory at the point when the snapshot was taken.</p>
+<p>Multiple snapshots can be taken and browsed independently from each other, enabling the snapshots to be used as part of a short-term archiving scheme. One such use when CephFS is exported via Samba is to use the snapshot functionality to be exposed through the Windows Explorer previous versions tab.</p>
+<p>In the following example, a test file is created, a snapshot taken, and then the file is modified. By examining the contents of the live and the file in the snapshot, we can see how CephFS snapshots present themselves:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/e5bee441-3b39-43e1-add0-e2942ce6c65a.png" style="width:30.75em;height:8.58em;"/></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Multi-MDS</h1>
+                </header>
+            
+            <article>
+                
+<p>A new feature of CephFS is the support for multiple active MDSes. Previously, it was only recommended to have a single active MDS with one or more standby, which for smaller CephFS deployments was more than adequate. However, in larger deployments, a single MDS could possibly start to become a limitation, especially due to the single-threaded limitation of MDSes. It should be noted that multiple active MDSes are purely for increased performance and do not provide any failover or high availability themselves; therefore, sufficient standby MDSes should always be provisioned.</p>
+<p>When multiple active MDSes are present, the CephFS filesystem is split across each MDS so that the metadata requests are hopefully not all being handled by a single MDS anymore. This splitting process is done at a per-directory level and is dynamically adjusted based on the metadata request load. This splitting process involves the creation of new CephFS ranks; each rank requires a working MDS to allow it to become active.</p>
+<p>In the following example, three active MDS servers are in use in the Ceph cluster. The primary MDS running rank 0 always hosts the CephFS root. The second MDS is serving metadata for the vertically-striped pattern directories, as their metadata load is significantly high. All other directories are still getting their metadata served by the primary MDS as they have little-to-no activity, with the exception of the directory containing Cat Gifs; this directory experiences an extremely high metadata request load and so has a separate rank and MDS assigned all to itself, as shown by the horizontal pattern:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/18fb1e0f-6860-43c1-99eb-109cd0c5d358.png" style="width:48.83em;height:19.17em;"/></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">RGW</h1>
+                </header>
+            
+            <article>
+                
+<p>The <strong>RADOS Gateway</strong> (<strong>RGW</strong>) presents the Ceph native object store via a S3 or swift-compatible interface, which are the two most popular object APIs for accessing object storage, with S3 being the dominant one, mainly due to the success of Amazon's AWS S3. This section of the book will primarily focus on S3. </p>
+<div class="packt_infobox">RGW has recently been renamed to Ceph Object Gateway although both the previous names are still widely used.</div>
+<p class="mce-root">The radosgw component of Ceph is responsible for turning S3 and swift API requests into RADOS requests. Although it can be installed alongside other components, for performance reasons, it's recommended to be installed on a separate server. The radosgw components are completely stateless and so lend themselves well to being placed behind a load balancer to allow for horizontal scaling.</p>
+<p>Aside from storing user data, the RGW also requires a number of additional RADOS pools to store additional metadata. With the exception of the index pool, most of these pools are very lightly utilized and so can be created with a small amount of PGs, around 64 is normally sufficient. The index pools helps with the listing of bucket contents and so placing the index pool on SSDs is highly recommended. The data pool can reside on either spinning disks or SSDs, depending on the type of objects being stored, although object storage tends to be a fairly good match for spinning disks. Quite often, clients are remote and the latency of WAN connections offsets a lot of the gains to be had from SSDs. It should be noted that only the data pool should be placed on erasure-coded pools.</p>
+<p>Handily, RGW will create the required pools the first time it tries to access them, reducing the complexity of installation somewhat. However, pools are created with their default settings, and it may be that you wish to create an erasure-coded pool for data-object storage. As long as no access has been made to the RGW service, the data pool should not exist after creation, and it can therefore be manually created as an erasure pool. As long as the name matches the intended pool name for the RGW zone, RGW will use this pool on first access, instead of trying to create a new one.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Deploying RGW</h1>
+                </header>
+            
+            <article>
+                
+<p>We will use the Ansible lab deployed in <a href="dd1d6803-6e40-4bfb-8150-b605bcc08d59.xhtml">Chapter 2</a>, <em>Deploying Ceph with Containers</em>, to deploy a RGW.</p>
+<p>First, edit the <kbd>/etc/ansible/hosts</kbd> file and add the <kbd>rgws</kbd> role to the <kbd>mon3</kbd> VM:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/9cddfdbb-6e1d-4cce-a20a-653d11e99d4c.png" style="width:16.33em;height:9.58em;"/></p>
+<p>We also need to update the <kbd>/etc/ansible/group_vars/ceph</kbd> file to add the <kbd>radosgw_address</kbd> variable; it will be set to <kbd>[::]</kbd>, which means bind to all IPv4 and IPv6 interfaces:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/cd34c35f-5784-47c3-bee1-16359030f8db.png" style="width:42.83em;height:10.92em;"/></p>
+<p>Now run the Ansible playbook again:</p>
+<pre><strong>ansible-playbook -K site.yml</strong></pre>
+<p>After running, you should see it has successfully deployed the <kbd>RGW</kbd> component:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/19f2f834-c7ed-42e8-aed6-87bb5aff3ae6.png" style="width:38.58em;height:6.33em;"/></p>
+<p>Viewing the Ceph status from a monitor node, we can check that the <kbd>RGW</kbd> service has registered with the Ceph cluster and is operational:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/2ec09db0-549e-4fa2-a135-d552b668b8ab.png" style="width:28.33em;height:10.33em;"/></p>
+<p>Now that the RGW is active, a user account is required to interact with the S3 API, and this can be created using the <kbd>radosgw-admin</kbd> tool shown as follows:</p>
+<pre><strong>sudo radosgw-admin user create --uid=johnsmith --display-name="John Smith" --email=john@smith.com</strong></pre>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/66873c73-6500-431a-a675-ee5b4f6055bd.png" style="width:59.33em;height:16.58em;"/></p>
+<p>Note the output from the command, particularly the <kbd>access_key</kbd> and <kbd>secret_key</kbd>, these are used with S3 clients to authenticate with the RGW.</p>
+<p>To upload objects to our S3-capable Ceph cluster, we first need to create an S3 bucket. We will use the <kbd>s3cmd</kbd> tool to do this, which is shown as follows:</p>
+<pre><strong>sudo apt-get install s3cmd</strong></pre>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/33d77ab5-bdbb-4ba0-beac-ba6696e241ef.png" style="width:40.00em;height:16.00em;"/></p>
+<p>Now that <kbd>s3cmd</kbd> is installed, it needs to be configured to point at our RGW server; it has a built-in configuration tool that can be used to generate the initial configuration. During the configuration wizard, it will prompt for the access key and secret that was generated when the user account was created, which is shown as follows:</p>
+<pre><strong>s3cmd --configure</strong></pre>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/ce6a0468-5a10-4339-babd-f3be7af994ef.png"/></p>
+<p>The generated configuration will be pointing to Amazon's S3 service; the generated configuration file needs to be edited and a few options modified. Edit the <kbd>.s3cfg</kbd> file in your Linux user's home directory and make the following changes:</p>
+<pre><strong>nano .s3cfg</strong></pre>
+<p>Comment out the <kbd>bucket_location</kbd> variable:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/a99c45d8-cdd4-4811-85ce-a2437a31c6f3.png" style="width:22.58em;height:7.00em;"/></p>
+<p>Change the <kbd>host_base</kbd> and <kbd>host_buckets</kbd> to match the address of the RGW:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/99bf9dae-fdd0-4fe1-9150-a29b313452de.png" style="width:37.25em;height:2.50em;"/></p>
+<p>Save the file and quit back to the shell; <kbd>s3cmd</kbd> can now be used to manipulate your <kbd>s3</kbd> storage. The following example will create a <kbd>test</kbd> bucket where objects can be uploaded:</p>
+<pre><strong>s3cmd mb s3://test</strong></pre>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/c6579b14-567d-4e53-87e8-0bb8eb7f6485.png" style="width:26.25em;height:2.42em;"/></p>
+<p>You now have a fully functional S3-compatible storage platform ready to explore the world of object storage.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Summary</h1>
+                </header>
+            
+            <article>
+                
+<p>In this chapter, you learned about the differences between replicated and erasure-coded pools, and their strengths and weaknesses. Armed with this information, you should now be capable of making the best decision when it comes to deciding between replicated and erasure pools. You also have a more in-depth understanding of how erasure-coded pools function, which will aid planning and operations.</p>
+<p>You should now feel confident in deploying Ceph clusters to provide block, file, and object storage, and be able to demonstrate regular administrative tasks.</p>
+<p>In the next chapter, we will learn about librados and how to use it to make custom applications that talk directly to Ceph.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Questions</h1>
+                </header>
+            
+            <article>
+                
+<ol>
+<li>Name two different erasure-coding techniques.</li>
+<li>What is the process called when an erasure-coded pool does a partial write to an object?</li>
+<li>Why might you choose an erasure-coded profile with two parity shards?</li>
+<li>What is the process called to turn a cloned snapshot into a full-fat RBD image?</li>
+<li>What Ceph daemon is required to run a CephFS filesystem?</li>
+<li>Why might you choose to run multiple active metadata servers over a single one in a CephFS filesystem?</li>
+<li>What Ceph daemon is required to run a RGW?</li>
+<li>What two APIs is Ceph's RGW capable of supporting?</li>
+</ol>
+
+
+            </article>
+
+            
+        </section>
+    </body></html>

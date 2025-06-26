@@ -1,0 +1,410 @@
+<html><head></head><body>
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Integrating GitLab with CI/CD Tools</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">In this chapter, we will cover some of the integrations that are possible with GitLab. Most of the time, companies will not use one tool for their complete DevOps journey. GitLab encourages this for small to midsize companies, but the reality is that big enterprise customers use a mix of different tools and technologies. We will connect Jira to GitLab, as this tool is in use in a big portion of the enterprise market. Of course, the venerable Jenkins server has to be mentioned and tried, and modern organizations use Slack/Mattermost or other chat tools for real-time collaboration. We will finish this chapter with an example of how to utilize a basic webhook.</p>
+<p>In this chapter, we will cover the following topics:</p>
+<ul>
+<li class="mce-root"><span>Using Jira with GitLab</span></li>
+<li>Connecting with Jenkins</li>
+<li>Integrating with Mattermost</li>
+<li>Using webhooks for events</li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Technical requirements</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">For managing omnibus installs, there is one central configuration file called <kbd>gitlab.rb</kbd>. You need to create it or copy an example. There is a template available that you can find at<span> </span><a href="https://gitlab.com/gitlab-org/omnibus-gitlab/blob/master/files/gitlab-config-template/gitlab.rb.template">https://gitlab.com/gitlab-org/omnibus-gitlab/blob/master/files/gitlab-config-template/gitlab.rb.template</a>. It isn't updated after upgrades. In large parts of this chapter, I will quote and discuss parts of this file.</p>
+<p class="mce-root">The code examples for this chapter <span>are available in this book's GitHub repository at</span><span> <a href="https://github.com/PacktPublishing/Mastering-GitLab-12/tree/master/Chapter13" target="_blank">https://github.com/PacktPublishing/Mastering-GitLab-12/tree/master/Chapter13</a>.</span></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Using Jira with GitLab </h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">Jira is an IT project management tool that was created by Atlassian in 2002 and was first created as software for developers.</p>
+<p class="mce-root">Jira was originally an issue tracking tool, that is, a tool to list and manage tasks. A <em>task</em> can be anything: a problem that needs to be solved, a simple TODO, an application, and so on. However, you can also go much further and put your products, customers, companies, and so on into this tool.</p>
+<p class="mce-root">JIRA is also a <em>workflow engine</em>. This means that you can define <em>workflows</em> (in other words, processes) that your tasks must follow. This way, you can impose different processes per project or per task. An example of a simple workflow for a task of the TODO type is OPEN | IN PROGRESS | READY.</p>
+<p class="mce-root">For a different type of task, for example, an application to do something, you can set up this workflow: OPEN | CONFIRMED | APPROVED | READY.</p>
+<p class="mce-root">Through its integrations, GitLab can interface with Jira. Although GitLab already offers a lot of the project management features that Jira provides, in larger organizations, it can help integrate these tools. For instance, when overall project management is done in Jira, you can make sure that specific links are accessible in the GitLab workflow through commit messages, merge requests, and so on.</p>
+<p class="mce-root">As an example, let's create a project in Jira:</p>
+<ol>
+<li class="mce-root">We created an account on the Cloud offering from Atlassian (<a href="https://www.atlassian.com/enterprise/cloud">https://www.atlassian.com/enterprise/cloud</a>). When you have set up your instance in the Atlassian Cloud or on premise, continue to create a new project:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/7fb74f38-1196-4790-93b9-d89c41e6caa8.png" style="width:34.58em;height:17.17em;"/></p>
+<ol start="2">
+<li>When your project has been created, you will see the following screen:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/0f9dbce0-5d59-4ee4-b2ad-a919a8ea4261.png" style="width:32.17em;height:21.17em;"/></p>
+<ol start="3">
+<li class="mce-root">The next step is to create an issue in this project. Let's do that with minimal information and call it <kbd>Integrate GitLab and Jira</kbd>. You will see it create an issue with an ID of <kbd>GI-1</kbd>. We now have an issue in our project management tool, which we like to link to our GitLab instance:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/71cba23c-7968-41e5-8160-38080232d07f.png" style="width:43.75em;height:13.75em;"/></p>
+<ol start="4">
+<li class="mce-root">Now, we will create a special token in Jira, which we will use in GitLab to update the issue. Please visit <a href="https://id.atlassian.com">https://id.atlassian.com</a>, click <span class="packt_screen">Security</span>, and then click <span class="packt_screen">Create and manage API tokens</span>:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/333b5d30-3263-4715-97c0-7ee292d57c33.png" style="width:57.75em;height:26.42em;"/></p>
+<ol start="5">
+<li class="mce-root">Click <span class="packt_screen">Create API token</span>:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/46a9dec8-7f3f-4665-aaf3-5506d9878359.png" style="width:35.33em;height:13.42em;"/></p>
+<ol start="6">
+<li class="mce-root">After you have given it a nice name and clicked <span class="packt_screen">Create</span>, it will appear in the list:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/82dbf83b-c981-4620-afbf-d9fe3ab745ef.png" style="width:35.33em;height:16.00em;"/></p>
+<ol start="7">
+<li class="mce-root">Now, we need to head over to our GitLab instance to create the project that we want to connect to Jira:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/7841c2db-4952-4dde-9b40-682afd489b20.png" style="width:46.25em;height:31.92em;"/></p>
+<ol start="8">
+<li class="mce-root">When the project has been created, go to the settings for this project and look for Jira in integrations:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/a7ca08d7-df3d-423d-b1cd-326440f6c543.png" style="width:55.17em;height:37.92em;"/></p>
+<ol start="9">
+<li class="mce-root">You can choose whether comments can be created in Jira by following references in a <span class="packt_screen">Commit</span> or a <span class="packt_screen">Merge request</span>. You need to give the web URL for your Jira instance, which in our case is <kbd>https://joustie.atlassian.net</kbd>.</li>
+</ol>
+<p class="mce-root">Your username is the email address, and you can fill in your token that you created in Jira earlier.</p>
+<p class="mce-root">Now comes the harder part. When you change a Jira issue to another state, you need to provide a transition ID. In our example, this is <kbd>11</kbd>, <kbd>21</kbd>, <kbd>31</kbd>. Now, what is that and where do we find it? This is a good question, and all you need to do is call Jira's API. They represent the state an issue can be in, and you need to know this state in order to change them.</p>
+<p class="mce-root">In the following example, we called <kbd>https://joustie.atlassian.net/rest/api/2/issue/GI-1/transitions</kbd>.</p>
+<p class="mce-root">When you've found those IDs and saved the changes, Jira will test them, and hopefully, you'll receive the following feedback:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/e5c50e45-d0b9-4902-8a17-03cdceadf654.png" style="width:30.00em;height:11.83em;"/></p>
+<p class="mce-root">If you go back to the <span class="packt_screen">Integrations</span> page, note that the Jira integration is green. Green is good:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/270b742a-f362-4067-8e0a-2f94a1e28873.png" style="width:42.08em;height:34.67em;"/></p>
+<p class="mce-root">If something goes wrong or you would like to know more about these calls, you can consult <kbd>integrations_json.log</kbd> in the rails log directory. For instance, the successful call to activate Jira integration is as follows:</p>
+<pre class="mce-root"> {"severity":"INFO","time":"2019-03-02T16:48:49.466Z","correlation_id":"28a67335-4f3d-40ed-826d-8ca0d6d34f84","service_class":"JiraService","project_id":12,"project_path":"root/gitlab-integration","message":"Successfully posted","client_url":"https://joustie.atlassian.net"}<br/><br/></pre>
+<p>Now, you can resolve an issue in Jira through GitLab:</p>
+<pre class="mce-root"> Joosts-iMac:gitlab-integration joostevertse$ git commit -m "Initial commit: Resolves GI-1"<br/> [master (root-commit) 0418211] Initial commit: Resolves GI-1<br/> 1 file changed, 0 insertions(+), 0 deletions(-)<br/> create mode 100644 test.txt<br/><br/></pre>
+<p class="mce-root">In the project overview, you will find that the issue has moved to <span class="packt_screen">Done</span>:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/0f3f2d01-c116-43ab-bd76-852079793323.png" style="width:40.08em;height:13.83em;"/></p>
+<p class="mce-root">If you look in the issue itself, you will find that is has a status of <span class="packt_screen">Closed</span>:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/ffff1970-786b-4d66-b9fb-3791a7bcc615.png" style="width:59.33em;height:32.58em;"/></p>
+<p><span>As you can see, it is possible to integrate project management tools like Jira with GitLab and keep issues in sync. In this section, we have demonstrated how to integrate a cloud-based Jira offering with a local on-premise GitLab installation. Now, let's move on and connect with Jenkins.</span></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Connecting Jenkins to GitLab</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">Jenkins (a fork of the Hudson project) is a Continuous Integration platform. The platform is primarily intended for the repeated execution and monitoring of build tasks, as well as the automated building and testing of applications. The many freely available plugins make it very easy to expand the functionality of Jenkins. An example of this is its integration with other systems (such as Sonar, Jira, or CloudBees) or changing its look and feel. It is possible to build a complete Continuous Delivery pipeline by using the right plugins.</p>
+<p class="mce-root">There is also a GitLab plugin available to integrate Jenkins in a GitLab workflow. You can download and host Jenkins yourself, or buy capacity in the cloud.</p>
+<p class="mce-root">As an example, we have used a local Jenkins container and pulled a container from <a href="https://hub.docker.com/_/jenkins">https://hub.docker.com/_/jenkins</a>. Let's get started:</p>
+<ol>
+<li class="mce-root">When your Jenkins container has been configured and started, you need to make sure that the GitLab plugin has been installed:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/d56ffa79-c120-4a2d-824c-1b44c9199605.png" style="width:41.83em;height:31.75em;"/></p>
+<ol start="2">
+<li class="mce-root">Click on <span class="packt_screen">Manage Jenkins</span> | <span class="packt_screen">Manage Plugins</span>:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/028484bc-8e79-4eba-8424-f592a26bdf21.png" style="width:11.17em;height:2.58em;"/></p>
+<ol start="3">
+<li class="mce-root">If you click on the <span class="packt_screen">Available</span> tab and filter for GitLab, you can choose the <span class="packt_screen">GitLab</span> plugin:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/27eb9f83-ebd0-4422-8f81-bdd9f4021f37.png" style="width:54.33em;height:32.75em;"/></p>
+<ol start="4">
+<li class="mce-root">When it has been installed, you will see it appearing as a <span class="packt_screen">Success</span>:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/b601f76a-410a-4d8a-b000-c03ce816aa9f.png" style="width:27.67em;height:15.42em;"/></p>
+<ol start="5">
+<li class="mce-root">Now, go back to the <span class="packt_screen">Manage Jenkins</span> page, click <span class="packt_screen">Configure System</span>, and scroll to the <span class="packt_screen">GitLab</span> section.</li>
+</ol>
+<ol start="6">
+<li class="mce-root">Give the connection a name of your choice, provide the correct URL, and click <span class="packt_screen">Add</span> to get a GitLab API token. This API token can be generated in GitLab in the settings:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/53c81772-e64e-4ad3-81e3-546629a187f4.png" style="width:55.17em;height:31.75em;"/></p>
+<ol start="7">
+<li class="mce-root">You only need to fill in the API token here:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/3298f054-e460-4157-a94b-3cc4e3216e0d.png" style="width:23.00em;height:20.17em;"/></p>
+<ol start="8">
+<li class="mce-root">The next step is to create projects in Jenkins and GitLab (for this example). For this occasion, we chose a freestyle project and named it <kbd>petclinic</kbd>:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/2e2339c0-2f01-4f0f-8fff-6a99a4f9b26f.png" style="width:48.58em;height:38.75em;"/></p>
+<ol start="9">
+<li class="mce-root">We did the same for GitLab:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/78d67e70-0c8f-4ca9-abc8-7299e2245b29.png" style="width:57.17em;height:31.92em;"/></p>
+<ol start="10">
+<li class="mce-root">In your Jenkins project, scroll down to the <span class="packt_screen">Source Code Management</span> section and fill in the URL of your GitLab source code repository:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/10e461b6-b57c-4529-8544-4f2d52542ea8.png" style="width:37.17em;height:24.08em;"/></p>
+<ol start="11">
+<li class="mce-root">Next, click <span class="packt_screen">Add</span> to add credentials. You need to add a username and password to connect to your HTTP Git repository (or an SSH user/key or an API key):</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/d5d06fe3-6082-415c-8da7-9b6188278f53.png" style="width:29.00em;height:25.83em;"/></p>
+<ol start="12">
+<li class="mce-root">Then, close the popup and scroll down to the <span class="packt_screen">Build Triggers</span> section. You can then enable <span class="packt_screen">Build when a change is pushed to GitLab</span>. For this example, we have chosen to trigger on push events and opened merge request events:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/4fb36457-0bff-4985-9a52-5b14773b9bec.png" style="width:44.75em;height:32.42em;"/></p>
+<ol start="13">
+<li class="mce-root">Click on <span class="packt_screen">Save</span> to save your settings.</li>
+</ol>
+<div>
+<p><span>For testing and fast development, I recommend using ngrok. This is a secure tunnel program that you can use to connect a localhost to a dynamic URL hosting service. You can find the tool at <a href="http://ngrok.com">http://ngrok.com</a>. Download the binary and place it on the local path.</span></p>
+<p><span>We can use it to tunnel from the internet (where our GitLab lives in a cloud container) to our local Docker container running Jenkins.</span></p>
+</div>
+<p class="mce-root">Start ngrok to connect an internet URL to our local Jenkins running on <kbd>8080</kbd> in Docker:</p>
+<pre class="mce-root"><strong> Joosts-iMac:images_chapter12 joostevertse$ ngrok http 8080</strong></pre>
+<p>After starting ngrok, you will be presented with the following output:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/755ed7c4-a7b6-4e9f-a89e-f920abb08d07.png" style="width:38.50em;height:12.67em;"/></p>
+<p class="mce-root CDPAlignLeft CDPAlign">Now, change some code in the repository and push the code to GitLab:</p>
+<pre class="mce-root"><strong>Joosts-iMac:petclinic joostevertse$ git push -u origin master</strong><br/><strong> Enumerating objects: 130, done.</strong><br/><strong> Counting objects: 100% (130/130), done.</strong><br/><strong> Delta compression using up to 16 threads</strong><br/><strong> Compressing objects: 100% (119/119), done.</strong><br/><strong> Writing objects: 100% (130/130), 352.91 KiB | 12.17 MiB/s, done.</strong><br/><strong> Total 130 (delta 26), reused 0 (delta 0)</strong><br/><strong> remote: Resolving deltas: 100% (26/26), done.</strong><br/><strong> To https://gitlab.joustie.nl/root/petclinic.git</strong><br/><strong> * [new branch] master -&gt; master</strong><br/><strong> Branch 'master' set up to track remote branch 'master' from 'origin'.</strong><br/><strong> Joosts-iMac:petclinic joostevertse$</strong></pre>
+<p class="mce-root">You will notice the hook being triggered in ngrok:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/d2b95721-bd38-4f73-b67a-3b343f5a294c.png" style="width:34.92em;height:17.42em;"/></p>
+<p class="mce-root">By going to Jenkins, you will see that it receives an event and starts building the project:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/3415ec38-f749-495b-b625-9f111652c5ce.png" style="width:38.25em;height:31.50em;"/></p>
+<div>
+<p><span>As you can see, it's quite easy to connect Jenkins to GitLab. You can choose to let Jenkins react to different kinds of events in GitLab.</span></p>
+</div>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Integrating with Mattermost</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">Mattermost is the number one open source Slack alternative, and can be hosted on a proprietary platform that you manage yourself.</p>
+<p>When teams use these tools, they can become more productive because of direct communication via chat in specialized channels. There, they can exchange quick information bits <span>–</span> even files (images/video, anything) and datafiles that are used by applications.</p>
+<p class="mce-root">You can use Mattermost via a browser, or use the platform-specific app on your mobile device. No specific personal data is used other than your email address.<strong> </strong></p>
+<p class="mce-root">What is also one of its killer features is that it easily connects to third-party applications and systems such as GitLab, Jira Jenkins, Nagios, Zabbix, Kopano, and many more! The company has actually been bought by GitLab, and Mattermost is part of the omnibus installation. In other words, you can easily enable it and run it together with GitLab. ChatOps has been supported since GitLab Ultimate 10.6, but came to GitLab Core in 11.9.</p>
+<p class="mce-root">As an example, we will set up a new Mattermost server to integrate with a GitLab instance in order to use slash commands.</p>
+<p>Because Mattermost is part of the GitLab omnibus package, you can enable/install it by editing the <kbd>gitlab.rb</kbd> file, and use <kbd>gitlab-ctl</kbd> afterwards to reconfigure your instance.</p>
+<p>The configuration key to change in <kbd>gitlab.rb</kbd> is as follows:</p>
+<pre><strong>mattermost['enable'] = true</strong></pre>
+<p>After Mattermost has been started, you can go the integrations page of the settings of your project and search for the Mattermost slash command service. Click on <span class="packt_screen">Add to Mattermost</span>. This will only work automatically on Mattermost 3.4, so make sure that your omnibus package isn't too old.</p>
+<p class="mce-root">If Mattermost isn't installed on your server, you can pull a simple Mattermost image from Docker Hub. <kbd>mattermost/mattermost-preview</kbd> will do fine. Let's get started:</p>
+<ol>
+<li class="mce-root">When you log in for the first time in your container (by default, this is via <kbd>http://localhost:8065</kbd>), you have to create a user:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/6d527181-4175-465f-a20d-3fe0a8fde5ef.png" style="width:23.08em;height:40.58em;"/></p>
+<ol start="2">
+<li class="mce-root">After you have created the user, you will want to create a team:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/99e8a251-803f-4a3f-8d80-40d555ac161e.png" style="width:20.75em;height:18.17em;"/></p>
+<ol start="3">
+<li class="mce-root">That team needs a URL as well:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/394ebdc4-c7a8-4582-93f4-cfd0a9cb09b1.png" style="width:21.25em;height:25.42em;"/></p>
+<ol start="4">
+<li class="mce-root">You can click the hamburger menu to reveal options for the team:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/d4ac96fd-5819-44b9-a9b6-79f3dd2a35a3.png" style="width:17.83em;height:24.25em;"/></p>
+<ol start="5">
+<li class="mce-root">Go to the system console:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/cbe266b9-04a1-4246-a784-5dbcce55c6f4.png" style="width:57.67em;height:27.83em;"/></p>
+<ol start="6">
+<li class="mce-root">Look for <span class="packt_screen">Custom Integrations</span> and check that slash commands are enabled. Save the settings:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/16ddc1f3-237f-4607-8b01-2fcbf4a43054.png" style="width:42.58em;height:6.33em;"/></p>
+<ol start="7">
+<li class="mce-root">After this, click the hamburger menu and click <span class="packt_screen">Switch back to..</span><span class="packt_screen">.</span>. Clicking the hamburger menu in the team context, you can click <span class="packt_screen">Integrations</span>. Here, you can click on <span class="packt_screen">Slash Command</span>, where you will find a page where you can define a slash command that can be triggered by Mattermost:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/492f2e6d-19fb-4eea-bed7-2ac27b988dff.png" style="width:55.08em;height:17.00em;"/></p>
+<ol start="8">
+<li class="mce-root">The information we need to fill in here can be got from GitLab:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/a0b3dc65-146a-4af0-aa9b-5455813077dc.png" style="width:43.67em;height:52.75em;"/></p>
+<ol start="9">
+<li class="mce-root">Log in to GitLab and go to <span class="packt_screen">Integrations</span> in the settings part of your repository. Then, click <span class="packt_screen">Mattermost slash</span> command. Here is the information you need to fill in in Mattermost:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/9ebaf1b4-a128-4b43-a414-795ebecc44ca.png" style="width:32.83em;height:50.33em;"/></p>
+<ol start="10">
+<li class="mce-root">In the following screenshot, you can see the settings as we copied them. Click <span class="packt_screen">Save</span> or <span class="packt_screen">Update</span> when you are done:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/8f311cf7-1898-4c2c-b02f-4995ea08273a.png" style="width:40.58em;height:52.17em;"/></p>
+<ol start="11">
+<li class="mce-root">You will now be presented with a token to be used in GitLab. Copy the Mattermost token:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/8aac56da-f37e-4eda-bf77-5ae2d7f4b6ed.png" style="width:42.00em;height:14.83em;"/></p>
+<ol start="12">
+<li class="mce-root">Paste it into the settings page for your Mattermost integration in GitLab, and save the changes:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/1aff3dc7-5b3d-4f7e-b8ac-71931517af83.png" style="width:21.50em;height:9.75em;"/></p>
+<ol start="13">
+<li class="mce-root">Now, go to your team channel in Mattermost and press <kbd><em>/</em></kbd>. If you issue <kbd>/gitlab help</kbd>, Mattermost will ask you to connect your GitLab account:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/09de6f24-794b-4a9e-8517-bcc1e451fcf5.png" style="width:37.67em;height:4.25em;"/></p>
+<ol start="14">
+<li class="mce-root">You will be redirected to GitLab, where you will have to authorize the connection:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/9e9150a1-7789-4773-807d-ff534d587f2d.png" style="width:21.58em;height:11.83em;"/></p>
+<ol start="15">
+<li class="mce-root">Now, by going back to Mattermost and issuing <kbd>/gitlab help</kbd> once more, you will be presented with the options for the command. There are several, and these can help your support people run ChatOps:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/58376bf2-502f-47e0-bd60-a069ec887dff.png" style="width:28.92em;height:17.33em;"/></p>
+<ol start="16">
+<li class="mce-root">Let's create a new issue called <kbd>gitlab issue new test</kbd>:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/ec97f6b7-db38-4a3b-bbd5-3c28c625ca46.png" style="width:30.00em;height:13.92em;"/></p>
+<ol start="17">
+<li class="mce-root">If you go back to GitLab, you will find that a new issue has been created for the GitLab project:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/f740d6ac-6d12-4504-8d40-6dc08e3dfce7.png" style="width:36.83em;height:11.75em;"/></p>
+<p class="mce-root">The ultimate integration is to use CI command functions, as described here: <a href="https://docs.gitlab.com/ee/ci/chatops/">https://docs.gitlab.com/ee/ci/chatops/</a>. </p>
+<p>Since GitLab 11.9, ChatOps is even part of GitLab Core, so its functionality isn't limited to the GitLab Enterprise Edition.</p>
+<p>In this section, we have showed you how to integrate your GitLab repository issues with the Mattermost chat application. There are endless possibilities if you create your own slash commands. Now, let's take a look at using webhooks for events.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Using webhooks for events</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">Webhooks are used as a signal between applications. You can see it as a callback from a different context. This call is made with the HTTP protocol (possibly with SSL). An attempt is made to provide information as efficiently as possible and in real time, and JSON is usually used as a data format.</p>
+<p class="mce-root">The strength lies in the fact that as few operations as possible are necessary in order to get feedback. Usually, the most work lies in the implementation of the <em>signal</em>.</p>
+<p class="mce-root">For a proof of concept, consider the following. Let's assume that when we push new code to GitLab, we have to send a signal from GitLab to an application that we have built ourselves.</p>
+<p class="mce-root">To implement this model, we've chose the lightweight Flask micro-framework for Python:</p>
+<pre class="mce-root">from flask import Flask, request<br/>import json<br/>app = Flask(__name__)<br/><br/>def runsomething():<br/> print "This is triggered"<br/><br/>@app.route('/',methods=['POST'])<br/>def trigger():<br/> data = json.loads(request.data)<br/> print "New commit by: {}".format(data['commits'][0]['author']['name'])<br/> print "New commit by: {}".format(data['commits'][0]['author']['email'])<br/> print "New commit by: {}".format(data['commits'][0]['message'])<br/> <br/> runsomething()<br/> return "OK"<br/><br/>if __name__ == '__main__':<br/> app.run()</pre>
+<p class="mce-root">Let's run through this code step by step. In the following code, the basic app has been initiated. The imports are purely the basic Flask framework and, in particular, the request object. The app is instantiated:</p>
+<pre class="mce-root"> from flask import Flask, request<br/> import json<br/>  <br/> app = Flask(__name__)</pre>
+<p class="mce-root">The following function can be used to do the real work:</p>
+<pre class="mce-root"> def runsomething():<br/> print "This is triggered"</pre>
+<p class="mce-root">Then follows the method that is decorated with a route, and parses the request for certain information. There's no check here <span>–</span> just reading the information from the JSON webhook, running the <kbd>real work</kbd> function, and returning <kbd>OK</kbd>:</p>
+<pre class="mce-root">@app.route('/',methods=['POST'])<br/> def trigger():<br/> data = json.loads(request.data)<br/> print "New commit by: {}".format(data['commits'][0]['author']['name'])<br/> print "New commit by: {}".format(data['commits'][0]['author']['email'])<br/> print "New commit by: {}".format(data['commits'][0]['message'])<br/> <br/> runsomething()<br/> return "OK"</pre>
+<p class="mce-root">The following <kbd>main</kbd> part, combined with the first block, is part of the basic Flask implementation:</p>
+<pre class="mce-root"> if __name__ == '__main__':<br/> app.run()</pre>
+<p class="mce-root">When you run this code with <kbd>python server.py</kbd>, it will open port <kbd>5000</kbd> on the localhost:</p>
+<pre class="mce-root"><strong> Joosts-iMac:gitlab-webhook joostevertse$ python server.py</strong><br/><strong> * Running on http://127.0.0.1:5000/</strong></pre>
+<p class="mce-root">If we want something on the internet to connect to it, we can use the venerable ngrok to link the port:</p>
+<pre class="mce-root"><strong> Joosts-iMac:Downloads joostevertse$ ngrok http 5000</strong></pre>
+<p class="mce-root">ngrok is now running, as shown in the following screenshot:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/ce383744-7d32-4ecf-8250-99aa35a80f65.png" style="width:39.83em;height:17.83em;"/></p>
+<p class="mce-root">We can now define the webhook in GitLab. You can find it in the <span class="packt_screen">Settings</span> | <span class="packt_screen">Integrations</span> section of your GitLab project. After you have defined the hook, you can run a test to verify its operation:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/a9b63b7d-0496-46ce-b7c6-458c43efbbc2.png" style="width:62.50em;height:56.50em;"/></p>
+<p class="mce-root">We get the following result when a call is triggered through GitLab. This is the connection going through the ngrok proxy:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/596697cd-7869-4197-ba32-653667394906.png" style="width:34.08em;height:15.33em;"/></p>
+<p class="mce-root">In GitLab, if you click the <span class="packt_screen">Edit</span> button, you will see the result of the webhook call. It will contain the body that was sent:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/ebc6d6f9-aca8-4e30-81f6-dbe054499fb6.png" style="width:51.83em;height:36.42em;"/></p>
+<p class="mce-root">You will also see the response that was given by the other end. You can see the <span class="packt_screen">OK</span> response clearly:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/de6afa45-058e-4058-b30d-231a73d8b96c.png" style="width:20.92em;height:12.42em;"/></p>
+<p class="mce-root">The result of this call was that our custom method was triggered and some specific information such as author, email, and message was printed on stdout:</p>
+<pre class="mce-root"><strong>Joosts-iMac:gitlab-webhook joostevertse$ python server.py</strong><br/><strong>* Running on http://127.0.0.1:5000/</strong><br/><strong>New commit by: Joost</strong><br/><strong>New commit by: joustie@gmail.com</strong><br/><strong>New commit by: Added text</strong><br/><strong>This is triggered</strong><br/><strong>127.0.0.1 - - [03/Mar/2019 17:10:39] "POST / HTTP/1.1" 200 -</strong></pre>
+<p class="mce-root">We have seen that it is also possible to use a generic event mechanism such as webhooks. You can modify your own software or <strong>commercial-off-the-shelf</strong> (<strong>COTS</strong>) application to receive events from<span> GitLab.</span></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Summary</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">In this chapter, we discussed the ways of integrating GitLab with other products. Every integration has its own special instruction, but the basic idea is that you have to set up trust relationships and map attributes. GitLab is already shipped with a lot of possible integrations out of the box. These are called <strong>project services</strong>, and the documentation can be found here: <a href="https://docs.gitlab.com/ee/user/project/integrations/project_services.html">https://docs.gitlab.com/ee/user/project/integrations/project_services.html</a>. <span>This chapter concludes the third section of this book, in which we've discussed the GitLab workflow and the underlying rationale behind it.</span></p>
+<p class="mce-root"><span>In the next part of this book, we will discuss the most</span> successful<span> part of GitLab: GitLab CI and runners. We will start by talking about how to set up a project for GitLab CI.</span></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Questions</h1>
+                </header>
+            
+            <article>
+                
+<ol>
+<li>What is Jira used for?</li>
+<li>Jira is from which company?</li>
+<li>Which ID or IDs are needed to manipulate issues in Jira?</li>
+<li>Which project is Jenkins forked from?</li>
+<li>What mechanism does Jenkins use to extend functionality?</li>
+<li>What is ChatOps?</li>
+<li>How can you control things from a Mattermost channel?</li>
+<li>In GitLab, where can you find the status of a webhook?</li>
+</ol>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Further reading</h1>
+                </header>
+            
+            <article>
+                
+<ul>
+<li class="mce-root"><em>Jira 8 Essentials - Fifth Edition</em>, by <em>Patrick Lee</em>: <a href="https://www.packtpub.com/in/application-development/jira-8-essentials-fifth-edition">https://www.packtpub.com/in/application-development/jira-8-essentials-fifth-edition</a></li>
+<li class="mce-root"><em>Jenkins 2.x Continuous Integration Cookbook - Third Edition</em>, by <em>Mitesh Soni</em> and <em>Alan Mark Berg</em>: <a href="https://www.packtpub.com/in/networking-and-servers/jenkins-2x-continuous-integration-cookbook-third-edition">https://www.packtpub.com/in/networking-and-servers/jenkins-2x-continuous-integration-cookbook-third-edition</a></li>
+<li class="mce-root"><em>Jenkins Fundamentals</em>, by <em>Joseph Muli</em> and <em>Arnold Okoth</em>: <a href="https://www.packtpub.com/in/networking-and-servers/jenkins-fundamentals">https://www.packtpub.com/in/networking-and-servers/jenkins-fundamentals</a></li>
+<li class="mce-root"><em>GitLab ChatOps</em>: <a href="https://docs.gitlab.com/ee/ci/chatops/">https://docs.gitlab.com/ee/ci/chatops/</a></li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    </body></html>

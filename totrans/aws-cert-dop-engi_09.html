@@ -1,0 +1,354 @@
+<html><head></head><body><div id="sbo-rt-content"><div id="_idContainer102">
+			<h1 id="_idParaDest-183"><a id="_idTextAnchor188"/>Chapter 7: Using CloudFormation Templates to Deploy Workloads</h1>
+			<p>CloudFormation templates offer DevOps engineers an easy way to create, manage, and provision related resources automatically. They also allow you to stand up the same infrastructure over and over again quickly, be it for development, testing, production, or disaster recovery. They are not only an essential concept to know of, but also to understand for the DevOps professional exam. </p>
+			<p>In this chapter, we're going to cover the following main topics:</p>
+			<ul>
+				<li>Essential CloudFormation topics</li>
+				<li>Creating nested stacks with dependencies </li>
+				<li>Adding a helper script to a CloudFormation template</li>
+				<li>Understanding how to detect drift in previously created stacks</li>
+				<li>Using the <strong class="bold">Cloud Development Kit</strong> (<strong class="bold">CDK</strong>) as an open source framework</li>
+			</ul>
+			<h1 id="_idParaDest-184"><a id="_idTextAnchor189"/>Technical requirements </h1>
+			<p>In dealing with the CloudFormation templates, this chapter will be a bit more hands-on than previous chapters, which have focused more on theory. You should be comfortable with the YAML syntax. And at this point, you should be comfortable with both the AWS Management Console as well as the CLI. Most of the templates discussed in this chapter are too large to type out entirely on the following pages, as some CloudFormation templates can become a few thousand lines in length. We have included the templates discussed here in the GitHub repository for this book in the <strong class="source-inline">Chapter-7</strong> section: <a href="https://github.com/PacktPublishing/AWS-Certified-DevOps-Engineer-Professional-Certification-and-Beyond/tree/main/Chapter-7">https://github.com/PacktPublishing/AWS-Certified-DevOps-Engineer-Professional-Certification-and-Beyond/tree/main/Chapter-7</a>.</p>
+			<h1 id="_idParaDest-185"><a id="_idTextAnchor190"/>Essential CloudFormation topics</h1>
+			<p>As we look to make repeatable pieces of infrastructure that can be built with automation, having the correct <strong class="bold">Infrastructure as Code</strong> (<strong class="bold">IaC</strong>) tool allows for the implementation <a id="_idIndexMarker711"/>of these repeatable processes. It is these repeatable processes where the CloudFormation service comes into play. CloudFormation is IaC <a id="_idIndexMarker712"/>that can be checked into source control systems such as <strong class="bold">CodeCommit</strong> or <strong class="bold">GitHub</strong>. The fact that it is a piece of code allows it to be versioned <a id="_idIndexMarker713"/>and collaborated on with multiple team members. It can also be added to an automated build pipeline as part of a CI/CD process. </p>
+			<p>CloudFormation <a id="_idIndexMarker714"/>templates have the flexibility to be built in either the <strong class="bold">JSON</strong> or <strong class="bold">YAML </strong>programming languages. Using YAML allows you to put comments and use short codes <a id="_idIndexMarker715"/>in your template. However, you do need to stick to the strict YAML formatting guidelines. </p>
+			<p>Once you have created a template, especially one with the proper mappings and without hardcoded references, then it has the ability to be reused over and over again. This means that you can use it both in multiple regions and across numerous accounts.  </p>
+			<h2 id="_idParaDest-186"><a id="_idTextAnchor191"/>The anatomy of a CloudFormation template</h2>
+			<p>A CloudFormation template can contain many different sections. There is only one mandatory <a id="_idIndexMarker716"/>section when creating CloudFormation templates, and that is the <em class="italic">resources</em> section. Sections don't necessarily need to be added in a particular order; however, as you look at different examples, there is a logical order in the way that sections are structured since some sections reference other sections. </p>
+			<h3>Format version</h3>
+			<p>This is the <a id="_idIndexMarker717"/>version that the CloudFormation follows. It is an <em class="italic">optional</em> section. If added, it is usually the first section of the template.  </p>
+			<h3>Description</h3>
+			<p>The description is a small section of text that tells users about the template. It must always follow <a id="_idIndexMarker718"/>the format version of the template. Descriptions are beneficial as you start to gather a more extensive collection of templates and then have the ability to quickly know what the template's purpose is and what type of resources it will create. It is an <em class="italic">optional</em> section. </p>
+			<h3>Metadata</h3>
+			<p>This section <a id="_idIndexMarker719"/>contains objects that provide additional information about the template. It is an <em class="italic">optional</em> section.</p>
+			<h3>Parameters </h3>
+			<p>This is a section of values that can be passed into the template at runtime. Default values can <a id="_idIndexMarker720"/>also be defined in lieu of needing user input. These values can then be used when creating your resources. You can also refer to parameters from the <strong class="bold">Resources</strong> and <strong class="bold">Output </strong>sections of the template. This is an <em class="italic">optional</em> section. </p>
+			<h3>Rules</h3>
+			<p>Rules are used to validate one or more parameters that are transferred to a template at runtime. Rules can <a id="_idIndexMarker721"/>help enforce things such as making sure that a large enough EC2 instance is being spun up in a production environment or that particular subnets are used. Rules very often validate the input of parameters . This is an <em class="italic">optional</em> section. </p>
+			<h3>Mappings </h3>
+			<p>Using the intrinsic <strong class="source-inline">Fn:FindInMap</strong> function allows CloudFormation to find the corresponding <a id="_idIndexMarker722"/>key to the matching value. One of the most frequent scenarios for the use of the mappings section is when declaring the correct <strong class="bold">Amazon Machine Image</strong> (<strong class="bold">AMI</strong>) for particular regions being used, ensuring that the template is reusable in more than a single region. This is an <em class="italic">optional</em> section. </p>
+			<p>We will look a bit more into mappings when we look at the intrinsic <strong class="source-inline">Fn:FindInMap</strong> function.</p>
+			<h3>Conditions </h3>
+			<p>Although CloudFormation templates don't have a lot of logical programming available to them, conditions <a id="_idIndexMarker723"/>inside of the template allow for certain values to be assigned or certain resources in the template to be created based on values being present. A good example would be if the stack were being created in the test environment, then it would create a database. However, if it were being created in the production environment, it would not. This is an <em class="italic">optional </em>section.  </p>
+			<h3>Resources</h3>
+			<p>This section <a id="_idIndexMarker724"/>actually declares the resources and their properties that will be created by the CloudFormation template. Resources can be a whole variety of AWS services from EC2 instances to IAM users to even <strong class="bold">chatbots</strong> and <strong class="bold">Step Functions</strong>. There are few services that AWS offers that cannot be created via CloudFormation templates. This is a <em class="italic">required </em>section. </p>
+			<h3>Outputs </h3>
+			<p>Outputs allow for the declaration of a key-value pair along with a corresponding description that <a id="_idIndexMarker725"/>can be consumed by an end user once the stack has completed creation or can be consumed by another stack. In the case of an end user, you might want to output the URL or IP of an EC2 instance that has just been spun up so that you don't have to go hunting around the console for it. Alternatively, in the <a id="_idIndexMarker726"/>case of creating outputs for other stacks to consume, <strong class="bold">Amazon Resource Names</strong> (<strong class="bold">ARNs</strong>) are one of the main items that can be used in other stacks as reference points. This is an <em class="italic">optional </em>section. </p>
+			<h2 id="_idParaDest-187"><a id="_idTextAnchor192"/>Launching CloudFormation templates </h2>
+			<p>Once you have <a id="_idIndexMarker727"/>your template ready to go, then you <a id="_idIndexMarker728"/>can launch it from either the AWS Management Console or the <strong class="bold">Command-Line Interface</strong> (<strong class="bold">CLI</strong>). We will go through the process of using the template located in the GitHub repository named <strong class="source-inline">sqs-queues.yml</strong>. If you would like to follow along with the following exercise, then go to the repository and download this template. Alternatively, you can use one of your own CloudFormation templates, bearing in mind that the parameters and resources will not be the same as we go along, but the process will still follow the same steps: </p>
+			<ol>
+				<li>Take the downloaded template and upload it to your S3 bucket, which we created in <a href="B17405_04_Final_JM_ePub.xhtml#_idTextAnchor110"><em class="italic">Chapter 4</em></a>, <em class="italic">Amazon S3 Blob Storage</em>. (In our case, our bucket's name is <strong class="source-inline">devopspro-beyond</strong>.):<p class="source-code"><strong class="bold">$aws s3 cp sqs-queues.yml s3://devopspro-beyond/sqs-queues.yml</strong></p></li>
+				<li>Now that <a id="_idIndexMarker729"/>the template has been uploaded, log in to the AWS Management Console and navigate to the CloudFormation service page at <a href="https://us-east-2.console.aws.amazon.com/cloudformation/">https://us-east-2.console.aws.amazon.com/cloudformation/</a>.</li>
+				<li>Click the orange button on the right-hand side labeled <strong class="bold">Create stack</strong>.</li>
+				<li>Under <strong class="bold">Pre-requisite – Prepare template</strong>, make sure that the radio button is already selected for the <strong class="bold">Template is ready</strong> option:<div id="_idContainer089" class="IMG---Figure"><img src="Images/Figure_7.1_B17405.jpg" alt="Figure 7.1 – CloudFormation prerequisites&#13;&#10;" width="841" height="190"/></div><p class="figure-caption">Figure 7.1 – CloudFormation prerequisites</p></li>
+				<li>Under <strong class="bold">Specify template</strong>, make sure that that the <strong class="bold">Amazon S3 URL</strong> option is already selected and then in the URL field, type the value of the location of your template, which in our case is <a href="https://devopspro-beyond.s3.us-east-2.amazonaws.com/sqs-queues.yml">https://devopspro-beyond.s3.us-east-2.amazonaws.com/sqs-queues.yml</a>:<div id="_idContainer090" class="IMG---Figure"><img src="Images/Figure_7.2_B17405.jpg" alt="Figure 7.2 – CloudFormation Specify template screen&#13;&#10;" width="634" height="306"/></div><p class="figure-caption">Figure 7.2 – CloudFormation Specify template screen</p></li>
+				<li>Click the orange <strong class="bold">Next </strong>button at the bottom of the page. </li>
+				<li>We now need to fill out a few details before we can proceed. We'll start with the <strong class="bold">Stack name</strong>. Name your stack <strong class="source-inline">SQSqueue</strong> (no spaces are allowed). </li>
+				<li>Next, fill out <a id="_idIndexMarker730"/>the rest of the <strong class="bold">Parameters</strong> by adding your address for the <strong class="bold">AlarmEmail </strong>field and the name of the queue for the <strong class="bold">QueueName</strong> field. You can leave the other two values at their defaults. After you have done this, press the orange <strong class="bold">Next</strong> button at the bottom of the page:<div id="_idContainer091" class="IMG---Figure"><img src="Images/Figure_7.3_B17405.jpg" alt=" Figure 7.3 – Entering the parameters for the template &#13;&#10;" width="801" height="527"/></div><p class="figure-caption"> Figure 7.3 – Entering the parameters for the template </p></li>
+				<li>On the next page, labeled <strong class="bold">Configure stack options</strong>, scroll down to the bottom of the page and click on the orange <strong class="bold">Next</strong> button. </li>
+				<li>We are now at the point where we can review what we have entered, and if everything looks correct, scroll down to the bottom of the page and click the orange button, which is labeled <strong class="bold">Create Stack</strong>. </li>
+			</ol>
+			<p>Once we start the creation process, we will be taken to the <strong class="bold">Stacks</strong> screen, where we can see the <strong class="bold">CREATE_IN_PROGRESS</strong> notification while our stack is being created. </p>
+			<p>There is a menu at the top of this section that allows you to see the specific resources that each stack creates, specific stack info, any outputs that you have declared for the stack to show <a id="_idIndexMarker731"/>after its creation, the parameters you entered when creating the stack, the actual template used to create the stack, and change sets used on the stack. </p>
+			<p>When you launch a CloudFormation template, that template is saved in an S3 bucket, which AWS creates in the region in which you are launching the template if you have not previously saved the template into an S3 bucket. Each time that you either update the template or launch a new version, a new copy of the template is added to this bucket. </p>
+			<h3>Using the CLI to launch templates </h3>
+			<p>After going through all the steps from the Management Console to launch a template, we can <a id="_idIndexMarker732"/>see that if we are going to automate our deployments as part of a CI/CD pipeline, then doing this each and every time would not be practical. The AWS CLI does have a <strong class="source-inline">deploy</strong> command that allows us to launch a stack with one line. Before we run the command, be sure that you have downloaded the YAML template from the GitHub repository in the <strong class="source-inline">Chapter-7</strong> folder. Once downloaded, open up your terminal window and either copy or move that template to your working directory or change your working directory to where you have downloaded the template: </p>
+			<p>An example of the CLI command to launch a template is shown as follows:</p>
+			<p class="source-code">$aws cloudformation deploy --template my-template.json --stack-name CLI-stack --parameter-overrides Key1=Value1 Key2=Value2</p>
+			<p>With this single command, we have replicated all of the steps that we went through before. As noted previously, our template should be in an S3 bucket with a random name since <a id="_idIndexMarker733"/>we uploaded it as part of the creation process, and the CloudFormation service stored it on our behalf. </p>
+			<h2 id="_idParaDest-188"><a id="_idTextAnchor193"/>Using change sets </h2>
+			<p>If your CloudFormation stack needs to be updated, sometimes you may like to know and understand <a id="_idIndexMarker734"/>how the existing resources currently running will be affected. Change sets allow you to preview how changes will impact the currently running resources before any changes take place, and then allow you to cancel the update if the changes would be detrimental to current resources, or proceed if the change would execute as expected.   </p>
+			<p class="callout-heading">Note</p>
+			<p class="callout">Change sets don't tell you if your CloudFormation will run successfully upon execution. They can't foresee account limit updates that you might run into, or determine whether you possess the correct IAM permissions to update a resource. </p>
+			<h3>Steps to execute a change set </h3>
+			<p>Let's look <a id="_idIndexMarker735"/>at both the mandatory and optional steps required for executing a change set on a stack:</p>
+			<div>
+				<div id="_idContainer092" class="IMG---Figure">
+					<img src="Images/Figure_7.4_B17405.jpg" alt="Figure 7.4 – CloudFormation change sets&#13;&#10;" width="472" height="201"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 7.4 – CloudFormation change sets</p>
+			<p>With the <a id="_idIndexMarker736"/>basis for how to execute a change set under our belts, we will now update our original CloudFormation stack – <strong class="source-inline">SQSqueue</strong> – with a change set.</p>
+			<h3>Using a change set to update our stack</h3>
+			<p>If you <a id="_idIndexMarker737"/>haven't already done so, then download the template named <strong class="source-inline">sqs-queues_change_set.yml</strong> from the GitHub repository in the <strong class="source-inline">Chapter-7</strong> folder. This is the file that we will use to create our change set. Also, make sure that you have your browser open to the AWS Management Console and have navigated to the CloudFormation service, then proceed with the following steps: </p>
+			<ol>
+				<li value="1">From the CloudFormation Stacks page, you should see your <strong class="source-inline">SQSqueue</strong> stack in a <strong class="source-inline">CREATE_COMPLETE</strong> state. Click on the stack name to be taken to the page with details about the stack. This is where we can perform the change set: <div id="_idContainer093" class="IMG---Figure"><img src="Images/Figure_7.5_B17405.jpg" alt="Figure 7.5 – Our previously created CloudFormation stack  &#13;&#10;" width="738" height="464"/></div><p class="figure-caption">Figure 7.5 – Our previously created CloudFormation stack  </p></li>
+				<li>On the horizontal menu under the stack name, you will see a number of choices, including <strong class="bold">Change sets</strong> on the very right-hand side. Click on the <strong class="bold">Change sets</strong> option: <div id="_idContainer094" class="IMG---Figure"><img src="Images/Figure_7.6_B17405.jpg" alt="Figure 7.6 – CloudFormation stack menu with the Change sets option highlighted on the right&#13;&#10;" width="1265" height="90"/></div><p class="figure-caption">Figure 7.6 – CloudFormation stack menu with the Change sets option highlighted on the right</p></li>
+				<li>Once in the <strong class="bold">Change Sets</strong> section, click on the button labeled <strong class="bold">Create change set</strong>.</li>
+				<li>At this <a id="_idIndexMarker738"/>point, a new screen will appear with the heading <strong class="bold">Prerequisite – Prepare template</strong>. You will be presented with three choices. Select the choice in the middle that reads <strong class="bold">Replace current template</strong>: <div id="_idContainer095" class="IMG---Figure"><img src="Images/Figure_7.7_B17405.jpg" alt="Figure 7.7 – CloudFormation change sets Prepare template screen&#13;&#10;" width="867" height="146"/></div><p class="figure-caption">Figure 7.7 – CloudFormation change sets Prepare template screen</p></li>
+				<li>This will make another set of selections appear underneath the initial set of radio buttons. This time instead of uploading our template to S3 prior to creating the change set, we will upload our template (<strong class="source-inline">sqs-queues_change_set.yml</strong>) here using the <strong class="bold">Choose file</strong> button and selecting the <strong class="source-inline">YAML</strong> file that we downloaded previously from the GitHub repository. After you have uploaded the file, click the orange button labeled <strong class="bold">Next</strong>. </li>
+				<li>The next screen, <strong class="bold">Parameters</strong>, should confirm the parameters we entered previously when we first created our template. We are not changing any of the parameters at this time so just click the orange <strong class="bold">Next</strong> button at the bottom of the page. </li>
+				<li>On the next screen, <strong class="bold">Configure stack options</strong>, we do not make any changes. You can scroll down to the bottom of the page and click the orange <strong class="bold">Next</strong> button. </li>
+				<li>Now, finally, on the <strong class="bold">Review</strong> page, we will have to check one more option at the bottom of the page acknowledging that our new stack is going to create an IAM role needed for the Lambda function to be added. Under the <strong class="bold">Capabilities</strong> heading, click the check box acknowledging that this new template is creating IAM permissions. Once you have done this, you can click the orange button labeled <strong class="bold">Create change set</strong>. </li>
+				<li>A window <a id="_idIndexMarker739"/>should now pop up, giving you the option to name this change set before its actual creation. You may name the change set if you like, or just click the orange <strong class="bold">Create change set</strong> button at the bottom right. </li>
+				<li>Once the change set has been created, then you should see a status of <strong class="source-inline">CREATE_PENDING</strong> as CloudFormation does the calculations of what is actually about to be changed in the current stack based on what has been requested by the new template that you have created with the change set. Once completed, then the orange <strong class="bold">Execute</strong> button will appear on the top right-hand menu. Scroll down and look under the <strong class="bold">Changes</strong> header to see the two changes that will be executed on your stack. Once you are satisfied with the changes, scroll back up and click the orange <strong class="bold">Execute</strong> button: <div id="_idContainer096" class="IMG---Figure"><img src="Images/Figure_7.8_B17405.jpg" alt="Figure 7.8 – Changes to be executed on the stack by the change set &#13;&#10;" width="788" height="269"/></div><p class="figure-caption">Figure 7.8 – Changes to be executed on the stack by the change set </p></li>
+				<li>You will now be taken back to the <strong class="bold">Events</strong> section of your <strong class="source-inline">SQSqueue</strong> stack and see an <strong class="source-inline">UPDATE_IN_PROGRESS</strong> status until the update is complete.</li>
+			</ol>
+			<p>Just because you have created a change set doesn't mean that you have to execute it. You could have multiple change sets sitting in your <strong class="bold">Change set</strong> tab waiting for execution as you and your team think about which changes should be implemented. It's important <a id="_idIndexMarker740"/>to note that unless you delete a change set, then anyone with the permissions to your stack could execute it.</p>
+			<p>At this point, we have updated our original stack to add a Lambda function along with the IAM role, which the Lambda function needs in order to operate. Everything went smoothly during our operation, but what happens if we have conflicts, missing information, or errors in our template? We will find out next as we talk about the rollback features of CloudFormation. </p>
+			<h2 id="_idParaDest-189"><a id="_idTextAnchor194"/>Rollback features of CloudFormation</h2>
+			<p>If the operations fail when creating or updating a stack in CloudFormation, then the stack will <a id="_idIndexMarker741"/>roll back to its previous state. There is also a feature available known as a <strong class="bold">rollback trigger</strong>. These triggers allow you set user-defined <a id="_idIndexMarker742"/>alarms that CloudWatch can monitor and, in the case of failure, roll back the stack. </p>
+			<p>The monitoring period can be set to last from 0 to 180 minutes while your stack is being created or your change set is updating it. We will look at an example of creating a change set update next that includes a rollback trigger. </p>
+			<p>We could create a CloudWatch alarm to watch over our stack by using the CLI command like the following:</p>
+			<p class="source-code">aws cloudwatch put-metric-alarm --alarm-name "SQS_stack_errors"  \</p>
+			<p class="source-code">   --alarm-description "example alarm" --namespace "SQS_log_errors"  \</p>
+			<p class="source-code">   --metric-name Errors --statistic Maximum --period 10 \</p>
+			<p class="source-code">   --evaluation-periods 1 --threshold 0  \</p>
+			<p class="source-code">   --treat-missing-data notBreaching  \</p>
+			<p class="source-code">   --comparison-operator GreaterThanThreshold </p>
+			<p>Once we've created that alarm, we can use the ARN returned back to us for use in our rollback trigger. If you need to find the ARN, use the CloudWatch <strong class="source-inline">describe-alarms</strong> command:</p>
+			<p class="source-code">aws cloudwatch describe-alarms --alarm-names "SQS_stack_errors"</p>
+			<p>We need to create a piece of JSON code and push it to a variable in order to pass that ARN to our command-line option:</p>
+			<p class="source-code">RB_TRIGGER=$(cat &lt;&lt;EOF</p>
+			<p class="source-code">{</p>
+			<p class="source-code">  "RollbackTriggers": [</p>
+			<p class="source-code">    {</p>
+			<p class="source-code">      "Arn": "arn:aws:cloudwatch:us-east-2:470066103307:alarm:SQS_stack_errors",</p>
+			<p class="source-code">      "Type": "AWS::CloudWatch::Alarm"</p>
+			<p class="source-code">    }</p>
+			<p class="source-code">  ],</p>
+			<p class="source-code">  "MonitoringTimeInMinutes": 5</p>
+			<p class="source-code">}</p>
+			<p class="source-code">EOF</p>
+			<p class="source-code">)</p>
+			<p>This will <a id="_idIndexMarker743"/>now give us the information that we need in order to create the rollback trigger: </p>
+			<p class="source-code">aws cloudformation create-change-set \</p>
+			<p class="source-code">    --change-set-name "SQS-UPDATE" \</p>
+			<p class="source-code">    --stack-name "SQSqueue" \</p>
+			<p class="source-code">    --template-url "https://devopspro-beyond.s3.us-east-2.amazonaws.com/sqs-queues_change_set.yml" \</p>
+			<p class="source-code">    --change-set-type "UPDATE" \</p>
+			<p class="source-code">    --parameters ParameterKey=QueueName,ParameterValue=chapter7 \</p>
+			<p class="source-code">    --capabilities CAPABILITY_IAM \</p>
+			<p class="source-code">    --rollback-configuration "$RB_TRIGGER" </p>
+			<p>Currently, only a <a id="_idIndexMarker744"/>CloudWatch alarm is supported as a monitor for a rollback trigger. </p>
+			<p>We will cover CloudWatch alarms in greater detail in <a href="B17405_15_Final_JM_ePub.xhtml#_idTextAnchor381"><em class="italic">Chapter 15</em></a>, <em class="italic">CloudWatch Metrics and Amazon EventBridge.</em> </p>
+			<h2 id="_idParaDest-190"><a id="_idTextAnchor195"/>Intrinsic functions in CloudFormation </h2>
+			<p>CloudFormation has several functions built into it that work with both JSON and YAML templates <a id="_idIndexMarker745"/>to expand the power and capabilities of the templates. We have the ability to stack or combine intrinsic functions. </p>
+			<p class="callout-heading">Note</p>
+			<p class="callout">Intrinsic functions can <a id="_idIndexMarker746"/>only be used on certain sections of a CloudFormation template. As of the publishing of this book, intrinsic functions can be used in resource properties, outputs, metadata attributes, and update policy attributes.</p>
+			<p>We will now look at some of the more common intrinsic functions, along with some examples of their usage. There are additional functions available for use in the YAML templates. In the function headings, the short form, will be shown if available after the original code, separated by a pipe: </p>
+			<ul>
+				<li><strong class="source-inline">Fn::FindInMap | !FindInMap</strong><p>The <strong class="source-inline">FindInMap</strong> function returns a value based on the key in the <strong class="source-inline">Mappings</strong> section:</p><p class="source-code"><strong class="bold">Mappings: </strong></p><p class="source-code"><strong class="bold">  RegionMap: </strong></p><p class="source-code"><strong class="bold">    us-east-1: </strong></p><p class="source-code"><strong class="bold">      HVM64: "ami-032930428bf1abbff"</strong></p><p class="source-code"><strong class="bold">    us-east-2:</strong></p><p class="source-code"><strong class="bold">      HVM64: "ami-027cab9a7bf0155df"  </strong></p><p class="source-code"><strong class="bold">    us-west-1: </strong></p><p class="source-code"><strong class="bold">      HVM64: "ami-088c153f74339f34c"</strong></p><p class="source-code"><strong class="bold">    eu-west-1: </strong></p><p class="source-code"><strong class="bold">      HVM64: "ami-015232c01a82b847b"</strong></p><p class="source-code"><strong class="bold">    ap-southeast-1: </strong></p><p class="source-code"><strong class="bold">      HVM64: "ami-0ba35dc9caf73d1c7"</strong></p><p class="source-code"><strong class="bold">    ap-northeast-1: </strong></p><p class="source-code"><strong class="bold">      HVM64: "ami-0b2c2a754d5b4da22"</strong></p><p class="source-code"><strong class="bold">Resources: </strong></p><p class="source-code"><strong class="bold">  EC2Instance: </strong></p><p class="source-code"><strong class="bold">    Type: "AWS::EC2::Instance"</strong></p><p class="source-code"><strong class="bold">    Properties: </strong></p><p class="source-code"><strong class="bold">      ImageId: !FindInMap</strong></p><p class="source-code"><strong class="bold">        - RegionMap</strong></p><p class="source-code"><strong class="bold">        - !Ref 'AWS::Region'</strong></p><p class="source-code"><strong class="bold">        - HVM64</strong></p><p class="source-code"><strong class="bold">      InstanceType: t2.small</strong></p></li>
+				<li><strong class="source-inline">Fn::GetAZs | !GetAZs</strong><p>The <strong class="source-inline">GetAZs</strong> function will return the list of Availability Zones in a given region. This can be especially helpful for creating dynamic templates that move from region to region:  </p><p class="source-code"><strong class="bold">PublicSubnet1:</strong></p><p class="source-code"><strong class="bold">    Type: AWS::EC2::Subnet</strong></p><p class="source-code"><strong class="bold">    Properties:</strong></p><p class="source-code"><strong class="bold">      AvailabilityZone:</strong></p><p class="source-code"><strong class="bold">        Fn::Select: </strong></p><p class="source-code"><strong class="bold">        - 0</strong></p><p class="source-code"><strong class="bold">        - Fn::GetAZs: ""</strong></p></li>
+				<li><strong class="source-inline">Fn::GetAtt</strong><p>The <strong class="source-inline">GetAtt</strong> function is helpful for getting an attribute, especially an ARN, from a <a id="_idIndexMarker747"/>resource that was created previously in the template. This function in particular is one that makes CloudFormation templates especially dynamic: </p><p class="source-code"><strong class="bold">SourceSecurityGroupName: !GetAtt EC2.SourceSecurityGroup.GroupName</strong></p></li>
+			</ul>
+			<h3>Condition functions </h3>
+			<p>The optional conditions section contains statements that define the circumstances where <a id="_idIndexMarker748"/>resources may or may not be created or configured based on dynamic options. </p>
+			<p>Scenarios for the use of conditions in CloudFormation templates include the following: </p>
+			<ul>
+				<li>You are trying to use the same template for both the DEV and PROD environments without having to change anything except for possibly parameter values.</li>
+				<li>You want to specify the number of EBS volumes to mount via a drop-down list. </li>
+				<li>You want to create a CloudWatch dashboard or not based on user selection.<p class="callout-heading">Note</p><p class="callout">During a stack update, you cannot update conditions by themselves. You can update conditions only when you include changes that add, modify, or delete resources. </p></li>
+			</ul>
+			<p>You can use condition functions to help evaluate items such as AWS-provided variables or input gathered from parameters and then create additional resources if certain conditions apply:</p>
+			<ul>
+				<li><strong class="source-inline">Fn::And</strong><p>This function returns <strong class="source-inline">true</strong> if all the specified conditions passed to it return <strong class="source-inline">true</strong>.</p></li>
+				<li><strong class="source-inline">Fn::Equals</strong><p>This function compares two different values and then returns <strong class="source-inline">true</strong> if the values are equal.</p><p>In the <a id="_idIndexMarker749"/>following example, the template will or won't create <strong class="source-inline">Public Subnets</strong> based on a value passed in the <strong class="source-inline">Parameters</strong> section of the template: </p><p class="source-code"><strong class="bold">Conditions:</strong></p><p class="source-code"><strong class="bold">  PublicSubnetsCondition:</strong></p><p class="source-code"><strong class="bold">      Fn::Equals: [ !Ref CreatePublicSubnets, "true" ]</strong></p><p class="source-code"><strong class="bold">  NoPublicSubnetsCondition:</strong></p><p class="source-code"><strong class="bold">      Fn::Equals: [ !Ref CreatePublicSubnets, "false" ]</strong></p></li>
+				<li><strong class="source-inline">Fn::If </strong><p>This returns one value if the specified condition evaluates to <strong class="source-inline">true</strong>, and another value if the specified condition evaluates to <strong class="source-inline">false</strong>. </p></li>
+				<li><strong class="source-inline">Fn::Not</strong><p>This returns <strong class="source-inline">true</strong> for a condition that evaluates to <strong class="source-inline">false</strong>, and returns <strong class="source-inline">false</strong> for a condition that evaluates to <strong class="source-inline">true</strong>. </p></li>
+				<li><strong class="source-inline">Fn::Or</strong><p>This returns <strong class="source-inline">true</strong> if any of the specified conditions evaluate to <strong class="source-inline">true</strong>. </p></li>
+			</ul>
+			<h2 id="_idParaDest-191"><a id="_idTextAnchor196"/>CloudFormation best practices </h2>
+			<p>As you start to work to build out your IaC in CloudFormation templates, there are some best practices <a id="_idIndexMarker750"/>and recommendations to follow that have been set forth by AWS. These tips can help you more effectively organize and plan your resource creation, along with minimizing the time that you spend troubleshooting initial runs of your templates. </p>
+			<h3>Don't embed sensitive information in your templates</h3>
+			<p>Rather than placing secrets or sensitive information that could be compromised directly in a CloudFormation template, <em class="italic">store secrets inside of AWS Secrets Manager</em>. Even better, the <a id="_idIndexMarker751"/>best practice is to use a <em class="italic">dynamic reference</em>. A dynamic reference allows you to cite an external value in <strong class="source-inline">Systems Manager</strong> (<strong class="source-inline">SSM</strong>) Parameter Store or AWS Secrets Manager. For SSM Parameter Store, it supports both <strong class="source-inline">ssm</strong>, which are plaintext values, and <strong class="source-inline">ssm-secure</strong>, which are encrypted values. </p>
+			<p>So instead of using template-based parameters for the database username and password that you create, your RDS resource block can look like this:</p>
+			<p class="source-code">  MySQLInstance:</p>
+			<p class="source-code">    Type: 'AWS::RDS::DBInstance'</p>
+			<p class="source-code">    Properties:</p>
+			<p class="source-code">      DBName: MyRDSInstance</p>
+			<p class="source-code">      AllocatedStorage: '20'</p>
+			<p class="source-code">      DBInstanceClass: db.t2.micro</p>
+			<p class="source-code">      Engine: mysql</p>
+			<p class="source-code">      MasterUsername: '{{resolve:secretsmanager:MyRDSSecret:SecretString:username}}'</p>
+			<p class="source-code">      MasterUserPassword: '{{resolve:secretsmanager:MyRDSSecret:SecretString:password}}'  </p>
+			<h3>Use AWS-specific parameter types </h3>
+			<p>To make AWS specialized parameter input easier on both yourself and your users, especially <a id="_idIndexMarker752"/>when asking for items that could need looking up in your account. Rather then use a string for the type of parameter you can define the AWS specific type of parameter. These could be items such as security group IDs, VPC IDs, or Route53 HostedZone IDs. A good example of this would be <strong class="source-inline">AWS::EC2::KeyPair::KeyName</strong>, which would then provide a dropdown of the EC2 keypairs available. </p>
+			<h3>Make use of parameter constraints </h3>
+			<p>If you are not using an AWS-specific parameter and using a string parameter, the use of parameter <a id="_idIndexMarker753"/>constraints can help catch user mistakes on parameter entry before the template even starts to create and then has to take the time to roll back. Parameter constraints are constructed like regular expressions and can also have a description for the user so that they have a better understanding of what needs to be entered.  </p>
+			<h3>Understand how to use AWS::CloudFormation::Init to deploy software to EC2 instances </h3>
+			<p>When you launch an EC2 instance from a CloudFormation template, software running on <a id="_idIndexMarker754"/>that instance can be installed and configured using the <strong class="source-inline">cfn-init</strong> helper script and the <strong class="source-inline">AWS::CloudFormation::Init</strong> resource. These helper scripts can be used to install not only system scripts but also necessary system packages via the OS package manager, such as <strong class="source-inline">apt</strong> or <strong class="source-inline">yum</strong>. </p>
+			<h3>Modularize your templates </h3>
+			<p>Making your templates modular allows you to accomplish a few things at the same time. The first <a id="_idIndexMarker755"/>and most important is to make your templates reusable. This becomes especially relevant as we start talking about nested templates. The second is to allow multiple team members to concentrate on the smaller templates where they have more subject matter expertise. </p>
+			<h3>Lint templates before attempting to launch</h3>
+			<p>Just like any other form of code, CloudFormation templates should go through a verification process to make sure that there are no formatting issues with the template before you <a id="_idIndexMarker756"/>attempt to launch it. There is a built-in template checker right from the AWS CLI that you can use to find any issues that might be present in your templates. </p>
+			<p>The AWS CloudFormation Linter (<strong class="source-inline">cfn-lint</strong>) is an open source tool that intergrates into most IDEs and is a tool that can be run either via the command line, inside of the IDE itself, or integrated into a CI/CD pipeline. The tool will validate both JSON and YAML templates and includes additional checks for things in line with CloudFormation best practices. </p>
+			<p class="callout-heading">Note</p>
+			<p class="callout">Although these best practices don't usually appear in the context of the test questions, these are more relevant for day-to-day usage of CloudFormation and making you the best DevOps professional that you can be.  </p>
+			<h1 id="_idParaDest-192"><a id="_idTextAnchor197"/>Creating nested stacks with dependencies </h1>
+			<p>As you start to organize your templates logically, you will find that breaking your larger templates <a id="_idIndexMarker757"/>up into smaller, more manageable pieces is a smart strategy. It will not only make them easier to work with but also allows for greater reusability with each template having a specific purpose, such as creating a VPC with subnets or a set of reusable IAM roles. Adding outputs to these smaller templates can allow other templates to use the resources other templates have created previously, acting like building blocks stacked on top of each other to create a complete solution. This also allows multiple team members to work on separate sections of the cloud infrastructure as each person can concentrate on their area of expertise. If you have a team member whose strength is networking then they can concentrate on the VPC and networking pieces of the stacks. If you have another team member who has a background in databases, then they can concentrate on the nested piece that creates and configures the database(s), including any specialized parameter groups for that particular database engine. </p>
+			<p>Nested stacks all start with a root or parent stack, depicted in <em class="italic">Figure 7.9</em> with the letter <strong class="bold">A</strong>. The root stack then has other child stacks as its resources instead of other AWS services. We can also see in the diagram that the stack labeled <strong class="bold">B</strong> is providing outputs that are being consumed by level <strong class="bold">C</strong>. The stack on level <strong class="bold">C</strong> creates another child stack, as well as resources whose outputs are consumed by the stack on level <strong class="bold">D</strong>: </p>
+			<div>
+				<div id="_idContainer097" class="IMG---Figure">
+					<img src="Images/Figure_7.9_B17405.jpg" alt="Figure 7.9 – CloudFormation nested stacks&#13;&#10;" width="186" height="357"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 7.9 – CloudFormation nested stacks</p>
+			<p>Another <a id="_idIndexMarker758"/>benefit that nested stacks can provide is the ability to go beyond the 200 resource limit for CloudFormation templates.</p>
+			<p class="callout-heading">Note</p>
+			<p class="callout">Nested stacks can be more complex to troubleshoot as a whole. If you run into errors while creating and deploying nested CloudFormation stacks, then try deploying just the single template that is causing you issues and then update for your changes. </p>
+			<h2 id="_idParaDest-193"><a id="_idTextAnchor198"/>Packaging up your nested stack for deployment </h2>
+			<p>Once you <a id="_idIndexMarker759"/>have all your templates ready to upload to S3, then you can package them all together using the AWS CLI. Since nested stacks need their child templates to be in S3 for deployment, this saves you time in having to upload each template individually. It will then generate a new template for us and give us the command for deploying the full nested stack using that newly generated template. The generic code for creating a CloudFormation package looks like the following:</p>
+			<p class="source-code">$aws cloudformation package \</p>
+			<p class="source-code"> --template-file /path_to_template/template.json \</p>
+			<p class="source-code"> --s3-bucket bucket-name \</p>
+			<p class="source-code"> --output-template-file packaged-template.json</p>
+			<p>We will look at this command in greater depth when we go through our exercise of creating a <a id="_idIndexMarker760"/>nested template with the AWS CLI. </p>
+			<p>Let's recap what the <strong class="source-inline">package</strong> command does:</p>
+			<ul>
+				<li>It creates a ZIP file with all of your child template files and extra code such as <strong class="source-inline">lambda</strong> code. </li>
+				<li>It uploads those items into the S3 bucket designated by you. </li>
+				<li>It generates a new template with your local templates and replaces it with the S3 URIs.</li>
+			</ul>
+			<h2 id="_idParaDest-194"><a id="_idTextAnchor199"/>Creating a nested stack using the AWS CLI</h2>
+			<p>In the following exercise, we will create a nested stack using a set of templates that you can find <a id="_idIndexMarker761"/>on the GitHub repository under the <strong class="source-inline">Chapter-7/nested</strong> directory. Download all of these YAML templates before you begin the following exercise. Also, make a note of the S3 bucket that you want to deploy the package to. As we noted earlier when we showed the example command, an S3 bucket is necessary as part of the CLI command to upload the files:</p>
+			<p class="figure-caption"> </p>
+			<div>
+				<div id="_idContainer098" class="IMG---Figure">
+					<img src="Images/Figure_7.10_B17405.jpg" alt="Figure 7.10 – Items created in the nested stack exercise&#13;&#10;" width="417" height="270"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 7.10 – Items created in the nested stack exercise</p>
+			<p>The diagram in <em class="italic">Figure 7.10</em> shows what we are about to package and deploy using our nested template:</p>
+			<ol>
+				<li value="1">Open up <a id="_idIndexMarker762"/>your terminal so that you have access to your AWS CLI.</li>
+				<li>Now navigate to the folder where you have downloaded all of the files to create the nested stack. If you have downloaded the book's entire GitHub repository, then the path will be <strong class="source-inline">Chapter-7/nested</strong>. </li>
+				<li>Because the packaging for nested stacks only works one level deep, we will have to manually upload our <strong class="source-inline">nested_dynamo.yml</strong> template (make sure that you substitute your own bucket name when performing the following command):<p class="source-code"><strong class="bold">aws s3 cp nested_dynamo.yml s3://devopspro-beyond/</strong></p></li>
+				<li>Open the <strong class="source-inline">nested_root.yml</strong> file and edit the default value for the S3 URL for the HTTPS value of the bucket where you placed the <strong class="source-inline">nested_dynamo.yml</strong> file. </li>
+				<li>Once in the nested directory, perform the following command:<p class="source-code"><strong class="bold">aws cloudformation package \</strong></p><p class="source-code"><strong class="bold">  --template-file nested_root.yml \</strong></p><p class="source-code"><strong class="bold">  --s3-bucket devopspro-beyond \</strong></p><p class="source-code"><strong class="bold">  --output-template-file packaged_template.yml</strong></p></li>
+				<li>Once completed, the <strong class="source-inline">package</strong> command should tell you that it was successful and give you a cut and paste command to run, where you need to substitute the stack name at the end of the command: <p>Successfully packaged artifacts and wrote output template to file <strong class="source-inline">packaged_template.yml</strong>.</p><p>Execute the following command to deploy the packaged template:</p><p class="source-code"><strong class="bold">aws cloudformation deploy --template-file /AWS-Certified-DevOps-Engineer-Professional-Certification-and-Beyond/Chapter-7/nested/packaged_template.yml --stack-name &lt;YOUR STACK NAME&gt;</strong></p></li>
+				<li>Run the <a id="_idIndexMarker763"/>command to create your nested stack, but be sure to change the stack name and to add the flag for <strong class="source-inline">--capability CAPABILITY_IAM</strong>:<p class="source-code"><strong class="bold">aws cloudformation deploy --template-file /AWS-Certified-DevOps-Engineer-Professional-Certification-and-Beyond/Chapter-7/nested/packaged_template.yml --stack-name Chapt7 --capabilities CAPABILITY_IAM</strong></p></li>
+				<li>Log in to the AWS Console and go to the CloudFormation service. At this point, you should be able to see both your root stack and the nested stacks that you have created. By clicking on the <strong class="bold">Resources</strong> tab, you can see all of the resources that you just created. </li>
+				<li>If you don't want to incur charges then delete the stack. </li>
+			</ol>
+			<h2 id="_idParaDest-195"><a id="_idTextAnchor200"/>Using DependsOn to order resources </h2>
+			<p>Although <a id="_idIndexMarker764"/>CloudFormation creates the resources in the order you specify in your template, it does not wait for the completion of any one resource before starting to build the next resource unless specifically instructed. The <strong class="source-inline">DependsOn</strong> construct allows you to pause the creation of specific resources until other resources have been completed. </p>
+			<p>There are a number of situations in which you would want to invoke <strong class="source-inline">DependsOn</strong>. The first set of scenarios involve those resources that need access to the internet, and hence they <a id="_idIndexMarker765"/>require an internet gateway to be completed before moving forward. </p>
+			<h2 id="_idParaDest-196"><a id="_idTextAnchor201"/>Adding wait conditions to a template</h2>
+			<p>A <strong class="source-inline">WaitCondition</strong> adds a pause to the tasks that your template is performing on your stack until <a id="_idIndexMarker766"/>a success signal has been received, indicating readiness to move on. </p>
+			<p>Whenever a <strong class="source-inline">WaitCondition</strong> is added as a resource to a CloudFormation template, you must couple this with a <strong class="source-inline">WaitConditionHandle</strong> resource. </p>
+			<p class="callout-heading">Note</p>
+			<p class="callout">Even though the <strong class="source-inline">DependsOn</strong> construct and <strong class="source-inline">WaitCondition</strong> resource seem similar in function, they are different in a few ways. First is the fact that <strong class="source-inline">DependsOn</strong> is a much simpler implementation as it doesn't require a helper script. <strong class="source-inline">DependsOn</strong> also doesn't check for a success or failure signal for a resource once it has been created and therefore only governs the order of items produced in the template. A <strong class="source-inline">WaitCondition</strong>, on the other hand, needs to explicitly receive a success signal and will make the template (or change set) pause until this signal is received. </p>
+			<h2 id="_idParaDest-197"><a id="_idTextAnchor202"/>Using curl to signal </h2>
+			<p>When using <strong class="source-inline">curl</strong> to signal to the <strong class="source-inline">WaitCondition</strong> that the resource, in most cases an EC2 instance, is done <a id="_idIndexMarker767"/>with its configuration, then it can be done dynamically. The first step is to create the <strong class="source-inline">WaitHandle</strong>, and then to construct the URL that the <strong class="source-inline">CloudFormation</strong> will use in the <strong class="source-inline">curl</strong> command. At that point, we are ready to call the <strong class="source-inline">curl</strong> command from within the <strong class="source-inline">UserData</strong> section of the template. We can see an example of this in an abbreviated template snippet, as shown next:</p>
+			<p class="source-code">ServerWaitCondition:</p>
+			<p class="source-code">    Type: 'AWS::CloudFormation::WaitCondition'</p>
+			<p class="source-code">    DependsOn: Server</p>
+			<p class="source-code">    Properties:</p>
+			<p class="source-code">      Handle: !Ref ServerWaitHandle</p>
+			<p class="source-code">      Timeout: '1200'</p>
+			<p class="source-code">…</p>
+			<p class="source-code">      UserData: !Base64 </p>
+			<p class="source-code">        'Fn::Join':</p>
+			<p class="source-code">          -"</p>
+			<p class="source-code">          - - |</p>
+			<p class="source-code">              #!/bin/bash -v</p>
+			<p class="source-code">            - |</p>
+			<p class="source-code">              # Send Wait Condition URL </p>
+			<p class="source-code">            - '/usr/local/bin/aws s3 cp s3://'</p>
+			<p class="source-code">            - !Ref BucketFolder</p>
+			<p class="source-code">            - |</p>
+			<p class="source-code">              /templates/success.json /tmp/a </p>
+			<p class="source-code">            - SignalURL=</p>
+			<p class="source-code">            - !Ref ServerWaitHandle</p>
+			<p class="source-code">            - |+</p>
+			<p class="source-code">            - |</p>
+			<p class="source-code">              echo $SignalURL </p>
+			<p class="source-code">            - curl -T /tmp/a "</p>
+			<p class="source-code">            - !Ref AdminServerWaitHandle</p>
+			<p class="source-code">            - |</p>
+			<p class="source-code">              "</p>
+			<p>The <strong class="source-inline">WaitCondition</strong> is the signal that is used in concert with one of the few helper scripts available <a id="_idIndexMarker768"/>in CloudFormation. Next, we will look at the different helper scripts available in CloudFormation templates. </p>
+			<h1 id="_idParaDest-198"><a id="_idTextAnchor203"/>Adding a helper script to a CloudFormation template</h1>
+			<p>In CloudFormation, there are a few different helper scripts, written in Python, that allow you to <a id="_idIndexMarker769"/>install software and start <a id="_idIndexMarker770"/>services when requesting and configuring EC2 instances as part of a template:</p>
+			<div>
+				<div id="_idContainer099" class="IMG---Figure">
+					<img src="Images/013.jpg" alt="Table 7.1 – CloudFormation helper scripts &#13;&#10;" width="1554" height="629"/>
+				</div>
+			</div>
+			<p class="figure-caption">Table 7.1 – CloudFormation helper scripts </p>
+			<p>As you can see, using these helper scripts provided by CloudFormation can greatly simplify EC2 configuration. Next, we will see how to detect drift in CloudFormation templates if your infrastructure deviates from your template code.</p>
+			<h1 id="_idParaDest-199"><a id="_idTextAnchor204"/>Understanding how to detect drift in CloudFormation templates</h1>
+			<p>CloudFormation templates allow you to create and manage your infrastructure and resources as code in the various AWS accounts that you oversee. Following this method of provisioning <a id="_idIndexMarker771"/>items as code that can be checked in and out of version control is a best practice since it is repeatable, rather than trying to build and maintain cloud assets by hand. </p>
+			<p>Can you stop people from altering the assets you have provisioned in this manner? Unless you have used IAM policies to prevent groups from modifying any resources other than those submitted through CloudFormation templates or via code deployment pipelines, then there is a chance that there could be drift in some of the resources spun up by your CloudFormation templates.</p>
+			<p>When you initiate a check for drift detection, the CloudFormation service compares the current stack and the resources that are currently provisioned versus what was originally specified in the template used to create or update that particular stack. It then reports any differences that it finds.  </p>
+			<p>With a good understanding of CloudFormation templates under our belt, we will now look at a complimentary service – AWS Service Catalog. Service Catalog is another tool in the AWS management toolbox that allows your users to quickly and easily provision resources that have been pre-created with a set guardrails around them.  </p>
+			<h2 id="_idParaDest-200"><a id="_idTextAnchor205"/>Managing templates with Service Catalog</h2>
+			<p>As we continue the conversation about CloudFormation templates, we start to look at other ways <a id="_idIndexMarker772"/>to manage the templates in an organization. The Service Catalog product from AWS allows us to use our CloudFormation templates and create a self-service portal for users to provision known patterns of items as long as they have been given the appropriate access. These templates, which now become products in our Service Catalog, can even become parameterized so that our user can choose items such as a vetted, predefined set of EC2 instance sizes and AMIs in the case of EC2. </p>
+			<p>First, you need to understand a few concepts regarding Service Catalog. The first concept is a product. A <strong class="bold">product</strong> is an IT service that you want to make available on AWS. This could be something as simple as a single S3 bucket or as complex as an EC2 instance backed by an RDS database along with predefined CloudWatch alerts. The next concept to understand in Service Catalog is a portfolio. <strong class="bold">Portfolios</strong> are groupings of specific products along with configuration information. Portfolios are also tied to particular user groups, and give those user groups access to launch the products. </p>
+			<p>Looking at <em class="italic">Figure 7.11</em>, we can see the two different workflows that are available in Service Catalog from both an administrator's and user's perspective. The top view shows how an <a id="_idIndexMarker773"/>administrator would load up a template containing an EMR cluster, an S3 bucket, and CloudWatch alarms for repeated use as a product for the data users' group. </p>
+			<p>Any user in the data user's group can then quickly provision not only the EMR cluster but a corresponding S3 bucket along with relevant S3 alarms after entering a few pieces of relevant information into the Service Catalog screens: </p>
+			<div>
+				<div id="_idContainer100" class="IMG---Figure">
+					<img src="Images/Figure_7.11_B17405.jpg" alt="Figure 7.11 – Service Catalog workflows&#13;&#10;" width="488" height="303"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 7.11 – Service Catalog workflows</p>
+			<p>Service Catalog also allows you to update the templates containing your products and release newer versions with updated features. This can give your users the choice of which version to use: a version they are familiar with, or a version with newer features. </p>
+			<p>There are quite a number of situations where this can become useful:</p>
+			<ul>
+				<li>When a solutions architect needs to be able to quickly provision a demo environment for a customer sales call.</li>
+				<li>The QA team would like to stand up a QA environment for testing.</li>
+				<li>In a marketing department, where they would like a promotional application to run for a specific period of time. </li>
+				<li>A data scientist who needs a set of specialized software provisioned, such as an EMR cluster or a server with R Studio, but doesn't have the background in system administration to install and configure all of the necessary software and secure it correctly. </li>
+			</ul>
+			<p>Access control in Service Catalog is handled via IAM. The Service Catalog administrators create IAM roles specific to the products in the catalog so that users have just enough access to run the services provisioned by the catalog. </p>
+			<p>There are a <a id="_idIndexMarker774"/>number of different types of constraints that you can place on products in your Service Catalog in order to apply governance. </p>
+			<p>There are template-based constraints that can shrink the number of options available to users when launching a product. Examples of this include the sizes of an EC2 instance or RDS instance or the languages allowed for a Lambda product. </p>
+			<p>Tag-based constraints either enforce specific tags that need to be filled in when launching a product or disallow users to use any additional tagging besides those tags that have already been predefined.  </p>
+			<p>You can specify a particular SNS topic to receive updates about a product using notification constraints. </p>
+			<p>Defining which IAM roles can be used to run a particular product and be controlled via a launch constraint. This provides Service Catalog administrators an extra set of controls to say which services are allowed to be governed by the Service Catalog product.</p>
+			<p>We just discovered how Service Catalog can allow even non-developers to quickly spin up predefined patterns of AWS infrastructure for users. These users don't need to worry about how to configure the underlying resources since all of that is handled by the underlying CloudFormation templates. </p>
+			<p>We will next examine another way of creating CloudFormation templates that allows us much more flexibility then only using JSON or YAML in the Cloud Development Kit.  </p>
+			<h1 id="_idParaDest-201"><a id="_idTextAnchor206"/>Using the Cloud Development Kit</h1>
+			<p>Developers are used to creating reusable libraries and using things like loops to take care of <a id="_idIndexMarker775"/>repetitive tasks. The <strong class="bold">Cloud Development Kit</strong> (<strong class="bold">CDK</strong>) allows those with a programming background to use a variety <a id="_idIndexMarker776"/>of languages (TypeScript, JavaScript, Python, Java, and C#) to create CloudFormation templates using techniques that they know, such as the following:</p>
+			<ul>
+				<li>Logic (<strong class="source-inline">if</strong> statements, <strong class="source-inline">for</strong> loops)</li>
+				<li>Object-oriented techniques </li>
+				<li>Organization via logical modules </li>
+			</ul>
+			<p>This is in contrast to CloudFormation templates, which require you, your developers, or DevOps personnel to write them in either JSON or YAML, although both of these options are somewhat universal in nature and can be picked up in a short time with or without a programming background. CloudFormation templates are also quite limiting in the number of programmatic options and logic that you can perform while creating your stacks: </p>
+			<div>
+				<div id="_idContainer101" class="IMG---Figure">
+					<img src="Images/Figure_7.12_B17405.jpg" alt="Figure 7.12 – CDK workflow &#13;&#10;" width="697" height="324"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 7.12 – CDK workflow </p>
+			<p>In <em class="italic">Figure 7.12</em>, you can see the workflow of how a developer would create an app using the CDK. This app then creates a stack that deploys the CloudFormation template to the AWS cloud environment.</p>
+			<h2 id="_idParaDest-202"><a id="_idTextAnchor207"/>Concepts of the AWS CDK</h2>
+			<p>Inside of <a id="_idIndexMarker777"/>the AWS CDK, there are three essential components – apps, stacks, and constructs – that developers can use to create cloud services. </p>
+			<h3>Apps </h3>
+			<p>With the <a id="_idIndexMarker778"/>AWS CDK, you are building an application, which in turn is an app and is composed of the CDK <strong class="source-inline">App</strong> class. </p>
+			<h3>Stacks </h3>
+			<p>Units of deployment in the AWS CDK are stacks, and all resources defined within the scope of a <a id="_idIndexMarker779"/>stack are provisioned as a single unit. Since CDK stacks are implemented as CloudFormation stacks, any boundaries or restrictions that CloudFormation stacks need to abide by also are present for CDK stacks.</p>
+			<h3>Constructs </h3>
+			<p>The building blocks of the AWS CDK are constructs. These can be a single AWS resource like a load <a id="_idIndexMarker780"/>balancer, or a single component consisting of multiple resources such as a VPC and subnets. Constructs create reusable components that can be shared like any other piece of code. </p>
+			<h2 id="_idParaDest-203"><a id="_idTextAnchor208"/>Advantages of using the AWS CDK </h2>
+			<p>We will examine <a id="_idIndexMarker781"/>some of the advantages of using the CDK over normal CloudFormation templates. </p>
+			<h3>Faster development process</h3>
+			<p>With the AWS CDK you have the ability to use the languages that you natively program in, such <a id="_idIndexMarker782"/>as Python, TypeScript, .NET, Go and Java. In using these languages you retain the ability to create object, loops, and conditions that you are familiar with rather than having to learn domain-specific functions and work-arounds.  </p>
+			<h3>Code completion within your IDE </h3>
+			<p>Using <a id="_idIndexMarker783"/>popular IDEs such as Visual Studio Code allows for code completion using the language of your choice when programming with the AWS CDK.</p>
+			<h3>The ability to deploy code and IaC synchronously</h3>
+			<p>Since the <a id="_idIndexMarker784"/>AWS CDK uses the same native language <a id="_idIndexMarker785"/>that you write your code in, combining pieces of infrastructure along with the code that would run your application becomes easy without any context switching. </p>
+			<h1 id="_idParaDest-204"><a id="_idTextAnchor209"/>Summary</h1>
+			<p>In this chapter, we looked at how to create IaC using both CloudFormation templates and the CDK. We examined some best practices of template construction and organization. We also practiced hands-on implementation of deploying and updating CloudFormation templates into stacks using both the AWS Management Console and the CLI.</p>
+			<p>In the next chapter, we will begin our examination of some of the AWS code tools that are part of the SDLC process, starting with CodeCommit and CodeBuild. We will create a code repository and commit to it using CodeCommit and then start building out code using AWS CodeBuild. Finally, we will see how we can tie both services together by triggering the CodeBuild job from pushes to our CodeCommit repository.</p>
+			<h1 id="_idParaDest-205"><a id="_idTextAnchor210"/>Review questions</h1>
+			<ol>
+				<li value="1">What are the two major components of CloudFormation?</li>
+				<li>You have been contracted by a company to help review and optimize their CI/CD processes, especially in the area of IaC. The company currently has a single CloudFormation template, which they have developed over time, that is used to create the IAM account roles, VPCs, subnets, Lambda functions, CloudWatch alarms, along with SNS topics and other resources, including databases and EKS EC2 instances and their corresponding AutoScaling groups. How would you go about creating a recommendation for optimizing their process?<p>a. Check the current template to make sure that it has the correct <strong class="source-inline">DependsOn</strong> and <strong class="source-inline">WaitCondition</strong> embedded so that all resources come up without conflicts.</p><p>b. Create a plan on how to break up their large template.</p><p>c. Use the CloudFormation <strong class="source-inline">package</strong> command to package all of the templates together.</p><p>d. Take the smaller templates and launch with a single <strong class="source-inline">deploy</strong> command.</p></li>
+				<li>After assessing a client's needs for a repeatable three-tier web application, you have decided to build a CloudFormation template that you can hand over at the end of the engagement. The middleware Linux servers have an elaborate user data script that takes a while to run in order to install completely. These servers are sitting behind a Network Load Balancer resource and need to be fully operational before being added. How can you make sure that the servers are fully operational and configured correctly before you attach them to the Network Load Balancer resource? (Choose two.) <p>a. Make sure that the Network Load Balancer resource is located directly after the middleware servers in the CloudFormation resources section of the template. </p><p>b. Add a <strong class="source-inline">WaitCondition</strong> that depends on the middleware servers. Once the user data finishes, it uses <strong class="source-inline">cfn-signal</strong> to notify that it is ready. </p><p>c. Launch everything from a nested template where the middleware servers are in a template launched from the Load Balancer template. </p><p>d. Add a <strong class="source-inline">WaitCondition</strong> that depends on the middleware servers. Once the user data finishes configuring the middleware servers, it uses a <strong class="source-inline">curl</strong> command to notify a pre-signed URL that they are ready. </p></li>
+				<li>You are working at a large enterprise company and have a number of projects in the backlog that are waiting to be deployed to different AWS cloud environments. In order to minimize the amount of time it takes for each deployment, you want to create a reusable set of components that can be easily swapped out based on the architecture of each project. There is already a basic CodePipeline service instance in place to add the test and deployment steps. Whatever solution you choose should be able to be checked into a code version control system and be tested easily. How should you organize your resources for optimal reusability?<p>a. Use the AWS CDK to create apps made of a shared library of components. Add a testing library and then run the tests as a step in CodePipeline before deploying to the development environment. </p><p>b. Create a library of small resource-specific CloudFormation templates that can be easily nested and packaged up according to the architecture guidelines. Use the <strong class="source-inline">yamllint</strong> and <strong class="source-inline">cfn-lint</strong> commands to lint the CloudFormation templates as a test step in CodeBuild to catch any errors.    </p><p>c. Develop a foundation of 5-10 blueprint patterns that all projects fall into. Using these blueprints, develop a library of CloudFormation templates with parameters and conditions so that they meet the majority of your project's needs. Use the <strong class="source-inline">cfn-lint</strong> command to lint the CloudFormation templates as a test step in CodeBuild to catch any errors.    </p><p>d. Create CloudFormation templates for each solution that have the necessary parameter values and conditions so that they work seamlessly on any Region and can be used in any environment (DEV, TEST, and PROD). Upload the templates to CodeCommit for version control. </p></li>
+			</ol>
+			<h1 id="_idParaDest-206"><a id="_idTextAnchor211"/>Review answers</h1>
+			<ol>
+				<li value="1">Templates and stacks</li>
+				<li>b</li>
+				<li>b and d</li>
+				<li>a </li>
+			</ol>
+		</div>
+	</div></body></html>

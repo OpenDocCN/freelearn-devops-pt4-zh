@@ -1,0 +1,735 @@
+<html><head></head><body>
+		<div id="_idContainer097">
+			<h1 id="_idParaDest-154"><em class="italic"><a id="_idTextAnchor154"/>Chapter 7</em>: Understanding Kubernetes Essentials to Deploy Containerized Applications</h1>
+			<p>The last two chapters (<a href="B15587_05_Final_ASB_ePub.xhtml#_idTextAnchor110"><em class="italic">Chapter 5</em></a>, <em class="italic">Managing Source Code Using Cloud Source Repositories</em>, and <a href="B15587_06_Final_ASB_ePub.xhtml#_idTextAnchor131"><em class="italic">Chapter 6</em></a>, <em class="italic">Building Code Using Cloud Build, and Pushing to Container Registry</em>) focused on Google Cloud services to manage source code via cloud source repositories, build code via Cloud Build, and create image artifacts using Container Registry. Given that the focus of this book is to deploy containerized applications, the next three chapters (from <a href="B15587_07_Final_ASB_ePub.xhtml#_idTextAnchor154"><em class="italic">Chapter 7</em></a>, <em class="italic">Understanding Kubernetes Essentials to Deploy Containerized Applications</em>, through to <a href="B15587_09_Final_ASB_ePub.xhtml#_idTextAnchor201"><em class="italic">Chapter 9</em></a>, <em class="italic">Securing the Cluster Using GKE Security Constructs</em>) are centered around essential concepts related to deploying containerized applications through Kubernetes, easy cluster management through <strong class="bold">Google Kubernetes Engine</strong> (<strong class="bold">GKE</strong>), and a rundown of key security features in GKE that are essential for hardening the Kubernetes cluster.</p>
+			<p>Kubernetes, or K8s, is an open source container orchestration system that can run containerized applications. Kubernetes originated as an internal cluster management tool from Google that it donated to <strong class="bold">Cloud Native Computing Foundation</strong> (<strong class="bold">CNCF</strong>) as an open source project in 2014. This specific chapter will focus on Kubernetes essentials that are required for containerized deployments. This includes understanding the cluster anatomy, and getting acquainted with Kubernetes objects, specifically related to workloads, deployment strategies, and constraints around scheduling applications. Google open sourced Kubernetes and donated it to CNCF. This specific chapter doesn't deep dive into setting up a Kubernetes cluster. It takes a significant effort and manual intervention to run the open source version of Kubernetes.</p>
+			<p>Google offers a managed version of Kubernetes called Google Kubernetes Engine, otherwise known as GKE. Essentially, the fundamentals of Kubernetes apply to GKE as well. However, GKE makes it easy to set up a Kubernetes cluster and includes additional capabilities that facilitate cluster management. The next chapter focuses on GKE core features and includes steps to create a cluster. However, this chapter essentially focuses and elaborates on the fundamentals of Kubernetes, which is also the core of GKE and helps to make the transition to GKE much easier.</p>
+			<p>This chapter introduces Kubernetes as the container orchestration of choice and provides details on the following topics:</p>
+			<ul>
+				<li><strong class="bold">Kubernetes</strong>: A quick introduction</li>
+				<li><strong class="bold">Kubernetes Cluster Anatomy</strong>: Deep dives into the constructs that form a Kubernetes cluster along with the components that form the master control plane</li>
+				<li><strong class="bold">Kubernetes Objects</strong>: Provides a high-level overview of critical Kubernetes objects used to deploy workloads</li>
+				<li><strong class="bold">Scheduling and interacting with Pods</strong>: Details the constraints evaluated and interactions involved while scheduling applications on Kubernetes</li>
+				<li><strong class="bold">Kubernetes deployment strategies</strong>: Details potential deployment strategies, from the option that essentially recreates applications, via deployment options that ensure zero downtime, to the option that enables the shifting of a specific amount of traffic to the new application</li>
+			</ul>
+			<h1 id="_idParaDest-155"><a id="_idTextAnchor155"/>Technical requirements</h1>
+			<p>There are four main technical requirements:</p>
+			<ul>
+				<li>A valid <strong class="bold">Google Cloud Platform</strong> (<strong class="bold">GCP</strong>) account to go hands-on with GCP services: <a href="https://cloud.google.com/free">https://cloud.google.com/free</a>.</li>
+				<li>Install Google Cloud SDK: <a href="https://cloud.google.com/sdk/docs/quickstart">https://cloud.google.com/sdk/docs/quickstart</a>. </li>
+				<li>Install Git: <a href="https://git-scm.com/book/en/v2/Getting-Started-Installing-Git">https://git-scm.com/book/en/v2/Getting-Started-Installing-Git</a>.</li>
+				<li>Install Docker: <a href="https://docs.docker.com/get-docker/">https://docs.docker.com/get-docker/</a>.</li>
+			</ul>
+			<h1 id="_idParaDest-156"><a id="_idTextAnchor156"/>Kubernetes – a quick introduction</h1>
+			<p>A <strong class="bold">container</strong> is a unit of software<a id="_idIndexMarker754"/> that packages code and its dependencies, such as libraries and configuration files. When compared to running applications on physical or <a id="_idIndexMarker755"/>virtual machines, a container enables applications to run faster and reliably across computing environments. Containers make it easier to build applications that use microservice design patterns. They are critical to the concept of continuous development, integration, and deployment as incremental changes can be made against a container image and can be quickly deployed to a compute environment of choice (that supports process isolation).  </p>
+			<p>Given that containers are lean and easy to deploy, an organization might end up deploying its applications as several containers. This poses challenges as some of the applications might need to interact with one another. Additionally, the life cycle of the application should also be monitored and managed. For example, if an application goes down due to resource constraints, then another instance of the application should be made available. Similarly, if there is a sudden spike in traffic, the application should horizontally scale up and when traffic returns to normal, the application should subsequently scale down.</p>
+			<p>Scaling actions (up or down) should be provisioned automatically rather than manually. This creates a need for container orchestration and will be discussed as the next topic.</p>
+			<h2 id="_idParaDest-157"><a id="_idTextAnchor157"/>Container orchestration</h2>
+			<p><strong class="bold">Container orchestration</strong> is about managing the life cycle of containers, specifically in large dynamic environments. Container <a id="_idIndexMarker756"/>orchestration can control and automate tasks such as provisioning, deployment, maintaining <a id="_idIndexMarker757"/>redundancy, ensuring availability, and handling changing traffic by scaling up or down as needed.</p>
+			<p>In addition, container <a id="_idIndexMarker758"/>orchestration can also handle the following scenarios:</p>
+			<ul>
+				<li>Move containers from one host node to the other in case the host node dies.</li>
+				<li>Set eviction policies if a container is consuming more resources than expected.</li>
+				<li>Provision access to persistent storage volumes in case a container restarts.</li>
+				<li>Secure interactions between containers by storing keys/secrets.</li>
+				<li>Monitor the health of the containers.</li>
+			</ul>
+			<p><strong class="bold">Kubernetes</strong> traces its lineage<a id="_idIndexMarker759"/> from Borg – an internal Google project that is essentially a cluster manager that runs large-scale containerized workloads to support core Google services such as Google Search. Kubernetes was the next-generation cluster manager after Borg. The most popular concepts in Kubernetes came from Borg, such as Pods, services, labels, and ip-per-pod.</p>
+			<p class="callout-heading">Alternative container orchestration options</p>
+			<p class="callout">Docker Swarm, Apache Mesos, OpenShift, and suchlike are a few alternatives for container orchestration outside Kubernetes. Docker Swarm is easy to get started and set up the cluster, but has limited features specific to scaling. Mesos is a cluster manager that is best suited to large systems and designed with maximum redundancy. It is complex in nature (in terms of features and configuration) and recommended for workloads such as Hadoop and Kafka, but is not suitable for mid- or small-scale systems.</p>
+			<p>The upcoming section summarizes the main features of Kubernetes.</p>
+			<h2 id="_idParaDest-158"><a id="_idTextAnchor158"/>Kubernetes features</h2>
+			<p>The following are some of the key features<a id="_idIndexMarker760"/> in Kubernetes:</p>
+			<ul>
+				<li><strong class="bold">Declarative configuration</strong>: Kubernetes administers the infrastructure declaratively, in other words, Kubernetes monitors the current state and takes the required action to ensure that the current state matches the desired state.</li>
+				<li><strong class="bold">Automation</strong>: Kubernetes' implementation of declarative configuration inherently supports automation. In addition, Kubernetes allows a wide range of user preferences and configurations. As a result, Kubernetes can automatically scale in and scale out containerized applications based on a myriad of conditions, with resource utilization or resource limits being a few of them.</li>
+				<li><strong class="bold">Stateful and stateless</strong>: Kubernetes supports both stateful and stateless applications. In the case of stateful applications, a user's state can be stored persistently. In addition, both batch jobs and daemon tasks are also supported.</li>
+				<li><strong class="bold">Container management</strong>: Kubernetes supports the features of infrastructure as service, such as logging, monitoring, and load balancing.</li>
+			</ul>
+			<p>The next section outlines the structure<a id="_idIndexMarker761"/> of a Kubernetes deployment and deep dives into its key components and their capabilities.</p>
+			<h1 id="_idParaDest-159"><a id="_idTextAnchor159"/>Kubernetes cluster anatomy</h1>
+			<p>A Kubernetes cluster is a collection <a id="_idIndexMarker762"/>of machines with compute power. These machines<a id="_idIndexMarker763"/> could be actual physical computers or <a id="_idIndexMarker764"/>could even be <strong class="bold">virtual machines</strong> (<strong class="bold">VMs</strong>). </p>
+			<p>In reference to cloud deployments, a Kubernetes cluster will be a collection of VMs. Each VM is termed a node. The nodes in a cluster are categorized as either <em class="italic">master</em> or <em class="italic">worker</em> nodes. Worker nodes run applications that are deployed in containers. The master node runs the control plane components that are responsible for coordinating tasks across the worker nodes.</p>
+			<p><em class="italic">Throughout this chapter, and for ease of reference, the node running the control plane components will be referred to as the master, and worker nodes will be referred to as nodes.</em></p>
+			<p>The master has the following<a id="_idIndexMarker765"/> responsibilities:</p>
+			<ul>
+				<li>It tracks information across all nodes in a cluster, such as applications or containers that a node is running.</li>
+				<li>It schedules applications on nodes by identifying nodes based on requirements (such as resource, affinity, or Anti-Affinity constraints).</li>
+				<li>It ensures that a desired number of instances are always running as per the deployment specifications and orchestrates all operations within the cluster.</li>
+			</ul>
+			<p><em class="italic">Figure 7.1</em> shows an illustration of a Kubernetes cluster that includes both master and nodes. These are comprised of machines with compute power:</p>
+			<div>
+				<div id="_idContainer078" class="IMG---Figure">
+					<img src="image/B15587_07_01.jpg" alt="Figure 7.1 – Outline of a Kubernetes cluster&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 7.1 – Outline of a Kubernetes cluster</p>
+			<p>The master performs its responsibilities <a id="_idIndexMarker766"/>using a set of key components that form the <strong class="bold">Kubernetes Control Plane</strong> and will be detailed in the upcoming topic.</p>
+			<h2 id="_idParaDest-160"><a id="_idTextAnchor160"/>Master components – Kubernetes control plane</h2>
+			<p>The Kubernetes<a id="_idIndexMarker767"/> control plane consists of components that make decisions with regard to operations within the cluster and respond to cluster-specific events. Events can include, but are not limited to, scaling up the number of instances with<a id="_idIndexMarker768"/> respect to the application if the average CPU utilization exceeds a specific configured threshold. </p>
+			<p>The following are the key components <a id="_idIndexMarker769"/>of the Kubernetes control plane:</p>
+			<ul>
+				<li><strong class="bold">kube-apiserver</strong>: A frontend to Kubernetes for cluster interactions</li>
+				<li><strong class="bold">etcd</strong>: Distributed key-value stores for cluster-specific information</li>
+				<li><strong class="bold">kube-scheduler</strong>: Responsible for distributing workloads across nodes</li>
+				<li><strong class="bold">kube-controller-manager</strong>: Tracks whether a node or application is down</li>
+				<li><strong class="bold">cloud-controller-manager</strong>: Embeds cloud-specific control logic</li>
+			</ul>
+			<p><em class="italic">Figure 7.2</em> shows an illustration of the components that run on the master and form the Kubernetes control plane:</p>
+			<div>
+				<div id="_idContainer079" class="IMG---Figure">
+					<img src="image/B15587_07_02.jpg" alt="Figure 7.2 – Kubernetes control plane on the master node&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 7.2 – Kubernetes control plane on the master node</p>
+			<p>The control plane <a id="_idIndexMarker770"/>components can be run on any machine in the cluster, but it is recommended to run on the same machine and avoid any user-specific containers. It's also possible to have multiple control planes when building a highly available cluster. Each of the key components is introduced in the upcoming sub-section.</p>
+			<h3>kube-apiserver</h3>
+			<p><strong class="bold">kube-apiserver</strong> is the component of<a id="_idIndexMarker771"/> the control plane that exposes the Kubernetes API. This is the only component in the control plane that an end user or an external system/Service can interact with. This component exposes the Kubernetes API through multiple pathways (such as <strong class="source-inline">HTTP</strong>, <strong class="source-inline">gRPC</strong>, and <strong class="source-inline">kubectl</strong>). All other components of the control plane can be viewed as clients to <strong class="source-inline">kube-apiserver</strong>. Additionally, <strong class="source-inline">kube-apiserver</strong> is also responsible for authentication, authorization, and managing admission control.</p>
+			<p class="callout-heading">Authentication, authorization, and admission control</p>
+			<p class="callout">From a cluster standpoint, authentication is about who can interact with the cluster (this could be a user or service account); authorization is about what specific operations are permitted and admission control represents a set of plugins that could limit requests to create, delete, modify, or connect to a proxy. ResourceQuota is an example of an admission controller where a namespace can be restricted to only use up to a certain capacity of memory and CPU.</p>
+			<p>Any query or<a id="_idIndexMarker772"/> change to the cluster is handled by <strong class="source-inline">kube-apiserver</strong>. It is also designed to horizontally scale by deploying instances to handle incoming requests to the cluster.</p>
+			<h3>etcd</h3>
+			<p><strong class="bold">etcd</strong> is the database for a <a id="_idIndexMarker773"/>Kubernetes cluster. <strong class="source-inline">etcd</strong> is a distributed key-value store used by Kubernetes to store information that is required to manage the cluster, such as cluster configuration data. This includes nodes, Pods, configs, secrets, accounts, roles, and bindings. When a <strong class="source-inline">get</strong> request is made to the cluster, the information is retrieved from <strong class="source-inline">etcd</strong>. Any <strong class="source-inline">create</strong>, <strong class="source-inline">update</strong>, or <strong class="source-inline">delete</strong> request made to the cluster is complete only if the change is reflected in <strong class="source-inline">etcd</strong>.</p>
+			<h3>kube-scheduler</h3>
+			<p><strong class="bold">kube-scheduler</strong> is responsible for<a id="_idIndexMarker774"/> scheduling applications (encapsulated in Pod objects) or jobs onto nodes. It chooses a suitable node where the application can be deployed (but doesn't launch the application). To schedule an application, <strong class="source-inline">kube-scheduler</strong> considers multiple factors, such as the resource requirements of an application, node availability, affinity, and Anti-Affinity specifications. Affinity and Anti-Affinity specifications represent policy definitions that allow certain applications to be deployed against specific nodes or prevent deployment against specific nodes.</p>
+			<h3>kube-controller-manager</h3>
+			<p><strong class="bold">kube-controller-manager</strong> monitors the<a id="_idIndexMarker775"/> state of the cluster through <strong class="source-inline">kube-apiserver</strong> and ensures that the current state of the cluster matches the desired state. <strong class="source-inline">kube-controller-manager</strong> is responsible for the actual running of the cluster, and accomplishes this by using several controller functions. As an example, a node controller monitors and responds when a node is offline. Other<a id="_idIndexMarker776"/> examples include the replication controller, namespace controller, and endpoints controller.</p>
+			<h3>cloud-controller-manager</h3>
+			<p><strong class="bold">cloud-controller-manager</strong> includes controller<a id="_idIndexMarker777"/> functions that allow Kubernetes to be integrated with services from a cloud provider. The controller functions are responsible for handling constructs such as networking, load balancers, and storage volumes that are specific to the cloud provider.</p>
+			<p>The master receives a request to perform a specific operation and the components in the control plane schedule, plan, and manage the operations to be performed on the nodes. Kubernetes doesn't natively consist of out-of-the-box integration (say with Google or AWS). The operations on the nodes are carried out by a set of components that form the node control plane and will be detailed in the upcoming sub-section.</p>
+			<h2 id="_idParaDest-161"><a id="_idTextAnchor161"/>Node components</h2>
+			<p>Nodes receive instructions <a id="_idIndexMarker778"/>from the master, specifically, the <strong class="source-inline">kube-apiserver</strong>. Nodes are responsible for running applications deployed in containers and establish communication between services across the cluster. The nodes perform these responsibilities by using a set of key components. These components <a id="_idIndexMarker779"/>are as follows:</p>
+			<ul>
+				<li><strong class="bold">kubelet</strong>: An agent for Kubernetes that listens to instructions from <strong class="source-inline">kube-apiserver</strong> and runs containers as per the Pod specification provided</li>
+				<li><strong class="bold">kube-proxy</strong>: A network proxy that enables communication between services</li>
+				<li><strong class="bold">container runtime</strong>: Software that is responsible for running containers</li>
+			</ul>
+			<p><em class="italic">Figure 7.3</em> shows an illustration of components that form the node control plane:</p>
+			<div>
+				<div id="_idContainer080" class="IMG---Figure">
+					<img src="image/B15587_07_03.jpg" alt="Figure 7.3 – Components of the node control plane&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 7.3 – Components of the node control plane</p>
+			<p>Node components run <a id="_idIndexMarker780"/>on each worker node in the cluster and provide the Kubernetes runtime environment. Each of the key components for a worker node is introduced in the upcoming topic.</p>
+			<h3>kubelet</h3>
+			<p><strong class="bold">kubelet</strong> is an agent that runs on <a id="_idIndexMarker781"/>each node. When an action needs to be performed on a node, the <strong class="source-inline">kube-apiserver</strong> connects with the node through <strong class="source-inline">kubelet</strong>, the node's agent. <strong class="source-inline">kubelet</strong> listens for instructions and deploys or deletes containers when told to. <strong class="source-inline">kubelet</strong> doesn't manage containers that are not created by Kubernetes.</p>
+			<h3>kube-proxy</h3>
+			<p><strong class="bold">kube-proxy</strong> is a network proxy that<a id="_idIndexMarker782"/> enables communication between services in the cluster based on network rules. The network rules allow communication with Pods from within or external to the cluster. <strong class="source-inline">kube-proxy</strong> runs on each node in the cluster.</p>
+			<h3>container runtime engine</h3>
+			<p><strong class="bold">container runtime engine</strong> is the<a id="_idIndexMarker783"/> software that enables applications to be run in containers on the cluster. For example, the container runtime allows the DNS service and networking to run as containers. This includes the master plane components. Kubernetes supports multiple container runtimes, such as Docker, <strong class="source-inline">containerd</strong>, and CRI-O.</p>
+			<p class="callout-heading">Kubernetes deprecating Docker as a container runtime engine</p>
+			<p class="callout">Based on the release notes for Kubernetes v1.20, <strong class="source-inline">dockershim</strong> will be deprecated and cannot be used from v1.22. <strong class="source-inline">dockershim</strong> is a module in <strong class="source-inline">kubelet</strong> and a temporary solution proposed by the Kubernetes community to use Docker as a container runtime. Due to the maintenance burden, <strong class="source-inline">dockershim</strong> will be deprecated and the Kubernetes community will only <a id="_idIndexMarker784"/>maintain the Kubernetes <strong class="bold">Container Runtime Interface</strong> (<strong class="bold">CRI</strong>). <strong class="source-inline">containerd</strong> and CRI-O are examples of a CRI-compliant runtime.</p>
+			<p>This completes a <a id="_idIndexMarker785"/>deep dive into Kubernetes cluster anatomy that specifically consists of components from the master control plane and components from the node control plane. Communication within the master control plane is driven by the <strong class="source-inline">kube-api</strong> server, which sends instructions to the <strong class="source-inline">kubelet</strong> on the respective nodes. <strong class="source-inline">kubelet</strong> executes the instructions sent by the <strong class="source-inline">kube-api</strong> server. <em class="italic">Figure 7.4</em> shows an illustration of the entire cluster anatomy:</p>
+			<div>
+				<div id="_idContainer081" class="IMG---Figure">
+					<img src="image/B15587_07_04.jpg" alt="Figure 7.4 – Kubernetes cluster anatomy&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 7.4 – Kubernetes cluster anatomy</p>
+			<p>It is important to understand that any interaction against a Kubernetes object, such as create, modify, or delete, can only be performed through the Kubernetes API. These operations on the object can also be performed through the CLI using the <strong class="source-inline">kubectl</strong> command. The next topic details the usage of the <strong class="source-inline">kubectl</strong> command.</p>
+			<h2 id="_idParaDest-162"><a id="_idTextAnchor162"/>Using kubectl</h2>
+			<p><strong class="bold">kubectl</strong> is a utility for controlling <a id="_idIndexMarker786"/>or executing operations in a Kubernetes cluster. <strong class="source-inline">kubectl</strong> is typically used by administrators. <strong class="source-inline">kubectl</strong> enables an action to be performed, such as get or delete, against a specific object type with a specific object name along with supported request parameters. <strong class="source-inline">kubectl</strong> communicates with <strong class="source-inline">kube-apiserver</strong> on the master and converts commands issued by the CLI into API calls. <strong class="source-inline">kubectl</strong> can be used to create Kubernetes objects, view existing objects, delete objects, and view/export configurations. The syntax structure of <strong class="source-inline">kubectl</strong> is as follows:</p>
+			<p class="source-code">#kubectl syntax</p>
+			<p class="source-code">kubectl [command] [type] [name] [flags]</p>
+			<p class="source-code">#Example – Command to get specification of a specific pod called 'my-pod' in yaml format</p>
+			<p class="source-code">kubectl get pod my-pod -o=yaml</p>
+			<p>The first step involved in using the <strong class="source-inline">kubectl</strong> command is to configure the credentials of the cluster, such as the cluster name and its location. <strong class="source-inline">kubectl</strong> stores this configuration in a file called <strong class="source-inline">config</strong> and stores the file in a hidden folder called <strong class="source-inline">.kube</strong> in the home directory. The current configuration can be retrieved by using the <strong class="source-inline">view</strong> command:</p>
+			<p class="source-code"># Get current config</p>
+			<p class="source-code">kubectl config view</p>
+			<p>The actions on the cluster are executed using Kubernetes objects. Each object has a specific purpose and functionality. There are many such objects in Kubernetes. The upcoming section introduces the concept of Kubernetes objects and details the most frequently used objects.</p>
+			<h1 id="_idParaDest-163"><a id="_idTextAnchor163"/>Kubernetes objects</h1>
+			<p>A Kubernetes object is a persistent entity and represents a record of intent. An object can be defined using the <strong class="bold">YAML</strong> configuration. It will <a id="_idIndexMarker787"/>have two main fields – spec and status. The object spec represents the specification, and the object state represents the desired state. Once the <a id="_idIndexMarker788"/>object is created, the Kubernetes system will ensure that the object exists as per the specified declarative configuration.</p>
+			<p>Kubernetes supports multiple object types. Each object type is meant for a specific purpose. The following are some critical Kubernetes objects that will be used throughout this chapter. This is not an exhaustive list:</p>
+			<ul>
+				<li>Pods – The smallest atomic unit in Kubernetes</li>
+				<li>Deployment – Provides declarative updates for Pods and ReplicaSets</li>
+				<li>StatefulSet – Manages stateful applications and guarantees ordering</li>
+				<li>DaemonSet – Runs a copy of the Pod on each node</li>
+				<li>Job – Creates one or more Pods and will continue to retry execution until a specified number of them terminate successfully</li>
+				<li>CronJob – A job that occurs on a schedule represented by a cron expression</li>
+				<li>Services – Exposes applications running one or more Pods</li>
+			</ul>
+			<p>Deployment, ReplicaSet, StatefulSet, DaemonSet, Jobs, and CronJobs are specifically categorized as <strong class="bold">Workload Resources</strong>. All these workload resources run one or more Pods. This chapter details the abovementioned Kubernetes objects in the upcoming sub-sections. Please note that the information provided is not exhaustive from the aspect of an object's functionality, but provides an in-depth review of the object's purpose.</p>
+			<h2 id="_idParaDest-164"><a id="_idTextAnchor164"/>Pod</h2>
+			<p><strong class="bold">Pod</strong> is a Kubernetes object and is the<a id="_idIndexMarker789"/> smallest deployable compute unit in a Kubernetes cluster. Application code exists in container images. Container images are run using containers and containers run inside a Pod. A Pod resides inside a node.</p>
+			<p>A Pod can contain one or more containers. A Pod provides a specification on how to run the containers. The containers in a Pod share filesystem, namespace, and network resources. A Pod also has a set of ports or port ranges assigned. All containers in the Pod have the same IP address, but with different ports. The containers within the Pod can communicate by using<a id="_idIndexMarker790"/> the port number on localhost. The following is a declarative specification for a Pod that runs an <strong class="source-inline">nginx</strong> container:</p>
+			<p class="source-code">apiVersion: v1</p>
+			<p class="source-code">kind: Pod</p>
+			<p class="source-code">metadata:</p>
+			<p class="source-code">  name: my-nginx</p>
+			<p class="source-code">spec:</p>
+			<p class="source-code">  containers:</p>
+			<p class="source-code">  - name: nginx</p>
+			<p class="source-code">    image: nginx:1.14.2</p>
+			<p class="source-code">    ports:</p>
+			<p class="source-code">containerPort:80</p>
+			<p>The following is an equivalent imperative command to create a similar Pod:</p>
+			<p class="source-code">kubectl run my-nginx –image=nginx</p>
+			<p class="callout-heading">What is CrashLoopBackOff?</p>
+			<p class="callout">There are certain situations where a Pod attempts to start, crashes, starts again, and then crashes again; essentially, a condition reported by a Pod where a container in a Pod has failed to start after repeated attempts.</p>
+			<p>On the Kubernetes platform, Pods are the atomic units and run one or more containers. A Pod consists of multiple containers if they form a single cohesive unit of Service. The sidecar pattern is a common implementation of a Pod with multiple containers. These are popularly used in ETL-specific use cases. For example, logs of the <strong class="source-inline">hello-world</strong> container need to be analyzed in real time. <strong class="source-inline">logs-analyzer</strong> is a specialized application that is meant to analyze logs. If each of these containers is in their respective Pods as <strong class="source-inline">pod-hello-world</strong> and <strong class="source-inline">pod-logs-analyzer</strong>, the <strong class="source-inline">logs-analyzer</strong> container can get the logs of the <strong class="source-inline">hello-world</strong> container through a <strong class="source-inline">GET</strong> request. Refer to <em class="italic">Figure 7.5</em>:</p>
+			<div>
+				<div id="_idContainer082" class="IMG---Figure">
+					<img src="image/B15587_07_05.jpg" alt="Figure 7.5 – Communication between containers in different Pods&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 7.5 – Communication between containers in different Pods</p>
+			<p>However, there will be <a id="_idIndexMarker791"/>minimal network latency since both the containers are in separate Pods. If both containers are part of the same Pod, <strong class="source-inline">pod-hello-world-etl</strong> forming a sidecar pattern, then the Pod will consist of two containers – <strong class="source-inline">logs-analyzer</strong> acting as the sidecar container that will analyze logs from another container, <strong class="source-inline">hello-world</strong>. Then, these containers can communicate on localhost because they are on the same network interface, providing real-time communication. Refer to <em class="italic">Figure 7.6</em>: </p>
+			<div>
+				<div id="_idContainer083" class="IMG---Figure">
+					<img src="image/B15587_07_06.jpg" alt="Figure 7.6 – Communication between containers in a sidecar pattern&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 7.6 – Communication between containers in a sidecar pattern</p>
+			<p>Using a single Pod with multiple containers allows the application to run as a single unit and reduces network latency as the containers communicate on the same network interface. The following is a declarative specification of a Pod that runs multiple containers with the specific example as illustrated in <em class="italic">Figure 7.6</em>:</p>
+			<p class="source-code">apiVersion: v1</p>
+			<p class="source-code">kind: Pod</p>
+			<p class="source-code">metadata:</p>
+			<p class="source-code">  name: pod-hello-world-etl</p>
+			<p class="source-code">spec:</p>
+			<p class="source-code">  containers:</p>
+			<p class="source-code">  - name: hello-world</p>
+			<p class="source-code">    image: hello-world</p>
+			<p class="source-code">    ports:</p>
+			<p class="source-code">    - containerPort:8059</p>
+			<p class="source-code">  - name: logs-analyzer</p>
+			<p class="source-code">    image: custom-logs-analyzer:0.0.1</p>
+			<p class="source-code">    ports:</p>
+			<p class="source-code">    - containerPort:8058</p>
+			<p class="callout-heading">Job and CronJob</p>
+			<p class="callout">Job and CronJob are workload resources. A job represents a task to execute a Pod. A job is completed if the task is executed successfully or, in other words, a Pod runs successfully to completion for a specified number of times. If a job is deleted, then Pods tied to the jobs are also deleted. If a job is suspended, then active Pods are deleted. Multiple jobs can be run in parallel. CronJob is a workload resource and is essentially a job that is set with a schedule through a cron expression.</p>
+			<p><em class="italic">Figure 7.7</em> brings<a id="_idIndexMarker792"/> together the examples related to a single container Pod, <strong class="source-inline">my-nginx</strong>, and the multiple container Pod, <strong class="source-inline">pod-hello-world-etl</strong>, and illustrates how these Pods can be potentially connected within a node:</p>
+			<div>
+				<div id="_idContainer084" class="IMG---Figure">
+					<img src="image/B15587_07_07.jpg" alt="Figure 7.7 – Pod connectivity within a node&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 7.7 – Pod connectivity within a node</p>
+			<p>Pods are <a id="_idIndexMarker793"/>ephemeral in nature, and so is the storage associated with Pods. Hence, Pods are better suited for stateless applications. However, Pods can also be used for stateful applications, but in such cases, Pods should be attached to persistent storage or volumes. Pods are also meant to run a single instance of the application. Multiple instances of Pods should be used to scale horizontally. This is referred to as replication. So, Pods cannot scale by themselves.</p>
+			<p class="callout-heading">Liveness, readiness, and start up probes</p>
+			<p class="callout">A liveness probe is used to check whether the application is running as expected and if not, the container is restarted. A readiness probe is used to check whether an application is up but also ready to accept traffic. A start up probe indicates when a container application has started. If a start up probe is configured, then this will disable the liveness and readiness checks until the start up probe succeeds. For more detailed information, refer to <a href="https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/">https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/</a>.</p>
+			<p>Kubernetes uses specific workload resources to create and manage multiple Pods. The most common ones are <a id="_idIndexMarker794"/>Deployment, StatefulSet, and DaemonSet, and these will be detailed in the upcoming sub-sections.</p>
+			<h2 id="_idParaDest-165"><a id="_idTextAnchor165"/>Deployment</h2>
+			<p>A <strong class="bold">Deployment</strong> is a Kubernetes object<a id="_idIndexMarker795"/> that provides declarative updates for Pods and ReplicaSets. A Deployment is part of the Kubernetes API group called apps.</p>
+			<p class="callout-heading">API groups</p>
+			<p class="callout">API groups are a way to extend the Kubernetes API. All supported API requests or future requests are placed in a specific group for easy categorization and this includes versioning. The most common group is the core group, also known as the legacy group. The core group is specified with <strong class="source-inline">apiVersion</strong> as <strong class="source-inline">v1</strong>. Pods fall under the core group. A Deployment falls under the apps group and is referred to with <strong class="source-inline">apiVersion</strong> as <strong class="source-inline">apps/v1</strong>.</p>
+			<p>A Deployment provides a declarative way to manage a set of Pods that are replicas. The deployment specification consists of a Pod template, Pod specification, and the desired number of Pod replicas. The cluster will have controllers that constantly monitor and work to maintain the desired state, and create, modify, or remove the replica Pods accordingly. Deployment controllers identify Pod replicas based on the matching label selector. The following is a declarative specification of a deployment that wraps three replicas of <strong class="bold">nginx</strong> Pods:</p>
+			<p class="source-code">apiVersion: apps/v1</p>
+			<p class="source-code">kind: Deployment</p>
+			<p class="source-code">metadata:</p>
+			<p class="source-code">  name: my-deploy</p>
+			<p class="source-code">  labels:</p>
+			<p class="source-code">    app: nginx</p>
+			<p class="source-code">spec:</p>
+			<p class="source-code">  replicas: 3</p>
+			<p class="source-code">  selector:</p>
+			<p class="source-code">    matchLabels:</p>
+			<p class="source-code">      app:nginx</p>
+			<p class="source-code">  template:</p>
+			<p class="source-code">    metadata:</p>
+			<p class="source-code">      labels:</p>
+			<p class="source-code">        app: nginx</p>
+			<p class="source-code">    spec:</p>
+			<p class="source-code">      containers:</p>
+			<p class="source-code">      - name: nginx</p>
+			<p class="source-code">        image: nginx</p>
+			<p class="source-code">        ports:</p>
+			<p class="source-code">        - containerPort: 80</p>
+			<p>The following is a set of equivalent imperative commands to create a similar deployment:</p>
+			<p class="source-code">kubectl create deployment my-deploy --image=nginx</p>
+			<p class="source-code">kubectl scale –replicas=3 deployments/my-deploy</p>
+			<p>Deployments support<a id="_idIndexMarker796"/> autoscaling using the concept of <strong class="bold">HorizontalPodAutoscaler</strong> (<strong class="bold">HPA</strong>), based on metrics such as CPU utilization. The following is the command to implement HPA. HPA will be discussed in detail as part of <a href="B15587_08_Final_ASB_TD_ePub.xhtml#_idTextAnchor182"><em class="italic">Chapter 8</em></a>, <em class="italic">Understanding GKE Essentials to Deploy Containerized Applications</em>. This focuses on GKE:</p>
+			<p class="source-code">kubectl autoscale deployment my-deploy --cpu-percent=80 --min=5 --max=10</p>
+			<p>A deployment can be updated using the rolling update strategy. For example, if the image version is updated, then a new ReplicaSet is created. A rolling update will ensure that the deployment will move the Pods from the old ReplicaSet to the new ReplicaSet in a phased-out manner to ensure 0% downtime. If an error occurs while performing a rolling update, the new ReplicaSet will never reach <em class="italic">Ready</em> status and the old ReplicaSet will not terminate, thereby enabling 0% downtime. Deployments and Pods are connected by labels. Each Pod is given a label. The deployment has a label selector. So, any updates to the deployments are rolled out to the Pods with matching labels.</p>
+			<p>A Deployment is <a id="_idIndexMarker797"/>well-suited for a stateless application, where a request will be served in a similar manner by either of the replica Pods. However, there is another Deployment resource that is stateful in nature and is called StatefulSets. This will be covered as the next topic.</p>
+			<h2 id="_idParaDest-166"><a id="_idTextAnchor166"/>StatefulSets</h2>
+			<p><strong class="bold">StatefulSets</strong> are a workload <a id="_idIndexMarker798"/>resource and a Kubernetes workload API object that is used to manage stateful applications, specifically, when an application requires its own unique network identifier and stable persistent storage. StatefulSets assign a unique identifier to Pods. StatefulSets can scale a set of Pods, but each replica is unique and has its own state. This means that each replica also has its own persistent volume. If the name of the StatefulSet is <strong class="source-inline">sample</strong>, then the Pod's name will be <strong class="source-inline">sample-0</strong>. If there are three replicas, then additional Pods called <strong class="source-inline">sample-1</strong> and <strong class="source-inline">sample-2</strong> will be created. This is completely different from deployment, where all Pods share the same volume.</p>
+			<p>The following is a declarative specification of a StatefulSet with three replicas:</p>
+			<p class="source-code">apiVersion: apps/v1</p>
+			<p class="source-code">kind: <strong class="bold">StatefulSet</strong></p>
+			<p class="source-code">metadata:</p>
+			<p class="source-code">  name: sample</p>
+			<p class="source-code">spec:</p>
+			<p class="source-code">  selector:</p>
+			<p class="source-code">    matchLabels:</p>
+			<p class="source-code">      app: nginx</p>
+			<p class="source-code">  serviceName: nginx</p>
+			<p class="source-code">  replicas: 3</p>
+			<p class="source-code">  updateStrategy:</p>
+			<p class="source-code">    type: RollingUpdate</p>
+			<p class="source-code">  template:</p>
+			<p class="source-code">    metadata:</p>
+			<p class="source-code">      labels:</p>
+			<p class="source-code">        app: nginx</p>
+			<p class="source-code">    spec:</p>
+			<p class="source-code">      containers:</p>
+			<p class="source-code">      - name: nginx</p>
+			<p class="source-code">        image: ...</p>
+			<p class="source-code">        ports:</p>
+			<p class="source-code">        - containerPort: 80</p>
+			<p class="source-code">        volumeMounts:</p>
+			<p class="source-code">        - name: nginx-stateful-volume</p>
+			<p class="source-code">          mountPath: ...</p>
+			<p class="source-code">  volumeClaimTemplates:</p>
+			<p class="source-code">  - metadata:</p>
+			<p class="source-code">      name: nginx-stateful-volume</p>
+			<p class="source-code">      annotations:</p>
+			<p class="source-code">        ...</p>
+			<p class="source-code">    spec:</p>
+			<p class="source-code">      accessModes: [ "ReadWriteOnce" ]</p>
+			<p class="source-code">      resources:</p>
+			<p class="source-code">        requests:</p>
+			<p class="source-code">          storage: 1Gi</p>
+			<p>If the StatefulSet is scaled down, then the last Pod in the StatefulSet will be removed (in other words, in reverse order). In the preceding example, if the replica count is reduced to two from three, then the <strong class="source-inline">sample-2</strong> Pod will be deleted. The StatefulSet supports rolling updates if there is any<a id="_idIndexMarker799"/> change. An old version of the Pod for a specific replica will be replaced when the new version of the Pod on that specific replica is back up. For example, <strong class="source-inline">sample-0</strong> will be replaced with a new version of <strong class="source-inline">sample-0</strong>. The next topic provides an overview of DaemonSets.</p>
+			<h2 id="_idParaDest-167"><a id="_idTextAnchor167"/>DaemonSets</h2>
+			<p><strong class="bold">DaemonSets</strong> is a workload resource<a id="_idIndexMarker800"/> that ensures that a copy of the Pod runs on every node or a certain subset of nodes in the cluster. Essentially, the controller for the DaemonSet creates a Pod when a node is created and deletes the Pod when the node is deleted. <strong class="source-inline">kube-proxy</strong> is a DaemonSet because a copy of it runs on each node in the cluster as part of the node control plane. Additional examples include the following:</p>
+			<ul>
+				<li>Running a log collector daemon on every node or a certain subset of nodes</li>
+				<li>Running a cluster storage daemon on every node or a certain subset of nodes</li>
+				<li>Running a node monitoring daemon on every node or a certain subset of nodes</li>
+			</ul>
+			<p>To elaborate further, in the case of a log collection daemon, logs are exported from each node using a log collector such as <strong class="source-inline">fluentd</strong>. This can be done by a <strong class="source-inline">fluentd</strong> Pod and should be run on every node in the cluster. The following is a declarative specification of a log collection DaemonSet:</p>
+			<p class="source-code">apiVersion: apps/v1</p>
+			<p class="source-code">kind: DaemonSet</p>
+			<p class="source-code">metadata:</p>
+			<p class="source-code">  name: log-collector-daemon</p>
+			<p class="source-code">  labels:</p>
+			<p class="source-code">    app: daemon</p>
+			<p class="source-code">spec:</p>
+			<p class="source-code">  selector:</p>
+			<p class="source-code">    matchLabels:</p>
+			<p class="source-code">      app:log-collector</p>
+			<p class="source-code">  template:</p>
+			<p class="source-code">    metadata:</p>
+			<p class="source-code">      labels:</p>
+			<p class="source-code">        app: log-collector</p>
+			<p class="source-code">    spec:</p>
+			<p class="source-code">      containers:</p>
+			<p class="source-code">      - name: fluentd</p>
+			<p class="source-code">        image: quay.io/fluent/fluentd-kubernetes-daemonset</p>
+			<p class="source-code">        ports:</p>
+			<p class="source-code">        - containerPort: 9200</p>
+			<p>Like Deployments, the <a id="_idIndexMarker801"/>DaemonSet also supports rolling updates. So, if the DaemonSet is updated, then a new Pod is created and when the new Pod is up, the current Pod will be deleted.</p>
+			<p>The next topic discusses a Kubernetes object called Service. This is essential for establishing communication with an application from within the cluster and from outside the cluster.</p>
+			<h2 id="_idParaDest-168"><a id="_idTextAnchor168"/>Service</h2>
+			<p>As previously mentioned, Pods are <a id="_idIndexMarker802"/>ephemeral in nature. Pods' IP addresses are not long-lived and can keep changing. This poses a challenge if an API request needs to be sent to the Pod's container using its IP address.</p>
+			<p>Kubernetes provides a stable <a id="_idIndexMarker803"/>abstraction point for a set of Pods called a <strong class="bold">Service</strong>. Every Service has a fixed IP address that doesn't change, and this gets registered with the cluster's built-in DNS. A Service identifies associated Pods using label selectors.</p>
+			<p>In addition, when a Service object is created, Kubernetes<a id="_idIndexMarker804"/> creates another object called <strong class="bold">EndPoint</strong>. The EndPoint object will maintain the list of all IPs for the Pods that match the label selector and is constantly updated as Pods are deleted and created. The Service object gets the current set of active Pods from the EndPoint object.</p>
+			<p><em class="italic">Figure 7.8</em> illustrates the interaction between the Service object, endpoint object, and the associated Pods based on the matching label selector:</p>
+			<div>
+				<div id="_idContainer085" class="IMG---Figure">
+					<img src="image/B15587_07_08.jpg" alt="Figure 7.8 – Service object interaction based on a matching label selector&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 7.8 – Service object interaction based on a matching label selector</p>
+			<p>The following is a <a id="_idIndexMarker805"/>declarative specification that exposes a Service for a set<a id="_idIndexMarker806"/> of Pods. This allows the Pod to be accessed using the Service, since the Service is not ephemeral in nature and will have a fixed IP address:</p>
+			<p class="source-code">apiVersion: v1</p>
+			<p class="source-code">kind: Service</p>
+			<p class="source-code">metadata:</p>
+			<p class="source-code">  name: my-service</p>
+			<p class="source-code">spec:</p>
+			<p class="source-code">  selector:</p>
+			<p class="source-code">    app: nginx</p>
+			<p class="source-code">  ports:</p>
+			<p class="source-code">  - protocol: TCP</p>
+			<p class="source-code">    port: 80</p>
+			<p class="source-code">    targetPort: 8080 </p>
+			<p>The following is an equivalent imperative command that can expose Pods as a Service:</p>
+			<p class="source-code">#Syntax</p>
+			<p class="source-code">kubectl create &lt;cluster-type&gt; NAME [--tcp=port:targetPort]</p>
+			<p class="source-code">kubectl create service clusterip nginx --tcp=80:80</p>
+			<p>There are four types <a id="_idIndexMarker807"/>of Service, and each Service type exposes Pods differently:</p>
+			<ul>
+				<li>ClusterIP</li>
+				<li>NodePort</li>
+				<li>LoadBalancer</li>
+				<li>ExternalName</li>
+			</ul>
+			<p>The preceding <a id="_idIndexMarker808"/>specification represents a Service of the ClusterIP type as that's the default Service type. This will be introduced as the next topic.</p>
+			<h3>ClusterIP</h3>
+			<p><strong class="bold">ClusterIP</strong> is the default<a id="_idIndexMarker809"/> Service type. Each Service gets an IP that can only be accessed by other services within the cluster. This is essentially an internal IP, and hence the application inside the Pods cannot be accessed by public traffic or by an external Service that resides outside the cluster. The default Service type, if not specified, is ClusterIP. The preceding declarative specification is an example of a ClusterIP Service.</p>
+			<h3>NodePort</h3>
+			<p><strong class="bold">NodePort</strong> is a Service type where<a id="_idIndexMarker810"/> the Service gets an internal IP that can be accessed by other services within the cluster. In addition, the NodePort Service gets a cluster-wide port. This port can be accessed by a Service that resides outside the cluster only if the request is sent to Node's IP address along with the cluster-wide port. Any traffic sent to the cluster-wide port will be redirected to the Pods<a id="_idIndexMarker811"/> associated with the Service. The following is a declarative specification that exposes a node port Service for a set of Pods:</p>
+			<p class="source-code">apiVersion: v1</p>
+			<p class="source-code">kind: Service</p>
+			<p class="source-code">metadata:</p>
+			<p class="source-code">  name: my-service</p>
+			<p class="source-code">spec:</p>
+			<p class="source-code">  type: NodePort</p>
+			<p class="source-code">  selector:</p>
+			<p class="source-code">    app: nginx</p>
+			<p class="source-code">  ports:</p>
+			<p class="source-code">  - protocol: TCP</p>
+			<p class="source-code">    nodePort: 30200</p>
+			<p class="source-code">    port: 80</p>
+			<p class="source-code">    targetPort: 8080</p>
+			<h3>LoadBalancer</h3>
+			<p><strong class="bold">LoadBalancer</strong> is a Service type<a id="_idIndexMarker812"/> where the Service gets an internal IP that can be accessed by other services within the cluster. In addition, the Service also gets an external IP address that allows the application to receive traffic from a Service that resides outside the cluster. This is facilitated by the public cloud load balancer attached to the Service. The following is a declarative specification that exposes a load balancer Service for a set of Pods:</p>
+			<p class="source-code">apiVersion: v1</p>
+			<p class="source-code">kind: Service</p>
+			<p class="source-code">metadata:</p>
+			<p class="source-code">  name: my-service</p>
+			<p class="source-code">spec:</p>
+			<p class="source-code">  type: LoadBalancer</p>
+			<p class="source-code">  selector:</p>
+			<p class="source-code">    app: nginx</p>
+			<p class="source-code">  ports:</p>
+			<p class="source-code">  - protocol: TCP </p>
+			<p class="source-code">    port: 80</p>
+			<p class="source-code">    targetPort: 8080</p>
+			<h3>ExternalName</h3>
+			<p><strong class="bold">ExternalName</strong> is a Service type where the <a id="_idIndexMarker813"/>Service uses DNS names instead of label selectors. So, a request from an internal client goes to the internal DNS and then gets redirected to an external name. The following is a declarative specification for a Service of the <strong class="source-inline">ExternalName</strong> type:</p>
+			<p class="source-code">apiVersion: v1</p>
+			<p class="source-code">kind: Service</p>
+			<p class="source-code">metadata:</p>
+			<p class="source-code">  name: my-service</p>
+			<p class="source-code">spec:</p>
+			<p class="source-code">  type: ExternalName</p>
+			<p class="source-code">  externalName: hello.com</p>
+			<p>Hence, a request from an internal client will go to <strong class="source-inline">my-service.default.svc.cluster.local</strong>, and then the request gets redirected to <strong class="source-inline">hello.com</strong>.</p>
+			<p>This completes an overview of the most common Service types in Kubernetes. One of the factors to consider while using services is to map services to Pods, otherwise known as Service resolution. Kubernetes has an <a id="_idIndexMarker814"/>add-on feature called <strong class="bold">kube-dns</strong>. <strong class="source-inline">kube-dns</strong> is a DNS server that is essentially a directory mapping of IP addresses against easy-to-remember names along with a record type:</p>
+			<p>The <strong class="source-inline">kube-dns</strong> server<a id="_idIndexMarker815"/> watches the API server for the creation of a new Service. When a new server is created, the <strong class="source-inline">kube-dns</strong> server creates a set of DNS records. Kubernetes is configured to use the <strong class="source-inline">kube-dns</strong> server's IP to resolve DNS names for Pods. Pods can resolve their Service IP by querying the <strong class="source-inline">kube-dns</strong> server using the Service name, the Pod's namespace, and the default cluster domain:</p>
+			<ul>
+				<li>If the Pod and Service are on the same namespace, then the Pod can resolve the Service IP by querying the <strong class="source-inline">kube-dns</strong> server using the Service name directly.</li>
+				<li>If the Pod and Service are not on the same namespace, then the Pod can resolve the Service IP by querying the <strong class="source-inline">kube-dns</strong> server using the Service and the Service namespace.</li>
+				<li>A Pod in any other namespace can resolve the IP address of the Service by using the fully qualified domain name, <strong class="source-inline">foo.bar.svc.cluster.local</strong>.</li>
+			</ul>
+			<p><strong class="source-inline">kube-dns</strong> maintains the following types of DNS record for Pods and services:</p>
+			<ul>
+				<li>Every Service defined in the cluster is assigned a DNS A record.</li>
+				<li>Every named Pod in the cluster is assigned a DNS SRV record.</li>
+			</ul>
+			<p>The following table represents <strong class="source-inline">kube-dns</strong> records where the hostname is <strong class="source-inline">foo</strong> and the namespace is <strong class="source-inline">bar</strong>:</p>
+			<div>
+				<div id="_idContainer086" class="IMG---Figure">
+					<img src="image/B15587_07_Table_01.jpg" alt=""/>
+				</div>
+			</div>
+			<p>This concludes a<a id="_idIndexMarker816"/> high-level overview of specific Kubernetes objects, and this should provide a good basis for discussing GKE in the next chapter. There are several other objects, such as job, CronJob, volumes, and persistent volumes, but a deep dive on those will be beyond the scope of the book.</p>
+			<p>The next topic details several concepts with respect to scheduling and interacting with Pods.</p>
+			<h1 id="_idParaDest-169"><a id="_idTextAnchor169"/>Scheduling and interacting with Pods</h1>
+			<p>A Pod is the smallest unit of deployment in<a id="_idIndexMarker817"/> a Kubernetes cluster that runs containerized applications. The <strong class="source-inline">kube-scheduler</strong> master control plane component is responsible for finding a suitable node for the Pod and includes interactions with<a id="_idIndexMarker818"/> other components of the control plane. In addition, <strong class="source-inline">kube-scheduler</strong> needs to consider multiple configuration options, such as NodeSelector, NodeAffinity, and PodAffinity, to find the right node for the Pod. This section details the interactions that happen during a Pod creation and details the factors that need to be considered while scheduling Pods.</p>
+			<h2 id="_idParaDest-170"><a id="_idTextAnchor170"/>Summarizing master plane interactions on Pod creation</h2>
+			<p>A Pod is a workload that <a id="_idIndexMarker819"/>needs to be deployed in a Kubernetes cluster. A Pod needs to run on a node and will host an application. A Pod can be in various phases. The following is a summary of valid Pod phases:</p>
+			<ul>
+				<li><strong class="bold">Pending</strong>: A Pod is accepted by the Kubernetes cluster, but is waiting to be scheduled.</li>
+				<li><strong class="bold">Running</strong>: A Pod is tied to a node and the container in the Pod is running.</li>
+				<li><strong class="bold">Succeeded</strong> or <strong class="bold">Completed</strong>: All containers in a Pod have terminated successfully and will not be restarted.</li>
+				<li><strong class="bold">Failed</strong>: All containers in the Pod have terminated and at least one container exited with a non-zero status or failure.</li>
+				<li><strong class="bold">Unknown</strong>: The state of the Pod cannot be obtained due to a communication error between the node where the Pod should be running.</li>
+			</ul>
+			<p>Right from the time<a id="_idIndexMarker820"/> a request is received to create a Pod to the time the Pod is created, there is a series of interactions between the components of the master plane that will create the Pod on the worker node. The sequence of interactions is listed as follows. This reflects a scenario where a Pod is being created. The sequence of steps for other interactions, such as list or delete, or even other workloads, such as job or deployment, follow the same pattern:</p>
+			<ol>
+				<li value="1"><strong class="source-inline">kube-apiserver</strong> receives a request to create a Pod. The request can come from a <strong class="source-inline">kubectl</strong> command or a direct API interaction.</li>
+				<li><strong class="source-inline">kube-apiserver</strong> authenticates and authorizes the incoming request.</li>
+				<li>Upon successful validation, <strong class="source-inline">kube-apiserver</strong> creates a Pod object but will not assign the newly created Pod object to any node.</li>
+				<li><strong class="source-inline">kube-apiserver</strong> will update the information about the newly created Pod object against the <strong class="source-inline">etcd</strong> database and sends a response to the original request for Pod creation that a Pod has been created.</li>
+				<li><strong class="source-inline">kube-scheduler</strong> continuously monitors and realizes that there is a new Pod object but with no node assigned.</li>
+				<li><strong class="source-inline">kube-controller</strong> identifies the right node to put the Pod and communicates this back to <strong class="source-inline">kube-apiserver</strong>.</li>
+				<li><strong class="source-inline">kube-apiserver</strong> updates the node for the Pod object against the <strong class="source-inline">etcd</strong> database.</li>
+				<li><strong class="source-inline">kube-apiserver</strong> passes instructions to <strong class="source-inline">kubelet</strong> on the node (worker) to physically create the Pod object.</li>
+				<li><strong class="source-inline">kubelet</strong> creates the Pod on the node and instructs the container runtime engine to deploy the application image.</li>
+				<li><strong class="source-inline">kubelet</strong> updates the status back to <strong class="source-inline">kube-apiserver</strong> and <strong class="source-inline">kube-apiserver</strong> updates the <strong class="source-inline">etcd</strong> database.</li>
+			</ol>
+			<p>This summarizes the<a id="_idIndexMarker821"/> interactions between master plane components when a request is sent to the Kubernetes cluster through <strong class="source-inline">kubectl</strong> or the Kubernetes client. The next sub-section focuses on critical factors that should be considered while scheduling Pods against the node.</p>
+			<h2 id="_idParaDest-171"><a id="_idTextAnchor171"/>Critical factors to consider while scheduling Pods</h2>
+			<p>There are multiple<a id="_idIndexMarker822"/> factors that <strong class="source-inline">kube-scheduler</strong> considers when scheduling a Pod against a node. One such common factor is resource requests and maximum limits. A Pod optionally allows the specification of CPU/memory requests and sets the respective maximum limits on a container basis. These requests and limits at container level are summed up for a Pod and are used by <strong class="source-inline">kube-scheduler</strong> to determine the appropriate node for the Pod. <strong class="source-inline">kube-scheduler</strong> schedules a Pod<a id="_idIndexMarker823"/> on the node where the Pod's requests and limits are within the node's available capacity.</p>
+			<p>A Pod provides additional properties that exercise more control in forcing <strong class="source-inline">kube-scheduler</strong> to schedule Pods only if certain conditions are met. A node also provides properties that are considered during scheduling. The following are such properties:</p>
+			<ul>
+				<li><strong class="bold">NodeSelector</strong>: Schedules a Pod against the<a id="_idIndexMarker824"/> node with matching label values</li>
+				<li><strong class="bold">NodeAffinity</strong>: Schedules a <a id="_idIndexMarker825"/>Pod against the node with matching flexible conditions; also considers Anti-Affinity conditions to avoid scheduling a Pod against specific node(s)</li>
+				<li><strong class="bold">Inter-pod affinity and Anti-Affinity</strong>: Schedules a<a id="_idIndexMarker826"/> Pod on nodes with Pods having matching attributes; also considers Anti-Affinity conditions that avoid scheduling Pods against specific node(s) that have Pods with specific attributes</li>
+				<li><strong class="bold">NodeName</strong>: Schedules a <a id="_idIndexMarker827"/>Pod against a very specific node</li>
+				<li><strong class="bold">Taints and Tolerations</strong>: Avoids<a id="_idIndexMarker828"/> scheduling Pods on nodes that are tainted, but can make an exception if tolerations are defined on the Pod</li>
+			</ul>
+			<p>The upcoming sub-sections will detail the aforementioned attributes.</p>
+			<h3>Node Selector</h3>
+			<p><strong class="bold">nodeSelector</strong> is a Pod <a id="_idIndexMarker829"/>attribute that forces <strong class="source-inline">kube-scheduler</strong> to schedule a Pod only against a node with a matching label and corresponding value for the label.</p>
+			<p>For example, consider a cluster where nodes in the cluster belong to different CPU platforms. The nodes are labeled with a label selector and an appropriate value indicating the CPU platform of the node. If there is a need to run a Pod on a node with a specific CPU platform, then the Pod attribute, <strong class="source-inline">nodeSelector</strong>, can be used. <strong class="source-inline">kube-scheduler</strong> will find a node that matches the <strong class="source-inline">nodeSelector</strong> specification on the Pod against the matching label on the node. If no such node is found, then the Pod will not be scheduled.</p>
+			<p><em class="italic">Figure 7.9</em> shows the use of <strong class="source-inline">nodeSelector</strong> in a Pod and its matching relevance to a node specification:</p>
+			<div>
+				<div id="_idContainer087" class="IMG---Figure">
+					<img src="image/B15587_07_09.jpg" alt="Figure 7.9 – Specifying a nodeSelector on a Pod that matches a node&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 7.9 – Specifying a nodeSelector on a Pod that matches a node</p>
+			<p>In the preceding example, <strong class="source-inline">kube-scheduler</strong> will schedule the Pod on a node where the node label is <strong class="source-inline">cpuPlatform</strong> and the corresponding value is <strong class="source-inline">Skylake</strong>.</p>
+			<h3>Node Affinity and Anti-Affinity </h3>
+			<p><strong class="bold">Node Affinity and Anti-Affinity</strong> are a set of preferences (very similar to the node selector) where a Pod can be scheduled <a id="_idIndexMarker830"/>against a node based on matching labels. However, the affinity and Anti-Affinity preferences are more flexible. A matching expression with a potential range of values can be specified, unlike <strong class="source-inline">nodeSelector</strong>, where only an exact value for a label match can be specified. These preferences are only considered during scheduling and are ignored during execution. This means that once a Pod is scheduled on a node, the Pod continues to run on the node even though the node labels have changed.</p>
+			<p>In addition, the Node Affinity and Anti-Affinity preferences can be set against two properties that serve as a hard or soft constraint. These two properties are as follows:</p>
+			<ul>
+				<li><strong class="bold">requiredDuringSchedulingIgnoredDuringExecution</strong>: This is a hard limit where a Pod is scheduled only if the criterion is met.</li>
+				<li><strong class="bold">preferredDuringSchedulingIgnoredDuringExecution</strong>: This is a soft limit where the scheduler tries to deploy the Pod on the node that matches the specified criterion. The Pod is still deployed on a node even if a match is not found.</li>
+			</ul>
+			<p>The following is a Pod specification involving the use of <strong class="source-inline">nodeAffinity</strong>. The Pod specification indicates that the Pod should not be scheduled on nodes with a specific CPU platform:</p>
+			<p class="source-code">apiVersion: v1</p>
+			<p class="source-code">kind: Pod</p>
+			<p class="source-code">metadata:</p>
+			<p class="source-code">  name: pod-node-anti-affinity</p>
+			<p class="source-code">spec:</p>
+			<p class="source-code">  containers:</p>
+			<p class="source-code">  - name: my-pod</p>
+			<p class="source-code">    image: nginx</p>
+			<p class="source-code">  affinity:</p>
+			<p class="source-code">    nodeAffinity:</p>
+			<p class="source-code">      requiredDuringSchedulingIgnoredDuringExecution:</p>
+			<p class="source-code">        nodeSelectorTerms:</p>
+			<p class="source-code">        - matchExpressions:</p>
+			<p class="source-code">          - key: cpuPlatform</p>
+			<p class="source-code">            operator: Not In</p>
+			<p class="source-code">            values:</p>
+			<p class="source-code">            - Skylake</p>
+			<p class="source-code">            - Broadwell</p>
+			<p>In the preceding example, <strong class="source-inline">kube-scheduler</strong> will not schedule the Pod on nodes where the CPU platform is either <strong class="source-inline">Skylake</strong> or <strong class="source-inline">Broadwell</strong>.</p>
+			<h3>Inter-pod affinity and Anti-Affinity</h3>
+			<p>This is an extension of Node Affinity with the <a id="_idIndexMarker831"/>same fundamentals. This specification allows the scheduling of Pods to nodes based on the labels on the Pods that are already running on the nodes. Similarly, Anti-Affinity will ensure that a Pod is not scheduled on a node if there are other Pods of specific labels running on a node.</p>
+			<p>The rules for Pod affinity and Anti-Affinity can be illustrated as follows:</p>
+			<ul>
+				<li><strong class="bold">pod-affinity</strong>: Pod P should be scheduled on Node N only if Node N has other Pods running with matching rule A.</li>
+				<li><strong class="bold">pod-anti-affinity</strong>: Pod P should not be scheduled on Node N if Node N has other Pods running with matching rule B.</li>
+			</ul>
+			<p><em class="italic">Figure 7.10</em> shows a Pod specification with Pod affinity and Anti-Affinity definitions:</p>
+			<div>
+				<div id="_idContainer088" class="IMG---Figure">
+					<img src="image/B15587_07_10.jpg" alt="Figure 7.10 – Pod definition with inter-pod and anti-pod affinity&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 7.10 – Pod definition with inter-pod and anti-pod affinity</p>
+			<p>In the preceding example, <strong class="source-inline">kube-scheduler</strong> will schedule Pods on nodes where other Pods that are already running on the node have matching labels that reflect <strong class="source-inline">app</strong> as either <strong class="source-inline">webserver</strong> or <strong class="source-inline">elasticserver</strong>. On the other hand, <strong class="source-inline">kube-scheduler</strong> will not attempt to schedule Pods on <a id="_idIndexMarker832"/>nodes where other Pods that are already running on the nodes have matching labels that reflect <strong class="source-inline">app</strong> as a database. In short, this Pod specification tries to schedule Pods on nodes that don't run database applications.</p>
+			<h3>Node name</h3>
+			<p><strong class="bold">nodeName</strong> is an attribute that can be specified in a Pod definition file and is also the simplest way to specify constraints<a id="_idIndexMarker833"/> regarding node selection. The biggest limitation of this kind of specification is that it is an all-or-nothing proposition.</p>
+			<p>For example, if the node is available for scheduling, then the Pod can be scheduled on that specific node. However, if the node is not available, then the Pod doesn't have a choice of any other node. A Pod cannot be scheduled until the node can take further workloads. In addition, nodes can be ephemeral, specifically, when the nodes are VMs. So, specifying a node name might not be a good design to start with, and hence this method is the least preferred. The following is a Pod specification with the <strong class="source-inline">nodeName</strong> attribute:</p>
+			<p class="source-code">apiVersion: v1</p>
+			<p class="source-code">kind: Pod</p>
+			<p class="source-code">metadata:</p>
+			<p class="source-code">  name: my-pod</p>
+			<p class="source-code">spec:</p>
+			<p class="source-code">  containers:</p>
+			<p class="source-code">  - name: nginx</p>
+			<p class="source-code">    image: nginx</p>
+			<p class="source-code">  nodeName: node01</p>
+			<p>In the preceding example, <strong class="source-inline">kube-scheduler</strong> will attempt to schedule Pods on nodes where the node name is <strong class="source-inline">node01</strong>.</p>
+			<h3>Taints and tolerations</h3>
+			<p>Node Affinity and Pod affinity are properties of a Pod for finding a set of nodes. Taint is a property of a node that can repel one or more Pods. A node is tainted with a specific effect, based on a defined combination of a key, operator, and optionally, a value attribute. Possible indications that a node may be tainted are as follows:</p>
+			<ul>
+				<li><strong class="bold">NoSchedule</strong>: Indicates that no more Pods can be scheduled on this node</li>
+				<li><strong class="bold">NoExecute</strong>: Indicates that no more Pods can run on this node and existing ones should be terminated</li>
+				<li><strong class="bold">PreferNoSchedule</strong>: Indicates a soft limit that no more Pods can be scheduled on this node</li>
+			</ul>
+			<p>Tolerations is a feature that <a id="_idIndexMarker834"/>allows Pods to be scheduled on nodes with matching taints. So, tolerations are a way to counter the impact of a taint.</p>
+			<p>The following is the CLI command to taint a node:</p>
+			<p class="source-code"># Taint a node</p>
+			<p class="source-code">kubectl taint nodes node01 sky=blue:NoSchedule</p>
+			<p>The following is a Pod specification that defines toleration against the tainted node, which makes the Pod still eligible to be scheduled against the node:</p>
+			<p class="source-code">kind: Pod</p>
+			<p class="source-code">metadata:</p>
+			<p class="source-code">  name: my-pod</p>
+			<p class="source-code">spec:</p>
+			<p class="source-code">  containers:</p>
+			<p class="source-code">  - name: nginx</p>
+			<p class="source-code">    image: nginx</p>
+			<p class="source-code">  tolerations:</p>
+			<p class="source-code">  - key: "sky"</p>
+			<p class="source-code">    value: "blue"</p>
+			<p class="source-code">    operator: "Equal"</p>
+			<p class="source-code">    effect: "NoSchedule"</p>
+			<p>This is a two-part example for tainting a node:</p>
+			<ul>
+				<li>The CLI command taints <strong class="source-inline">node01</strong> by specifying not to schedule Pods with a matching label key-value pair as <strong class="source-inline">sky=blue</strong>.</li>
+				<li>However, the Pod specification defines a toleration for <strong class="source-inline">node01</strong>.</li>
+			</ul>
+			<p>So, the Pod can be potentially scheduled on <strong class="source-inline">node01</strong> by <strong class="source-inline">kube-scheduler</strong>. This completes the deep dive into critical factors that need to be considered while scheduling Pods on nodes.</p>
+			<p>In a Kubernetes<a id="_idIndexMarker835"/> deployment, application changes in terms of new features or bug fixes are reflected by deploying updated container images. There are several strategies to enforce a change in deployment or apply a new deployment. These will be discussed in the upcoming section.</p>
+			<h1 id="_idParaDest-172"><a id="_idTextAnchor172"/>Kubernetes deployment strategies</h1>
+			<p>If a change is required to<a id="_idIndexMarker836"/> horizontally scale an application by increasing the number of replicas or if a change is required to the application by updating the container image, then a change is required to the deployment specification in <a id="_idIndexMarker837"/>Kubernetes. This will lead to automatic updates, either resulting in deploying additional Pods to scale horizontally or deploying a new Pod with the updated image and replace the current running Pod.</p>
+			<p>Changes to deployment can either happen by applying an updated deployment spec or by editing an existing deployment or specifically updating the image on the deployment. All of these can be done through the <strong class="source-inline">kubectl</strong> commands. However, the strategy used to perform the deployment makes an immense difference in terms of how end users of the application are impacted. There are four specific deployment strategies. Each of these strategies offers a different use case. These are mentioned as follows and will be illustrated in detail in the upcoming sub-sections:</p>
+			<ul>
+				<li>Recreate</li>
+				<li>Rolling update</li>
+				<li>Blue/Green</li>
+				<li>Canary</li>
+			</ul>
+			<p>The first deployment strategy that will be detailed will be the <em class="italic">Recreate</em> strategy.</p>
+			<h2 id="_idParaDest-173"><a id="_idTextAnchor173"/>Recreate strategy</h2>
+			<p>The <strong class="bold">Recreate</strong> strategy is<a id="_idIndexMarker838"/> a basic strategy and is also the most straightforward compared to other strategies. Essentially, the current running Pods are all destroyed or brought down first and then the desired number of Pods are brought up against a new ReplicaSet. </p>
+			<p>The following is an example snippet that illustrates a Recreate update:</p>
+			<p class="source-code">[...]</p>
+			<p class="source-code">kind: deployment</p>
+			<p class="source-code">spec:</p>
+			<p class="source-code">  replicas: 4</p>
+			<p class="source-code">  strategy:</p>
+			<p class="source-code">    type: Recreate</p>
+			<p class="source-code">[...]</p>
+			<p>Based on the preceding example snippet, Kubernetes will first bring down all four running Pods on the current ReplicaSet. Following that, Kubernetes will create a new ReplicaSet and will start four new Pods. Refer to <em class="italic">Figure 7.11</em>:</p>
+			<div>
+				<div id="_idContainer089" class="IMG---Figure">
+					<img src="image/B15587_07_11.jpg" alt="Figure 7.11 – Illustrating the 'Recreate' strategy in Kubernetes deployment&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 7.11 – Illustrating the 'Recreate' strategy in Kubernetes deployment</p>
+			<p>The Recreate strategy results in downtime as the application will remain unavailable for a brief period. This will result in disruptions and is therefore not a suggested strategy for applications that have a live user base. However, this strategy is used in scenarios where old and new versions of the application should or can never serve user traffic at the exact same time.</p>
+			<p>This completes<a id="_idIndexMarker839"/> the Recreate strategy. The clear downside is unavoidable downtime. This downside can be handled by another deployment strategy, called the rolling update strategy, and will be covered in the next sub-section.</p>
+			<h2 id="_idParaDest-174"><a id="_idTextAnchor174"/>Rolling update strategy</h2>
+			<p>The <strong class="bold">Rolling update</strong> strategy enables the<a id="_idIndexMarker840"/> incremental deployment of applications with zero downtime. The current running Pod instances are gradually updated with a new Pod instance until all of them are replaced. The application stays available at all times. The rolling update strategy is the<a id="_idIndexMarker841"/> default deployment strategy in Kubernetes. However, this strategy doesn't exercise control in terms of specifying or having control over the amount of traffic directed to the new Pod instances versus old Pod instances.</p>
+			<p>The deployment also gets updated over time, and the process is time-consuming and gradual. There are specific fields that control the rolling update strategy, and these are detailed as follows, starting with <strong class="bold">Max unavailable</strong>.</p>
+			<h3>Max unavailable</h3>
+			<p><strong class="source-inline">.spec.strategy.rollingUpdate.maxUnavailable</strong> is an optional field and refers to the maximum number of Pods that can be unavailable during the deployment process. This can be <a id="_idIndexMarker842"/>specified as an absolute number, or as a percentage of the desired Pods. If the field is not explicitly specified, then the default value is 25%. In addition, the default value is always considered if the value is explicitly specified as <strong class="source-inline">0</strong>.</p>
+			<p>Let's consider an example. If the desired set of Pods is 5, and <strong class="source-inline">maxUnavailable</strong> is 2, this means that at any point in time, the total number of minimum Pods running across the old and new versions should be 3.</p>
+			<p>The next sub-section will cover <strong class="bold">Max surge</strong>. This indicates the maximum number of Pods that can exist at any time across current and new replica sets.</p>
+			<h3>Max surge</h3>
+			<p><strong class="source-inline">.spec.strategy.rollingUpdate.maxSurge</strong> is an optional field and refers to the maximum number of Pods that can be created in addition to the desired number of Pods during the <a id="_idIndexMarker843"/>deployment process. This can be specified as an absolute number or a percentage of the desired Pods. If the field is not explicitly specified, then the default value is 25%. In addition, the default value is always considered if the value is explicitly specified as <strong class="source-inline">0</strong>.</p>
+			<p>Let's consider an example. If the desired set of Pods is 5 and the maximum surge is 3, this means that the deployment process can get started by rolling out three new Pods and ensure that the total number of running Pods doesn't exceed 8 (desired Pods + maximum surge). If the maximum surge is specified in terms of a percentage and the value is set to 20%, then the total number of running Pods across old and new deployment will not exceed 6 (desired Pods + 10% of desired Pods).</p>
+			<p>The next sub-section will cover <strong class="bold">Min Ready</strong>. This indicates the minimum time that the container should run for, indicating the Pod to be ready.</p>
+			<h3>Min ready</h3>
+			<p><strong class="source-inline">.spec.minReadySeconds</strong> is an optional<a id="_idIndexMarker844"/> field and refers to the minimum number of seconds that a newly created Pod should be in the ready state where containers are running without any failures or crashes. The default value, if not specified, is <strong class="source-inline">0</strong> and indicates that the Pod is ready as soon as it is created. However, if a value of <strong class="source-inline">10</strong> seconds is specified, for example, then the Pod needs to be in the ready state for 10 seconds without any containers failing in order to consider the Pod as available.</p>
+			<p>The next sub-section will cover <strong class="bold">Progress Deadline</strong>; the minimum wait time before concluding that a deployment is not progressing.</p>
+			<h3>Progress deadline</h3>
+			<p><strong class="source-inline">.spec.progressDeadlineSeconds</strong> is an optional <a id="_idIndexMarker845"/>field and refers to the waiting period before a deployment reports that it has failed to progress. The default value, if not explicitly specified, is 600 (in seconds). If explicitly specified, then this value needs to be greater than <strong class="source-inline">.spec.minReadySeconds</strong>.</p>
+			<p>During a rolling update strategy, a new ReplicaSet is always created. New Pods are created in the new ReplicaSet and currently running Pods are gradually removed from the old ReplicaSet. The <a id="_idIndexMarker846"/>following is an example snippet that illustrates a rolling update strategy and includes the key fields that impact the way the rolling update will be performed internally:</p>
+			<p class="source-code">[...]</p>
+			<p class="source-code">kind: deployment</p>
+			<p class="source-code">spec:</p>
+			<p class="source-code">  replicas: 8</p>
+			<p class="source-code">  minReadySeconds: 5</p>
+			<p class="source-code">  strategy:</p>
+			<p class="source-code">    type: RollingUpdate</p>
+			<p class="source-code">    rollingUpdate:</p>
+			<p class="source-code">      maxSurge: 4</p>
+			<p class="source-code">      maxUnavailable: 50%</p>
+			<p class="source-code">[...]</p>
+			<p>Based on the preceding example snippet, the following are the specific values that will be used to illustrate the example:</p>
+			<ul>
+				<li>Desired number of Pods = 8 Pods.</li>
+				<li>Maximum surge = 4. At any point, the total number of running Pods across old and new running Pods cannot exceed 12.</li>
+				<li>Maximum unavailable = 50% of desired = 4. At any point, there should be a minimum of 4 running Pods across old and new replica sets.</li>
+			</ul>
+			<p>Kubernetes will create a new ReplicaSet and will launch 4 new Pods. Kubernetes will then wait for 5 seconds once the Pods have been created to consider whether the Pods are available. So, at this moment, the total number of Pods across old and new replica sets is 12, which is the maximum value allowed. This is illustrated in <em class="italic">Figure 7.12</em>:</p>
+			<div>
+				<div id="_idContainer090" class="IMG---Figure">
+					<img src="image/B15587_07_12.jpg" alt="Figure 7.12 – Rolling update; creating Pods up to the maximum surge in a new ReplicaSet&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 7.12 – Rolling update; creating Pods up to the maximum surge in a new ReplicaSet</p>
+			<p>Now, given that<a id="_idIndexMarker847"/> the minimum number of running Pods is four in this example, across the old and new replica sets, Kubernetes can potentially kill all eight of the old replica sets since it will still leave four in the new ReplicaSet. So, the core values are still not violated. This is illustrated in <em class="italic">Figure 7.13</em>:</p>
+			<div>
+				<div id="_idContainer091" class="IMG---Figure">
+					<img src="image/B15587_07_13.jpg" alt="Figure 7.13 – Rolling update; removing Pods up to the maximum unavailable in the current ReplicaSet&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 7.13 – Rolling update; removing Pods up to the maximum unavailable in the current ReplicaSet</p>
+			<p>Now, Kubernetes will launch four more new Pods in the new ReplicaSet and will reach the desired number of Pods as well. This is illustrated in <em class="italic">Figure 7.14</em>. This completes the rolling update, where the specified limits were met throughout the process:</p>
+			<div>
+				<div id="_idContainer092" class="IMG---Figure">
+					<img src="image/B15587_07_14.jpg" alt="Figure 7.14 – Rolling update; creating new Pods up to the desired number in a new ReplicaSet&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 7.14 – Rolling update; creating new Pods up to the desired number in a new ReplicaSet</p>
+			<p>The rolling update strategy ensures zero downtime, but the downside is that there is no control in terms of the time taken for the deployment to complete, or no control in terms of the traffic<a id="_idIndexMarker848"/> going across old and new versions. The next strategy solves this specific downside.</p>
+			<h2 id="_idParaDest-175"><a id="_idTextAnchor175"/>Blue/Green strategy</h2>
+			<p>In the case of the <strong class="bold">Blue/Green</strong> strategy, there will be two versions of the deployment running. That means that there are<a id="_idIndexMarker849"/> two replica sets, one ReplicaSet per deployment. However, each ReplicaSet will have a different set of labels that differentiate the Pods. Traffic to the Pods is sent through a Service. The Service will initially have labels that send traffic to the first deployment or ReplicaSet. The second deployment will also be running, but traffic will not be served. When the Service is patched, and the labels are updated on the Service, matching the labels of Pods on the second deployment, then traffic will be diverted to the second deployment without any downtime.</p>
+			<p>The following is an example of two running deployments in the Kubernetes cluster. In this example, the name of the deployment is <strong class="source-inline">demo-app</strong>. Both deployments are running the same application, but different versions of the application image. The difference in the deployment is also reflected by the Pod label selector, where the current version of the deployment has a label selector with the version as <em class="italic">blue</em>, whereas the new deployment has a label selector with the version as <em class="italic">green</em>. </p>
+			<p>The example is illustrated in <em class="italic">Figure 7.15</em>. The Service initially points to the deployment where the version is blue. This is because the label selector on the Service has the version as <em class="italic">blue</em> and matches the label selectors on the Pods in the current deployment. Hence, the incoming traffic to the Service is only handled by Pods in the <em class="italic">blue</em> deployment. The Pods in the <em class="italic">green</em> deployment are running, but they are not serving any incoming traffic:</p>
+			<div>
+				<div id="_idContainer093" class="IMG---Figure">
+					<img src="image/B15587_07_15.jpg" alt="Figure 7.15 – Blue/Green deployment; traffic served only by the blue version&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 7.15 – Blue/Green deployment; traffic served only by the blue version</p>
+			<p><em class="italic">Figure 7.16</em> shows a snippet that reflects an update to the Service spec, where the Service label selector is updated to reflect the new version as green from blue:</p>
+			<div>
+				<div id="_idContainer094" class="IMG---Figure">
+					<img src="image/B15587_07_16.jpg" alt="Figure 7.16 – Updating the Service specification to switch to a new deployment version&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 7.16 – Updating the Service specification to switch to a new deployment version</p>
+			<p><em class="italic">Figure 7.17</em> reflects how <a id="_idIndexMarker850"/>the traffic is served after the Service label selector is updated. In this case, incoming traffic will now be served by the Pods in the green deployment, as the Pod label selectors match those of the Service. The Pods in the blue deployment will no longer serve incoming traffic, although the Pods can continue to run:</p>
+			<div>
+				<div id="_idContainer095" class="IMG---Figure">
+					<img src="image/B15587_07_17.jpg" alt="Figure 7.17 – Blue/Green deployment; traffic served only by the green version&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 7.17 – Blue/Green deployment; traffic served only by the green version</p>
+			<p>Rolling out the deployment is as simple as updating the labels on the Service to point back to Pods matching the blue deployment.</p>
+			<p>Blue/Green<a id="_idIndexMarker851"/> deployment is alternatively known as red/black deployment, or A/B deployment. Although Blue/Green deployment provides control over the specific deployment against which traffic can be sent or rolled back, the downside is that double the number of applications are always running, thereby increasing infrastructure costs significantly. Also, it's an all-or-nothing scenario where a bug or issue in the application related to the updated deployment impacts all users of the application. This downside is solved by using the next deployment strategy, canary deployment.</p>
+			<h2 id="_idParaDest-176"><a id="_idTextAnchor176"/>Canary deployment</h2>
+			<p><strong class="bold">Canary deployment</strong> provides more<a id="_idIndexMarker852"/> control in terms of how much traffic can be sent to the new deployment. This ensures that a change in the application only impacts a subset of the users. If the change is not as desired, then it also impacts only a small percentage of total active users, thereby controlling customers' perceptions. Canary deployment is increasingly used in a continuous deployment process as it's a slow change where new features can be constantly added to active users, but in a controlled fashion.</p>
+			<p><em class="italic">Figure 7.18</em> illustrates a canary deployment where only 10% of the traffic is sent to the new deployment (version=green), whereas the remaining 90% is going to the current deployment (version=blue):</p>
+			<div>
+				<div id="_idContainer096" class="IMG---Figure">
+					<img src="image/B15587_07_18.jpg" alt="Figure 7.18 – Canary deployment; traffic sent to both versions based on the weighted percentage&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 7.18 – Canary deployment; traffic sent to both versions based on the weighted percentage</p>
+			<p>Canary deployment is a true and reliable reflection of the continuous deployment model since a change to the application can flow through the CI/CD pipeline and can be deployed to production. In addition, deployment can also be targeted at just a specific set of users or a user base. This ensures that the new features are tested by live users (like beta users), but also ensures that a break in the new feature doesn't negatively impact the entire user base. Canary deployment is popularly implemented in the real world by using a resource such as Istio. Istio can split and route traffic between two versions based on predefined weights. As the new version becomes more stable, the traffic can gradually be shifted to the new deployment by changing the weighted percentage.</p>
+			<p>This completes a detailed illustration of the possible deployment strategies in Kubernetes. This also concludes a chapter that primarily focused on understanding the essential Kubernetes constructs for containerized deployments.</p>
+			<h1 id="_idParaDest-177"><a id="_idTextAnchor177"/>Summary</h1>
+			<p>In this chapter, we discussed Kubernetes workloads in detail and considered Kubernetes as an option for deploying containerized applications. We learned about Kubernetes cluster anatomy, with a specific focus on understanding the key components that form the master control plane and the node control plane. In addition, we focused on learning key Kubernetes objects that are critical to deploying applications in the cluster, along with possible deployment strategies. Finally, we deep dived into how the master plane components interact while performing an action against an object such as Pod and discussed various factors involved in scheduling Pods onto Kubernetes nodes.</p>
+			<p>The next chapter focuses on the managed version of Kubernetes, called GKE, or GKE. The fundamental constructs of Kubernetes studied in this chapter, such as cluster anatomy or Kubernetes objects, are essentially the same for GKE. However, GKE makes cluster creation a lot easier and, in addition, GKE provides additional features for cluster management. Topics specifc to GKE, such as node pools, cluster configuration choices and autoscaling will also be detailed.</p>
+			<h1 id="_idParaDest-178"><a id="_idTextAnchor178"/>Points to remember</h1>
+			<p>The following are some important points to remember:</p>
+			<ul>
+				<li>A node in a Kubernetes cluster is categorized as a <em class="italic">master</em> or <em class="italic">worker</em> node. The master node runs the control plane components.</li>
+				<li>The key components of the Kubernetes control plane are <strong class="source-inline">kube-apiserver</strong>, <strong class="source-inline">etcd</strong>, <strong class="source-inline">kube-scheduler</strong>, <strong class="source-inline">kube-controller-manager</strong>, and <strong class="source-inline">cloud-controller-manager</strong>.</li>
+				<li>It is recommended to run the control plane components on the same node and avoid any user-specific containers on that node.</li>
+				<li>A highly available cluster can have multiple control planes.</li>
+				<li><strong class="source-inline">kube-apiserver</strong> handles any queries or changes to the cluster and can be horizontally scaled.</li>
+				<li><strong class="source-inline">etcd</strong> is a distributed key-value store used by Kubernetes to store cluster configuration data.</li>
+				<li><strong class="source-inline">kube-scheduler</strong> chooses a suitable node where an application can be deployed.</li>
+				<li><strong class="source-inline">kube-controller-manager</strong> runs several controller functions to ensure that the current state of the cluster matches the desired state.</li>
+				<li><strong class="source-inline">cloud-controller-manager</strong> includes controller functions that allow Kubernetes to integrate with services from a cloud provider.</li>
+				<li>Key components of the worker node include <strong class="source-inline">kubelet</strong> (a Kubernetes agent that listens to instructions from <strong class="source-inline">kube-apiserver</strong> and runs containers as per the Pod specification), <strong class="source-inline">kube-proxy</strong> (a network proxy to enable communication between services), and container runtime (software responsible for running containers).</li>
+				<li>Deployment, ReplicaSet, StatefulSet, DaemonSet, Jobs, and CronJobs are categorized as workload resources, and each run one or more Pods.</li>
+				<li>A Pod is the smallest deployable unit in a Kubernetes cluster and can contain one or more containers that share filesystem, namespace, and network resources.</li>
+				<li>Deployment provides a declarative way to manage a set of Pods that are replicas.</li>
+				<li>StatefulSets manage stateful applications and can scale a set of Pods, but each replica is unique and has its own state.</li>
+				<li>DaemonSets ensure that a copy of the Pod runs on every node or a certain subset of nodes in the cluster.</li>
+				<li>The EndPoint object will maintain a list of all IPs for the Pods that match the label selector and is constantly updated as Pods are deleted and created.</li>
+				<li>ExternalName is a Service type where the Service uses DNS names instead of label selectors.</li>
+				<li>Critical factors to consider while scheduling Pods are NodeSelector, NodeAffinity, inter-pod affinity and Anti-Affinity, taints and tolerations, and NodeName.</li>
+				<li>Possible Kubernetes deployment strategies are Recreate, Rolling update, Blue/Green, and Canary.</li>
+			</ul>
+			<h1 id="_idParaDest-179"><a id="_idTextAnchor179"/>Further reading</h1>
+			<p>For more information on GCP's approach to DevOps, read the following article:</p>
+			<ul>
+				<li><strong class="bold">Kubernetes</strong>: <a href="https://kubernetes.io/docs/home/">https://kubernetes.io/docs/home/</a></li>
+			</ul>
+			<h1 id="_idParaDest-180"><a id="_idTextAnchor180"/>Practice test</h1>
+			<p>Answer the following questions:</p>
+			<ol>
+				<li value="1">A user changes the image of a container running in a Pod against a deployment in a Kubernetes cluster. A user updates the deployment specification. Select the option that describes the accurate behavior:<p>a) The container image of the Pod tied to the deployment will get instantly updated and the running Pods will use the new container image.</p><p>b) A new ReplicaSet will be created with the new image running inside a new Pod and will run in parallel with the older ReplicaSet with the older image.</p><p>c) The current running Pod will stop instantly, and a new Pod will be created with the new image. There will be some downtime.</p><p>d) A new ReplicaSet will be created with the new image running inside a new Pod and will gradually replace Pods from the old ReplicaSet.</p></li>
+				<li>Select the smallest unit of deployment in Kubernetes:<p>a) Deployment</p><p>b) Container</p><p>c) Pod</p><p>d) ReplicaSet</p></li>
+				<li>Select the object and the basis on which a Service object directs traffic:<p>a) The Service object sends traffic to Deployments based on metadata.</p><p>b) The Service object sends traffic to Pods based on label selectors.</p><p>c) The Service object sends traffic to containers based on label selectors.</p><p>d) The Service object sends traffic to Pods based on using the same name for the Pod and Service.</p></li>
+				<li>A Pod is in a ready state, but performing some actions internally when started, and is thereby unable to serve incoming traffic. Traffic from a Service is failing. Select the option that could be a potential solution:<p>a) Configure a start up probe.</p><p>b) Configure a liveness probe.</p><p>c) Configure a readiness probe.</p><p>d) None of the above.</p></li>
+				<li>There is a need to deploy multiple applications in a GKE cluster that could scale independently based on demand. Some of these applications are memory-intensive, some are I/O-intensive, and some are CPU-intensive. Select the option that represents the most appropriate cluster design:<p>a) Select the majority category that applications fall under and create a cluster with either a CPU-intensive machine type, or memory-intensive or I/O-intensive.</p><p>b) Create a cluster where the nodes have the maximum possible CPU and memory.</p><p>c) Create a cluster with multiple node pools. Each node pool can be used to run a specific type of application with specific CPU, RAM, or I/O requirements.</p><p>d) (b) and (c).</p></li>
+				<li>Which specific deployment option allows the testing of a new version of the application in production with a small percentage of actual traffic?<p>a) Percentage deployment</p><p>b) Rolling update</p><p>c) Canary deployment</p><p>d) Blue/Green deployment</p></li>
+				<li>Select the appropriate Service type where a Service gets an internal IP address:<p>a) ClusterIP</p><p>b) NodePort</p><p>c) LoadBalancer</p><p>d) All of the above</p></li>
+				<li>Which of the following deployment options enables running the last successful deployment on standby so that it could be used if the latest deployment has an issue? (Select all applicable options)<p>a) Rolling update</p><p>b) A/B deployment</p><p>c) Canary deployment</p><p>d) Red/black deployment</p></li>
+				<li>Which of the following controllers allows multiple development teams to use the same cluster, but with specific controls on the consumption of CPU and memory?<p>a) Authorization controller</p><p>b) <strong class="source-inline">kube-controller-manager</strong></p><p>c) ResourceQuota admission controller</p><p>d) <strong class="source-inline">cloud-controller-manager</strong></p></li>
+				<li>What is the function of a DaemonSet?<p>a) It runs a specific Pod on every node in the cluster.</p><p>b) It runs multiple copies of the specific Pod on every node in the cluster.</p><p>c) It runs a specific Pod on every node in the cluster or a subset of selected nodes in the cluster.</p><p>d) It runs multiple copies of the Pod on every node in the cluster or a subset of selected nodes in the cluster.</p></li>
+				<li>There is a specific requirement where Container C1 should be terminated if the memory or CPU currently utilized is three times more than the specified request limits. Select all possible options that match the specified requirements and should be added to the Pod spec:<p>a) Requests: CPU=1000m, Memory=500Mi</p><p>     Limits: CPU=3000m, Memory=1250Mi</p><p>b) Limits: CPU=3000m, Memory=1500Mi</p><p>     Requests: CPU=1000m, Memory=500Mi</p><p>c) Requests: CPU=750m, Memory=1000Mi</p><p>     Limits: CPU=2250m, Memory=3000Mi</p><p>d) Limits: CPU=1200m, Memory=500Mi</p><p>     Requests: CPU=3600m, Memory=1500Mi</p></li>
+				<li>A StatefulSet called <strong class="source-inline">log-collector</strong> consists of three replicas. Assume the Pods are labeled as <strong class="source-inline">log-collector-0</strong>, <strong class="source-inline">log-collector-1</strong>, and <strong class="source-inline">log-collector-2</strong>. The replica count is now scaled down to two replicas. Which of the following Pods will be deleted?<p>a) The first Pod that was created in sequence will be deleted (<strong class="source-inline">log-collector-0</strong>).</p><p>b) A random Pod will be deleted.</p><p>c) The last Pod that was created will be deleted (<strong class="source-inline">log-collector-2</strong>).</p><p>d) It's not possible to scale down a StatefulSet.</p></li>
+				<li>Select the option that depicts the reason for a CrashLoopBackOff error:<p>a) Containers are terminated when an update is made to the Pod.</p><p>b) A container in a Pod failed to start successfully following repeated attempts.</p><p>c) Containers are terminated when an update is made to the deployment.</p><p>d) None of the above.</p></li>
+				<li>Select the option that depicts the state where all containers in a Pod have terminated successfully and will not be restarted:<p>a) Unknown</p><p>b) Pending</p><p>c) Completed</p><p>d) Failed</p></li>
+				<li>Select the appropriate Service type where a Service gets a cluster-wide port:<p>a) ClusterIP</p><p>b) NodePort</p><p>c) LoadBalancer</p><p>d) All of the above</p></li>
+			</ol>
+			<h1 id="_idParaDest-181"><a id="_idTextAnchor181"/>Answers</h1>
+			<ol>
+				<li value="1">(d) – A new ReplicaSet will be created with the new image running inside a new Pod and will gradually replace Pods from the old ReplicaSet.</li>
+				<li>(c) – Pod.</li>
+				<li>(b) – The Service object sends traffic to Pods based on label selectors.</li>
+				<li>(c) – Configure a readiness probe.</li>
+				<li>(c) – Create a cluster with multiple node pools.</li>
+				<li>(c) – Canary deployment.</li>
+				<li>(d) – All of the above.</li>
+				<li>(b) and (d) – A/B and Red/Black is the same as Blue/Green.</li>
+				<li>(b) – ResourceQuota is an example of an admission controller where a namespace can be restricted to only use up to a certain capacity of memory and CPU. Each development team can work exclusively in its own namespace.</li>
+				<li>(c) – It runs a specific Pod on every node in the cluster or a subset of selected nodes in the cluster.</li>
+				<li>(b) and (c).</li>
+				<li>(c) – The last Pod that was created will be deleted (<strong class="source-inline">log-collector-2</strong>).</li>
+				<li>(b) – A container in a Pod failed to start successfully following repeated attempts.</li>
+				<li>(c) – Completed.</li>
+				<li>(b) – NodePort.</li>
+			</ol>
+		</div>
+	</body></html>

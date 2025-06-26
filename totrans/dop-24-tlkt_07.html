@@ -1,0 +1,1047 @@
+<html><head></head><body>
+<div class="calibre6">
+<h2 id="sts" class="calibre16">Deploying Stateful Applications At Scale</h2>
+
+<aside class="tip">
+    <p class="calibre3">Stateless and stateful application are quite different in their architecture. Those differences need to be reflected in Kubernetes as well. The fact that we can use Deployments with PersistentVolumes does not necessarily mean that is the best way to run stateful applications.</p>
+
+</aside>
+
+<p class="calibre3">Most of the applications are deployed to Kubernetes using Deployments. It is, without a doubt, the most commonly used controller. Deployments provide (almost) everything we might need. We can specify the number of replicas when our applications need to be scaled. We can mount volumes through PersistentVolumeClaims. We can communicate with the Pods controlled by Deployments through Services. We can execute rolling updates that will deploy new releases without downtime. There are quite a few other features enabled by Deployments. Does that mean that Deployments are the preferable way to run all types of applications? Is there a feature we might need that is not already available through Deployments and other resources we can associate with them? </p>
+
+<p class="calibre3">When running stateful applications in Kubernetes, we soon realize that Deployments do not offer everything we need. It’s not that we require additional features, but that some of those available in Deployments do not behave just as we might want them to. In many cases, Deployments are an excellent fit for stateless applications. However, we might need to look for a different controller that will allow us to run stateful applications safely and efficiently. That controller is StatefulSet.</p>
+
+<aside class="information">
+    <p class="calibre3">If we are to implement continuous delivery or deployment processes across the whole organization, we cannot ignore the fact that not all the applications are stateless. Having a state is unavoidable, and we need to be sure that we know how to handle stateful applications.</p>
+
+</aside>
+
+<p class="calibre3">Let’s experience some of the problems behind stateful applications, and the benefits <em class="calibre17">StatefulSets</em> bring to the table. To do that, we need a cluster.</p>
+
+<aside class="information">
+    <p class="calibre3">This chapter asssumes that you are already familiar with Namespaces, Ingress, Services, and Deployments. If you’re not, please refer to <a href="https://amzn.to/2GvzDjy">The DevOps 2.3 Toolkit: Kubernetes</a> for more info.</p>
+
+</aside>
+
+<p class="calibre3">We’ll skip the theory (for now), and dive straight into examples. To do that, we need a cluster.</p>
+
+<h3 id="leanpub-auto-creating-a-cluster" class="calibre20">Creating A Cluster</h3>
+
+<p class="calibre3">We’ll start the hands-on walk-through by cloning the <code class="calibre19">vfarcic/k8s-specs</code> repository that contains all the example definitions we’ll use throughout the book.</p>
+
+<aside class="warning">
+    <h3 id="leanpub-auto-a-note-to-windows-users" class="calibre22">A note to <strong class="calibre23">Windows</strong> users</h3>
+
+  <p class="calibre3">Please run all the examples from <em class="calibre17">GitBash</em> (installed through <em class="calibre17">Git</em>). That way the commands you’ll see throughout the book will be same as those executed on <em class="calibre17">MacOS</em> or any <em class="calibre17">Linux</em> distribution. If you’re using Hyper-V instead of VirtualBox, you may need to run the <em class="calibre17">GitBash</em> window as an Administrator.</p>
+
+</aside>
+
+<aside class="information">
+    <p class="calibre3">All the commands from this chapter are available in the <a href="https://gist.github.com/505aedf2cb268837983132d4e4385fab">01-sts.sh</a> Gist.</p>
+
+</aside>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>git clone <code class="se">\</code>
+<code class="lineno">2 </code>    https://github.com/vfarcic/k8s-specs.git
+<code class="lineno">3 </code>
+<code class="lineno">4 </code><code class="nb">cd</code> k8s-specs
+</pre></div>
+
+</figure>
+
+<p class="calibre3">Now that you have a repository with the examples we’ll use throughout the book, we should create a cluster unless you already have one.</p>
+
+<p class="calibre3">For this chapter, I’ll assume that you are running a cluster with <strong class="calibre18">Kubernetes version 1.9</strong> or higher. Further on, I’ll assume that you already have an <strong class="calibre18">nginx Ingress Controller</strong> deployed, that <strong class="calibre18">RBAC</strong> is set up, and that your cluster has a <strong class="calibre18">default StorageClass</strong>. If you are unsure about some of the requirements, I prepared a few Gists with the commands I used to create different clusters. Feel free to choose whichever suits you the best, or be brave and roll with your own. Ideally, you’ll run the commands from every chapter on each of the Kubernetes flavors. That way, you’ll not only learn the main subject but also gain experience in running Kubernetes in different combinations and, hopefully, make a more informed decision which flavor to use for your local development as well as for production.</p>
+
+<p class="calibre3">The Gists with the commands I used to create different variations of Kubernetes clusters are as follows.</p>
+
+<ul class="calibre21">
+  <li class="calibre15">
+<a href="https://gist.github.com/06e313db2957e92b1df09fe39c249a14">docker4mac.sh</a>: <strong class="calibre18">Docker for Mac</strong> with 2 CPUs, 2GB RAM, and with <strong class="calibre18">nginx Ingress</strong> controller.</li>
+  <li class="calibre15">
+<a href="https://gist.github.com/536e6329e750b795a882900c09feb13b">minikube.sh</a>: <strong class="calibre18">minikube</strong> with 2 CPUs, 2GB RAM, and with <code class="calibre19">ingress</code>, <code class="calibre19">storage-provisioner</code>, and <code class="calibre19">default-storageclass</code> addons enabled.</li>
+  <li class="calibre15">
+<a href="https://gist.github.com/2a3e4ee9cb86d4a5a65cd3e4397f48fd">kops.sh</a>: <strong class="calibre18">kops in AWS</strong> with 3 t2.small masters and 2 t2.medium nodes spread in three availability zones, and with <strong class="calibre18">nginx Ingress</strong> controller (assumes that the prerequisites are set through <a href="part0018.html#appendix-b">Appendix B</a>).</li>
+  <li class="calibre15">
+<a href="https://gist.github.com/c9968f23ecb1f7b2ec40c6bcc0e03e4f">minishift.sh</a>: <strong class="calibre18">minishift</strong> with 2 CPUs, 2GB RAM, and version 1.16+.</li>
+  <li class="calibre15">
+<a href="https://gist.github.com/5c52c165bf9c5002fedb61f8a5d6a6d1">gke.sh</a>: <strong class="calibre18">Google Kubernetes Engine (GKE)</strong> with 3 n1-standard-1 (1 CPU, 3.75GB RAM) nodes (one in each zone), and with <strong class="calibre18">nginx Ingress</strong> controller running on top of the “standard” one that comes with GKE. We’ll use nginx Ingress for compatibility with other platforms. Feel free to modify the YAML files if you prefer NOT to install nginx Ingress.</li>
+  <li class="calibre15">
+<a href="https://gist.github.com/5496f79a3886be794cc317c6f8dd7083">eks.sh</a>: <strong class="calibre18">Elastic Kubernetes Service (EKS)</strong> with 2 t2.medium nodes, with <strong class="calibre18">nginx Ingress</strong> controller, and with a <strong class="calibre18">default StorageClass</strong>.</li>
+</ul>
+
+<aside class="warning">
+    <p class="calibre3">The purpose of those Gists is to serve as guidance, not necessarily as a set of steps you should execute blindly. I assume that you already know how to create a cluster with the specified requirements.</p>
+
+</aside>
+
+<h3 id="leanpub-auto-using-statefulsets-to-run-stateful-applications" class="calibre20">Using StatefulSets To Run Stateful Applications</h3>
+
+<p class="calibre3">Let’s see a StatefulSet in action and see whether it beings any benefits. We’ll use Jenkins as the first application we’ll deploy. It is a simple application to start with since it does not require a complicated setup and it cannot be scaled. On the other hand, Jenkins is a stateful application. It stores all its state into a single directory. There are no “special” requirements besides the need for a PersistentVolume.</p>
+
+<p class="calibre3">A sample Jenkins definition that uses StatefulSets can be found in <code class="calibre19">sts/jenkins.yml</code>.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>cat sts/jenkins.yml
+</pre></div>
+
+</figure>
+
+<p class="calibre3">The definition is relatively straightforward. It defines a Namespace for easier organization, a Service for routing traffic, and an Ingress that makes it accessible from outside the cluster. The interesting part is the <code class="calibre19">StatefulSet</code> definition.</p>
+
+<p class="calibre3">The only significant difference, when compared to Deployments, is that the <code class="calibre19">StatefulSet</code> can use <code class="calibre19">volumeClaimTemplates</code>. While Deployments require that we specify PersistentVolumeClaim separately, now we can define a claim template as part of the <code class="calibre19">StatefulSet</code> definition. Even though that might be a more convenient way to define claims, surely there are other reasons for this difference. Or maybe there isn’t. Let’s check it out by creating the resources defined in <code class="calibre19">sts/jenkins.yml</code>.</p>
+
+<aside class="warning">
+    <h3 id="leanpub-auto-a-note-to-minishift-users" class="calibre22">A note to <strong class="calibre23">minishift</strong> users</h3>
+
+  <p class="calibre3">OpenShift does not allow setting <code class="calibre19">fsGroup</code> in the security context, it uses Routes instead of Ingress, and Services accessible through Routes need to be the <code class="calibre19">LoadBalancer</code> type. Due to those changes, I had to prepare a different YAML specification for minishift. Please execute <code class="calibre19">oc apply -f sts/jenkins-oc.yml --record</code> instead of the command that follows.</p>
+
+</aside>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl apply <code class="se">\</code>
+<code class="lineno">2 </code>    -f sts/jenkins.yml <code class="se">\</code>
+<code class="lineno">3 </code>    --record
+</pre></div>
+
+</figure>
+
+<p class="calibre3">We can see from the output that a Namespace, an Ingress, a Service, and a StatefulSet were created. In case you’re using minishift and deployed the YAML defined in <code class="calibre19">sts/jenkins-oc.yml</code>, you got a Route instead Ingress.</p>
+
+<aside class="warning">
+    <h3 id="leanpub-auto-a-note-to-gke-users" class="calibre22">A note to GKE users</h3>
+
+  <p class="calibre3">GKE uses external load balancer as Ingress. To work properly, the <code class="calibre19">type</code> of the service related to Ingress needs to be <code class="calibre19">NodePort</code>. We’ll have to patch the service to change its type. Please execute the command that follows.</p>
+
+  <p class="calibre3"><code class="calibre19">kubectl -n jenkins patch svc jenkins -p '{"spec":{"type": "NodePort"}}'</code></p>
+
+</aside>
+
+<p class="calibre3">Let’s confirm that the StatefulSet was rolled out correctly.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl -n jenkins <code class="se">\</code>
+<code class="lineno">2 </code>    rollout status sts jenkins
+</pre></div>
+
+</figure>
+
+<p class="calibre3">Now that <code class="calibre19">jenkins</code> StatefulSet is up and running, we should check whether it created a PersistentVolumeClaim.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl -n jenkins get pvc
+</pre></div>
+
+</figure>
+
+<p class="calibre3">The output is as follows.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>NAME                   STATUS VOLUME  CAPACITY ACCESS MODES STORAGECLASS AGE
+<code class="lineno">2 </code>jenkins-home-jenkins-0 Bound  pvc-... 2Gi      RWO          gp2          2m
+</pre></div>
+
+</figure>
+
+<p class="calibre3">It comes as no surprise that a claim was created. After all, we did specify <code class="calibre19">volumeClaimTemplates</code> as part of the StatefulSet definition. However, if we compare it with claims we make as separate resources (e.g., with Deployments), the format of the claim we just created is a bit different. It is a combination of the claim name (<code class="calibre19">jenkins-home</code>), the Namespace (<code class="calibre19">jenkins</code>), and the indexed suffix (<code class="calibre19">0</code>). The index is an indication that StatefulSets might create more than one claim. Still, we can see only one, so we’ll need to stash that thought for a while.</p>
+
+<p class="calibre3">Similarly, we might want to confirm that the claim created a PersistentVolume.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl -n jenkins get pv
+</pre></div>
+
+</figure>
+
+<aside class="warning">
+    <h3 id="leanpub-auto-a-note-to-minishift-users-1" class="calibre22">A note to <strong class="calibre23">minishift</strong> users</h3>
+
+  <p class="calibre3">You’ll see a hundred volumes instead of one. Minishift does not (yet) uses default storage classes. Instead, we have a hundred volumes without a storage class so that enough volumes are available for testing purposes. Only one of them will be with the status <code class="calibre19">Bound</code>.</p>
+
+</aside>
+
+<p class="calibre3">Finally, as the last verification, we’ll open Jenkins in a browser and confirm that it looks like it’s working correctly. But, before we do that, we should retrieve the hostname or the IP assigned to us by the Ingress controller.</p>
+
+<aside class="warning">
+    <h3 id="leanpub-auto-a-note-to-gke-users-1" class="calibre22">A note to GKE users</h3>
+
+  <p class="calibre3">Please change <code class="calibre19">hostname</code> to <code class="calibre19">ip</code> in the command that follows. The <code class="calibre19">jsonpath</code> should be <code class="calibre19">{.status.loadBalancer.ingress[0].ip}</code>.
+Please note that GKE Ingress spins up an external load balancer and it might take a while until the IP is generated. Therefore, you might need to repeat the command that follows until you get the IP.</p>
+
+</aside>
+
+<aside class="warning">
+    <h3 id="leanpub-auto-a-note-to-minikube-users" class="calibre22">A note to minikube users</h3>
+
+  <p class="calibre3">Please change the following command to <code class="calibre19">CLUSTER_DNS=$(minikube ip)</code>.</p>
+
+</aside>
+
+<aside class="warning">
+    <h3 id="leanpub-auto-a-note-to-minishift-users-2" class="calibre22">A note to minishift users</h3>
+
+  <p class="calibre3">Please change the following command to <code class="calibre19">CLUSTER_DNS=jenkins-jenkins.$(minishift ip).nip.io</code>.</p>
+
+</aside>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code><code class="nv">CLUSTER_DNS</code><code class="o">=</code><code class="k">$(</code>kubectl -n jenkins <code class="se">\</code>
+<code class="lineno">2 </code>    get ing jenkins <code class="se">\</code>
+<code class="lineno">3 </code>    -o <code class="nv">jsonpath</code><code class="o">=</code><code class="s">"{.status.loadBalancer.ingress[0].hostname}"</code><code class="k">)</code>
+<code class="lineno">4 </code>
+<code class="lineno">5 </code><code class="nb">echo</code> <code class="nv">$CLUSTER_DNS</code>
+</pre></div>
+
+</figure>
+
+<p class="calibre3">We retrieved the hostname (or IP) from the Ingress resource, and now we are ready to open Jenkins in a browser.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>open <code class="s">"http://</code><code class="nv">$CLUSTER_DNS</code><code class="s">/jenkins"</code>
+</pre></div>
+
+</figure>
+
+<aside class="warning">
+    <h3 id="leanpub-auto-a-note-to-windows-users-1" class="calibre22">A note to Windows users</h3>
+
+  <p class="calibre3">Git Bash might not be able to use the <code class="calibre19">open</code> command. If that’s the case, replace the <code class="calibre19">open</code> command with <code class="calibre19">echo</code>. As a result, you’ll get the full address that should be opened directly in your browser of choice.</p>
+
+</aside>
+
+<aside class="warning">
+    <p class="calibre3">In some cases (e.g., GKE), it might take a few minutes until the external load balancer is created. If you see 40x or 50x error message, please wait for a while and try to open Jenkins in the browser again.</p>
+
+</aside>
+
+<p class="calibre3">You might see browser’s message that the connection is not private. That’s normal since we did not specify an SSL certificate. If that’s the case, please choose to proceed. In Chrome, you should click the <em class="calibre17">ADVANCED</em> link, followed by <em class="calibre17">Proceed to…</em> For the rest of the browsers… Well, I’m sure that you already know how to ignore SSL warnings in your favorite browser.</p>
+
+<p class="calibre3">You should see a wizard. We won’t use it to finalize Jenkins setup. All we wanted, for now, is to explore StatefulSets using Jenkins as an example. There are a few things we’re missing for Jenkins to be fully operational and we’ll explore them in later chapters. For now, we’ll remove the whole <code class="calibre19">jenkins</code> Namespace.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl delete ns jenkins
+</pre></div>
+
+</figure>
+
+<p class="calibre3">From what we experienced so far, StatefulSets are a lot like Deployments. The only difference was in the <code class="calibre19">volumeClaimTemplates</code> section that allowed us to specify PersistentVolumeClaim as part of the StatefulSet definition, instead of a separate resource. Such a minor change does not seem to be a reason to move away from Deployments. If we limit our conclusions to what we observed so far, there are no good arguments to use StatefulSets instead of Deployments. The syntax is almost the same, and the result as well. Why would we learn to use a new controller if it provides no benefits?</p>
+
+<p class="calibre3">Maybe we could not notice a difference between a StatefulSet and a Deployment because our example was too simple. Let’s try a slightly more complicated scenario.</p>
+
+<h3 id="leanpub-auto-using-deployments-to-run-stateful-applications-at-scale" class="calibre20">Using Deployments To Run Stateful Applications At Scale</h3>
+
+<p class="calibre3">We’ll use <code class="calibre19">go-demo-3</code> application throughout this book. It consists of a backend API written in Go that uses MongoDB to store its state. With time, we’ll improve the definition of the application. Once we’re happy with the way the application is running inside the cluster, we’ll work on continuous deployment processes that will fully automate everything from a commit to the <code class="calibre19">vfarcic/go-demo-3</code> GitHub repository, all the way until it’s running in production.</p>
+
+<p class="calibre3">We need to start somewhere, and our first iteration of the <code class="calibre19">go-demo-3</code> application is in <code class="calibre19">sts/go-demo-3-deploy.yml</code>.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>cat sts/go-demo-3-deploy.yml
+</pre></div>
+
+</figure>
+
+<p class="calibre3">Assuming that you are already familiar with Namespaces, Ingress, PersistentVolumeClaims, Deployments, and Services, the definition is fairly straightforward. We defined a Namespace <code class="calibre19">go-demo-3</code> in which all the other resources will reside. Ingress will forward external requests with the base path <code class="calibre19">/demo</code> to the Service <code class="calibre19">api</code>. The PersistentVolumeClaim does not have a <code class="calibre19">storageClassName</code>, so it will claim a PersistentVolume defined through the default StorageClass.</p>
+
+<p class="calibre3">There are two Deployments, one for the API and the other for the database. Both have a Service associated, and both will create three replicas (Pods).</p>
+
+<p class="calibre3">Now that we have a very high-level overview of the <code class="calibre19">go-demo-3</code> definition, we can proceed and create the resources.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl apply <code class="se">\</code>
+<code class="lineno">2 </code>    -f sts/go-demo-3-deploy.yml <code class="se">\</code>
+<code class="lineno">3 </code>    --record
+<code class="lineno">4 </code>
+<code class="lineno">5 </code>kubectl -n go-demo-3 <code class="se">\</code>
+<code class="lineno">6 </code>    rollout status deployment api
+</pre></div>
+
+</figure>
+
+<p class="calibre3">We created the resources defined in <code class="calibre19">sts/go-demo-3-deploy.yml</code> and retrieved the <code class="calibre19">rollout status</code> of the <code class="calibre19">api</code> Deployment. The API is designed to fail if it cannot access its databases, so the fact that it rolled out correctly seems to give us a reasonable guarantee that everything is working as expected. Still, since I am skeptical by nature, we’ll double-check that all the Pods are running. We should see six of them (three for each Deployment) in the <code class="calibre19">go-demo-3</code> Namespace.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl -n go-demo-3 get pods
+</pre></div>
+
+</figure>
+
+<p class="calibre3">The output is as follows.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>NAME    READY STATUS           RESTARTS AGE
+<code class="lineno">2 </code>api-... 1/1   Running          2        55s
+<code class="lineno">3 </code>api-... 1/1   Running          2        55s
+<code class="lineno">4 </code>api-... 1/1   Running          2        55s
+<code class="lineno">5 </code>db-...  1/1   Running          0        55s
+<code class="lineno">6 </code>db-...  0/1   CrashLoopBackOff 2        55s
+<code class="lineno">7 </code>db-...  0/1   CrashLoopBackOff 1        55s
+</pre></div>
+
+</figure>
+
+<p class="calibre3">A disaster befell us. Only one of the three <code class="calibre19">db</code> Pods is running. We did expect a few restarts of the <code class="calibre19">api</code> Pods. They tried to connect to MongoDB and were failing until at least one <code class="calibre19">db</code> Pod started running. The failure of the two <code class="calibre19">db</code> Pods is a bit harder to explain. They do not depend on other Pods and Services so they should run without restarts.</p>
+
+<p class="calibre3">Let’s take a look at the <code class="calibre19">db</code> logs. They might give us a clue what went wrong.</p>
+
+<aside class="warning">
+    <h3 id="leanpub-auto-a-note-to-gke-users-2" class="calibre22">Â A note to GKE users</h3>
+
+  <p class="calibre3">GKE will not be able to mount a volume to more than one Pod. Two of the <code class="calibre19">db-</code> Pods with have <code class="calibre19">ContainerCreating</code> status. If you <code class="calibre19">describe</code> one of those Pods, you’ll see <code class="calibre19">Multi-Attach error for volume "pvc-..." Volume is already exclusively attached to one node and can't be attached to another</code>. That’s a typical behavior since the default PersistentVolumeClass used in GKE creates volumes that can be attached only to one Pod at a time. We’ll fix that soon. Until then, remember that you will not be able to see the logs of those Pods.</p>
+
+</aside>
+
+<p class="calibre3">We need to know the names of the Pods we want to peek into, so we’ll use a bit of “creative” formatting of the <code class="calibre19">kubectl get pods</code> output.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code><code class="nv">DB_1</code><code class="o">=</code><code class="k">$(</code>kubectl -n go-demo-3 get pods <code class="se">\</code>
+<code class="lineno">2 </code>    -l <code class="nv">app</code><code class="o">=</code>db <code class="se">\</code>
+<code class="lineno">3 </code>    -o <code class="nv">jsonpath</code><code class="o">=</code><code class="s">"{.items[0].metadata.name}"</code><code class="k">)</code>
+<code class="lineno">4 </code>
+<code class="lineno">5 </code><code class="nv">DB_2</code><code class="o">=</code><code class="k">$(</code>kubectl -n go-demo-3 get pods <code class="se">\</code>
+<code class="lineno">6 </code>    -l <code class="nv">app</code><code class="o">=</code>db <code class="se">\</code>
+<code class="lineno">7 </code>    -o <code class="nv">jsonpath</code><code class="o">=</code><code class="s">"{.items[1].metadata.name}"</code><code class="k">)</code>
+</pre></div>
+
+</figure>
+
+<p class="calibre3">The only difference between the two commands is in <code class="calibre19">jsonpath</code>. The first result (index <code class="calibre19">0</code>) is stored in <code class="calibre19">DB_1</code>, and the second (index <code class="calibre19">1</code>) in <code class="calibre19">DB_2</code>. Since we know that only one of the three Pods is running, peeking into the logs of two will guarantee that we’ll look into at least one of those with errors.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl -n go-demo-3 logs <code class="nv">$DB_1</code>
+</pre></div>
+
+</figure>
+
+<p class="calibre3">The last lines of the output of the first <code class="calibre19">db</code> Pod are as follows.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>...
+<code class="lineno">2 </code>2018-03-29T20:51:53.390+0000 I NETWORK  [thread1] waiting for connections on port 27\
+<code class="lineno">3 </code>017
+<code class="lineno">4 </code>2018-03-29T20:51:53.681+0000 I NETWORK  [thread1] connection accepted from 100.96.2.\
+<code class="lineno">5 </code>7:46888 #1 (1 connection now open)
+<code class="lineno">6 </code>2018-03-29T20:51:55.984+0000 I NETWORK  [thread1] connection accepted from 100.96.2.\
+<code class="lineno">7 </code>8:49418 #2 (2 connections now open)
+<code class="lineno">8 </code>2018-03-29T20:51:59.182+0000 I NETWORK  [thread1] connection accepted from 100.96.3.\
+<code class="lineno">9 </code>6:43940 #3 (3 connections now open)
+</pre></div>
+
+</figure>
+
+<p class="calibre3">Everything seems OK. We can see that the database initialized and started <code class="calibre19">waiting for connections</code>. Soon after, the three replicas of the <code class="calibre19">api</code> Deployment connected to MongoDB running inside this Pod.</p>
+
+<p class="calibre3">Now that we know that the first Pod is the one that is running, we should look at the logs of the second. That must be one of those with errors.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl -n go-demo-3 logs <code class="nv">$DB_2</code>
+</pre></div>
+
+</figure>
+
+<p class="calibre3">The output, limited to the last few lines, is as follows.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno"> 1 </code>...
+<code class="lineno"> 2 </code>2018-03-29T20:54:57.362+0000 I STORAGE  [initandlisten] exception in initAndListen: \
+<code class="lineno"> 3 </code>98 Unable to lock file: /data/db/mongod.lock Resource temporarily unavailable. Is a \
+<code class="lineno"> 4 </code>mongod instance already running?, terminating
+<code class="lineno"> 5 </code>2018-03-29T20:54:57.362+0000 I NETWORK  [initandlisten] shutdown: going to close lis\
+<code class="lineno"> 6 </code>tening sockets...
+<code class="lineno"> 7 </code>2018-03-29T20:54:57.362+0000 I NETWORK  [initandlisten] shutdown: going to flush dia\
+<code class="lineno"> 8 </code>glog...
+<code class="lineno"> 9 </code>2018-03-29T20:54:57.362+0000 I CONTROL  [initandlisten] now exiting
+<code class="lineno">10 </code>2018-03-29T20:54:57.362+0000 I CONTROL  [initandlisten] shutting down with code:100
+</pre></div>
+
+</figure>
+
+<p class="calibre3">There’s the symptom of the problem. MongoDB could not lock the <code class="calibre19">/data/db/mongod.lock</code> file, and it shut itself down.</p>
+
+<p class="calibre3">Let’s take a look at the PersistentVolumes.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl get pv
+</pre></div>
+
+</figure>
+
+<p class="calibre3">The output is as follows.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>NAME    CAPACITY ACCESS MODES RECLAIM POLICY STATUS CLAIM           STORAGECLASS REA\
+<code class="lineno">2 </code>SON AGE
+<code class="lineno">3 </code>pvc-... 2Gi      RWO          Delete         Bound  go-demo-3/mongo gp2             \
+<code class="lineno">4 </code>    3m
+</pre></div>
+
+</figure>
+
+<p class="calibre3">There is only one bound PersistentVolume. That is to be expected. Even if we’d want to, we could not tell a Deployment to create a volume for each replica. The Deployment mounted a volume associated with the claim which, in turn, created a PersistentVolume. All the replicas tried to mount the same volume.</p>
+
+<p class="calibre3">MongoDB is designed in a way that each instance requires exclusive access to a directory where it stores its state. We tried to mount the same volume to all the replicas, and only one of them got the lock. All the others failed.</p>
+
+<p class="calibre3">If you’re using kops with AWS, the default <code class="calibre19">StorageClass</code> is using the <code class="calibre19">kubernetes.io/aws-ebs</code> provisioner. Since EBS can be mounted only by a single entity, our claim has the access mode set to <code class="calibre19">ReadWriteOnce</code>. To make thing more complicated, EBS cannot span multiple availability-zones, and we are hoping to spread our MongoDB replicas so that they can survive even failure of a whole zone. The same is true for GKE which also uses block storage by default.</p>
+
+<p class="calibre3">Having a <code class="calibre19">ReadWriteOnce</code> PersistentVolumeClaims and EBS not being able to span multiple availability zones is not a problem for our use-case. The real issue is that each MongoDB instance needs a separate volume or at least a different directory. Neither of the solutions can be (easily) solved with Deployments.</p>
+
+
+<figure class="image">
+  <img src="../images/00005.jpeg" alt="Figure 1-1: Pods created through the Deployment share the same PersistentVolume (AWS variation)" class="calibre25"/>
+  <figcaption class="calibre26">Figure 1-1: Pods created through the Deployment share the same PersistentVolume (AWS variation)</figcaption>
+</figure>
+
+
+<p class="calibre3">Now we have a good use-case that might show some of the benefits of StatefulSet controllers.</p>
+
+<p class="calibre3">Before we move on, we’ll delete the <code class="calibre19">go-demo-3</code> Namespace and all the resources running inside it.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl delete ns go-demo-3
+</pre></div>
+
+</figure>
+
+<h3 id="leanpub-auto-using-statefulsets-to-run-stateful-applications-at-scale" class="calibre20">Using StatefulSets To Run Stateful Applications At Scale</h3>
+
+<p class="calibre3">Let’s see whether we can solve the problem with PersistentVolumes through a StatefulSet. As a reminder, our goal (for now) is for each instance of a MongoDB to get a separate volume.</p>
+
+<p class="calibre3">The updated definition is in the <code class="calibre19">sts/go-demo-3-sts.yml</code> file.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>cat sts/go-demo-3-sts.yml
+</pre></div>
+
+</figure>
+
+<p class="calibre3">Most of the new definition is the same as the one we used before, so we’ll comment only on the differences. The first in line is StatefulSet that replaces the <code class="calibre19">db</code> Deployment. It is as follows.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno"> 1 </code><code class="calibre19">apiVersion</code><code class="calibre19">:</code> <code class="calibre19">apps/v1beta2</code>
+<code class="lineno"> 2 </code><code class="calibre19">kind</code><code class="calibre19">:</code> <code class="calibre19">StatefulSet</code>
+<code class="lineno"> 3 </code><code class="calibre19">metadata</code><code class="calibre19">:</code>
+<code class="lineno"> 4 </code>  <code class="calibre19">name</code><code class="calibre19">:</code> <code class="calibre19">db</code>
+<code class="lineno"> 5 </code>  <code class="calibre19">namespace</code><code class="calibre19">:</code> <code class="calibre19">go-demo-3</code>
+<code class="lineno"> 6 </code><code class="calibre19">spec</code><code class="calibre19">:</code>
+<code class="lineno"> 7 </code>  <code class="calibre19">serviceName</code><code class="calibre19">:</code> <code class="calibre19">db</code>
+<code class="lineno"> 8 </code>  <code class="calibre19">replicas</code><code class="calibre19">:</code> <code class="calibre19">3</code>
+<code class="lineno"> 9 </code>  <code class="calibre19">selector</code><code class="calibre19">:</code>
+<code class="lineno">10 </code>    <code class="calibre19">matchLabels</code><code class="calibre19">:</code>
+<code class="lineno">11 </code>      <code class="calibre19">app</code><code class="calibre19">:</code> <code class="calibre19">db</code>
+<code class="lineno">12 </code>  <code class="calibre19">template</code><code class="calibre19">:</code>
+<code class="lineno">13 </code>    <code class="calibre19">metadata</code><code class="calibre19">:</code>
+<code class="lineno">14 </code>      <code class="calibre19">labels</code><code class="calibre19">:</code>
+<code class="lineno">15 </code>        <code class="calibre19">app</code><code class="calibre19">:</code> <code class="calibre19">db</code>
+<code class="lineno">16 </code>    <code class="calibre19">spec</code><code class="calibre19">:</code>
+<code class="lineno">17 </code>      <code class="calibre19">terminationGracePeriodSeconds</code><code class="calibre19">:</code> <code class="calibre19">10</code>
+<code class="lineno">18 </code>      <code class="calibre19">containers</code><code class="calibre19">:</code>
+<code class="lineno">19 </code>      <code class="calibre19">-</code> <code class="calibre19">name</code><code class="calibre19">:</code> <code class="calibre19">db</code>
+<code class="lineno">20 </code>        <code class="calibre19">image</code><code class="calibre19">:</code> <code class="calibre19">mongo:3.3</code>
+<code class="lineno">21 </code>        <code class="calibre19">command</code><code class="calibre19">:</code>
+<code class="lineno">22 </code>          <code class="calibre19">-</code> <code class="calibre19">mongod</code>
+<code class="lineno">23 </code>          <code class="calibre19">-</code> <code class="s">"--replSet"</code>
+<code class="lineno">24 </code>          <code class="calibre19">-</code> <code class="calibre19">rs0</code>
+<code class="lineno">25 </code>          <code class="calibre19">-</code> <code class="s">"--smallfiles"</code>
+<code class="lineno">26 </code>          <code class="calibre19">-</code> <code class="s">"--noprealloc"</code>
+<code class="lineno">27 </code>        <code class="calibre19">ports</code><code class="calibre19">:</code>
+<code class="lineno">28 </code>          <code class="calibre19">-</code> <code class="calibre19">containerPort</code><code class="calibre19">:</code> <code class="calibre19">27017</code>
+<code class="lineno">29 </code>        <code class="calibre19">resources</code><code class="calibre19">:</code>
+<code class="lineno">30 </code>          <code class="calibre19">limits</code><code class="calibre19">:</code>
+<code class="lineno">31 </code>            <code class="calibre19">memory</code><code class="calibre19">:</code> <code class="s">"100Mi"</code>
+<code class="lineno">32 </code>            <code class="calibre19">cpu</code><code class="calibre19">:</code> <code class="calibre19">0.1</code>
+<code class="lineno">33 </code>          <code class="calibre19">requests</code><code class="calibre19">:</code>
+<code class="lineno">34 </code>            <code class="calibre19">memory</code><code class="calibre19">:</code> <code class="s">"50Mi"</code>
+<code class="lineno">35 </code>            <code class="calibre19">cpu</code><code class="calibre19">:</code> <code class="calibre19">0.01</code>
+<code class="lineno">36 </code>        <code class="calibre19">volumeMounts</code><code class="calibre19">:</code>
+<code class="lineno">37 </code>        <code class="calibre19">-</code> <code class="calibre19">name</code><code class="calibre19">:</code> <code class="calibre19">mongo-data</code>
+<code class="lineno">38 </code>          <code class="calibre19">mountPath</code><code class="calibre19">:</code> <code class="calibre19">/data/db</code>
+<code class="lineno">39 </code>  <code class="calibre19">volumeClaimTemplates</code><code class="calibre19">:</code>
+<code class="lineno">40 </code>  <code class="calibre19">-</code> <code class="calibre19">metadata</code><code class="calibre19">:</code>
+<code class="lineno">41 </code>      <code class="calibre19">name</code><code class="calibre19">:</code> <code class="calibre19">mongo-data</code>
+<code class="lineno">42 </code>    <code class="calibre19">spec</code><code class="calibre19">:</code>
+<code class="lineno">43 </code>      <code class="calibre19">accessModes</code><code class="calibre19">:</code>
+<code class="lineno">44 </code>      <code class="calibre19">-</code> <code class="calibre19">ReadWriteOnce</code>
+<code class="lineno">45 </code>      <code class="calibre19">resources</code><code class="calibre19">:</code>
+<code class="lineno">46 </code>        <code class="calibre19">requests</code><code class="calibre19">:</code>
+<code class="lineno">47 </code>          <code class="calibre19">storage</code><code class="calibre19">:</code> <code class="calibre19">2Gi</code>
+</pre></div>
+
+</figure>
+
+<p class="calibre3">As you already saw with Jenkins, StatefulSet definitions are almost the same as Deployments. The only important difference is that we are not defining PersistentVolumeClaim as a separate resource but letting the StatefulSet take care of it through the specification set inside the <code class="calibre19">volumeClaimTemplates</code> entry. We’ll see it in action soon.</p>
+
+<p class="calibre3">We also used this opportunity to tweak <code class="calibre19">mongod</code> process by specifying the <code class="calibre19">db</code> container <code class="calibre19">command</code> that creates a ReplicaSet <code class="calibre19">rs0</code>. Please note that this replica set is specific to MongoDB and it is in no way related to Kubernetes ReplicaSet controller. Creation of a MongoDB replica set is the base for some of the things we’ll do later on.</p>
+
+<p class="calibre3">Another difference is in the <code class="calibre19">db</code> Service. It is as follows.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno"> 1 </code><code class="calibre19">apiVersion</code><code class="calibre19">:</code> <code class="calibre19">v1</code>
+<code class="lineno"> 2 </code><code class="calibre19">kind</code><code class="calibre19">:</code> <code class="calibre19">Service</code>
+<code class="lineno"> 3 </code><code class="calibre19">metadata</code><code class="calibre19">:</code>
+<code class="lineno"> 4 </code>  <code class="calibre19">name</code><code class="calibre19">:</code> <code class="calibre19">db</code>
+<code class="lineno"> 5 </code>  <code class="calibre19">namespace</code><code class="calibre19">:</code> <code class="calibre19">go-demo-3</code>
+<code class="lineno"> 6 </code><code class="calibre19">spec</code><code class="calibre19">:</code>
+<code class="lineno"> 7 </code>  <code class="calibre19">ports</code><code class="calibre19">:</code>
+<code class="lineno"> 8 </code>  <code class="calibre19">-</code> <code class="calibre19">port</code><code class="calibre19">:</code> <code class="calibre19">27017</code>
+<code class="lineno"> 9 </code>  <code class="calibre19">clusterIP</code><code class="calibre19">:</code> <code class="calibre19">None</code>
+<code class="lineno">10 </code>  <code class="calibre19">selector</code><code class="calibre19">:</code>
+<code class="lineno">11 </code>    <code class="calibre19">app</code><code class="calibre19">:</code> <code class="calibre19">db</code>
+</pre></div>
+
+</figure>
+
+<p class="calibre3">This time we set <code class="calibre19">clusterIP</code> to <code class="calibre19">None</code>. That will create a Headless Service. Headless service is a service that doesnâ€™t need load-balancing and has a single service IP.</p>
+
+<p class="calibre3">Everything else in this YAML file is the same as in the one that used Deployment controller to run MongoDB.</p>
+
+<p class="calibre3">To summarize, we changed <code class="calibre19">db</code> Deployment into a StatefulSet, we added a command that creates MongoDB replica set named <code class="calibre19">rs0</code>, and we set the <code class="calibre19">db</code> Service to be Headless. We’ll explore the reasons and the effects of those changes soon. For now, we’ll create the resources defined in the <code class="calibre19">sts/go-demo-3-sts.yml</code> file.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl apply <code class="se">\</code>
+<code class="lineno">2 </code>    -f sts/go-demo-3-sts.yml <code class="se">\</code>
+<code class="lineno">3 </code>    --record
+<code class="lineno">4 </code>
+<code class="lineno">5 </code>kubectl -n go-demo-3 get pods
+</pre></div>
+
+</figure>
+
+<p class="calibre3">We created the resources and retrieved the Pods. The output of the latter command is as follows.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>NAME    READY STATUS            RESTARTS AGE
+<code class="lineno">2 </code>api-... 0/1   Running           0        4s
+<code class="lineno">3 </code>api-... 0/1   Running           0        4s
+<code class="lineno">4 </code>api-... 0/1   Running           0        4s
+<code class="lineno">5 </code>db-0    0/1   ContainerCreating 0        5s
+</pre></div>
+
+</figure>
+
+<p class="calibre3">We can see that all three replicas of the <code class="calibre19">api</code> Pods are running or, at least, that’s how it seems so far. The situation with <code class="calibre19">db</code> Pods is different. Kubernetes is creating only one replica, even though we specified three.</p>
+
+<p class="calibre3">Let’s wait for a bit and retrieve the Pods again.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl -n go-demo-3 get pods
+</pre></div>
+
+</figure>
+
+<p class="calibre3">Forty seconds later, the output is as follows.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>NAME    READY STATUS            RESTARTS AGE
+<code class="lineno">2 </code>api-... 0/1   CrashLoopBackOff  1        44s
+<code class="lineno">3 </code>api-... 0/1   CrashLoopBackOff  1        44s
+<code class="lineno">4 </code>api-... 0/1   Running           2        44s
+<code class="lineno">5 </code>db-0    1/1   Running           0        45s
+<code class="lineno">6 </code>db-1    0/1   ContainerCreating 0        9s
+</pre></div>
+
+</figure>
+
+<p class="calibre3">We can see that the first <code class="calibre19">db</code> Pod is running and that creation of the second started. At the same time, our <code class="calibre19">api</code> Pods are crashing. We’ll ignore them for now, and concentrate on <code class="calibre19">db</code> Pods.</p>
+
+<p class="calibre3">Let’s wait a bit more and observe what happens next.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl -n go-demo-3 get pods
+</pre></div>
+
+</figure>
+
+<p class="calibre3">A minute later, the output is as follows.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>NAME    READY STATUS            RESTARTS AGE
+<code class="lineno">2 </code>api-... 0/1   CrashLoopBackOff  4        1m
+<code class="lineno">3 </code>api-... 0/1   Running           4        1m
+<code class="lineno">4 </code>api-... 0/1   CrashLoopBackOff  4        1m
+<code class="lineno">5 </code>db-0    1/1   Running           0        2m
+<code class="lineno">6 </code>db-1    1/1   Running           0        1m
+<code class="lineno">7 </code>db-2    0/1   ContainerCreating 0        34s
+</pre></div>
+
+</figure>
+
+<p class="calibre3">The second <code class="calibre19">db</code> Pod started running, and the system is creating the third one. It seems that our progress with the database is going in the right direction. </p>
+
+<p class="calibre3">Let’s wait a while longer before we retrieve the Pods one more time.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl -n go-demo-3 get pods
+</pre></div>
+
+</figure>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>NAME    READY STATUS           RESTARTS AGE
+<code class="lineno">2 </code>api-... 0/1   CrashLoopBackOff 4        3m
+<code class="lineno">3 </code>api-... 0/1   CrashLoopBackOff 4        3m
+<code class="lineno">4 </code>api-... 0/1   CrashLoopBackOff 4        3m
+<code class="lineno">5 </code>db-0    1/1   Running          0        3m
+<code class="lineno">6 </code>db-1    1/1   Running          0        2m
+<code class="lineno">7 </code>db-2    1/1   Running          0        1m
+</pre></div>
+
+</figure>
+
+<p class="calibre3">Another minute later, the third <code class="calibre19">db</code> Pod is also running but our <code class="calibre19">api</code> Pods are still failing. We’ll deal with that problem soon.</p>
+
+<p class="calibre3">What we just observed is an essential difference between Deployments and StatefulSets. Replicas of the latter are created sequentially. Only after the first replica was running, the StatefulSet started creating the second. Similarly, the creation of the third began solely after the second was running.</p>
+
+<p class="calibre3">Moreover, we can see that the names of the Pods created through the StatefulSet are predictable. Unlike Deployments that create random suffixes for each Pod, StatefulSets create them with indexed suffixes based on integer ordinals. The name of the first Pod will always end suffixed with <code class="calibre19">-0</code>, the second will be suffixed with <code class="calibre19">-1</code>, and so on. That naming will be maintained forever. If we’d initiate rolling updates, Kubernetes would replace the Pods of the <code class="calibre19">db</code> StatefulSet, but the names would remain the same.</p>
+
+<p class="calibre3">The nature of the sequential creation of Pods and formatting of their names provides predictability that is often paramount with stateful applications. We can think of StatefulSet replicas as being separate Pods with guaranteed ordering, uniqueness, and predictability.</p>
+
+<p class="calibre3">How about PersistentVolumes? The fact that the <code class="calibre19">db</code> Pods did not fail means that MongoDB instances managed to get the locks. That means that they are not sharing the same PersistentVolume, or that they are using different directories within the same volume.</p>
+
+<p class="calibre3">Let’s take a look at the PersistentVolumes created in the cluster.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl get pv
+</pre></div>
+
+</figure>
+
+<p class="calibre3">The output is as follows.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>NAME    CAPACITY ACCESS MODES RECLAIM POLICY STATUS CLAIM                     STORAG\
+<code class="lineno">2 </code>ECLASS REASON AGE
+<code class="lineno">3 </code>pvc-... 2Gi      RWO          Delete         Bound  go-demo-3/mongo-data-db-0 gp2   \
+<code class="lineno">4 </code>              9m
+<code class="lineno">5 </code>pvc-... 2Gi      RWO          Delete         Bound  go-demo-3/mongo-data-db-1 gp2   \
+<code class="lineno">6 </code>              8m
+<code class="lineno">7 </code>pvc-... 2Gi      RWO          Delete         Bound  go-demo-3/mongo-data-db-2 gp2   \
+<code class="lineno">8 </code>              7m
+</pre></div>
+
+</figure>
+
+<p class="calibre3">Now we can observe the reasoning behind using <code class="calibre19">volumeClaimTemplates</code> spec inside the definition of the StatefulSet. It used the template to create a claim for each replica. We specified that there should be three replicas, so it created three Pods, as well as three separate volume claims. The result is three PersistentVolumes.</p>
+
+<p class="calibre3">Moreover, we can see that the claims also follow a specific naming convention. The format is a combination of the name of the claim (<code class="calibre19">mongo-data</code>), the name of the StatefulSet <code class="calibre19">db</code>, and index (<code class="calibre19">0</code>, <code class="calibre19">1</code>, and <code class="calibre19">2</code>).</p>
+
+<p class="calibre3">Judging by the age of the claims, we can see that they followed the same pattern as the Pods. They are approximately a minute apart. The StatefulSet created the first Pod and used the claim template to create a PersistentVolume and attach it. Later on, it continued to the second Pod and the claim, and after that with the third. Pods are created sequentially, and each generated a new PersistentVolumeClaim.</p>
+
+<p class="calibre3">If a Pod is (re)scheduled due to a failure or a rolling update, it’ll continue using the same PersistentVolumeClaim and, as a result, it will keep using the same PersistentVolume, making Pods and volumes inseparable.</p>
+
+
+<figure class="image1">
+  <img src="../images/00006.jpeg" alt="Figure 1-2: Each Pod created through the StatefulSet gets a PersistentVolume (AWS variation)" class="calibre25"/>
+  <figcaption class="calibre26">Figure 1-2: Each Pod created through the StatefulSet gets a PersistentVolume (AWS variation)</figcaption>
+</figure>
+
+
+<p class="calibre3">Given that each Pod in a StatefulSet has a unique and a predictable name, we can assume that the same applies to hostnames inside those Pods. Let’s check it out.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl -n go-demo-3 <code class="se">\</code>
+<code class="lineno">2 </code>    <code class="nb">exec</code> -it db-0 -- hostname
+</pre></div>
+
+</figure>
+
+<p class="calibre3">We executed <code class="calibre19">hostname</code> command inside one of the replicas of the StatefulSet. The output is as follows.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>db-0
+</pre></div>
+
+</figure>
+
+<p class="calibre3">Just as names of the Pods created by the StatefulSet, hostnames are predictable as well. They are following the same pattern as Pod names. Each Pod in a StatefulSet derives its hostname from the name of the StatefulSet and the ordinal of the Pod. The pattern for the constructed hostname is <code class="calibre19">[STATEFULSET_NAME]-[INDEX]</code>.</p>
+
+<p class="calibre3">Let’s move into the Service related to the StatefulSet. If we take another look at the <code class="calibre19">db</code> Service defined in <code class="calibre19">sts/go-demo-3-sts.yml</code>, we’ll notice that it has <code class="calibre19">clusterIP</code> set to <code class="calibre19">None</code>. As a result, the Service is headless.</p>
+
+<p class="calibre3">In most cases we want Services to handle load-balancing and forward requests to one of the replicas. Load balancing is often round-robin even though it can be changed to other algorithms. However, sometimes we don’t need the Service to do load-balancing, nor we want it to provide a single IP for the Service. That is certainly true for MongoDB. If we are to convert its instances into a replica set, we need to have a separate and stable address for each. So, we disabled Service’s load-balancing by setting <code class="calibre19">spec.clusterIP</code> to <code class="calibre19">None</code>. That converted it into a Headless Service and let StatefulSet take over its algorithm.</p>
+
+<p class="calibre3">We’ll explore the effect of combining StatefulSets with Headless Services by creating a new Pod from which we can execute <code class="calibre19">nslookup</code> commands.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl -n go-demo-3 <code class="se">\</code>
+<code class="lineno">2 </code>    run -it <code class="se">\</code>
+<code class="lineno">3 </code>    --image busybox dns-test <code class="se">\</code>
+<code class="lineno">4 </code>    --restart<code class="o">=</code>Never <code class="se">\</code>
+<code class="lineno">5 </code>    --rm sh
+</pre></div>
+
+</figure>
+
+<p class="calibre3">We created a new Pod based on <code class="calibre19">busybox</code> inside the <code class="calibre19">go-demo-3</code> Namespace. We specified <code class="calibre19">sh</code> as the command together with the <code class="calibre19">-ti</code> argument that allocated a TTY and standard input (<code class="calibre19">stdin</code>). As a result, we are inside the container created through the <code class="calibre19">dns-test</code> Pod, and we can execute our first <code class="calibre19">nslookup</code> query.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>nslookup db
+</pre></div>
+
+</figure>
+
+<p class="calibre3">The output is as follows.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code><code class="calibre19">Server</code><code class="o">:</code>    <code class="o">100.64</code><code class="o">.</code><code class="o">0.10</code>
+<code class="lineno">2 </code><code class="calibre19">Address</code> <code class="o">1</code><code class="o">:</code> <code class="o">100.64</code><code class="o">.</code><code class="o">0.10</code> <code class="calibre19">kube</code><code class="o">-</code><code class="calibre19">dns</code><code class="o">.</code><code class="na">kube</code><code class="o">-</code><code class="calibre19">system</code><code class="o">.</code><code class="na">svc</code><code class="o">.</code><code class="na">cluster</code><code class="o">.</code><code class="na">local</code>
+<code class="lineno">3 </code>
+<code class="lineno">4 </code><code class="calibre19">Name</code><code class="o">:</code>      <code class="calibre19">db</code>
+<code class="lineno">5 </code><code class="calibre19">Address</code> <code class="o">1</code><code class="o">:</code> <code class="o">100.96</code><code class="o">.</code><code class="o">2.14</code> <code class="calibre19">db</code><code class="o">-</code><code class="o">0</code><code class="o">.</code><code class="na">db</code><code class="o">.</code><code class="na">go</code><code class="o">-</code><code class="calibre19">demo</code><code class="o">-</code><code class="o">3</code><code class="o">.</code><code class="na">svc</code><code class="o">.</code><code class="na">cluster</code><code class="o">.</code><code class="na">local</code>
+<code class="lineno">6 </code><code class="calibre19">Address</code> <code class="o">2</code><code class="o">:</code> <code class="o">100.96</code><code class="o">.</code><code class="o">2.15</code> <code class="calibre19">db</code><code class="o">-</code><code class="o">2</code><code class="o">.</code><code class="na">db</code><code class="o">.</code><code class="na">go</code><code class="o">-</code><code class="calibre19">demo</code><code class="o">-</code><code class="o">3</code><code class="o">.</code><code class="na">svc</code><code class="o">.</code><code class="na">cluster</code><code class="o">.</code><code class="na">local</code>
+<code class="lineno">7 </code><code class="calibre19">Address</code> <code class="o">3</code><code class="o">:</code> <code class="o">100.96</code><code class="o">.</code><code class="o">3.8</code> <code class="calibre19">db</code><code class="o">-</code><code class="o">1</code><code class="o">.</code><code class="na">db</code><code class="o">.</code><code class="na">go</code><code class="o">-</code><code class="calibre19">demo</code><code class="o">-</code><code class="o">3</code><code class="o">.</code><code class="na">svc</code><code class="o">.</code><code class="na">cluster</code><code class="o">.</code><code class="na">local</code>
+</pre></div>
+
+</figure>
+
+<p class="calibre3">We can see that the request was picked by the <code class="calibre19">kube-dns</code> server and that it returned three addresses, one for each Pod in the StatefulSet.</p>
+
+<p class="calibre3">The StatefulSet is using the Headless Service to control the domain of its Pods. The domain managed by this Service takes the form of <code class="calibre19">[SERVICE_NAME].[NAMESPACE].svc.cluster.local</code>, where <code class="calibre19">cluster.local</code> is the cluster domain. However, we used a short syntax in our <code class="calibre19">nslookup</code> query that requires only the name of the service (<code class="calibre19">db</code>). Since the service is in the same Namespace, we did not need to specify <code class="calibre19">go-demo-3</code>. The Namespace is required only if we’d like to establish communication from one Namespace to another.</p>
+
+<p class="calibre3">When we executed <code class="calibre19">nslookup</code>, a request was sent to the CNAME of the Headless Service (<code class="calibre19">db</code>). It, in turn, returned SRV records associated with it. Those records point to A record entries that contain Pods IP addresses, one for each of the Pods managed by the StatefulSet.</p>
+
+<p class="calibre3">Let’s do <code class="calibre19">nslookup</code> of one of the Pods managed by the StatefulSet.</p>
+
+<p class="calibre3">The Pods can be accessed with a combination of the Pod name (e.g., <code class="calibre19">db-0</code>) and the name of the StatefulSet. If the Pods are in a different Namespace, we need to add it as a suffix. Finally, if we want to use the full CNAME, we can add <code class="calibre19">svc.cluster.local</code> as well. We can see the full address from the previous output (e.g., <code class="calibre19">db-0.db.go-demo-3.svc.cluster.local</code>). All in all, we can access the Pod with the index <code class="calibre19">0</code> as <code class="calibre19">db-0.db</code>, <code class="calibre19">db-0.db.go-demo-3</code>, or <code class="calibre19">db-0.db.go-demo-3.svc.cluster.local</code>. Any of the three combinations should work since we are inside the Pod running in the same Namespace. So, we’ll use the shortest version.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>nslookup db-0.db
+</pre></div>
+
+</figure>
+
+<p class="calibre3">The output is as follows.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code><code class="calibre19">Server</code><code class="o">:</code>    <code class="o">100.64</code><code class="o">.</code><code class="o">0.10</code>
+<code class="lineno">2 </code><code class="calibre19">Address</code> <code class="o">1</code><code class="o">:</code> <code class="o">100.64</code><code class="o">.</code><code class="o">0.10</code> <code class="calibre19">kube</code><code class="o">-</code><code class="calibre19">dns</code><code class="o">.</code><code class="na">kube</code><code class="o">-</code><code class="calibre19">system</code><code class="o">.</code><code class="na">svc</code><code class="o">.</code><code class="na">cluster</code><code class="o">.</code><code class="na">local</code>
+<code class="lineno">3 </code>
+<code class="lineno">4 </code><code class="calibre19">Name</code><code class="o">:</code>      <code class="calibre19">db</code><code class="o">-</code><code class="o">0</code><code class="o">.</code><code class="na">db</code>
+<code class="lineno">5 </code><code class="calibre19">Address</code> <code class="o">1</code><code class="o">:</code> <code class="o">100.96</code><code class="o">.</code><code class="o">2.14</code> <code class="calibre19">db</code><code class="o">-</code><code class="o">0</code><code class="o">.</code><code class="na">db</code><code class="o">.</code><code class="na">go</code><code class="o">-</code><code class="calibre19">demo</code><code class="o">-</code><code class="o">3</code><code class="o">.</code><code class="na">svc</code><code class="o">.</code><code class="na">cluster</code><code class="o">.</code><code class="na">local</code>
+</pre></div>
+
+</figure>
+
+<p class="calibre3">We can see that the output matches part of the output of the previous <code class="calibre19">nslookup</code> query. The only difference is that this time it is limited to the particular Pod.</p>
+
+<p class="calibre3">What we got with the combination of a StatefulSet and a Headless Service is a stable network identity. Unless we change the number of replicas of this StatefulSet, CNAME records are permanent. Unlike Deployments, StatefulSets maintain sticky identities for each of their Pods. These pods are created from the same spec, but they are not interchangeable. Each has a persistent identifier that is maintained across any rescheduling.</p>
+
+<p class="calibre3">Pods ordinals, hostnames, SRV records, and A records are never changed. However, the same cannot be said for IP addresses associated with them. They might change. That is why it is crucial not to configure applications to connect to Pods in a StatefulSet by IP address.</p>
+
+<p class="calibre3">Now that we know that the Pods managed with a StatefulSet have a stable network identity, we can proceed and configure MongoDB replica set.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code><code class="nb">exit</code>
+<code class="lineno">2 </code>
+<code class="lineno">3 </code>kubectl -n go-demo-3 <code class="se">\</code>
+<code class="lineno">4 </code>    <code class="nb">exec</code> -it db-0 -- sh
+</pre></div>
+
+</figure>
+
+<p class="calibre3">We exited the <code class="calibre19">dns-test</code> Pod and entered into one of the MongoDB containers created by the StatefulSet.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno"> 1 </code><code class="calibre19">mongo</code>
+<code class="lineno"> 2 </code>
+<code class="lineno"> 3 </code><code class="calibre19">rs</code><code class="calibre19">.</code><code class="calibre19">initiate</code><code class="calibre19">(</code> <code class="calibre19">{</code>
+<code class="lineno"> 4 </code>   <code class="calibre19">_id</code> <code class="o">:</code> <code class="s">"rs0"</code><code class="calibre19">,</code>
+<code class="lineno"> 5 </code>   <code class="calibre19">members</code><code class="o">:</code> <code class="calibre19">[</code>
+<code class="lineno"> 6 </code>      <code class="calibre19">{</code><code class="calibre19">_id</code><code class="o">:</code> <code class="o">0</code><code class="calibre19">,</code> <code class="calibre19">host</code><code class="o">:</code> <code class="s">"db-0.db:27017"</code><code class="calibre19">},</code>
+<code class="lineno"> 7 </code>      <code class="calibre19">{</code><code class="calibre19">_id</code><code class="o">:</code> <code class="o">1</code><code class="calibre19">,</code> <code class="calibre19">host</code><code class="o">:</code> <code class="s">"db-1.db:27017"</code><code class="calibre19">},</code>
+<code class="lineno"> 8 </code>      <code class="calibre19">{</code><code class="calibre19">_id</code><code class="o">:</code> <code class="o">2</code><code class="calibre19">,</code> <code class="calibre19">host</code><code class="o">:</code> <code class="s">"db-2.db:27017"</code><code class="calibre19">}</code>
+<code class="lineno"> 9 </code>   <code class="calibre19">]</code>
+<code class="lineno">10 </code><code class="calibre19">})</code>
+</pre></div>
+
+</figure>
+
+<p class="calibre3">We entered into <code class="calibre19">mongo</code> Shell and initiated a ReplicaSet (<code class="calibre19">rs.initiate</code>). The members of the ReplicaSet are the addresses of the three Pods combined with the default MongoDB port <code class="calibre19">27017</code>.</p>
+
+<p class="calibre3">The output is <code class="calibre19">{ "ok" : 1 }</code>, thus confirming that we (probably) configured the ReplicaSet correctly.</p>
+
+<p class="calibre3">Remember that our goal is not to go deep into MongoDB configuration, but only to explore some of the benefits behind StatefulSets.</p>
+
+<p class="calibre3">If we used Deployments, we would not get stable network identity. Any update would create new Pods with new identities. With StatefulSet, on the other hand, we know that there will always be <code class="calibre19">db-[INDEX].db</code>, no matter how often we update it. Such a feature is mandatory when applications need to form an internal cluster (or a replica set) and were not designed to discover each other dynamically. That is indeed the case with MongoDB.</p>
+
+<p class="calibre3">We’ll confirm that the MongoDB replica set was created correctly by outputting its status.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code><code class="calibre19">rs</code><code class="calibre19">.</code><code class="calibre19">status</code><code class="calibre19">()</code>
+</pre></div>
+
+</figure>
+
+<p class="calibre3">The output, limited to the relevant parts, is as follows.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno"> 1 </code><code class="err">...</code>
+<code class="lineno"> 2 </code>  <code class="s">"members"</code> <code class="err">:</code> <code class="calibre19">[</code>
+<code class="lineno"> 3 </code>    <code class="calibre19">{</code>
+<code class="lineno"> 4 </code>      <code class="k">"_id"</code> <code class="calibre19">:</code> <code class="o">0</code><code class="calibre19">,</code>
+<code class="lineno"> 5 </code>      <code class="err">...</code>
+<code class="lineno"> 6 </code>      <code class="k">"stateStr"</code> <code class="calibre19">:</code> <code class="s">"PRIMARY"</code><code class="calibre19">,</code>
+<code class="lineno"> 7 </code>      <code class="err">...</code>
+<code class="lineno"> 8 </code>    <code class="calibre19">},</code>
+<code class="lineno"> 9 </code>    <code class="calibre19">{</code>
+<code class="lineno">10 </code>      <code class="k">"_id"</code> <code class="calibre19">:</code> <code class="o">1</code><code class="calibre19">,</code>
+<code class="lineno">11 </code>      <code class="err">...</code>
+<code class="lineno">12 </code>      <code class="k">"stateStr"</code> <code class="calibre19">:</code> <code class="s">"SECONDARY"</code><code class="calibre19">,</code>
+<code class="lineno">13 </code>      <code class="err">...</code>
+<code class="lineno">14 </code>      <code class="k">"syncingTo"</code> <code class="calibre19">:</code> <code class="s">"db-0.db:27017"</code><code class="calibre19">,</code>
+<code class="lineno">15 </code>      <code class="err">...</code>
+<code class="lineno">16 </code>    <code class="calibre19">},</code>
+<code class="lineno">17 </code>    <code class="calibre19">{</code>
+<code class="lineno">18 </code>      <code class="k">"_id"</code> <code class="calibre19">:</code> <code class="o">2</code><code class="calibre19">,</code>
+<code class="lineno">19 </code>      <code class="err">...</code>
+<code class="lineno">20 </code>      <code class="k">"stateStr"</code> <code class="calibre19">:</code> <code class="s">"SECONDARY"</code><code class="calibre19">,</code>
+<code class="lineno">21 </code>      <code class="err">...</code>
+<code class="lineno">22 </code>      <code class="k">"syncingTo"</code> <code class="calibre19">:</code> <code class="s">"db-0.db:27017"</code><code class="calibre19">,</code>
+<code class="lineno">23 </code>      <code class="err">...</code>
+<code class="lineno">24 </code>    <code class="calibre19">}</code>
+<code class="lineno">25 </code>  <code class="calibre19">]</code><code class="err">,</code>
+<code class="lineno">26 </code>  <code class="s">"ok"</code> <code class="err">:</code> <code class="o">1</code>
+<code class="lineno">27 </code><code class="err">}</code>
+</pre></div>
+
+</figure>
+
+<p class="calibre3">We can see that all three MongoDB Pods are members of the replica set. One of them is primary. If it fails, Kubernetes will reschedule it and, since it’s managed by the StatefulSet, it’ll maintain the same stable network identity. The secondary members are all syncing with the primary one that is reachable through the <code class="calibre19">db-0.db:27017</code> address.</p>
+
+<p class="calibre3">Now that the database is finally operational, we should confirm that the <code class="calibre19">api</code> Pods are running.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code><code class="nb">exit</code>
+<code class="lineno">2 </code>
+<code class="lineno">3 </code><code class="nb">exit</code>
+<code class="lineno">4 </code>
+<code class="lineno">5 </code>kubectl -n go-demo-3 get pods
+</pre></div>
+
+</figure>
+
+<p class="calibre3">We exited MongoDB Shell and the container that hosts <code class="calibre19">db-0</code>, and we listed the Pods in the <code class="calibre19">go-demo-3</code> Namespace.</p>
+
+<p class="calibre3">The output of the latter command is as follows.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>NAME    READY STATUS  RESTARTS AGE
+<code class="lineno">2 </code>api-... 1/1   Running 8        17m
+<code class="lineno">3 </code>api-... 1/1   Running 8        17m
+<code class="lineno">4 </code>api-... 1/1   Running 8        17m
+<code class="lineno">5 </code>db-0    1/1   Running 0        17m
+<code class="lineno">6 </code>db-1    1/1   Running 0        17m
+<code class="lineno">7 </code>db-2    1/1   Running 0        16m
+</pre></div>
+
+</figure>
+
+<p class="calibre3">If, in your case, <code class="calibre19">api</code> Pods are still not <code class="calibre19">running</code>, please wait for a few moments until Kubernetes restarts them.</p>
+
+<p class="calibre3">Now that the MongoDB replica set is operational, <code class="calibre19">api</code> Pods could connect to it, and Kubernetes changed their statuses to <code class="calibre19">Running</code>. The whole application is operational.</p>
+
+<p class="calibre3">There is one more StatefulSet-specific feature we should discuss.</p>
+
+<p class="calibre3">Let’s see what happens if, for example, we update the image of the <code class="calibre19">db</code> container.</p>
+
+<p class="calibre3">The updated definition is in <code class="calibre19">sts/go-demo-3-sts-upd.yml</code>.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>diff sts/go-demo-3-sts.yml <code class="se">\</code>
+<code class="lineno">2 </code>    sts/go-demo-3-sts-upd.yml
+</pre></div>
+
+</figure>
+
+<p class="calibre3">As you can see from the <code class="calibre19">diff</code>, the only change is in the <code class="calibre19">image</code>. We’ll update <code class="calibre19">mongo</code> version from <code class="calibre19">3.3</code> to <code class="calibre19">3.4</code>.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl apply <code class="se">\</code>
+<code class="lineno">2 </code>    -f sts/go-demo-3-sts-upd.yml <code class="se">\</code>
+<code class="lineno">3 </code>    --record
+<code class="lineno">4 </code>
+<code class="lineno">5 </code>kubectl -n go-demo-3 get pods
+</pre></div>
+
+</figure>
+
+<p class="calibre3">We applied the new definition and retrieved the list of Pods inside the Namespace.</p>
+
+<p class="calibre3">The output is as follows.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>NAME    READY STATUS            RESTARTS AGE
+<code class="lineno">2 </code>api-... 1/1   Running           6        14m
+<code class="lineno">3 </code>api-... 1/1   Running           6        14m
+<code class="lineno">4 </code>api-... 1/1   Running           6        14m
+<code class="lineno">5 </code>db-0    1/1   Running           0        6m
+<code class="lineno">6 </code>db-1    1/1   Running           0        6m
+<code class="lineno">7 </code>db-2    0/1   ContainerCreating 0        14s
+</pre></div>
+
+</figure>
+
+<p class="calibre3">We can see that the StatefulSet chose to update only one of its Pods. Moreover, it picked the one with the highest index.</p>
+
+<p class="calibre3">Let’s see the output of the same command half a minute later.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>NAME    READY STATUS            RESTARTS AGE
+<code class="lineno">2 </code>api-... 1/1   Running           6        15m
+<code class="lineno">3 </code>api-... 1/1   Running           6        15m
+<code class="lineno">4 </code>api-... 1/1   Running           6        15m
+<code class="lineno">5 </code>db-0    1/1   Running           0        7m
+<code class="lineno">6 </code>db-1    0/1   ContainerCreating 0        5s
+<code class="lineno">7 </code>db-2    1/1   Running           0        32s
+</pre></div>
+
+</figure>
+
+<p class="calibre3">StatefulSet finished updating the <code class="calibre19">db-2</code> Pod and moved to the one before it.</p>
+
+<p class="calibre3">And so on, and so forth, all the way until all the Pods that form the StatefulSet were updated.</p>
+
+<p class="calibre3">The Pods in the StatefulSet were updated in reverse ordinal order. The StatefulSet terminated one of the Pods, and it waited for its status to become <code class="calibre19">Running</code> before it moved to the next one.</p>
+
+<p class="calibre3">All in all, when StatefulSet is created, it, in turn, generates Pods sequentially starting with the index <code class="calibre19">0</code>, and moving upwards. Updates to StatefulSets are following the same logic, except that StatefulSet begins updates with the Pod with the highest index, and it flows downwards.</p>
+
+<p class="calibre3">We did manage to make MongoDB replica set running, but the cost was too high. Creating Mongo replica set manually is not a good option. It should be no option at all. </p>
+
+<p class="calibre3">We’ll remove the <code class="calibre19">go-demo-3</code> Namespace (and everything inside it) and try to improve our process for deploying MongoDB.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl delete ns go-demo-3
+</pre></div>
+
+</figure>
+
+<h3 id="leanpub-auto-using-sidecar-containers-to-initialize-applications" class="calibre20">Using Sidecar Containers To Initialize Applications</h3>
+
+<p class="calibre3">Even though we managed to deploy MongoDB replica set with three instances, the process was far from optimum. We had to execute manual steps. Since I don’t believe that manual hocus-pocus type of intervention is the way to go, we’ll try to improve the process by removing human interaction. We’ll do that through sidecar containers that will do the work of creating MongoDB replica set (not to be confused with Kubernetes ReplicaSet).</p>
+
+<p class="calibre3">Let’s take a look at yet another iteration of the <code class="calibre19">go-demo-3</code> application definition.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>cat sts/go-demo-3.yml
+</pre></div>
+
+</figure>
+
+<p class="calibre3">The output, limited to relevant parts, is as follows.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno"> 1 </code><code class="nn">...</code>
+<code class="lineno"> 2 </code><code class="calibre19">apiVersion</code><code class="calibre19">:</code> <code class="calibre19">apps/v1beta2</code>
+<code class="lineno"> 3 </code><code class="calibre19">kind</code><code class="calibre19">:</code> <code class="calibre19">StatefulSet</code>
+<code class="lineno"> 4 </code><code class="calibre19">metadata</code><code class="calibre19">:</code>
+<code class="lineno"> 5 </code>  <code class="calibre19">name</code><code class="calibre19">:</code> <code class="calibre19">db</code>
+<code class="lineno"> 6 </code>  <code class="calibre19">namespace</code><code class="calibre19">:</code> <code class="calibre19">go-demo-3</code>
+<code class="lineno"> 7 </code><code class="calibre19">spec</code><code class="calibre19">:</code>
+<code class="lineno"> 8 </code>  <code class="calibre19">...</code>
+<code class="lineno"> 9 </code>  <code class="calibre19">template</code><code class="calibre19">:</code>
+<code class="lineno">10 </code>    <code class="calibre19">...</code>
+<code class="lineno">11 </code>    <code class="calibre19">spec</code><code class="calibre19">:</code>
+<code class="lineno">12 </code>      <code class="calibre19">terminationGracePeriodSeconds</code><code class="calibre19">:</code> <code class="calibre19">10</code>
+<code class="lineno">13 </code>      <code class="calibre19">containers</code><code class="calibre19">:</code>
+<code class="lineno">14 </code>      <code class="calibre19">...</code>
+<code class="lineno">15 </code>      <code class="calibre19">-</code> <code class="calibre19">name</code><code class="calibre19">:</code> <code class="calibre19">db-sidecar</code>
+<code class="lineno">16 </code>        <code class="calibre19">image</code><code class="calibre19">:</code> <code class="calibre19">cvallance/mongo-k8s-sidecar</code>
+<code class="lineno">17 </code>        <code class="calibre19">env</code><code class="calibre19">:</code>
+<code class="lineno">18 </code>        <code class="calibre19">-</code> <code class="calibre19">name</code><code class="calibre19">:</code> <code class="calibre19">MONGO_SIDECAR_POD_LABELS</code>
+<code class="lineno">19 </code>          <code class="calibre19">value</code><code class="calibre19">:</code> <code class="s">"app=db"</code>
+<code class="lineno">20 </code>        <code class="calibre19">-</code> <code class="calibre19">name</code><code class="calibre19">:</code> <code class="calibre19">KUBE_NAMESPACE</code>
+<code class="lineno">21 </code>          <code class="calibre19">value</code><code class="calibre19">:</code> <code class="calibre19">go-demo-3</code>
+<code class="lineno">22 </code>        <code class="calibre19">-</code> <code class="calibre19">name</code><code class="calibre19">:</code> <code class="calibre19">KUBERNETES_MONGO_SERVICE_NAME</code>
+<code class="lineno">23 </code>          <code class="calibre19">value</code><code class="calibre19">:</code> <code class="calibre19">db</code>
+<code class="lineno">24 </code><code class="nn">...</code>
+</pre></div>
+
+</figure>
+
+<p class="calibre3">When compared with <code class="calibre19">sts/go-demo-3-sts.yml</code>, the only difference is the addition of the second container in the StatefulSet <code class="calibre19">db</code>. It is based on <a href="https://hub.docker.com/r/cvallance/mongo-k8s-sidecar">cvallance/mongo-k8s-sidecar</a> Docker image. I won’t bore you with the details but only give you the gist of the project. It creates and maintains MongoDB replica sets.</p>
+
+<p class="calibre3">The sidecar will monitor the Pods created through our StatefulSet, and it will reconfigure <code class="calibre19">db</code> containers so that MongoDB replica set is (almost) always up to date with the MongoDB instances.</p>
+
+<p class="calibre3">Let’s create the resources defined in <code class="calibre19">sts/go-demo-3.yml</code> and check whether everything works as expected.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl apply <code class="se">\</code>
+<code class="lineno">2 </code>    -f sts/go-demo-3.yml <code class="se">\</code>
+<code class="lineno">3 </code>    --record
+<code class="lineno">4 </code>
+<code class="lineno">5 </code><code class="c"># Wait for a few moments</code>
+<code class="lineno">6 </code>
+<code class="lineno">7 </code>kubectl -n go-demo-3 <code class="se">\</code>
+<code class="lineno">8 </code>    logs db-0 <code class="se">\</code>
+<code class="lineno">9 </code>    -c db-sidecar
+</pre></div>
+
+</figure>
+
+<p class="calibre3">We created the resources and outputted the logs of the <code class="calibre19">db-sidecar</code> container inside the <code class="calibre19">db-0</code> Pod.</p>
+
+<p class="calibre3">The output, limited to the last entry, is as follows.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno"> 1 </code><code class="calibre19">...</code>
+<code class="lineno"> 2 </code><code class="calibre19">Error</code> <code class="k">in</code> <code class="calibre19">workloop</code> <code class="calibre19">{</code> <code class="calibre19">[</code><code class="nl">Error</code><code class="calibre19">:</code> <code class="calibre19">[</code><code class="calibre19">object</code> <code class="calibre19">Object</code><code class="calibre19">]]</code>
+<code class="lineno"> 3 </code>  <code class="nl">message</code><code class="calibre19">:</code>
+<code class="lineno"> 4 </code>   <code class="calibre19">{</code> <code class="nl">kind</code><code class="calibre19">:</code> <code class="err">'</code><code class="calibre19">Status</code><code class="err">'</code><code class="calibre19">,</code>
+<code class="lineno"> 5 </code>     <code class="nl">apiVersion</code><code class="calibre19">:</code> <code class="err">'</code><code class="calibre19">v1</code><code class="err">'</code><code class="calibre19">,</code>
+<code class="lineno"> 6 </code>     <code class="nl">metadata</code><code class="calibre19">:</code> <code class="calibre19">{},</code>
+<code class="lineno"> 7 </code>     <code class="nl">status</code><code class="calibre19">:</code> <code class="err">'</code><code class="calibre19">Failure</code><code class="err">'</code><code class="calibre19">,</code>
+<code class="lineno"> 8 </code>     <code class="nl">message</code><code class="calibre19">:</code> <code class="err">'</code><code class="calibre19">pods</code> <code class="calibre19">is</code> <code class="nl">forbidden</code><code class="calibre19">:</code> <code class="calibre19">User</code> <code class="s">"system:serviceaccount:go-demo-3:default"</code> <code class="calibre19">can</code>\
+<code class="lineno"> 9 </code><code class="calibre19">not</code> <code class="calibre19">list</code> <code class="calibre19">pods</code> <code class="k">in</code> <code class="calibre19">the</code> <code class="calibre19">namespace</code> <code class="s">"go-demo-3"</code><code class="err">'</code><code class="calibre19">,</code>
+<code class="lineno">10 </code>     <code class="nl">reason</code><code class="calibre19">:</code> <code class="err">'</code><code class="calibre19">Forbidden</code><code class="err">'</code><code class="calibre19">,</code>
+<code class="lineno">11 </code>     <code class="nl">details</code><code class="calibre19">:</code> <code class="calibre19">{</code> <code class="nl">kind</code><code class="calibre19">:</code> <code class="err">'</code><code class="calibre19">pods</code><code class="err">'</code> <code class="calibre19">},</code>
+<code class="lineno">12 </code>     <code class="nl">code</code><code class="calibre19">:</code> <code class="o">403</code> <code class="calibre19">},</code>
+<code class="lineno">13 </code>  <code class="nl">statusCode</code><code class="calibre19">:</code> <code class="o">403</code> <code class="calibre19">}</code>
+</pre></div>
+
+</figure>
+
+<p class="calibre3">We can see that the <code class="calibre19">db-sidecar</code> container is not allowed to list the Pods in the <code class="calibre19">go-demo-3</code> Namespace. If, in your case, that’s not the output you’re seeing, you might need to wait for a few moments and re-execute the <code class="calibre19">logs</code> command.</p>
+
+<p class="calibre3">It is not surprising that the sidecar could not list the Pods. If it could, RBAC would be, more or less, useless. It would not matter that we restrict which resources users can create if any Pod could circumvent that. Just as we learned in <em class="calibre17">The DevOps 2.3 Toolkit: Kubernetes</em> how to set up users using RBAC, we need to do something similar with service accounts. We need to extend RBAC rules from human users to Pods. That will be the subject of the next chapter.</p>
+
+<aside class="warning">
+    <h3 id="leanpub-auto-a-note-to-docker-for-macwindows-users" class="calibre22">A note to <strong class="calibre23">Docker For Mac/Windows</strong> users</h3>
+
+  <p class="calibre3">On Docker for Mac (or Windows), the <code class="calibre19">db-sidecar</code> can list the Pods even with RBAC enabled. Even though Docker for Mac/Windows supports RBAC, it allows any internal process inside containers to communicate with Kube API. Be aware that even though the sidecar could list the Pods in Docker For Mac/Windows, it will not work in any other cluster with RBAC enabled.</p>
+
+</aside>
+
+<h3 id="leanpub-auto-to-statefulset-or-not-to-statefulset" class="calibre20">To StatefulSet Or Not To StatefulSet</h3>
+
+<p class="calibre3">StatefulSets provide a few essential features often required when running stateful applications in a Kubernetes cluster. Still, the division between Deployments and StatefulSets is not always clear. After all, both controllers can attach a PersistentVolume, both can forward requests through Services, and both support rolling updates. When should you choose one over the other? Saying that one is for stateful applications and the other isn’t would be an oversimplification that would not fit all the scenarios. As an example, we saw that we got no tangible benefit when we moved Jenkins from a Deployment into a StatefulSet. MongoDB, on the other hand, showcases essential benefits provided by StatefulSets.</p>
+
+<p class="calibre3">We can simplify decision making with a few questions.</p>
+
+<ul class="calibre21">
+  <li class="calibre15">Does your application need stable and unique network identifiers?</li>
+  <li class="calibre15">Does your application need stable persistent storage?</li>
+  <li class="calibre15">Does your application need ordered deployments, scaling, deletion, or rolling updates?</li>
+</ul>
+
+<p class="calibre3">If the answer to any of those questions is <em class="calibre17">yes</em>, your application should probably be managed by a StatefulSet. Otherwise, you should probably use a Deployment. All that does not mean that there are no other controller types you can use. There are a few. However, if the choice is limited to Deployment and StatefulSet controllers, those three questions should be on your mind when choosing which one to use.</p>
+
+<h3 id="leanpub-auto-what-now" class="calibre20">What Now?</h3>
+
+<p class="calibre3">We’re finished with the exploration of StatefulSets. They will be essential since they will enable us to do a few things that will be critical for our Continuous Deployment processes. For now, we’ll remove the resources we created and take a break before we jump into Service Accounts in an attempt to fix the problem with the MongoDB sidecar. Who knows? We might find the usage of Service Account beyond the sidecar.</p>
+
+<figure class="code">
+<div class="highlight"><pre class="calibre24"><code class="calibre19"/><code class="lineno">1 </code>kubectl delete ns go-demo-3
+</pre></div>
+
+</figure>
+
+<p class="calibre3">We deleted the <code class="calibre19">go-demo-3</code> Namespace and, with it, all the resources we created. We’ll start the next chapter with a clean slate. Feel free to delete the whole cluster if you’re not planning to explore the next chapter right away. If it’s dedicated to this book, there’s no need to waste resources and money on running a cluster that is not doing anything.</p>
+
+<p class="calibre3">Before you leave, please consult the following API references for more information about StatefulSets.</p>
+
+<ul class="calibre21">
+  <li class="calibre15"><a href="https://v1-9.docs.kubernetes.io/docs/api-reference/v1.9/#statefulset-v1-apps">StatefulSet v1beta2 apps</a></li>
+</ul>
+
+
+
+</div>
+</body></html>

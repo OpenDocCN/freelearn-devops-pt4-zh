@@ -1,0 +1,589 @@
+<html><head></head><body>
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Troubleshooting</h1>
+                </header>
+            
+            <article>
+                
+<p><span>Ceph is largely autonomous in taking care of itself and recovering from failure scenarios, but in some cases human intervention is required. This chapter will look at common errors and failure scenarios and how to bring Ceph back to working order by troubleshooting them.</span></p>
+<p><span>In this chapter we will cover the following topics:</span></p>
+<ul>
+<li>How to correctly repair inconsistent objects</li>
+<li>How to solve problems with the help of peering</li>
+<li>How to deal with <kbd>near_full</kbd> and <kbd>too_full</kbd> OSDs</li>
+<li>How to investigate errors via Ceph logging</li>
+<li>How to investigate poor performance</li>
+<li>How to investigate PGs in a down state</li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Repairing inconsistent objects</h1>
+                </header>
+            
+            <article>
+                
+<p>With BlueStore, all data is checksumed by default, so the steps in this section to safely determine the correct copy of the object no longer apply.</p>
+<p>We will now see how we can correctly repair inconsistent objects:</p>
+<ol>
+<li>To be able to recreate an inconsistent scenario, create an RBD, and later we'll make a filesystem on it:</li>
+</ol>
+<div class="CDPAlignCenter"><img src="assets/07131b2d-a45a-446f-b60a-e029ac54549d.png" style="width:58.08em;height:18.17em;"/></div>
+<ol start="2">
+<li>Check to see which objects have been created by formatting the RBD with a filesystem:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img class="aligncenter size-full wp-image-235 image-border" src="assets/7473fca0-98dc-42ca-b93c-651d0ba4b467.png" style="width:34.08em;height:10.17em;"/></p>
+<ol start="3">
+<li>Pick one object at random and use the <kbd>osd map</kbd> command to find out which PG the object is stored in:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img class="aligncenter size-full wp-image-236 image-border" src="assets/0b42bd82-9f14-4bc1-9327-194ba0dadd0c.png" style="width:56.25em;height:3.25em;"/></p>
+<ol start="4">
+<li>Find this object on the disk on one of the OSD nodes; in this case, it is <kbd>OSD.0</kbd> on <kbd>OSD1</kbd>:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img class="aligncenter size-full wp-image-237 image-border" src="assets/d3c6ed04-34c8-48ca-8728-6ea21a10cc01.png" style="width:56.25em;height:4.33em;"/></p>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<ol start="5">
+<li>Corrupt it by echoing garbage over the top of it:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img class="aligncenter size-full wp-image-238 image-border" src="assets/649ee1fe-2df4-4335-8864-7a2463d82dec.png" style="width:52.25em;height:2.08em;"/></p>
+<ol start="6">
+<li>Tell Ceph to do a scrub on the PG that contains the object we corrupted:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img class="aligncenter size-full wp-image-239 image-border" src="assets/88baf197-08c4-4eff-8fda-3494cb3b8983.png" style="width:34.67em;height:3.67em;"/></p>
+<ol start="7">
+<li>If you check the Ceph status, you will see that Ceph has detected the corrupted object and marked the PG as inconsistent. From this point onward, forget that we corrupted the object manually and work through the process as if it were for real:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img class="aligncenter size-full wp-image-240 image-border" src="assets/7cee2fad-1997-4a02-a5cd-a53fc520565c.png" style="width:55.00em;height:15.67em;"/></p>
+<p style="padding-left: 60px">By looking at the detailed health report, we can find the PG that contains the corrupted object. We could just tell Ceph to repair the PG now; however, if the primary OSD is the one that holds the corrupted object, it will overwrite the remaining good copies. This would be bad, so in order to make sure this doesn't happen, before running the <kbd>repair</kbd> command, we will confirm which OSD holds the corrupt object.</p>
+<p class="CDPAlignCenter CDPAlign"><img class="aligncenter size-full wp-image-241 image-border" src="assets/03111330-f1b8-4f31-92c6-fd6cb77f37e3.png" style="width:55.58em;height:4.67em;"/></p>
+<p style="padding-left: 60px">By looking at the health report, we can see the three OSDs that hold a copy of the object; the first OSD is the primary.</p>
+<ol start="8">
+<li>Log onto the primary OSD node and open the log file for the primary OSD. You should be able to find the log entry that indicates what object was flagged by the PG scrub.</li>
+<li>Navigate through the PG structure, find the object mentioned in the log file, and calculate a <kbd>md5sum</kbd> of each copy:</li>
+</ol>
+<div class="CDPAlignCenter CDPAlign"><img src="assets/498fda62-7f79-4431-8771-1f64691af145.png"/></div>
+<p style="padding-left: 90px"><kbd>md5sum</kbd> of object on <kbd>osd</kbd> node one.</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/e1633c2f-2f8c-4009-a610-75059eb6a8cc.png"/></p>
+<p style="padding-left: 90px"><span><kbd>md5sum</kbd> of object on <kbd>osd</kbd> node two.</span></p>
+<div class="CDPAlignCenter CDPAlign"><img class="aligncenter size-full wp-image-243 image-border" src="assets/e4ccb034-e57a-4107-acf2-e93029fa69c2.png" style="width:56.00em;height:4.08em;"/></div>
+<p style="padding-left: 90px"><span><kbd>md5sum</kbd> of object on</span> <kbd>osd</kbd> node three.</p>
+<p>We can see that the object on <kbd>OSD.0</kbd> has a different <kbd>md5sum</kbd>, and so we know that it is the corrupt object.</p>
+<pre><strong>OSD.0 = \0d599f0ec05c3bda8c3b8a68c32a1b47<br/></strong><strong>OSD.2 = \b5cfa9d6c8febd618f91ac2843d50a1c<br/></strong><strong>OSD.3 = \b5cfa9d6c8febd618f91ac2843d50a1c</strong></pre>
+<p>Although we already know which copy of the object was corrupted as we manually corrupted the object on <kbd>OSD.0</kbd>, let's pretend we hadn't done it, and that this corruption was caused by some random cosmic ray. We now have the <kbd>md5sum</kbd> of the three replica copies and can clearly see that the copy on <kbd>OSD.0</kbd> is wrong. This is a big reason why a 2x replication scheme is bad; if a PG becomes inconsistent, you can't figure out which one is the bad one. As the primary OSD for this PG is 2, as can be seen in both the Ceph health details and the Ceph <kbd>OSD map</kbd> commands, we can safely run the <kbd>ceph pg repair</kbd> command without the fear of copying the bad object over the top of the remaining good copies:</p>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<div class="CDPAlignCenter CDPAlign"><img class="aligncenter size-full wp-image-245 image-border" src="assets/a17d3536-836b-47bb-8cb4-b9c5c63fa0b6.png" style="width:29.42em;height:3.50em;"/></div>
+<p>We can see that the inconsistent PG has repaired itself:</p>
+<div class="CDPAlignCenter CDPAlign"><img class="aligncenter size-full wp-image-246 image-border" src="assets/cc5c798c-1389-4ab6-b0f4-1c80d33d4cbc.png" style="width:54.00em;height:13.75em;"/></div>
+<p>In the event that the copy is corrupt on the primary OSD, then the following steps should be taken:</p>
+<ol>
+<li>
+<div>Stop the primary OSD.</div>
+</li>
+<li>
+<div>Delete the object from the PG directory.</div>
+</li>
+<li>
+<div>Restart the OSD.</div>
+</li>
+<li>
+<div>Instruct Ceph to repair the PG.</div>
+</li>
+</ol>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Full OSDs</h1>
+                </header>
+            
+            <article>
+                
+<p>By default, Ceph will warn us when OSD utilization approaches 85%, and it will stop writing I/O to the OSD when it reaches 95%. If, for some reason, the OSD completely fills up to 100%, the OSD is likely to crash and will refuse to come back online. An OSD that is above the 85% warning level will also refuse to participate in backfilling, so the recovery of the cluster may be impacted when OSDs are in a near-full state.</p>
+<p>Before covering the troubleshooting steps around full OSDs, it is highly recommended that you monitor the capacity utilization of your OSDs, as described in <a href="e1176b5d-603f-424a-83db-023605c29083.xhtml"/><a href="e1176b5d-603f-424a-83db-023605c29083.xhtml">Chapter 8</a>, <em>Monitoring Ceph</em>. This will give you advanced warning as OSDs approach the <kbd>near_full</kbd> warning threshold.</p>
+<p>If you find yourself in a situation where your cluster is above the near-full warning state, you have two options:</p>
+<ul>
+<li>Add some more OSDs</li>
+<li>Delete some data</li>
+</ul>
+<p>However, in the real world, both of these are either impossible or will take time, in which case the situation can deteriorate. If the OSD is only at the <kbd>near_full</kbd> threshold, you can probably get things back on track by checking whether your OSD utilization is balanced, and then perform PG balancing if not. This was covered in more detail in <a href="5c0bf2de-c75e-4aa7-b3d9-8a1e038e3735.xhtml"/><a href="5c0bf2de-c75e-4aa7-b3d9-8a1e038e3735.xhtml"/><a href="5c0bf2de-c75e-4aa7-b3d9-8a1e038e3735.xhtml">Chapter 9</a>, <em>Tuning Ceph</em>. The same applies to the <kbd>too_full</kbd> OSDs as; although you are unlikely going to get them back below 85%, at least you can resume write operations.</p>
+<p>If your OSDs have completely filled up, they are in an offline state and will refuse to start. Now you have an additional problem. If the OSDs will not start, no matter what rebalancing or deletion of data you carry out, it will not be reflected on the full OSDs as they are offline. The only way to recover from this situation is to manually delete some PGs from the disk's filesystem to let the OSD start.</p>
+<p>The following steps should be undertaken for this:</p>
+<ol>
+<li>Make sure the OSD process is not running.</li>
+<li>Set <kbd>nobackfill</kbd> on the cluster, to stop the recovery from happening when the OSD comes back online.</li>
+<li>Find a PG that is in an active, clean, and remapped state and exists on the offline OSD.</li>
+<li>Delete this PG from the offline OSD using ceph-objectstore-tool.</li>
+<li>Restart the OSD.</li>
+<li>Delete data from the Ceph cluster or rebalance the PGs.</li>
+<li>Remove <kbd>nobackfill</kbd>.</li>
+<li>Run a scrub and repair the PG you just deleted.</li>
+</ol>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Ceph logging</h1>
+                </header>
+            
+            <article>
+                
+<p>When investigating errors, it is very handy to be able to look through the Ceph log files to get a better idea of what is going on. By default, the logging levels are set so that only the important events are logged. During troubleshooting, the logging levels may need to be increased in order to reveal the cause of the error. To increase the logging level, you can either edit <kbd>ceph.conf</kbd>, add the new logging level, and then restart the component, or, if you don't wish to restart the Ceph daemons, you can inject the new configuration parameter into the live running daemon. To inject parameters, use the <kbd>ceph tell</kbd> command:</p>
+<pre><strong>ceph tell osd.0 injectargs --debug-osd 0/5</strong></pre>
+<p>Then, set the logging level for the OSD log on <kbd>osd.0</kbd> to <kbd>0/5</kbd>. The number <kbd>0</kbd> is the disk logging level, and the number <kbd>5</kbd> is the in-memory logging level.</p>
+<div class="packt_tip">At a logging level of <kbd>20</kbd>, the logs are extremely verbose and will grow quickly. Do not keep high-verbosity logging enabled for too long. Higher logging levels will also have an impact on performance.</div>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Slow performance</h1>
+                </header>
+            
+            <article>
+                
+<p>Slow performance is defined as when the cluster is actively processing I/O requests, but it appears to be operating at a lower performance level than what is expected. Generally, slow performance is caused by a component of your Ceph cluster reaching saturation and becoming a bottleneck. This maybe due to an increased number of client requests or a component failure that is causing Ceph to perform recovery.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Causes</h1>
+                </header>
+            
+            <article>
+                
+<p>Although there are many things that may cause Ceph to experience slow performance, here are some of the most likely causes.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Increased client workload</h1>
+                </header>
+            
+            <article>
+                
+<p>Sometimes, slow performance may not be due to an underlying fault; it may just be that the number and type of client requests may have exceeded the capability of the hardware. Whether this is due to a number of separate workloads all running at the same time, or just a slow general increase over a period of time, if you are capturing the number of client requests across your cluster, this should be easy to trend. If the increased workload looks like it's permanent, the only solution is to add some additional hardware.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Down OSDs</h1>
+                </header>
+            
+            <article>
+                
+<p>If a significant number of OSDs are marked as down in a cluster, perhaps due to a whole OSD node going offline <span>–</span> although recovery will not start until the OSDs are marked out <span>–</span> the performance will be affected, as the number of IOPs available to service the client IO will now be lower. Your monitoring solution should alert you if this is happening and allow you to take action.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Recovery and backfilling</h1>
+                </header>
+            
+            <article>
+                
+<p>When an OSD is marked out, the affected PGs will re-peer with new OSDs and start the process of recovering and backfilling data across the cluster. This process can put a strain on the disks in a Ceph cluster and lead to higher latencies for client requests. There are several tuning options that can reduce the impact of backfilling by reducing the rate and priority. These should be evaluated against the impact of slower recovery from failed disks, which may reduce the durability of the cluster.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Scrubbing</h1>
+                </header>
+            
+            <article>
+                
+<p>When Ceph performs deep scrubbing to check your data for any inconsistencies, it has to read all the objects from the OSD; this can be a very IO-intensive task, and on large drives, the process can take a long time. Scrubbing is vital to protect against data loss and therefore should not be disabled. Various tuning options were discussed in <a href="" target="_blank">Chapter 9</a>, <em>Tuning Ceph</em>, regarding setting windows for scrubbing and its priority. By tweaking these settings, a lot of the performance impact on client workloads from scrubbing can be avoided.</p>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Snaptrimming</h1>
+                </header>
+            
+            <article>
+                
+<p>When you remove a snapshot, Ceph has to delete all the objects that have been created due to the copy-on-write nature of the snapshot process. From Ceph 10.2.8 onward, there is an improved OSD setting called <kbd>osd_snap_trim_sleep</kbd>, which makes Ceph wait for the specified number of settings between the trimming of each snapshot object. This ensures that the backing object store does not become overloaded.</p>
+<div class="packt_infobox">Although this setting was available in previous jewel releases, its behavior was not the same and should not be used.</div>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Hardware or driver issues</h1>
+                </header>
+            
+            <article>
+                
+<p>If you have recently introduced new hardware into your Ceph cluster and, after backfilling has rebalanced your data, you start experiencing slow performance, check for firmware or driver updates relating to your hardware, as newer drivers may require a newer kernel. If you have only introduced a small amount of hardware, you can temporarily mark the OSDs out on it without going below your pool's <kbd>min_size</kbd>; this can be a good way to rule out hardware issues.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Monitoring</h1>
+                </header>
+            
+            <article>
+                
+<p>This is where the monitoring you configured in <a href="" target="_blank">Chapter 8</a>, <em>Tiering with Ceph,</em> can really come in handy, as it will allow you to compare long-term trends with current metric readings and see whether there are any clear anomalies.</p>
+<p>It is recommended you first look at the disk performance as, in most cases of poor performance, the underlying disks are normally the components that become the bottleneck.</p>
+<p>If you do not have monitoring configured or wish to manually drill deeper into the performance metrics, there are a number of tools you can use to accomplish this.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">iostat</h1>
+                </header>
+            
+            <article>
+                
+<p><kbd>iostat</kbd> can be used to get a running overview of the performance and latency of all the disks running in your OSD nodes. Run <kbd>iostat</kbd> with the following command:</p>
+<pre><strong>iostat -d 1 -x</strong></pre>
+<p>You will get a display similar to this, which will refresh once a second:</p>
+<div class="CDPAlignCenter CDPAlign"><img class="aligncenter size-full wp-image-247 image-border" src="assets/4e342165-b756-45b0-b46d-77d9cd040e68.png" style="width:56.67em;height:13.17em;"/></div>
+<p>As a rule of thumb, if a large number of your disks are showing a high <kbd>%</kbd> util over a period of time, it is likely that your disks are being saturated. It may also be worth looking at the <kbd>r_await</kbd> time to see whether read requests are taking longer than what is expected for the type of disk in your OSD nodes. As mentioned earlier, if you find that high disk utilization is the cause of slow performance and the triggering factor is unlikely to dissipate soon, extra disks are the only solution.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">htop</h1>
+                </header>
+            
+            <article>
+                
+<p>Like the standard top utility, <kbd>htop</kbd> provides a live view of the CPU and the memory consumption of the host. However, it also produces a more intuitive display that may make judging overall system-resource use easier, especially with the rapidly-changing resource usage of Ceph:</p>
+<div class="CDPAlignCenter CDPAlign"><img class="aligncenter size-full wp-image-248 image-border" src="assets/0f53b1ff-e4ce-4d2f-a58d-6f82e4202196.png" style="width:60.00em;height:15.00em;"/></div>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">atop</h1>
+                </header>
+            
+            <article>
+                
+<p>atop is another useful tool. It captures performance metrics for CPU, RAM, disk, network, and can present this all in one view; this makes it very easy to get a complete overview of the system resource usage.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Diagnostics</h1>
+                </header>
+            
+            <article>
+                
+<p>There are a number of internal Ceph tools that can be used to help diagnose slow performance. The most useful command for investigating slow performance is dumping current inflight operations, which can be done with the following command:</p>
+<pre><strong>sudo ceph daemon osd.x dump_ops_in_flight</strong></pre>
+<p>This will dump all current operations for the specified OSD and break down all the various timings for each step of the operation. Here is an example of an inflight IO:</p>
+<div class="CDPAlignCenter CDPAlign"><img class="aligncenter size-full wp-image-249 image-border" src="assets/1e43402e-9b97-44e2-b365-76ae84c5b8b6.png" style="width:49.75em;height:54.08em;"/></div>
+<p>From the previous example IO, we can see all the stages that are logged for each operation; it is clear that this operation is running without any performance problems. However, in the event of slow performance, you may see a large delay between two steps, and directing your investigation into this area may lead you to the root cause.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Extremely slow performance or no IO</h1>
+                </header>
+            
+            <article>
+                
+<p>If your cluster is performing really slowly, to the point that it is barely servicing IO requests, there is probably an underlying fault or configuration issue. These slow requests will likely be highlighted on the Ceph status display with a counter for how long the request has been blocked. There are a number of things to check in this case.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Flapping OSDs</h1>
+                </header>
+            
+            <article>
+                
+<p>Check <kbd>ceph.log</kbd> on the monitors, and see whether it looks like any OSDs are flapping up and down. When an OSD joins a cluster, its PGs begin peering. During this peering process, IO is temporarily halted, so in the event of a number of OSDs flapping, the client IO can be severely impacted. If there is evidence of flapping OSDs, the next step is to go through the logs for the OSDs that are flapping, and see whether there are any clues as to what is causing them to flap. Flapping OSDs can be tough to track down as there can be several different causes, and the problem can be widespread.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Jumbo frames</h1>
+                </header>
+            
+            <article>
+                
+<p>Check that a network change hasn't caused problems with jumbo frames if in use. If jumbo frames are not working correctly, smaller packets will most likely be successfully getting through to other OSDs and MONs, but larger packets will be dropped. This will result in OSDs that appear to be half-functioning, and it can be very difficult to find an obvious cause. If something odd seems to be happening, always check that jumbo frames are being allowed across your network using ping.</p>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Failing disks</h1>
+                </header>
+            
+            <article>
+                
+<p>As Ceph stripes data across all disks in the cluster, a single disk, which is in the process of failing but has not yet completely failed, may start to cause slow or blocked IO across the cluster. Often, this will be caused by a disk that is suffering from a large number of read errors, but it is not severe enough for the disk to completely fail. Normally, a disk will only reallocate sectors when a bad sector is written to. Monitoring the SMART stats from the disks will normally pick up conditions such as these and allow you to take action.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Slow OSDs</h1>
+                </header>
+            
+            <article>
+                
+<p>Sometimes an OSD may start performing very poorly for no apparent reason. If there is nothing obvious being revealed by your monitoring tools, consult <kbd>ceph.log</kbd> and the Ceph health detail output. You can also run Ceph <kbd>osd perf</kbd>, which will list all the commit and apply latencies of all your OSDs and may also help you identify a problematic OSD.<br/>
+If there is a common pattern of OSDs referenced in the slow requests, there is a good chance that the mentioned OSD is the cause of the problems. It is probably worth restarting the OSD in case that resolves the issue; if the OSD is still problematic, it would be advisable to mark it out and then replace the OSD.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Out of capacity</h1>
+                </header>
+            
+            <article>
+                
+<p>If your Ceph cluster fills up past 95%, the OSDs will stop accepting IO. The only way to recover from this situation is to delete some data to reduce the utilization on each OSD. If an OSD will not start or you are unable to delete data, you can adjust the full threshold with the <kbd>mon_osd_full_ratio</kbd> variable. This will hopefully buy you enough time to remove some data and get the cluster into a usable state.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Investigating PGs in a down state</h1>
+                </header>
+            
+            <article>
+                
+<p>A PG in a down state will not service any client operations, and any object contained within the PG will be unavailable. This will cause slow requests to build up across the cluster as clients try to access these objects. The most common reason for a PG to be in a down state is when a number of OSDs are offline, which means that there are no valid copies of the PGs on any active OSDs. However, to find out why a PG is down, you can run the following command:</p>
+<pre><strong>ceph pg x.y query</strong></pre>
+<p class="CDPAlignLeft CDPAlign">This will produce a large amount of output; the section we are interested in shows the peering status. The example here was taken from a PG whose pool was set to <kbd>min_size</kbd> <kbd>1</kbd> and had data written to it when only OSD <kbd>0</kbd> was up and running. OSD <kbd>0</kbd> was then stopped and OSDs <kbd>1</kbd> and <kbd>2</kbd> were started:</p>
+<p><img class="aligncenter size-full wp-image-250 image-border" src="assets/08cc15aa-68de-4a19-b672-bdacb54e86e0.png" style="width:54.17em;height:15.50em;"/></p>
+<p class="mce-root"/>
+<p>We can see that the peering process is being blocked, as Ceph knows that the PG has newer data written to OSD <kbd>0</kbd>. It has probed OSDs 1 and 2 for the data, which means that it didn't find anything it needed. It wants to try to poll OSD 0, but it can't because the OSD is down, hence the <kbd>starting or marking this osd lost may let us proceed</kbd> message appeared<span class="packt_screen">.</span></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Large monitor databases</h1>
+                </header>
+            
+            <article>
+                
+<p>Ceph monitors use <kbd>leveldb</kbd> to store all of the required monitor data for your cluster. This includes things such as the monitor map, OSD map, and PG map, which OSDs and clients pull from the monitors to be able to locate objects in the RADOS cluster. One particular feature that you should be aware of is that during a period where the health of the cluster doesn't equal <kbd>HEALTH_OK</kbd>, the monitors do not discard any of the older cluster maps from its database. If the cluster is in a degraded state for an extended period of time and/or the cluster has a large number of OSDs, the monitor database can grow very large.</p>
+<p>In normal operating conditions, the monitors are very lightweight on resource consumption; because of this, it's quite common for smaller disk sizes to be used for the monitors. In the scenario where a degraded condition continues for an extended period, it's possible for the disk holding the monitor database to fill up, which, if it occurs across all your monitor nodes, will take down the entire cluster.</p>
+<p>To guard against this behavior, it may be worth deploying your monitor nodes using LVM so that, if the disks need to be expanded, it can be done a lot more easily. When you get into this situation, adding disk space is the only solution, until you can get the rest of your cluster into a <kbd>HEALTH_OK</kbd> state.</p>
+<p>If your cluster is in a <kbd>HEALTH_OK</kbd> state, but the monitor database is still large, you can compact it by running the following command:</p>
+<pre><strong>sudo ceph tell mon.{id} compact</strong></pre>
+<p>However, this will only work if your cluster is in a <kbd>HEALTH_OK</kbd> state; the cluster will not discard old cluster maps, which can be compacted, until it's in a <kbd>HEALTH_OK</kbd> state.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Summary</h1>
+                </header>
+            
+            <article>
+                
+<p>In this chapter, you learned how to deal with problems that Ceph is not able to solve by itself. You now understand the necessary steps to troubleshoot a variety of issues that, if left unhandled, could become bigger problems. Furthermore, you have a good idea of the key areas to look at when your Ceph cluster is not performing as expected. You should feel confident that you are in a good place to handle Ceph-related issues whenever they appear.</p>
+<p>In the next chapter, we will continue to look into troubleshooting processes and will explore the situations where data loss has already happened.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Questions</h1>
+                </header>
+            
+            <article>
+                
+<ol>
+<li>What is the command to repair an inconsistent PG?</li>
+<li>What command can you use to change the logging level on the fly?</li>
+<li>Why might the monitor databases grow large over time?</li>
+<li>What is the command to query a PG?</li>
+<li>Why might scrubbing have a performance impact on a Ceph cluster?</li>
+</ol>
+
+
+            </article>
+
+            
+        </section>
+    </body></html>

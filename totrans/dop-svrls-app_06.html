@@ -1,0 +1,484 @@
+<html><head></head><body>
+        <section>
+
+                            <header>
+                    <h1 class="header-title">DevOps with Google Functions</h1>
+                </header>
+            
+            <article>
+                
+<p>Google decided to launch its serverless platform as Cloud Functions, but it is still in its maturing stage. At the time of writing this book, we can only write Google Cloud Functions with Node.js. The functions can be triggered through Google's internal event bus—Pub/Sub and through HTTP as mobile events from Firebase. I am not going to delve much into what Google Functions does, because we have already covered that in earlier chapters. So, in this chapter, we will be covering how we apply DevOps to Google Functions and what are the best practices of deployment, release management, monitoring, and logging. We will look into various examples and a demo with a <kbd>gcloud</kbd> command line, Serverless Framework, and Jenkins. So, let's jump in to DevOps. </p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">CI and CD pipelines with Google Functions</h1>
+                </header>
+            
+            <article>
+                
+<p>As Google currently allows coding only with JavaScript, we will be using Node.js throughout this book, with examples and demos. Google terms its serverless functions as Cloud Functions, so we will be using this term throughout this chapter. So, Cloud Functions are to be written in JavaScript and executed in Node.js v6.11.5 (at the time of writing this book) and the cloud function source must be exported in a Node.js module. The module will be loaded using a <kbd>require()</kbd> call. So, functions are contained within an <kbd>index.js</kbd> file. We can invoke the function from HTTP request methods such as <kbd>GET</kbd>, <kbd>POST</kbd>, <kbd>PUT</kbd>, <kbd>OPTIONS</kbd>, and <kbd>DELETE</kbd>. The deployment can be done through a command-line tool provided by Google Cloud CLI, through the cloud function UI on a GCP console, and can also be done through a serverless framework. We will be looking into each way throughout this chapter. The deployable is a ZIP file, which has functions packaged into it, and it is deployed on the Google Cloud storage bucket. Functions source code can be directly put into Cloud Functions as well, or we can reference it by uploading to the Google Cloud storage bucket. Let's look at various way to deploy function and further automate it through the Jenkins pipeline. </p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Prerequisites for Cloud Functions</h1>
+                </header>
+            
+            <article>
+                
+<p><span>Let's look at </span><span>how to create and deploy a Cloud Function using the GCP console. But before that prerequisite, we need to have access to the Google Function platform. At the time of writing, Google provides a free GCP account with $300 credit for a year to use for any product on the GCP. So let's create one. Please follow the given steps: </span></p>
+<ol>
+<li>Go to the following link: <a href="https://cloud.google.com/free/" target="_blank">https://cloud.google.com/free/</a>.<a href="https://cloud.google.com/free/" target="_blank"/></li>
+<li>Click on the <span class="packt_screen">TRY IT FREE</span> button, which will be redirected to the Google account page. If you already have a Google account, you can then use it or create a new Google account. </li>
+<li>Feed in the credentials and you will be redirected to the GCP home page. </li>
+<li>As the account is already created, let's create a GCP project. So go to the <span class="packt_screen">MANAGE RESOURCES PAGE</span><strong> </strong>(<a href="https://console.cloud.google.com/cloud-resource-manager" target="_blank">https://console.cloud.google.com/cloud-resource-manager</a>).</li>
+<li>We will now create a project, so let's click on <span class="packt_screen">Create Project</span>, enter the project name as <kbd>My Serverless Project</kbd> and click on <span class="packt_screen">Create</span>. You will see that the project is getting created in the notification bell image on the top right-hand side of the page. Once it has stopped, refresh the page and you will see the project in the list.</li>
+<li> Now enable the cloud API for the project by opening the link: <a href="https://console.cloud.google.com/flows/enableapi?apiid=cloudfunctions&amp;redirect=https://cloud.google.com/functions/quickstart" target="_blank">https://console.cloud.google.com/flows/enableapiapiid=cloudfunctions&amp;redirect=https://cloud.google.com/functions/quickstart</a>. The page will have a drop-down list for projects. Select <span class="packt_screen">My Serverless Project</span> and click on <span class="packt_screen">Continue</span>; then API will be enabled for the project.</li>
+<li>We will now install and configure the Google Cloud SDK. The following link will guide you through this: <a href="https://cloud.google.com/sdk/docs/" target="_blank">https://cloud.google.com/sdk/docs/</a>. While doing the <kbd>gcloud init</kbd>, you will be prompted to select the project. Select the project <span class="packt_screen">My Serverless Project</span> which we created, and we will be authenticated with GCP as well. </li>
+<li>Set up the Node.js environment.</li>
+</ol>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Cloud Functions through the GCP console</h1>
+                </header>
+            
+            <article>
+                
+<p>We will now create a cloud function through the GCP console: </p>
+<ol>
+<li>Go to the Cloud Functions overview page in the GCP console, select the project from the drop-down list for which the function is attached.</li>
+<li>Click on <span class="packt_screen">Create Function</span>.</li>
+</ol>
+<ol start="3">
+<li>Name the function as <kbd>my-serverless-function</kbd>.</li>
+<li>Select the trigger as an <span class="packt_screen">HTTP trigger</span>.</li>
+<li>Let's use the default code, so it should be checked by an inline editor. The text area will have two scripts, one is <kbd>index.js</kbd> and the other is <kbd>package.json</kbd>. This is a simple <kbd>helloworld</kbd> function provided by Google Functions. <span>The function logs a message which you provide in a later step. When you finish the steps you will see something similar to the following screenshot:</span></li>
+</ol>
+<div class="mce-root CDPAlignCenter CDPAlign"><span><img src="assets/b7c56459-ac0a-4339-932f-35351b4a5b05.png" style="width:22.25em;height:44.33em;"/><br/></span></div>
+<ol start="6">
+<li>Click on the <span class="packt_screen">Create</span> button. Now the function will be deployed and the GCP console redirects to the <span class="packt_screen">Overview</span> page. W<span>hile the function is being deployed, the icon next to it is a small spinner. After deployment is complete, the spinner turns to a green check mark.</span></li>
+<li><span>We will test the function. Click on the three vertical dots on the right-hand side of the page for the particular function and click on</span> the <span class="packt_screen">Test function</span>:</li>
+</ol>
+<div class="CDPAlignCenter CDPAlign"><span><img src="assets/725e0903-84b5-468d-b09c-e13add91db1d.png" style="width:64.67em;height:16.08em;"/><br/></span></div>
+<ol start="8">
+<li>We will be redirected to a function test page. In the <span class="packt_screen">Triggered Event</span> field, replace the text with <kbd>{"message":"Hello World!"}</kbd> <span>and click on </span><span class="packt_screen">Test function</span>. <span>In the</span> <span class="packt_screen">Output</span> <span>field we should see the <span class="packt_screen">Success: Hello World!</span>. and in the</span> <span class="packt_screen">Logs</span> <span>field the status code 200 will indicate that the function ran</span> successfully<span>. We can see detailed logs by clicking on the arrow for each log.</span></li>
+<li>We can see the logs history by click on <span class="packt_screen">VIEW LOGS</span> on top right. So, this is how we create and deploy the function through the GCP console and also view the function logs and their history:</li>
+</ol>
+<div class="CDPAlignCenter CDPAlign"><img src="assets/49b170dc-c885-47cb-9b63-168d19285b4f.png" style="width:71.58em;height:37.75em;"/></div>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Cloud Function using a gcloud command line</h1>
+                </header>
+            
+            <article>
+                
+<p>In this part of this chapter, we will be deploying the <kbd>helloworld</kbd> application through the <kbd>gcloud</kbd> command line. First, we need to have created a GCP project through the <span class="packt_screen">Manage resources</span> page, enabled the Cloud Function API as a prerequisite, and, most importantly, to have installed the <kbd>gcloud</kbd> SDK locally:</p>
+<ol>
+<li>Let's update the <kbd>gcloud</kbd> components. Go to your Command Prompt and add the following command. You will be prompted to install components using the <kbd>gcloud beta</kbd> commands. Go ahead and install them. The <kbd>gcloud</kbd> selected components will be installed and configured locally:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>$ gcloud components update &amp;&amp; gcloud components install beta</strong></pre>
+<div class="packt_infobox">We can follow the deployment steps with Google Cloud Shell (<a href="https://console.cloud.google.com/?cloudshell=true" target="_blank">https://console.cloud.google.com/?cloudshell=true</a>) as well. Google Cloud Shell is a command-line environment with <kbd>gcloud</kbd> SDK on the GCP console.</div>
+<ol start="2">
+<li>Let's create a function for this. We need to create a directory where our function will reside:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>$ mkdir helloServerless</strong><br/><strong>$ cd helloServerless</strong></pre>
+<ol start="3">
+<li>Let's create a file <kbd>index.js</kbd> in the <kbd><span>helloServerless</span></kbd> directory with the following content:</li>
+</ol>
+<pre class="mce-root" style="padding-left: 60px">/**<br/>* HTTP Cloud Function.<br/> * @param {Object} req Cloud Function request context.<br/> * @param {Object} res Cloud Function response context.<br/> */<br/>exports.helloServerless = (req, res) =&gt; {<br/>  res.send('Hello My Serverless World!');<br/>};</pre>
+<ol start="4">
+<li>We will deploy the function using the following command. It will deploy the function into the GCP. The <kbd>--trigger-http</kbd><strong> </strong>is the trigger we need to be specified. While deploying with the trigger, the function will be assigned an endpoint which can viewed by using the <kbd>describe</kbd> command. There are various different triggers which can be used for deployment:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>$ gcloud beta functions deploy helloServerless --trigger-http</strong><br/><br/><strong>Deploying function (may take a while - up to 2 minutes)...done.</strong><br/><strong> availableMemoryMb: 256</strong><br/><strong> entryPoint: helloServerless</strong><br/><strong> httpsTrigger:</strong><br/><strong> url: https://[GCP_REGION]-[PROJECT_ID].cloudfunctions.net/helloServerless</strong><br/><strong> labels:</strong><br/><strong> deployment-tool: cli-gcloud</strong><br/><strong> name: projects/my-serverless-project-201920/locations/us-central1/functions/helloServerless</strong><br/><strong> serviceAccountEmail: my-serverless-project-201920@appspot.gserviceaccount.com</strong><br/><strong> sourceUploadUrl: https://storage.googleapis.com/gcf-upload-us-central1-39234144-2d9a-4a19-bf5f-82ef8d19a71b/d2611724-50d0-4339-9ee5-9d140aa674ae.zip?GoogleAccessId=37314512027@cloudservices.gserviceaccount.com&amp;Expires=1524947393&amp;Signature=WCwiJ8E%2B8a6EMMZiz5cWG%2FE%2F7pt8V%2FbqIDyW68utF%2FQXMJR0Pt94e0fC8DcqHbWBAEqHaE9%2B71fOYoWVcXg%2FWos38q%2FIfl%2BTNfaavRr9WyIi6V3M5our8aNI%2FGcntOrHm%2FpMK2LdiBzN6QI%2FiDjPDaA5%2FXohjLD%2BLaGGDHEoHp97%2BqCA7Mzifs%2B%2BhNcYknZ0vjLdpegUqfTUVjDF1h%2BQqg68sIurtT14Bay3uXryeMqYB%2FZv0lTjZIsd7svnUZtXZTNi72HOzP2J7vo1qo%2B74hO7Yy7WJOj2yvDKiFJ4ZXyk8cXvPu3ooNV%2BGy2dc758CFl3u87M%2FuKJV%2Bl0VkDwnQ%3D%3D</strong><br/><strong> status: ACTIVE</strong><br/><strong> timeout: 60s</strong><br/><strong> updateTime: '2018-04-28T19:59:54Z'</strong><br/><strong> versionId: '1'</strong></pre>
+<ol start="5">
+<li>Once the function has successfully deployed, we can execute the function through the URL property from the deployment output, or we can get the URL through the following command:</li>
+</ol>
+<pre class="mce-root" style="padding-left: 60px"><strong>$ gcloud beta functions describe helloServerless</strong></pre>
+<ol start="6">
+<li>Copy, paste, and run the URL on any browser and then we should be able to see the following message:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>Hello My Serverless World!</strong></pre>
+<p><span>So, you can see how easy it is to deploy the function through <kbd>gcloud</kbd> on the GCP. But how do we make sure we unit test it, integrate test, and finally automate the deployment? That is what we are going to cover further on in the chapter. But we can do most of this locally by setting up a development environment. </span></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Building and testing locally</h1>
+                </header>
+            
+            <article>
+                
+<p>As the Cloud Functions run on a <kbd>Node.js</kbd> environment, we can build and test our application locally just using a <kbd>Node.js</kbd> emulator with development tools. The emulator is an open source and code is hosted on the GitHub. Let's look at how to use it:</p>
+<ol>
+<li>Install the emulator through npm or Yarn; you need to make sure you have <kbd>Node.js</kbd> installed on your machine:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>$ npm install -g @google-cloud/functions-emulator</strong><br/><br/><strong>/usr/local/bin/functions-emulator -&gt; /usr/local/lib/node_modules/@google-cloud/functions-emulator/bin/functions</strong><br/><strong> /usr/local/bin/functions -&gt; /usr/local/lib/node_modules/@google-cloud/functions-emulator/bin/functions</strong><br/><br/><strong>&gt; @google-cloud/functions-emulator@1.0.0-beta.4 postinstall /usr/local/lib/node_modules/@google-cloud/functions-emulator</strong><br/><strong> &gt; node scripts/upgrade-warning</strong><br/><br/><strong> If you're using the Emulator via the Firebase CLI, you can</strong><br/><strong> disregard this message.</strong><br/><br/><strong>If you're upgrading @google-cloud/functions-emulator, these</strong><br/><strong> are the recommended upgrade steps:</strong><br/><strong>1. Stop the currently running emulator, if any:</strong><br/><strong>functions stop</strong><br/><strong>2. Uninstall the current emulator, if any:</strong><br/><strong>npm uninstall -g @google-cloud/functions-emulator</strong><br/><strong>3. Install the new version of the emulator:</strong><br/><strong>npm install -g @google-cloud/functions-emulator</strong><br/><br/><strong>If you have trouble after upgrading, try deleting the config</strong><br/><strong> directory found in:</strong><br/><br/><strong>~/.config/configstore/@google-cloud/functions-emulator</strong><br/><br/><strong>Then restart the emulator. You can also check for any renegade</strong><br/><strong> Node.js emulator processes that may need to be killed:</strong><br/><br/><strong>ps aux | grep node</strong><br/><strong>+ @google-cloud/functions-emulator@1.0.0-beta.4</strong><br/><strong> added 314 packages in 21.252s</strong></pre>
+<ol start="2">
+<li>Let's start the emulator. This command will start the emulator and wait for the prompt:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>$ functions start</strong><br/><strong> Warning: You're using Node.js v8.9.2 but Google Cloud Functions only supports v6.11.5.</strong><br/><strong> Starting Google Cloud Functions Emulator...</strong><br/><strong> Google Cloud Functions Emulator STARTED</strong><br/><strong> No functions deployed "_". Run functions deploy --help for how to deploy a function.</strong></pre>
+<ol start="3">
+<li>Deploy the function locally; so go into a folder before the function folder and run the following command:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>$ functions deploy helloServerless --trigger-http</strong><br/><strong> Warning: You're using Node.js v8.9.2 but Google Cloud Functions only supports v6.11.5.</strong><br/><strong> Copying file:///var/folders/mj/74rcnfp94ll_sj3s95z4nnx00000gn/T/tmp-6681yxqJsPl2WsYI.zip...</strong><br/><strong> Waiting for operation to finish...done.</strong><br/><strong> Deploying function......done.</strong><br/><strong> Function helloServerless deployed.</strong><br/><strong> ┌────────────┬──────────────────────────────────────────────────────────────────────────────────┐</strong><br/><strong> │ Property │ Value │</strong><br/><strong> ├────────────┼──────────────────────────────────────────────────────────────────────────────────┤</strong><br/><strong> │ Name │ helloServerless │</strong><br/><strong> ├────────────┼──────────────────────────────────────────────────────────────────────────────────┤</strong><br/><strong> │ Trigger │ HTTP │</strong><br/><strong> ├────────────┼──────────────────────────────────────────────────────────────────────────────────┤</strong><br/><strong> │ Resource │ http://localhost:8010/my-serverless-project-201920/us-central1/helloServerless │</strong><br/><strong> ├────────────┼──────────────────────────────────────────────────────────────────────────────────┤</strong><br/><strong> │ Timeout │ 60 seconds │</strong><br/><strong> ├────────────┼──────────────────────────────────────────────────────────────────────────────────┤</strong><br/><strong> │ Local path │ /Users/&lt;username&gt;/Documents/packt/chapter6/googlefunction_hello_world │</strong><br/><strong> ├────────────┼──────────────────────────────────────────────────────────────────────────────────┤</strong><br/><strong> │ Archive │ file:///var/folders/mj/74rcnfp94ll_sj3s95z4nnx00000gn/T/tmp-6681yxqJsPl2WsYI.zip │</strong><br/><strong> └────────────┴──────────────────────────────────────────────────────────────────────────────────┘</strong></pre>
+<ol start="4">
+<li>Open the URL mentioned in the output in the browser. You should see the message <kbd><span>Hello My Serverless World!</span></kbd> ; or execute it through the command line:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>$ functions call helloServerless</strong><br/><strong> Warning: You're using Node.js v8.9.2 but Google Cloud Functions only supports v6.11.5.</strong><br/><strong> ExecutionId: 4b32f8b9-2452-45ee-a0c9-57f2fd3f9d8a</strong><br/><strong> Result: Hello My Serverless World!</strong></pre>
+<ol start="5">
+<li>Also, you can see the following logs:</li>
+</ol>
+<pre style="padding-left: 60px"><strong> $ functions call helloServerless</strong><br/><strong> Warning: You're using Node.js v8.9.2 but Google Cloud Functions only supports v6.11.5.</strong><br/><strong> ExecutionId: 4b32f8b9-2452-45ee-a0c9-57f2fd3f9d8a</strong><br/><strong> Result: Hello My Serverless World!</strong><br/><strong> &lt;username&gt;s-MacBook-Pro:googlefunction_hello_world &lt;username&gt;$ functions logs read</strong><br/><strong> Warning: You're using Node.js v8.9.2 but Google Cloud Functions only supports v6.11.5.</strong><br/><strong> 2018-04-28T20:54:55.907Z - info: User function triggered, starting execution</strong><br/><strong> 2018-04-28T20:54:55.914Z - info: Execution took 11 ms, user function completed successfully</strong><br/><strong> 2018-04-28T20:56:10.393Z - info: User function triggered, starting execution</strong><br/><strong> 2018-04-28T20:56:10.394Z - info: Execution took 1 ms, user function completed successfully</strong><br/><strong> 2018-04-28T21:07:14.853Z - info: User function triggered, starting execution</strong><br/><strong> 2018-04-28T21:07:14.859Z - info: Execution took 6 ms, user function completed successfully</strong><br/><strong> 2018-04-28T21:12:13.228Z - info: User function triggered, starting execution</strong><br/><strong> 2018-04-28T21:12:13.229Z - info: Execution took 0 ms, user function completed successfully</strong></pre>
+<div class="packt_infobox">More details for the emulator can be found in the link below. We can integrate the emulator with the our favorite development tools and debug the Google Functions: <a href="https://github.com/GoogleCloudPlatform/cloud-functions-emulator">https://github.com/GoogleCloudPlatform/cloud-functions-emulator</a>. For debugging Cloud Functions:<strong> </strong><a href="https://github.com/GoogleCloudPlatform/cloud-functions-emulator/wiki/Debugging-functions">https://github.com/GoogleCloudPlatform/cloud-functions-emulator/wiki/Debugging-functions</a>.<a href="https://github.com/GoogleCloudPlatform/cloud-functions-emulator/wiki/Debugging-functions"/></div>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">CI and CD with testing</h1>
+                </header>
+            
+            <article>
+                
+<p>Until now, we have just created a function and come up with a couple of ways to build and deploy. We have also learned how to run the function locally through emulator. But we cannot manually build and deploy <span>every</span> function each time, and we should also be versioning the code. We will looking into all those aspects within this part of the chapter. </p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Source code management</h1>
+                </header>
+            
+            <article>
+                
+<p><strong>Source code management</strong> is a very important part of software development. It is always best to version and tag the code. Git is the most popular source code management tool, and we have been using it throughout this chapter. So, for a perfect deployment cycle, we should always create different branches. These are feature branch, develop branch, release branch, and then we have the default master branch. I have already covered best practice around this in earlier chapters, so I won't talk here about the structuring of branches and how code flow across branches is managed. However, it is important to about the folder structure to be followed for Cloud Functions. In earlier chapters, we wrote function in <kbd>index.js</kbd>. If functions are limited then they can easily be managed within <kbd>index.js</kbd>. But if we have hundreds of functions then managing them within one file becomes really tedious and painful. So, one simple way to structure the functions would be as follows:</p>
+<pre>├── /build/                # Compiled output for Node.js 6.x<br/>├── /src/                    # Application source files<br/>│   ├── someFuncA.js         # Function A<br/>│   ├── someFuncA.test.js    # Function A unit tests<br/>│   ├── someFuncB.js         # Function B<br/>│   ├── someFuncB.test.js    # Function B unit tests<br/>├── index.js                 # Main export(s)<br/>└── package.json             # List of project dependencies and NPM scripts</pre>
+<p><span>There are many ways to structure it, but I have kept it simple. However, I would let the developer decide over the structure. </span></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Continuous integration and testing</h1>
+                </header>
+            
+            <article>
+                
+<p>Continuous integration and testing are other important aspects of the development cycle. Continuous integration clubs the codes together, and testing will make sure that the code which goes into production is bug free, and that most of the issues are mitigated in a lower environment. There are many different way of testing: unit testing, integration testing and system testing. We will be integrating this testing in an automated pipeline in the example. I will be using the examples provided by Google Cloud with a simple <kbd>hello world</kbd> function, and running them in an automated way, and then putting them into a pipeline for single-touch deployment. </p>
+<p><span>I have created a <kbd>HelloWorld</kbd> function referencing from Google's existing example repository. I have put them on my local repository, which we will be using for setting continuous integration and testing. I have also created a Dockerfile, which will help us to create a docker container for Jenkins, pre-installed <kbd>gcloud</kbd>, Node.js and the functions emulator which we will be using to set up our DevOps automation:</span></p>
+<ol>
+<li>Git clone the Git repository mentioned as follows. We are cloning this locally to get the Dockerfile, and you can play around with it by making changes to the script and testing the deployment:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>$ git clone https://github.com/shzshi/google-functions-helloworld.git</strong></pre>
+<ol start="2">
+<li>We will build a Docker image locally and then start a Jenkins portal to enable us to set up the automation. You need to make sure Docker is installed on your local machine for this example.</li>
+<li>We move to the Dockerfile directory:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>$ cd google-functions-helloworld</strong></pre>
+<ol start="4">
+<li>We create a Docker image with Jenkins, <kbd>gcloud</kbd>, a function emulator, Node.js and all other required libraries:</li>
+</ol>
+<pre style="padding-left: 60px"><strong><span>$ docker image build -t google-functions .</span></strong></pre>
+<ol start="5">
+<li>Here, run the Docker container with the <span>image </span> created in the previous line. The Docker container will be hosted locally with port <kbd>8080</kbd> and <kbd>50000</kbd> exposed. We will also map the volume with a local host directory:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>$ docker run --rm -it -p 50000:50000 -p 8080:8080 -v /My/Local/Host/PATH/chapter6/google-functions/jenkins:/var/jenkins_home google-functions:latest</strong></pre>
+<ol start="6">
+<li><span>Once the container is running, we will browse the Jenkins portal through</span> <kbd>http://localhost:8080</kbd><span>. If you are creating this container for the first time without mapped volume, you will be asked to copy and paste the password and install a default plugin. </span></li>
+<li>Log in to the Jenkins portal using the credentials you had created earlier, or you already had. Then click on <span class="packt_screen">New Item</span>. </li>
+<li>Enter the item name as <kbd>my-serverless-google-functions</kbd>, select the freestyle project and then click on <span class="packt_screen">OK</span>.<strong><br/></strong></li>
+</ol>
+<ol start="9">
+<li>Go to the tab <span class="packt_screen">Source Code Management</span> and select <span class="packt_screen">Git</span>, then copy and paste the repository mentioned below into the <span class="packt_screen">Repository URL</span> textbox and leave the rest as default: <a href="https://github.com/shzshi/google-functions-helloworld.git" target="_blank">https://github.com/shzshi/google-functions-helloworld.git</a><a href="https://github.com/shzshi/google-functions-helloworld.git" target="_blank">.</a></li>
+<li>We need to create a Google service account for <kbd>gcloud</kbd> within Jenkins to authenticate with GCP:
+<ul>
+<li>Go to the <span class="packt_screen">OPEN THE LIST OF CREDENTIALS</span> (<a href="https://console.cloud.google.com/apis/credentials?_ga=2.77044693.-1734735492.1524930885" target="_blank">https://console.cloud.google.com/apis/credentials?_ga=2.77044693.-1734735492.1524930885</a>) page</li>
+<li>Click on <span class="packt_screen">Create Credentials</span></li>
+<li>Select the <span class="packt_screen">Service Account Key</span></li>
+<li>Click on the drop-down for <span class="packt_screen">Service account</span><strong> </strong>and select <span class="packt_screen">New Service Account</span></li>
+<li>Enter a name for the service account in <span class="packt_screen">Name</span></li>
+<li>Use the default <span class="packt_screen">Service account ID</span> or generate a different one</li>
+<li>Select the <span class="packt_screen">Key type: JSON</span></li>
+<li>Click <span class="packt_screen">Create</span>, the <span class="packt_screen">Service account created</span> <span>window is displayed, </span><span>and the private key for the</span> <span class="packt_screen">Key type</span> <span>you selected is downloaded automatically to our local machine which we will be using further.</span></li>
+<li><span>Click <span class="packt_screen">Close</span></span></li>
+</ul>
+</li>
+<li>You need to fork your repository and copy the content of the <kbd>gcloud</kbd> service account key JSON file into the file <kbd>My-Serverless-Project-1d8bacd4886d.json</kbd>,<strong> </strong>because we will be using this JSON file in Jenkins to authenticate: <a href="https://github.com/shzshi/google-functions-helloworld.git" target="_blank">https://github.com/shzshi/google-functions-helloworld.git</a>.</li>
+<li>Go to the <span class="packt_screen">Build</span> tab, and from the drop-down menu's <span class="packt_screen">Add build step</span><strong> </strong>select <span class="packt_screen">Execute Shell</span> and then add the following steps into the <span class="packt_screen">Command</span> text area:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>gcloud auth activate-service-account --key-file=${WORKSPACE}/My-Serverless-Project-1d8bacd4886d.json</strong><br/><strong> gcloud config set project ${YOUR_GCP_PROJECT_ID}</strong><br/><strong> npm install</strong><br/> <br/><strong> export NODE_PATH=${WORKSPACE}/node_modules</strong><br/><br/><br/><strong># executing unit test</strong><br/><strong> ${WORKSPACE}/node_modules/.bin/ava test/unit.http.test.js</strong><br/><br/><strong> # executing integration test</strong><br/><strong> export BASE_URL=http://localhost:8010/${YOUR_GCP_PROJECT_ID}/${YOUR_GCF_REGION}</strong><br/><strong>${WORKSPACE}/node_modules/.bin/functions start</strong><br/><strong>${WORKSPACE}/node_modules/.bin/functions deploy helloHttp --trigger-http</strong><br/><strong>${WORKSPACE}/node_modules/.bin/ava test/integration.http.test.js</strong><br/><strong> # deploying to GCP project and executing system test</strong><br/><strong> gcloud beta functions deploy helloHttp --trigger-http</strong><br/><strong>export BASE_URL=https://${YOUR_GCF_REGION}-${YOUR_GCP_PROJECT_ID}.cloudfunctions.net/helloHttp</strong><br/><strong>${WORKSPACE}/node_modules/.bin/ava test/system.http.test.js</strong></pre>
+<ol start="13">
+<li>We need to parameterize the job, which means that we need to add two text parameters, one for the <kbd>gcloud</kbd> project id and another for the <kbd>gcloud</kbd> region. Add the parameters as mentioned in the following screenshot. The <strong>Default Value</strong> needs to be changed with your project name and region:</li>
+</ol>
+<div class="CDPAlignCenter CDPAlign"><img src="assets/de053287-d843-4dd4-ab7a-b0ee18a83465.png" style="width:57.75em;height:40.42em;"/></div>
+<ol start="14">
+<li>Once everything looks fine, as mentioned in the previous 13 steps, click <span class="packt_screen">SAVE</span>, and save the project. </li>
+<li>To run the job, click <span class="packt_screen">Build with Parameters</span> and run the job with a default parameter. </li>
+<li>If the job runs successfully, we should see the following output and therefore Google Function has successfully passed the unit, integration and system tests:</li>
+</ol>
+<pre class="console-output" style="padding-left: 60px"><strong>Building in workspace /var/jenkins_home/workspace/my-serverless-google-functions
+ &gt; git rev-parse --is-inside-work-tree # timeout=10
+Fetching changes from the remote Git repository
+ &gt; git config remote.origin.url https://github.com/shzshi/google-functions-helloworld.git # timeout=10
+Fetching upstream changes from https://github.com/shzshi/google-functions-helloworld.git
+ &gt; git --version # timeout=10
+ &gt; git fetch --tags --progress https://github.com/shzshi/google-functions-helloworld.git +refs/heads/*:refs/remotes/origin/*
+ &gt; git rev-parse refs/remotes/origin/master^{commit} # timeout=10
+ &gt; git rev-parse refs/remotes/origin/origin/master^{commit} # timeout=10
+Checking out Revision bbfb5c17a65dab7f0a8e0b3dc3de82e5792fe21d (refs/remotes/origin/master)
+ &gt; git config core.sparsecheckout # timeout=10
+ &gt; git checkout -f bbfb5c17a65dab7f0a8e0b3dc3de82e5792fe21d
+Commit message: "added function emulator"
+ &gt; git rev-list --no-walk bbfb5c17a65dab7f0a8e0b3dc3de82e5792fe21d # timeout=10
+[my-serverless-google-functions] $ /bin/sh -xe /tmp/jenkins2470859504083131546.sh
++ gcloud auth activate-service-account --key-file=/var/jenkins_home/workspace/my-serverless-google-functions/My-Serverless-Project-1d8bacd4886d.json
+Activated service account credentials for: [jenkins@my-serverless-project-201920.iam.gserviceaccount.com]
++ gcloud config set project my-serverless-project-201920
+Updated property [core/project].
++ npm install
+npm WARN optional SKIPPING OPTIONAL DEPENDENCY: fsevents@1.2.3 (node_modules/fsevents):
+npm WARN notsup SKIPPING OPTIONAL DEPENDENCY: Unsupported platform for fsevents@1.2.3: wanted {"os":"darwin","arch":"any"} (current: {"os":"linux","arch":"x64"})
+
+up to date in 30.041s
++ export NODE_PATH=/var/jenkins_home/workspace/my-serverless-google-functions/node_modules
++ /var/jenkins_home/workspace/my-serverless-google-functions/node_modules/.bin/ava test/unit.http.test.js
+
+   helloHttp: should print a name
+   helloHttp: should print hello world
+
+  2 tests passed
+
++ export BASE_URL=http://localhost:8010/my-serverless-project-201920/us-central1
++ /var/jenkins_home/workspace/my-serverless-google-functions/node_modules/.bin/functions start
+Warning: You're using Node.js v8.11.1 but Google Cloud Functions only supports v6.11.5.
+Starting Google Cloud Functions Emulator...
+Google Cloud Functions Emulator STARTED
+┌────────┬───────────┬─────────┬──────────────────────────────────────────────────────────────────────────┐
+│ Status │ Name      │ Trigger │ Resource                                                                 │
+├────────┼───────────┼─────────┼──────────────────────────────────────────────────────────────────────────┤
+│ READY  │ helloHttp │ HTTP    │ http://localhost:8010/my-serverless-project-201920/us-central1/helloHttp │
+└────────┴───────────┴─────────┴──────────────────────────────────────────────────────────────────────────┘
++ /var/jenkins_home/workspace/my-serverless-google-functions/node_modules/.bin/functions deploy helloHttp --trigger-http
+Warning: You're using Node.js v8.11.1 but Google Cloud Functions only supports v6.11.5.
+Copying file:///tmp/tmp-1653qKGF3wXgKZdC.zip...
+Waiting for operation to finish...done.
+Deploying function............done.
+Function helloHttp deployed.
+┌────────────┬──────────────────────────────────────────────────────────────────────────┐
+│ Property   │ Value                                                                    │
+├────────────┼──────────────────────────────────────────────────────────────────────────┤
+│ Name       │ helloHttp                                                                │
+├────────────┼──────────────────────────────────────────────────────────────────────────┤
+│ Trigger    │ HTTP                                                                     │
+├────────────┼──────────────────────────────────────────────────────────────────────────┤
+│ Resource   │ http://localhost:8010/my-serverless-project-201920/us-central1/helloHttp │
+├────────────┼──────────────────────────────────────────────────────────────────────────┤
+│ Timeout    │ 60 seconds                                                               │
+├────────────┼──────────────────────────────────────────────────────────────────────────┤
+│ Local path │ /var/jenkins_home/workspace/my-serverless-google-functions               │
+├────────────┼──────────────────────────────────────────────────────────────────────────┤
+│ Archive    │ file:///tmp/tmp-1653qKGF3wXgKZdC.zip                                     │
+└────────────┴──────────────────────────────────────────────────────────────────────────┘
++ /var/jenkins_home/workspace/my-serverless-google-functions/node_modules/.bin/ava test/integration.http.test.js
+
+   helloHttp: should print a name (110ms)
+   helloHttp: should print hello world (104ms)
+
+  2 tests passed
+
++ gcloud beta functions deploy helloHttp --trigger-http
+Deploying function (may take a while - up to 2 minutes)...
+.............done.
+availableMemoryMb: 256
+entryPoint: helloHttp
+httpsTrigger:
+  url: https://us-central1-my-serverless-project-201920.cloudfunctions.net/helloHttp
+labels:
+  deployment-tool: cli-gcloud
+name: projects/my-serverless-project-201920/locations/us-central1/functions/helloHttp
+serviceAccountEmail: my-serverless-project-201920@appspot.gserviceaccount.com
+sourceUploadUrl: https://storage.googleapis.com/gcf-upload-us-central1-39234144-2d9a-4a19-bf5f-82ef8d19a71b/5433a10a-52ed-4330-b68a-f3c3be016035.zip?GoogleAccessId=37314512027@cloudservices.gserviceaccount.com&amp;Expires=1525049193&amp;Signature=C3H2oyjrieTuykum%2BH09BqZO63bCXE4vlrWVzOhEMTBAoPAUFTHU96JVqTk7ZiGdl2iv34a7FlR70vE9oo4jnnZApVtCYHVSY9JA3X%2BAn4VR4Aw510UUC7ilZbGGJ5U3eyk1bVlzQxTkx20Mq6yx8JUQqRMj%2FTisHqs0MCHC9k83NJj6JQdF%2BbgVLzPg%2Bfrm06kZzhKqKmLQ7XOMXwSHlm%2F74N6%2B5JyByPvtPlHqgGoIdW8X7eyys4%2B22X3zU0Z3MjXG7emlA9t4Hrpa3oQ0AUiSD78b1Mnfbz%2FYXdj%2BKDY4fjv5JQcOBZLj8DEw8sbcSdJcIvvAKrPwcKy7Y1eiMg%3D%3D
+status: ACTIVE
+timeout: 60s
+updateTime: '2018-04-30T00:16:35Z'
+versionId: '2'
++ export BASE_URL=https://us-central1-my-serverless-project-201920.cloudfunctions.net/helloHttp
++ /var/jenkins_home/workspace/my-serverless-google-functions/node_modules/.bin/ava test/system.http.test.js
+
+   helloHttp: should print hello world (371ms)
+   helloHttp: should print a name (1.3s)
+
+  2 tests passed
+
+Finished: SUCCESS</strong><br/><br/></pre>
+<p>So, through the previous example, we were able to build, test and deploy the function locally and on <kbd>gcloud</kbd>. But we did this just randomly on a project. Imagine that we need to have multiple environments, and performance systems, and performance testing with very minimal manual intervention. We need to set up a pipeline with approval gates which deploys to multiple environments, mitigating most of the problems before the function is actually in production. This is where continuous delivery comes in handy. </p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Continuous delivery with Google Functions</h1>
+                </header>
+            
+            <article>
+                
+<p><strong>Continuous delivery</strong> is about<span> removing risk, delivering frequently and getting fast feedback, and it helps speed up the time to get the product to market. So, how do we do that for Cloud Functions? There are many ways of doing it, but I would like to use a serverless framework to achieve this. There are couple of reason for this. One reason for this is that a serverless framework is a very mature framework for serverless functions deployment. It supports many different vendors, as we have seen, and also has good community support. We can achieve continuous delivery even through <kbd>gcloud</kbd> and the Jenkins pipeline. </span><span>We will be reusing most of the setup which we used in previous sections of this chapter. </span></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Google environments</h1>
+                </header>
+            
+            <article>
+                
+<p>It is essential to have multiple environments for setting up continuous delivery for any type of application. But for a serverless world, there is no clear demarcation for the environment. So we always have to come up with alternatives. We have to do the same for Cloud Functions. We set up environment separation in two ways—first, we could separate the functions for the environment with separate names, for example, <kbd>my-serverless-dev</kbd>, <kbd>my-serverless-sit</kbd> or <kbd>my-serverless-prod</kbd>, but this will add unnecessary complications. So, the ideal way would be to separate the environment by creating a different project, as follows:</p>
+<ol>
+<li> Log on to the GCP console, go to the <strong>Manage Resource Page</strong> (<a href="https://console.cloud.google.com/cloud-resource-manager?_ga=2.108039562.-900655901.1524348645">https://console.cloud.google.com/cloud-resource-manager?_ga=2.108039562.-900655901.1524348645</a>), click on<span> </span><strong>CREATE PROJECT</strong>, enter the project name as<span> </span><kbd>Serverless-SIT</kbd><span> in the <strong>Project Name</strong> </span>and click on<span> </span><strong>Create</strong>. You will see that the project is being created in the notification bell image on the top right-hand side of the page. Once it has stopped, refresh the page and you will see the project in the list. Likewise, let's create <kbd>Serverless-UAT</kbd> and <kbd>Serverless-PROD</kbd> projects. I am not creating <kbd>dev</kbd> as we are using a local emulator for <kbd>dev</kbd> environment. </li>
+<li>Let's enable the cloud API for the project by opening the link: <a href="https://console.cloud.google.com/flows/enableapi?apiid=cloudfunctions&amp;redirect=https://cloud.google.com/functions/quickstart">https://console.cloud.google.com/flows/enableapi?apiid=cloudfunctions&amp;redirect=https://cloud.google.com/functions/quickstart</a>. The page will have a drop-down list for projects. Select<span> </span><strong>My Serverless Project</strong><span> </span>and click on<span> </span><strong>Continue</strong>, then API will be enabled for the project. </li>
+</ol>
+<ol start="3">
+<li>Log in to the Jenkins portal (<kbd>http://localhost:8080</kbd>), which we created in a previous section of the chapter. Then click on <strong>New Item</strong>.</li>
+<li>Enter the item name in the textbox as <kbd>my-serverless-google-function-pipeline</kbd> and then select <strong>Pipeline</strong> from the list and then click <strong>OK</strong>. </li>
+<li>Click on the checkbox <strong><span>This project is</span> <span>parameterized</span></strong> <span>and, in the <strong>Add Parameter</strong> drop-down, select <strong>String Parameter</strong>. Then let's add </span><kbd>DEV_PROJECT_ID</kbd> <span>in the <span class="packt_screen">Name</span> textbox and the <strong>Default Value</strong> textbox should have <kbd>project id</kbd> for the <kbd>dev</kbd> which we created in Step 1. Likewise, let's create a text parameter for each environment until PROD, and then the last text parameter should be </span><span><kbd>YOUR_GCF_REGION</kbd>.</span></li>
+<li>Click on the <span class="packt_screen">Pipeline</span> tab, in the definition dropdown <strong>Pipeline script from SCM</strong>, and in the <span class="packt_screen">SCM</span> dropdown select <strong>Git</strong>. Now, in the repository URL textbox add <kbd>https://github.com/shzshi/google-functions-helloworld.git</kbd> and then keep everything as default and click on <strong>Save</strong>. </li>
+<li>Once the job is saved, we will build the pipeline, for which we need to click on <strong>Build with Parameters</strong>, so we will see default values for each parameter. In case you want to change the environment or add a different project id, we can feed it through the textbox. </li>
+<li>Now click on <span class="packt_screen">Build</span>, the job should first init, which is setting up pre-requisites, then it will run a unit test, then the function is deployed on the local dev environment, then integrate test run. In the next stage, functions are deployed into the UAT environment and the same will happen to other environments. The gated approval is been setup for production deployment. This pipeline can be done in many ways.</li>
+</ol>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Monitoring and logging</h1>
+                </header>
+            
+            <article>
+                
+<p>Google has provided a dashboard to view the invocation and also view the logs of the invocation through the console. So, once you log in to the console and select the specific function, we should be able to see the invocation graph and also should be able to see the execution time and also the memory used. We can view the source code and also test the function. If we click on <strong>View Logs</strong>,<strong> </strong>as per the following screenshot, we should be able to see the logs of the invocation and also be able to drill down to a detailed log: </p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/c0d77f3b-a187-4770-b170-fc184b7a63be.png"/></p>
+<p>With the dashboard, Google Cloud also has a monitoring and logging platform called <strong>stackdriver</strong>. <span>It show us insights into the health, performance, and availability of Cloud Function. It is natively integrated with the Google Cloud platform. Stackdriver provides a wide variety of metrics, dashboards, alerting, log management, reporting, and tracing capabilities.</span></p>
+<p><span>It has advanced alerting to help you identify issues quickly. Integrated logging, tracing, and error reporting enable rapid drill-down and root-cause analysis.</span></p>
+<p><span>Stackdriver gives you access to logs, metrics, traces, and other signals from your infrastructure platform(s), virtual machines, containers, middleware, and application tier, so that you can track issues all the way from your end user to your backend services and infrastructure. Native support for distributed systems, auto-scaling, and ephemeral resources means that your monitoring works seamlessly with your modern architecture.</span></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Best practice</h1>
+                </header>
+            
+            <article>
+                
+<p>Google Function is still in beta and it is being evaluated and getting better day by day. In terms of best practice for DevOps, it would be pretty similar to what I suggested in the previous chapter, in that I would recommend using a serverless framework for automating deployment in Google Functions. A serverless framework also supplies a template for creating a basic function setup for Node.js. </p>
+<p>Developing a DevOps culture across the organisation and moving from monolithic application to micro-services will have a huge impact. But we should be able to guide the team to follow the right path. This would call for some mentoring and educating the team with new processes and terms. </p>
+<p>We must extend security to the DevOps tools and organization as well. Security should be part of every aspects of DevOps, right from the automated testing, continuous integration and continuous deployment processes on the cloud platform. It is good to look into monitor security within DevOps in the cloud, and you should have a dedicated person doing this. <br/>
+<br/>
+<strong>Vendor lock-in</strong> is really is painful when we develop functions or projects on AWS and then want to move to Google Cloud. The code has to be modified as per the vendor requirements. But, in terms of deployment, I recommend using a serverless framework for DevOps as it mitigates vendor locking of the DevOps tools and framework. </p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Summary</h1>
+                </header>
+            
+            <article>
+                
+<p>In this chapter, we learned how to set up CI and CD with Google Functions and set up a dynamic dashboard for Google Functions. In the next chapter, we will talk about how to set up our own private serverless form. We will also will talk about setting up CI and CD for this serverless architecture, as well as monitoring and logging, and unit and integration testing.</p>
+
+
+            </article>
+
+            
+        </section>
+    </body></html>

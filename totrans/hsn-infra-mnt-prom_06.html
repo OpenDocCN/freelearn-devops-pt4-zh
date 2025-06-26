@@ -1,0 +1,741 @@
+<html><head></head><body>
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Prometheus Metrics Fundamentals</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">Metrics are the core resources that the Prometheus stack ingests to provide you with useful information. Understanding them correctly is essential to fully utilize, manage, or even extend the realm of possibilities this stack has to offer. From data to information, and finally to knowledge, metrics are here to help you.</p>
+<p><span>In brief, the following topics will be covered in this chapter: </span></p>
+<ul>
+<li>Understanding the Prometheus data model</li>
+<li>A tour of the four core metric types</li>
+<li>Longitudinal and cross-sectional aggregations</li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Understanding the Prometheus data model</h1>
+                </header>
+            
+            <article>
+                
+<p>To understand the Prometheus data model, we need to go through what makes a time series and the storage of such data. These concepts will be invaluable throughout this book.</p>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Time series data</h1>
+                </header>
+            
+            <article>
+                
+<p>Time series data can usually be defined as a sequence of numerical data points that are indexed chronologically from the same source. In the scope of Prometheus, these data points are collected at a fixed time interval. As such, this kind of data, when represented in graphical form, will most commonly plot the evolution of the data through time, with the <em>x</em> axis being time and the <em>y</em> axis being the data value.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Time series databases</h1>
+                </header>
+            
+            <article>
+                
+<p>It all starts with the need to collect, store, and query measurements over time. When dealing with massive amounts of data from collectors and sensors (such as those that make up the Internet of Things), querying the resulting datasets is extremely slow if the database isn't designed with that use case in mind. Nothing prevents you from using standard relational or NoSQL databases to store time series data, but the performance penalty and scalability concerns should make you ponder on that decision. Prometheus chose to implement a time series database that was tailored to its unique problem space.</p>
+<p>Besides the write-heavy aspect of these types of databases, which in turn implies the storage of a massive volume of measurements, it is also important to understand that a simple query can span over several hours, days, or even months, returning a tremendous amount of data points, but is still expected to return data reasonably fast.</p>
+<p>As such, modern time series databases store the following components:</p>
+<ul>
+<li>A timestamp</li>
+<li>A value</li>
+<li>Some context about the value, encoded in a metric name or in associated key/value pairs</li>
+</ul>
+<p>An abstract example of data that fits this time series database specification is as follows:</p>
+<pre>timestamp=1544978108, company=ACME, location=headquarters, beverage=coffee, value=40172</pre>
+<p>As you can see, this kind of data can be easily stored into a single table in a database:</p>
+<table border="1" style="border-collapse: collapse;width: 100%">
+<tbody>
+<tr>
+<td><kbd>timestamp</kbd></td>
+<td><kbd>company</kbd></td>
+<td><kbd>location</kbd></td>
+<td><kbd>beverage</kbd></td>
+<td><kbd>value</kbd></td>
+</tr>
+<tr>
+<td><kbd>1544978108</kbd></td>
+<td><kbd>ACME</kbd></td>
+<td><kbd>headquarters</kbd></td>
+<td><kbd>coffee</kbd></td>
+<td><kbd>40172</kbd></td>
+</tr>
+</tbody>
+</table>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root">In this simple example, we can check the cups of coffee being served by a vending machine located at the headquarters of the ACME company. This example has all the required components of a time series if it's continually measured through time.</p>
+<div class="packt_infobox">This example does not map directly to the Prometheus data model, as it also requires a metric name, but illustrates the logic we're aiming to address.</div>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Prometheus local storage</h1>
+                </header>
+            
+            <article>
+                
+<p>Local storage is the standard approach for storing data in Prometheus and, as such, we must understand its basics. At a very high level, Prometheus storage design is a combination of an index implementation using posting lists for all currently stored labels with their values, and its own time series data format.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Data flow</h1>
+                </header>
+            
+            <article>
+                
+<p>The way Prometheus stores collected data locally can be seen as a three-part process. The following topics depict the stages that data goes through until it's successfully persisted.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Memory</h1>
+                </header>
+            
+            <article>
+                
+<p>The freshest batch of data is kept in memory for up to two hours. This includes one or more chunks of data that are gathered during the two-hour time window. This approach dramatically reduces disk I/O two fold; the most recent data is available in memory, making it blazingly fast to query; and the chunks of data are created in memory, avoiding constant disk writes.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Write ahead log</h1>
+                </header>
+            
+            <article>
+                
+<p>While in memory, data is not persisted and could be lost if the process terminates abnormally. To prevent this scenario, a <strong>write-ahead log</strong> (<strong>WAL</strong>) in disk keeps the state of the in-memory data so that it can be replayed if Prometheus, for any reason, crashes or restarts.</p>
+<p class="mce-root"/>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Disk</h1>
+                </header>
+            
+            <article>
+                
+<p>After the two-hour time window, the chunks get written to disk. These chunks are immutable and, even though data can be deleted, it's not an atomic operation. Instead, tombstone files are created with the information of the data that's no longer required.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Layout</h1>
+                </header>
+            
+            <article>
+                
+<p>The way data gets stored in Prometheus, as we can see in the following example, is organized into a series of directories (blocks) containing the data chunks, the LevelDB index for that data, a <kbd>meta.json</kbd> file with human-readable information about the block, and tombstones for data that's no longer required. Each one of these blocks represents a database.</p>
+<p class="mce-root">At the top level, you can also see the WAL for the data that's not been flushed into its own chunk yet:</p>
+<pre>...<br/>├── 01CZMVW4CB6DCKK8Q33XY5ESQH<br/>│   ├── chunks<br/>│   │ └── 000001<br/>│   ├── index<br/>│   ├── meta.json<br/>│   └── tombstones<br/>├── 01CZNGF9G10R2P56R9G39NTSJE<br/>│   ├── chunks<br/>│   │ └── 000001<br/>│   ├── index<br/>│   ├── meta.json<br/>│   └── tombstones<br/>├── 01CZNGF9ST4ZNKNSZ4VTDVW8DH<br/>│   ├── chunks<br/>│   │ └── 000001<br/>│   ├── index<br/>│   ├── meta.json<br/>│   └── tombstones<br/>├── lock<br/>└── wal<br/>    ├── 00000114<br/>    ├── 00000115<br/>    ├── 00000116<br/>    ├── 00000117<br/>    └── checkpoint.000113<br/>        └── 00000000</pre>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Prometheus data model</h1>
+                </header>
+            
+            <article>
+                
+<p>As we have seen so far, Prometheus stores data as time series, which includes key/value pairs known as labels, a timestamp, and finally a value. The following topics will expand on these components and provide the basics for each one, which we will be utilizing in depth in <a href="205ddb34-6ee8-4e22-b80f-39d5b2198c29.xhtml">Chapter 7</a>, <em>Prometheus Query Language - PromQL</em>, dedicated to PromQL.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Notation</h1>
+                </header>
+            
+            <article>
+                
+<p>A time series in Prometheus is represented as follows:</p>
+<pre>&lt;metric_name&gt;[{&lt;label_1="value_1"&gt;,&lt;label_N="value_N"&gt;}] &lt;datapoint_numerical_value&gt;</pre>
+<p>As you can see, it's represented as a metric name, optionally followed by one or more set of label names/values inside curly brackets, and then the value of the metric. Additionally, a sample will also have a timestamp with millisecond precision.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Metric names</h1>
+                </header>
+            
+            <article>
+                
+<p>Even though this is an implementation detail, a metric name is nothing more than the value of a special label called <kbd>"__name__"</kbd>. So, if you have a metric named <kbd>"beverages_total"</kbd>, internally, it's represented as <kbd>"__name__=beverages_total"</kbd>. Keep in mind that labels surrounded by <kbd>"__"</kbd> are internal to Prometheus, and any label prefixed with <kbd>"__"</kbd> is only available in some phases of the metrics collection cycle.</p>
+<p class="mce-root">The combination of labels (key/values) and the metric name defines the identity of a time series.</p>
+<p class="mce-root">Every metric name in Prometheus must match the following regular expression:</p>
+<pre class="mce-root">"[a-zA-Z_:][a-zA-Z0-9_:]*"</pre>
+<p class="mce-root">This, in layman's terms, means that metric names only allow lowercase and uppercase letters of the English alphabet (<kbd>a-z</kbd>), underscores (<kbd>_</kbd>), colons (<kbd>:</kbd>), and Arabic numerals (<kbd>0-9</kbd>), except on the first character, where numbers are not allowed.</p>
+<div class="packt_infobox">Colons are reserved for a special kind of metric-designated recording rule. We will expand on this subject in another chapter.</div>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Metric labels</h1>
+                </header>
+            
+            <article>
+                
+<p>Labels, or the key/value pairs associated with a certain metric, add dimensionality to the metrics. This is an essential part of what makes Prometheus so good at slicing and dicing time series, as we'll see in <a href="205ddb34-6ee8-4e22-b80f-39d5b2198c29.xhtml">Chapter 7</a>,<em> Prometheus Query Language <span>–</span> PromQL.</em></p>
+<p>While <span>label values can be full UTF-8, l</span>abel names have to match a regular expression to be considered valid; for example, <kbd>"[a-zA-Z0-9_]*"</kbd>.</p>
+<p class="mce-root">Their main difference in regard to metric names is that label names don't allow the colon (<kbd>:</kbd>).</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Samples</h1>
+                </header>
+            
+            <article>
+                
+<p>Samples are the collected data points, and they represent the numerical value of time series data. The components that are required to define a sample are a float64 value, and a timestamp with millisecond precision. <span>Something to keep in mind is that samples collected out of order will be discarded by Prometheus. The same happens to samples with the same metric identity and different sample values.</span></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Cardinality</h1>
+                </header>
+            
+            <article>
+                
+<p>Depending on the computing resources being assigned to a Prometheus instance (that is, CPU, memory, disk space, and IOPS), it will gracefully handle a number of time series. This number can be thought of as the primary indicator of capacity for that instance, and it will inform your scraping decisions: will you have thousands of targets with relatively few metrics, fewer targets with a thousand metrics each, or something in between? In the end, Prometheus will only be able to handle that amount of time series without performance degradation.</p>
+<p>It is in this context that the concept of cardinality appears. This term is often used to mean the number of unique time series that are produced by a combination of metric names and their associated label names/values. As an example, a single metric with no additional dimensions (such as labels) from an application that has one hundred instances will naturally mean that Prometheus will store 100 time series, one for each instance (the instance, here, is a dimension that's added outside of the application); another metric from that application that had a label with ten possible values will translate into 1,000 time series (10 time series per instance, times 100 instances). This shows that cardinality is multiplicative—each additional dimension will increase the number of produced time series by repeating the existing dimensions for each value of the new one. Having multiple dimensions with a large number of possible values in a metric will cause what is called a cardinality explosion in Prometheus, which is the creation of a very large number of time series.</p>
+<p>When you have label values that don't have a clear limit, which can increase indefinitely or above hundreds of possible values, you will also have a cardinality problem. These metrics might be better suited to be handled in logs-based systems.</p>
+<p>The following are some examples of data with high or unbound cardinality that should not be used as label values (or in metric names, for that matter):</p>
+<ul>
+<li>Email addresses</li>
+<li>Usernames</li>
+<li>Request/process/order/transaction ID</li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">A tour of the four core metric types</h1>
+                </header>
+            
+            <article>
+                
+<p>Prometheus metrics are divided into four main types: counters, gauges, histograms, and summaries. It is essential to understand them in depth, as most functions provided by Prometheus only work correctly with a given data type. So, to that end, here is an overview of each.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Counter</h1>
+                </header>
+            
+            <article>
+                
+<p>This is a strictly cumulative metric whose value can only increase. The only exception for this rule is when the metric is reset, which brings it back to zero.</p>
+<p class="mce-root">This is one of the most useful metric types because even if a scrape fails, you won't lose the cumulative increase in the data, which will be available on the next scrape. To be clear, in the case of a failed scrape, granularity would be lost as fewer points will be saved.</p>
+<p>To help visualize this type of metric, here are some examples of counters and their graphical representation based on the test environment we created in the previous chapter:</p>
+<ul>
+<li>The total number of packets received by the Prometheus instance:</li>
+</ul>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/b19429b8-0dd4-4af4-85f4-d204334d9258.png"/></p>
+<ul>
+<li>The total number of bytes written to disk by the Grafana instance – notice the middle gap caused by an instance restart, forcing the counter to reset:</li>
+</ul>
+<div class="CDPAlignCenter CDPAlign"><img src="assets/e68511cd-17b3-4aa4-a35f-e4699f038e06.png"/></div>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Gauge</h1>
+                </header>
+            
+            <article>
+                
+<p>A gauge is a metric that snapshots<span> a given measurement at the time of collection, which can increase or decreas</span>e (such as temperature, disk space, and memory usage).</p>
+<p class="mce-root">If a scrape fails, you will lose that sample, as the next scrape might encounter the metric on a different value (higher/lower).</p>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p>To help visualize this type of metric, here are some examples of gauges and their graphical representation based on the test environment we created in the previous chapter:</p>
+<ul>
+<li><span>The number of established TCP connections on the Alertmanager instance:</span></li>
+</ul>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/8fd23da9-b580-4619-84a2-e553d41e6f04.png"/></p>
+<ul>
+<li>
+<p>The amount of free memory on the Grafana instance – notice the middle gap caused by an instance restart, preventing any assumption about the possible value during that period:</p>
+</li>
+</ul>
+<div class="CDPAlignCenter CDPAlign"><img src="assets/2bc8cac1-9a40-4ae6-9662-0f7793b061b5.png"/></div>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Histogram</h1>
+                </header>
+            
+            <article>
+                
+<p>Recording numerical data that's inherent to each event in a system can be expensive, so some sort of pre-aggregation is usually needed to conserve at least partial information about what happened. However, by pre-calculating aggregations on each instance (such as average since process start, rolling window, exponentially weighted, and so on), a lot of granularity is lost and some calculations can be computationally costly. Adding to this, a lot of pre-aggregations can't generally be re-aggregated without losing meaning—the average of a thousand pre-calculated 95th percentiles has no statistical meaning. Similarly, having the 99th percentile of request latency collected from each instance of a given cluster (for example) gives you no indication of the overall cluster's 99th percentile and no way to accurately calculate it.</p>
+<p>Histograms allow you to retain some granularity by counting events into buckets that are configurable on the client side, and also by providing a sum of all observed values. Prometheus histograms produce one time series per configured bucket, plus an additional two that track the sum and the count of observed events. Furthermore, histograms in Prometheus are cumulative, which means each bucket will have the value of the previous bucket, plus the number of its own events. This is done so that some buckets can be dropped for performance or storage reasons without losing the overall ability to use the histogram.</p>
+<p class="mce-root"/>
+<p>The downside of using histograms is that the selected buckets need to fit the range and distribution of values that are expected to be collected. The error margin for quantile calculation will be directly related with this fit: too few or poorly selected buckets will increase the error margins for quantile calculations.</p>
+<p>This type of metric is especially useful to track bucketed latencies and sizes (for example, request durations or response sizes) as it can be freely aggregated across different dimensions. Another great use is to generate heatmaps (the evolution of histograms over time).</p>
+<p>To help visualize this type of metric, here is an example of a histogram and its graphical representation based on the test environment we created in the previous chapter:</p>
+<ul>
+<li>A Prometheus HTTP request duration in seconds, divided into buckets. This is shown in a Grafana heatmap to better illustrate the concept of buckets:</li>
+</ul>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/f943c349-a36f-4a3c-8320-3518950d6dd4.png"/></p>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mceNonEditable"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Summaries</h1>
+                </header>
+            
+            <article>
+                
+<p>Summaries are similar to histograms in some ways, but present different trade-offs and are generally less useful. They are also used to track sizes and latencies, and also provide both a sum and a count of observed events. Additionally (and if the client library used supports it), summaries can also provide pre-calculated quantiles over a predetermined sliding time window. The main reason to use summary quantiles is when accurate quantile estimation is needed, irrespective of the distribution and range of the observed events.</p>
+<div class="packt_infobox">Quantiles in Prometheus are referred to as φ-quantiles, where 0 ≤ φ ≤ 1.</div>
+<p>Both quantiles and sliding window size are defined in the instrumentation code, so it's not possible to calculate other quantiles or window sizes on an ad hoc basis. Doing these calculations on the client side also means that the instrumentation and computational cost is a lot higher. The last downside to mention is that the resulting quantiles are not aggregable and thus of limited usefulness.</p>
+<p>One benefit that summaries have is that, without quantiles, they are quite cheap to generate, collect, and store.</p>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p><span>To help visualize this type of metric</span>, here is an example of a summary and its graphical representation, based on the test environment we created in the previous chapter:</p>
+<ul>
+<li>The maximum duration of the Prometheus rule group in seconds by quantile:</li>
+</ul>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/c663adc3-ae79-48e7-8d52-5511b1ba35f1.png"/></p>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Longitudinal and cross-sectional aggregations</h1>
+                </header>
+            
+            <article>
+                
+<p>The last concept to grasp when thinking about time series is how aggregations work on an abstract level. One of Prometheus' core strengths is that it makes the manipulation of time series data easy, and this slicing and dicing of data usually boils down to two kinds of aggregations, which are often used together: longitudinal and cross-sectional aggregations.</p>
+<p>In the context of time series, an aggregation is a process that reduces or summarizes the raw data, which is to say that it receives a set of data points as input and produces a smaller set (often a single element) as output. Some of the most common aggregation functions in time series databases are minimum, maximum, average, count, and sum.</p>
+<p class="mce-root"/>
+<p>To better understand how these aggregations work, let's look at some data using the example time series we presented earlier in this chapter. To be clear, the next few sections will explain how these aggregations work on an abstract level and will hint at what their Prometheus counterparts are, but are not supposed to be a one-to-one match with PromQL (which we will explore thoroughly in <a href="205ddb34-6ee8-4e22-b80f-39d5b2198c29.xhtml">Chapter 7</a>, <em>Prometheus Query Language <span>–</span> PromQL</em>). </p>
+<p>Let's pretend we've selected <kbd>{company=ACME, beverage=coffee}</kbd> and we're now looking at the raw counters over time per location. The data would look something like this:</p>
+<table border="1" style="border-collapse: collapse;width: 100%">
+<thead>
+<tr>
+<td><strong>Location/Time</strong></td>
+<td><strong>t=0</strong></td>
+<td><strong>t=1</strong></td>
+<td><strong>t=2</strong></td>
+<td><strong>t=3</strong></td>
+<td><strong>t=4</strong></td>
+<td><strong>t=5</strong></td>
+<td><strong>t=6</strong></td>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Factory</strong></td>
+<td>1,045</td>
+<td>1</td>
+<td>2</td>
+<td>3</td>
+<td>4</td>
+<td>5</td>
+<td>6</td>
+</tr>
+<tr>
+<td><strong>Warehouse</strong></td>
+<td>223</td>
+<td>223</td>
+<td>223</td>
+<td>223</td>
+<td>224</td>
+<td>224</td>
+<td>224</td>
+</tr>
+<tr>
+<td><strong>Headquarters</strong></td>
+<td>40,160</td>
+<td><span>40,162</span></td>
+<td><span>40,164</span></td>
+<td><span>40,166</span></td>
+<td><span>40,168</span></td>
+<td><span>40,170</span></td>
+<td><span>40,172</span></td>
+</tr>
+</tbody>
+</table>
+<div class="packt_infobox">Actual data wouldn't look exactly like this, as each time series is collected at slightly different times. The data points would have their own timestamps associated, which means they would be out of alignment. This, in turn, impacts on the results of aggregations, as some method of interpolation would be applied to align data points.</div>
+<p>For argument's sake, let's say that the samples were collected every minute. The metric type is probably a counter, as it's monotonically increasing, with the exception of the counter that's reset at <kbd>t=1</kbd> for <kbd>location=factory</kbd>.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Cross-sectional aggregation</h1>
+                </header>
+            
+            <article>
+                
+<p>Cross-sectional aggregations are the easiest to understand. As we can see in the following data representation, we take a column of data and apply an aggregation function to it:</p>
+<table border="1" style="border-collapse: collapse;width: 100%">
+<thead>
+<tr>
+<td><strong>Location/Time</strong></td>
+<td><strong>t=0</strong></td>
+<td><strong>t=1</strong></td>
+<td><strong>t=2</strong></td>
+<td><strong>t=3</strong></td>
+<td><strong>t=4</strong></td>
+<td><strong>t=5</strong></td>
+<td><strong>t=6</strong></td>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Factory</strong></td>
+<td>1,045</td>
+<td>1</td>
+<td>2</td>
+<td>3</td>
+<td>4</td>
+<td>5</td>
+<td><strong>6</strong></td>
+</tr>
+<tr>
+<td><strong>Warehouse</strong></td>
+<td>223</td>
+<td>223</td>
+<td>223</td>
+<td>223</td>
+<td>224</td>
+<td>224</td>
+<td><strong>224</strong></td>
+</tr>
+<tr>
+<td><strong>Headquarters</strong></td>
+<td>40160</td>
+<td><span>40,162</span></td>
+<td><span>40,164</span></td>
+<td><span>40,166</span></td>
+<td><span>40,168</span></td>
+<td><span>40,170</span></td>
+<td><strong><span>40,172</span></strong></td>
+</tr>
+</tbody>
+</table>
+<p> </p>
+<p>If we apply the <kbd>max()</kbd> aggregation, we can find out which location reported more coffees were dispensed—in this case, the result would be 40,172. Applying <kbd>count()</kbd> would give us the number of offices reporting data for the dimensions that were selected (<kbd>{company=ACME, beverage=coffee}</kbd>): 3.</p>
+<div class="packt_tip"><span>It's not generally sane to apply <kbd>max()</kbd> to a counter, as we'll see in <a href="205ddb34-6ee8-4e22-b80f-39d5b2198c29.xhtml">Chapter 7</a>, <em>Prometheus Query Language – PromQL</em>. This is a simple and abstract example to help you understand the basics of time series.</span></div>
+<p>This type of aggregation usually applies to the last data points in the requested set. The most common case where this is not true is when graphing the aggregation over time, as it needs to be calculated for each point in the graph.</p>
+<p>You will notice that the selected data resembles a traditional column vector from linear algebra. As we'll see in <a href="205ddb34-6ee8-4e22-b80f-39d5b2198c29.xhtml">Chapter 7</a>, <em>Prometheus Query Language – PromQL</em>, dedicated to PromQL, these will be referred to as instant vectors.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Longitudinal aggregation</h1>
+                </header>
+            
+            <article>
+                
+<p>Longitudinal aggregations are trickier to use because you need to select a time window over which to apply the aggregation. This means they work over rows, as we can see in the following representation:</p>
+<table border="1" style="border-collapse: collapse;width: 100%">
+<thead>
+<tr>
+<td><strong>Location/Time</strong></td>
+<td><strong>t=0</strong></td>
+<td><strong>t=1</strong></td>
+<td><strong>t=2</strong></td>
+<td><strong>t=3</strong></td>
+<td><strong>t=4</strong></td>
+<td><strong>t=5</strong></td>
+<td><strong>t=6</strong></td>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Factory</strong></td>
+<td>1,045</td>
+<td>1</td>
+<td>2</td>
+<td>3</td>
+<td><strong>4</strong></td>
+<td><strong>5</strong></td>
+<td><strong>6</strong></td>
+</tr>
+<tr>
+<td><strong>Warehouse</strong></td>
+<td>223</td>
+<td>223</td>
+<td>223</td>
+<td>223</td>
+<td><strong>224</strong></td>
+<td><strong>224</strong></td>
+<td><strong>224</strong></td>
+</tr>
+<tr>
+<td><strong>Headquarters</strong></td>
+<td>40,160</td>
+<td><span>40,162</span></td>
+<td><span>40,164</span></td>
+<td><span>40,166</span></td>
+<td><strong><span>40,168</span></strong></td>
+<td><strong><span>40,170</span></strong></td>
+<td><strong><span>40,172</span></strong></td>
+</tr>
+</tbody>
+</table>
+<p> </p>
+<p>Since the current selectors we're using return three rows of data, this means we'll have three results when applying longitudinal aggregations. In this example, we've selected the last three minutes of data for aggregation (as we mentioned previously, we're considering a 1-minute sample interval). If we apply the <kbd>max()</kbd> aggregation over time, since these are counters and there wasn't a reset in the selected window, we will get the latest values in the selected set: 6 for <kbd>location=factory</kbd>, <strong>224</strong> for <kbd>location=warehouse</kbd>, and <strong>40,172</strong> for <kbd>location=headquarters</kbd>. <kbd>count()</kbd> will return the number of points that were selected in the specified time range—in this case, since the collection occurs every minute and we requested it for three minutes, it will return <strong>3</strong> for each location.</p>
+<p>A more interesting aggregation of this kind that wasn't mentioned before is <kbd>rate()</kbd>. It is a particularly useful aggregation to use with counters, as you can calculate the rate of change per unit of time—we will explore this in detail later in this book. In this example, <kbd>rate()</kbd> would return 1, 0, and 2 for each location, respectively.</p>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p>Once again, we would like to point out the resemblance of the selected data to a traditional matrix from mathematics. These type of selections will be referred to as range vectors in PromQL.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Summary</h1>
+                </header>
+            
+            <article>
+                
+<p>In this chapter, we came to understand what time series data is, and looked at an overview of how a modern time series database such as Prometheus works, not only logically, but physically as well. We went through the Prometheus metrics notation and how metric names and labels relate to each other, and also covered what defines a sample. Prometheus metrics have four types, and we had the chance to go through every one of them and provide some useful examples. Finally, we dived into how longitudinal and cross-sectional aggregations work, which is essential to fully take advantage of Prometheus' query language.</p>
+<p>In the next chapter, we'll return to a more hands-on approach and go into Prometheus server configuration, and how to manage it on both virtual machines and Kubernetes.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Questions</h1>
+                </header>
+            
+            <article>
+                
+<ol>
+<li class="mce-root">What is the mandatory requirement of any graphical time series representation?</li>
+<li class="mce-root">What are the components for a data point to be considered as time series data?</li>
+<li class="mce-root">When a Prometheus server crashes, what prevents it from losing data?</li>
+<li class="mce-root">What is the Prometheus in-memory database time window for storing data?</li>
+<li class="mce-root">What are the components of a Prometheus sample?</li>
+<li class="mce-root">What are the common use cases for both histograms and summaries?</li>
+<li class="mce-root">What is the difference between a cross-sectional and a longitudinal aggregation?</li>
+</ol>
+<p class="mce-root"/>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Further reading</h1>
+                </header>
+            
+            <article>
+                
+<ul>
+<li><strong>Prometheus storage layout</strong>: <a href="https://prometheus.io/docs/prometheus/latest/storage/">https://prometheus.io/docs/prometheus/latest/storage/</a></li>
+<li><strong>Prometheus storage format</strong>: <a href="https://github.com/prometheus/tsdb/blob/master/docs/format/README.md">https://github.com/prometheus/tsdb/blob/master/docs/format/README.md</a></li>
+<li><strong>Fabian Reinartz <span>–</span> Writing a Time Series Database from Scratch</strong>: <a href="https://fabxc.org/tsdb/">https://fabxc.org/tsdb/</a></li>
+<li><strong>Prometheus data model</strong>: <a href="https://prometheus.io/docs/concepts/data_model/">https://prometheus.io/docs/concepts/data_model/</a></li>
+<li><strong>Histograms and Summaries</strong>: <a href="https://prometheus.io/docs/practices/histograms/">https://prometheus.io/docs/practices/histograms/</a></li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    </body></html>

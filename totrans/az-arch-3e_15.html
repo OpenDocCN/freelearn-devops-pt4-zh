@@ -1,0 +1,635 @@
+<html><head></head><body>
+		<div>
+			<div id="_idContainer393" class="Content">
+			</div>
+		</div>
+		<div id="_idContainer394" class="Content">
+			<h1 id="_idParaDest-367">15. <a id="_idTextAnchor382"/>Cross-subscription deployments using ARM templates</h1>
+		</div>
+		<div id="_idContainer401" class="Content">
+			<p><strong class="bold">Azure Resource Manager</strong> (<strong class="bold">ARM</strong>) templates are the preferred mechanism for provisioning resources and configuring them on Azure.</p>
+			<p>ARM templates help to implement a relatively new paradigm known as <strong class="bold">Infrastructure as Code</strong> (<strong class="bold">IaC</strong>). ARM templates convert the infrastructure and its configuration into code, which has numerous advantages. IaC brings a high level of consistency and predictability to deployments across environments. It also ensures that environments can be tested before going to production, and, finally, it gives a high level of confidence in the deployment process, maintenance, and governance.</p>
+			<p>The following topics will be covered in this chapter:</p>
+			<ul>
+				<li>ARM templates</li>
+				<li>Deploying resource groups with ARM templates</li>
+				<li>Deploying resources across subscriptions and resource groups</li>
+				<li>Deploying cross-subscription and resource group deployments using linked templates</li>
+				<li>Creating ARM templates for PaaS, data, and IaaS solutions</li>
+			</ul>
+			<h2 id="_idParaDest-368"><a id="_idTextAnchor383"/>ARM templates</h2>
+			<p>A prominent advantage of IaC is that it can be version controlled. It can also be reused across environments, which provides a high degree of consistency and predictability in deployments, and ensures that the impact and result of deploying an ARM template is the same no matter the number of times the template is deployed. This feature is known as <strong class="bold">idempotency</strong>.</p>
+			<p>ARM templates debuted with the introduction of the ARM specification and have been getting richer in features and growing in maturity since then. It's important to understand that there's generally a feature gap of a few weeks to a couple of months between the actual resource configuration and the availability of the configuration in ARM templates.</p>
+			<p>Each resource has its own configuration. This configuration can be affected in a multitude of ways, including using Azure PowerShell, the Azure CLI, Azure SDKs, REST APIs, and ARM templates.</p>
+			<p>Each of these techniques has its own development and release life cycle, which is different from the actual resource development. Let's try to understand this with the help of an example.</p>
+			<p>The Azure Databricks resource has its own cadence and development life cycle. The consumers of this resource have their own development life cycle, in turn, which is different from the actual resource development. If Databricks gets its first release on December 31, the Azure PowerShell cmdlets for it might not be available on the same date and might even be released on January 31 of the next year; similarly, the availability of these features in the REST API and ARM templates might be around January 15.</p>
+			<p>ARM templates are JSON-based documents that, when executed, invoke a REST API on the Azure management plane and submit the entire document to it. The REST API has its own development life cycle, and the JSON schema for the resource has its own life cycle too.</p>
+			<p>This means the development of a feature within a resource needs to happen in at least three different components before they can be consumed from ARM templates. These include:</p>
+			<ul>
+				<li>The resource itself</li>
+				<li>The REST API for the resource</li>
+				<li>The ARM template resource schema</li>
+			</ul>
+			<p>Each resource in the ARM template has the <strong class="inline">apiVersion</strong> property. This property helps to decide the REST API version that should be used to provision and deploy the resource. <em class="italics">Figure 15.1</em> shows the flow of requests from the ARM template to resource APIs that are responsible for the creation, updating, and deletion of resources:</p>
+			<div>
+				<div id="_idContainer395" class="IMG---Figure">
+					<img src="image/Figure_15.1.jpg" alt="A flow diagram illustrating the flowofrequestsfromtheARMtemplatetoresourceAPIs, which starts from ARM templates, then moves to the Resource REST API and finally moves to the Resource Management API."/>
+				</div>
+			</div>
+			<h6>Figure 15.1: Request flow</h6>
+			<p>A resource configuration, such as a storage account in an ARM template, looks as follows:</p>
+			<p class="snippet">{ "type": "Microsoft.Storage/storageAccounts",  "apiVersion": "2019-04-01",   "name": "[variables('storage2')]",   "location": "[resourceGroup().location]",   "kind": "Storage",   "sku": {                "name": "Standard_LRS"          }}</p>
+			<p>In the preceding code, the availability of this schema for defining <strong class="inline">sku</strong> is based on the development of the ARM template schema. The availability of the REST API and its version number is determined by <strong class="inline">apiVersion</strong>, which happens to be <strong class="inline">2019-04-01</strong>. The actual resource is determined by the <strong class="inline">type</strong> property, which has the following two parts:</p>
+			<ul>
+				<li><strong class="bold">Resource-provider namespace</strong>: Resources in Azure are hosted within namespaces and related resources are hosted within the same namespace.</li>
+				<li><strong class="bold">Resource type</strong>: Resources are referenced using their type name.</li>
+			</ul>
+			<p>In this case, the resource is identified by its provider name and type, which happens to be <strong class="inline">Microsoft.Storage/storageaccounts</strong>.</p>
+			<p>Previously, ARM templates expected resource groups to be available prior to deployment. They were also limited to deploying to a single resource group within a single subscription.</p>
+			<p>This meant that, until recently, an ARM template could deploy all resources within a single resource group. Azure ARM templates now have added functionality for deploying resources to multiple resource groups within the same subscription or multiple subscriptions simultaneously. It's now possible to create resource groups as part of ARM templates, which means it's now possible to deploy resources in multiple regions into different resource groups.</p>
+			<p>Why would we need to create resource groups from within ARM templates, and why would we need to have cross-subscription and resource group deployments simultaneously?</p>
+			<p>To appreciate the value of creating a resource group and cross-subscription deployments, we need to understand how deployments were carried out prior to these features being available.</p>
+			<p>To deploy an ARM template, a resource group is a prerequisite. Resource groups should be created prior to the deployment of a template. Developers use PowerShell, the Azure CLI, or the REST API to create resource groups and then initiate the deployment of ARM templates. This means that any end-to-end deployment consists of multiple steps. The first step is to provision the resource group and the next step is the deployment of the ARM template to this newly created resource group. These steps could be executed using a single PowerShell script or individual steps from the PowerShell command line. The PowerShell script should be complete with regard to code related to exception handling, taking care of edge cases, and ensuring that there are no bugs in it before it can be said to be enterprise-ready. It is important to note that resource groups can be deleted from Azure, and the next time the script runs, they might be expected to be available. It would fail because it might assume that the resource group exists. In short, the deployment of the ARM template to a resource group should be an atomic step rather than multiple steps.</p>
+			<p>Compare this with the ability to create resource groups and their constituent resources together within the same ARM templates. Whenever you deploy the template, it ensures that the resource groups are created if they don't yet exist and continues to deploy resources to them after creation.</p>
+			<p>Let's also look at how these new features can help to remove some of the technical constraints related to disaster recovery sites.</p>
+			<p>Prior to these features, if you had to deploy a solution that was designed with disaster recovery in mind, there were two separate deployments: one deployment for the primary region and another deployment for the secondary region. For example, if you were deploying an ASP.NET MVC application using App Service, you would create an app service and configure it for the primary region, and then you would conduct another deployment with the same template to another region using a different <strong class="inline">parameters</strong> file. When deploying another set of resources in another region, as mentioned before, the parameters used with the template should be different to reflect the differences between the two environments. The parameters would include changes such as a S<a id="_idTextAnchor384"/>QL connection string, domain and IP addresses, and other configuration items unique to an environment.</p>
+			<p>With the availability of cross-subscription and resource group deployment, it's possible to create the disaster recovery site at the same time as the primary site. This eliminates two deployments and ensures that the same configuration can be used on multiple sites.</p>
+			<h2 id="_idParaDest-369"><a id="_idTextAnchor385"/>Deploying resource groups with ARM templates</h2>
+			<p>In this section, an ARM template will be authored and deployed, which will create a couple of resource groups within the same subscription.</p>
+			<p>To use PowerShell to deploy templates that contain resource groups and cross-subscription resources, the latest version of PowerShell should be used. At the time of writing, Azure module version 3.3.0 is being used:</p>
+			<div>
+				<div id="_idContainer396" class="IMG---Figure">
+					<img src="image/Figure_15.2.jpg" alt="The output of the get-module –Name az command showing that the current Azure module version on the machine is 3.3.0. "/>
+				</div>
+			</div>
+			<h6>Figure 15.2: Verifying the latest Azure module version</h6>
+			<p>If the latest Azure module is not installed, it can be installed using the following command:</p>
+			<p class="snippet">install-module  -Name az  -Force</p>
+			<p>It's time to create an ARM template that will create multiple resource groups within the same subscription. The code for the ARM template is as follows:</p>
+			<p class="snippet">{  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",  "contentVersion": "1.0.0.0",  "parameters": {    "resourceGroupInfo": {      "type": "array"    },    "multiLocation": {      "type": "array"         }  },  "resources": [    {      "type": "Microsoft.Resources/resourceGroups",      "location": "[parameters('multiLocation')[copyIndex()]]",      "name": "[parameters('resourceGroupInfo')[copyIndex()]]",      "apiVersion": "2019-10-01",      "copy": {        "name": "allResourceGroups",        "count": "[length(parameters('resourceGroupInfo'))]"      },      "properties": {}    }  ],  "outputs": {}}</p>
+			<p>The first section of the code is about parameters that the ARM templates expect. These are mandatory parameters, and anybody deploying these templates should provide values for them. Array values must be provided for both the parameters.</p>
+			<p>The second major section is the <strong class="inline">resources</strong> JSON array, which can contain multiple resources. In this example, we are creating resource groups, so it is declared within the <strong class="inline">resources</strong> section. Resource groups are getting provisioned in a loop because of the use of the <strong class="inline">copy</strong> element. The <strong class="inline">copy</strong> element ensures that the resource is run a specified number of times and creates a new resource in every iteration. If we send two values for the <strong class="inline">resourceGroupInfo</strong> array parameter, the length of the array would be two, and the <strong class="inline">copy</strong> element will ensure that the <strong class="inline">resourceGroup</strong> resource is executed twice.</p>
+			<p>All resource names within a template should be unique for a resource type. The <strong class="inline">copyIndex</strong> function is used to assign the current iteration number to the overall name of the resource and make it unique. Also, we want the resource groups to be created in different regions using distinct region names sent as parameters. The assignment of a name and location for each resource group is done using the <strong class="inline">copyIndex</strong> function.</p>
+			<p>The code for the <strong class="inline">parameters</strong> file is shown next. This code is pretty straightforward and provides array values to the two parameters expected by the previous template. The values in this file should be changed for all parameters according to your environment:</p>
+			<p class="snippet">{  "$schema": "<a href="https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#">https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#</a>",  "contentVersion": "1.0.0.0",  "parameters": {    "resourceGroupInfo": {      "value": [ "firstResourceGroup", "SeocndResourceGroup" ]    },    "multiLocation": {      "value": [        "West Europe",        "East US"      ]    }  }}</p>
+			<h3 id="_idParaDest-370"><a id="_idTextAnchor386"/>Deploying ARM templates</h3>
+			<p>To deploy this template using PowerShell, log in to Azure with valid credentials using the following command:</p>
+			<p class="snippet">Login-AzAccount</p>
+			<p>The valid credentials could be a user account or a service principal. Then, use a newly released <strong class="inline">New-AzDeployment</strong> cmdlet to deploy the template. The deployment script is available in the <strong class="inline">multipleResourceGroups.ps1</strong> file:</p>
+			<p class="snippet">New-AzDeployment  -Location "West Europe"  -TemplateFile "c:\users\rites\source\repos\CrossSubscription\CrossSubscription\multipleResourceGroups.json" -TemplateParameterFile "c:\users\rites\source\repos\CrossSubscription\CrossSubscription\multipleResourceGroups.parameters.json"  -Verbose</p>
+			<p>It's important to understand that the <strong class="inline">New-AzResourceGroupDeployment</strong> cmdlet can't be used here because the scope of the <strong class="inline">New-AzResourceGroupDeployment</strong> cmdlet is a resource group and it expects a resource group to be available as a prerequisite. For deploying resources at the subscription level, Azure had released a new cmdlet that can work above the resource group scope. The new cmdlet, <strong class="inline">new-AzDeployment</strong>, works at the subscription level. It is also possible to have a deployment at the management group level. Management groups are at a higher level than subscriptions using the <strong class="inline">New-AzManagementGroupDeployment</strong> cmdlet.</p>
+			<h3 id="_idParaDest-371"><a id="_idTextAnchor387"/>Deployment of templates using Azure CLI</h3>
+			<p>The same template can also be deployed using the Azure CLI. Here are the steps to deploy it using the Azure CLI:</p>
+			<ol>
+				<li>Use the latest version of the Azure CLI to create resource groups using the ARM template. At the time of writing, version 2.0.75 was used for deployment, as shown here: <div id="_idContainer397" class="IMG---Figure"><img src="image/Figure_15.3.jpg" alt="The output of the az –version command displaying the version of the Azure CLI as 2.0.75."/></div><h6>Figure 15.3: Checking the version of the Azure CLI</h6></li>
+				<li>Log in to Azure using the following command and select the right subscription for use:<p class="snippet">az login</p></li>
+				<li>If the login has access to multiple subscriptions, select the appropriate subscription using the following command:<p class="snippet">az account set –subscription xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx</p></li>
+				<li>Execute the deployment using the following command. The deployment script is available in the <strong class="inline">multipleResourceGroupsCLI.txt</strong> file:<p class="snippet">C:\Users\Ritesh&gt;az deployment create—location westus—template-file "C:\users\rites\source\repos\CrossSubscription\CrossSubscription\azuredeploy.json—parameters @"C:\users\rites\source\repos\CrossSubscription\CrossSubscription\azuredeploy.parameters.json"—verbose</p></li>
+			</ol>
+			<p>Once the command is executed, the resources defined within the ARM template should be reflected on the Azure portal.</p>
+			<h2 id="_idParaDest-372"><a id="_idTextAnchor388"/>Deploying resources across subscriptions and resource groups</h2>
+			<p>In the last section, resource groups were created as part of ARM templates. Another feature in Azure is the provision of resources into multiple subscriptions simultaneously from a single deployment using a single ARM template. In this section, we will provide a new storage account to two different subscriptions and resource groups. The person deploying the ARM template would select one of the subscriptions as the base subscription, using which they would initiate the deployment and provision the storage account into the current and another subscription. The prerequisite for deploying this template is that the person doing the deployment should have access to at least two subscriptions and that they have contributor rights on these subscriptions. The code listing is shown here and is available in the <strong class="inline">CrossSubscriptionStorageAccount.json</strong> file within the accompanying code:</p>
+			<p class="snippet">{    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",    "contentVersion": "1.0.0.0",    "parameters": {      "storagePrefix1": {        "type": "string",        "defaultValue": "st01"    ...        "type": "string",        "defaultValue": "rg01"      },      "remoteSub": {        "type": "string",        "defaultValue": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"      }   ...                            }                        }                    ],                    "outputs": {}                }            }        }    ],    "outputs": {}}</p>
+			<p>It is important to note that the names of the resource group used within the code should already be available in the respective subscriptions. The code will throw an error if the resource groups are not available. Moreover, the names of the resource group should precisely match those in the ARM template.</p>
+			<p>The code for deploying this template is shown next. In this case, we use <strong class="inline">New-AzResourceGroupDeployment</strong>, because the scope of the deployment is a resource group. The deployment script is available in the <strong class="inline">CrossSubscriptionStorageAccount.ps1</strong> file within the code bundle:</p>
+			<p class="snippet">New-AzResourceGroupDeployment  -TemplateFile "&lt;&lt; path to your CrossSubscriptionStorageAccount.json file &gt;&gt;" -ResourceGroupName "&lt;&lt;provide your base subscription resource group name&gt;&gt;" -storagePrefix1 &lt;&lt;provide prefix for first storage account&gt;&gt; -storagePrefix2 &lt;&lt;provide prefix for first storage account&gt;&gt; -verbose</p>
+			<p>Once the command is executed, the resources defined within the ARM template should be reflected in the Azure portal.</p>
+			<h3 id="_idParaDest-373"><a id="_idTextAnchor389"/>Another example of cross-subscription and resource group deployments</h3>
+			<p>In this section, we create two storage accounts in two different subscriptions, resource groups, and regions from one ARM template and a single deployment. We will use the nested templates approach along with the <strong class="inline">copy</strong> element to provide different names and locations to these resource groups in different subscriptions. </p>
+			<p>However, before we can execute the next set of ARM templates, an Azure Key Vault instance should be provisioned as a prerequisite and a secret should be added to it. This is because the names of the storage accounts are retrieved from Azure Key Vault and passed as parameters to ARM templates to provision the storage account.</p>
+			<p>To provision Azure Key Vault using Azure PowerShell, the next set of commands can be executed. The code for the following commands is available in the <strong class="inline">CreateKeyVaultandSetSecret.ps1</strong> file:</p>
+			<p class="snippet">New-AzResourceGroup -Location &lt;&lt;replace with location of your key vault&gt;&gt; -Name &lt;&lt;replace with name of your resource group for key vault&gt;&gt; -verbose New-AzureRmKeyVault -Name &lt;&lt;replace with name of your key vault&gt;&gt; -ResourceGroupName &lt;&lt;replace with name of your resource group for key vault&gt;&gt;  -Location &lt;&lt;replace with location of your key vault&gt;&gt; -EnabledForDeployment -EnabledForTemplateDeployment -EnabledForDiskEncryption -EnableSoftDelete -EnablePurgeProtection -Sku Standard -Verbose </p>
+			<p>You should note that the <strong class="inline">ResourceID</strong> value should be noted from the result of the <strong class="inline">New-AzKeyVault</strong> cmdlet. This value will need to be replaced in the <strong class="inline">parameters</strong> file. See <em class="italics">Figure 15.4</em> for details:</p>
+			<div>
+				<div id="_idContainer398" class="IMG---Figure">
+					<img src="image/Figure_15.4.jpg" alt="The output displaying the values for Key Vault Name, Resource Group Name, Location, ResourceID, Tenant ID, and so on."/>
+				</div>
+			</div>
+			<h6>Figure 15.4: Creating a Key Vault instance</h6>
+			<p>Execute the following command to add a new secret to the newly created Azure Key Vault instance:</p>
+			<p class="snippet">Set-AzKeyVaultSecret -VaultName &lt;&lt;replace with name of your key vault&gt;&gt; -Name &lt;&lt;replace with name of yoursecret&gt;&gt; -SecretValue $(ConvertTo-SecureString -String &lt;&lt;replace with value of your secret&gt;&gt; -AsPlainText -Force ) -Verbose</p>
+			<p>The code listing is available in the <strong class="inline">CrossSubscriptionNestedStorageAccount.json</strong> file within the code bundle:</p>
+			<p class="snippet">{  "$schema": "<a href="https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#">https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#</a>",  "contentVersion": "1.0.0.0",  "parameters": {    "hostingPlanNames": {      "type": "array",      "minLength": 1     },  ...      "type": "Microsoft.Resources/deployments",      "name": "deployment01",      "apiVersion": "2019-10-01",      "subscriptionId": "[parameters('subscriptions')[copyIndex()]]",      "resourceGroup": "[parameters('resourceGroups')[copyIndex()]]",      "copy": {        "count": "[length(parameters('hostingPlanNames'))]",        "name": "mywebsites",        "mode": "Parallel"      },    ...              "kind": "Storage",              "properties": {              }            }          ]...</p>
+			<p>Here's the code for the <strong class="inline">parameters</strong> file. It is available in the <strong class="inline">CrossSubscriptionNestedStorageAccount.parameters.json</strong> file:</p>
+			<p class="snippet">{  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",  "contentVersion": "1.0.0.0",  "parameters": {    "hostingPlanNames": {   ...    "storageKey": {      "reference": {        "keyVault": { "id": "&lt;&lt;replace it with the value of Key vault ResourceId noted before&gt;&gt;" },        "secretName": "&lt;&lt;replace with the name of the secret available in Key vault&gt;&gt;"      }    }  }}</p>
+			<p>Here's the PowerShell code for deploying the previous template. The deployment script is available in the <strong class="inline">CrossSubscriptionNestedStorageAccount.ps1</strong> file:</p>
+			<p class="snippet">New-AzResourceGroupDeployment  -TemplateFile "c:\users\rites\source\repos\CrossSubscription\CrossSubscription\CrossSubscriptionNestedStorageAccount.json" -ResourceGroupName rg01 -TemplateParameterFile "c:\users\rites\source\repos\CrossSubscription\CrossSubscription\CrossSubscriptionNestedStorageAccount.parameters.json" -Verbose</p>
+			<p>Once the command gets executed, the resources defined within the ARM template should be reflected in the Azure portal.</p>
+			<h2 id="_idParaDest-374"><a id="_idTextAnchor390"/>Deploying cross-subscription and resource group deployments using linked templates</h2>
+			<p>The previous example used nested templates to deploy to multiple subscriptions and resource groups. In the next example, we will deploy multiple App Service plans in separate subscriptions and resource groups using linked templates. The linked templates are stored in Azure Blob storage, which is protected using policies. This means that only the holder of the storage account key or a valid shared access signature can access this template. The access key is stored in Azure Key Vault and is accessed from the <strong class="inline">parameters</strong> file using references under the <strong class="inline">storageKey</strong> element. You should upload the <strong class="inline">website.json</strong> file to a container in Azure Blob storage. The <strong class="inline">website.json</strong> file is a linked template responsible for provisioning an App Service plan and an app service. The file is protected using the <strong class="bold">Private (no anonymous access)</strong> policy, as shown in <em class="italics">Figure 15.5</em>. A privacy policy ensures that anonymous access is not allowed. For this instance, we have created a container named <strong class="inline">armtemplates</strong> and set it with a private policy:</p>
+			<div>
+				<div id="_idContainer399" class="IMG---Figure">
+					<img src="image/Figure_15.5.jpg" alt="Setting the Public access level in the Access policy panefor the armtemplates containeras ‘Private (no anonymous access)’."/>
+				</div>
+			</div>
+			<h6>Figure 15.5: Setting a private policy for the container</h6>
+			<p>This file can only be accessed using the <strong class="bold">Shared Access Signature</strong> (<strong class="bold">SAS</strong>) keys. The SAS keys can be generated from the Azure portal for a storage account using the <strong class="bold">Shared access signature</strong> item in the left menu shown in <em class="italics">Figure 15.6</em>. You should click on the <strong class="bold">Generate SAS and connection string</strong> button to generate the SAS token. It is to be noted that an SAS token is displayed once and not stored within Azure. So, copy it and store it somewhere so that it can be uploaded to Azure Key Vault. <em class="italics">Figure 15.6</em> shows the generation of the SAS token:</p>
+			<div>
+				<div id="_idContainer400" class="IMG---Figure">
+					<img src="image/Figure_15.6.jpg" alt="Selecting the ‘Shared access signature’ tab in the Azure portalfrom the left-hand navigation and generating the SAS token."/>
+				</div>
+			</div>
+			<h6>Figure 15.6: Generating an SAS token in the Azure portal</h6>
+			<p>We will use the same Key Vault instance that was created in the previous section. We just have to ensure that there are two secrets available within the Key Vault instance. The first secret is <strong class="inline">StorageName</strong> and the other one is <strong class="inline">StorageKey</strong>. The commands to create these secrets in the Key Vault instance are as follows:</p>
+			<p class="snippet">Set-AzKeyVaultSecret -VaultName "testkeyvaultbook" -Name "storageName" -SecretValue $(ConvertTo-SecureString -String "uniquename" -AsPlainText -Force ) -Verbose Set-AzKeyVaultSecret -VaultName "testkeyvaultbook" -Name "storageKey" -SecretValue $(ConvertTo-SecureString -String "?sv=2020-03-28&amp;ss=bfqt&amp;srt=sco&amp;sp=rwdlacup&amp;se=2020-03-30T21:51:03Z&amp;st=2020-03-30T14:51:03Z&amp;spr=https&amp;sig=gTynGhj20er6pDl7Ab%2Bpc29WO3%2BJhvi%2BfF%2F6rHYWp4g%3D" -AsPlainText -Force ) -Verbose</p>
+			<p>You are advised to change the names of the Key Vault instance and the secret key value based on your storage account.</p>
+			<p>After ensuring that the Key Vault instance has the necessary secrets, the ARM template file code can be used to deploy the nested templates across subscriptions and resource groups.</p>
+			<p>The ARM template code is available in the <strong class="inline">CrossSubscriptionLinkedStorageAccount.json</strong> file and is also shown here. You are advised to change the value of the <strong class="inline">templateUrl</strong> variable within this file. It should be updated with a valid Azure Blob storage file location:</p>
+			<p class="snippet">{  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",  "contentVersion": "1.0.0.0",  "parameters": {    "hostingPlanNames": {      "type": "array",      "minLength": 1   ...      "type": "Microsoft.Resources/deployments",      "name": "fsdfsdf",      "apiVersion": "2019-10-01",      "subscriptionId": "[parameters('subscriptions')[copyIndex()]]",      "resourceGroup": "[parameters('resourceGroups')[copyIndex()]]",      "copy": {        "count": "[length(parameters('hostingPlanNames'))]",        "name": "mywebsites",        "mode": "Parallel"    ...  ]}</p>
+			<p>The code for the <strong class="inline">parameters</strong> file is shown next. You are advised to change the values of the parameters, including the <strong class="inline">resourceid</strong> of the Key Vault instance and the secret name. The names of app services should be unique, or the template will fail to deploy. The code for the <strong class="inline">parameters</strong> file is available in the <strong class="inline">CrossSubscriptionLinkedStorageAccount.parameters.json</strong> code file:</p>
+			<p class="snippet">{  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",  "contentVersion": "1.0.0.0",  "parameters": {    "hostingPlanNames": {      "value": [ "firstappservice", "secondappservice" ]  ...    "storageKey": {      "reference": {        "keyVault": { "id": "/subscriptions/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/resourceGroups/keyvaluedemo/providers/Microsoft.KeyVault/vaults/forsqlvault1" },        "secretName": "storageKey"      }    }  }}</p>
+			<p>Here's the command to deploy the template. The deployment script is available in the <strong class="inline">CrossSubscriptionLinkedStorageAccount.ps1</strong> file:</p>
+			<p class="snippet">New-AzureRmResourceGroupDeployment  -TemplateFile "c:\users\rites\source\repos\CrossSubscription\CrossSubscription\CrossSubscriptionLinkedStorageAccount.json" -ResourceGroupName &lt;&lt;replace with the base subscription resource group name &gt;&gt; -TemplateParameterFile "c:\users\rites\source\repos\CrossSubscription\CrossSubscription\CrossSubscriptionLinkedStorageAccount.parameters.json" -Verbose</p>
+			<p>Once the command gets executed, the resources defined within the ARM template should be reflected in the Azure portal.</p>
+			<p>Now that you know how to provision resources across resource groups and subscriptions, we will look at some of the solutions that can be created using ARM templates.</p>
+			<h2 id="_idParaDest-375"><a id="_idTextAnchor391"/>Virtual machine solutions using ARM templates</h2>
+			<p><strong class="bold">Infrastructure as a service</strong> (<strong class="bold">IaaS</strong>) resources and solutions can be deployed and configured using ARM templates. The major resources related to IaaS are virtual machine resources. </p>
+			<p>Creating a virtual machine resource is dependent on multiple other resources in Azure. Some of the resources that are needed to create a virtual machine include: </p>
+			<ul>
+				<li>A storage account or a managed disk for hosting the operating system and data disk</li>
+				<li>A virtual network along with subnets</li>
+				<li>A network interface card</li>
+			</ul>
+			<p>There are other resources that are optional, including: </p>
+			<ul>
+				<li>Azure Load Balancer</li>
+				<li>Network security groups</li>
+				<li>Public IP address</li>
+				<li>Route tables and more</li>
+			</ul>
+			<p>This section will deal with the process of creating virtual machines using ARM templates. As mentioned before in this section, we need to create a few resources, upon which the virtual machine resource will depend, prior to creating the virtual machine resource itself.</p>
+			<p>It is important to note that it is not always necessary to create the dependent resources. They should be created only if they do not exist already. If they already are available within the Azure subscription, the virtual machine resource can be provisioned by referencing those dependent resources.</p>
+			<p>The template is dependent on a few parameters that should be supplied to it at the time of executing the template. These variables relate to the location of the resources and some of their configuration values. These values are taken from parameters because they might change from one deployment to another, so using parameters helps keep the template generic.</p>
+			<p>The first step is to create a storage account, as shown in the following code:</p>
+			<p class="snippet">{</p>
+			<p class="snippet">      "type": "Microsoft.Storage/storageAccounts",      "name": "[variables('storageAccountName')]",      "apiVersion": "2019-04-01",      "location": "[parameters('location')]",      "sku": {        "name": "Standard_LRS"      },      "kind": "Storage",      "properties": {}      },</p>
+			<p>After creating a storage account, a virtual network should be defined within the ARM template. It is important to note that there is no dependency between a storage account and a virtual network. They can be created in parallel. The virtual network resource has a subnet as its sub-resource. These are both configured with their IP ranges; the subnet typically has a smaller range than the virtual network IP range:</p>
+			<p class="snippet">    {</p>
+			<p class="snippet">      "apiVersion": "2019-09-01",</p>
+			<p class="snippet">      "type": "Microsoft.Network/virtualNetworks",</p>
+			<p class="snippet">      "name": "[variables('virtualNetworkName')]",</p>
+			<p class="snippet">      "location": "[parameters('location')]",</p>
+			<p class="snippet">      "properties": {</p>
+			<p class="snippet">        "addressSpace": {</p>
+			<p class="snippet">          "addressPrefixes": [</p>
+			<p class="snippet">            "[variables('addressPrefix')]"</p>
+			<p class="snippet">          ]</p>
+			<p class="snippet">        },</p>
+			<p class="snippet">        "subnets": [</p>
+			<p class="snippet">          {</p>
+			<p class="snippet">            "name": "[variables('subnetName')]",</p>
+			<p class="snippet">            "properties": {</p>
+			<p class="snippet">              "addressPrefix": "[variables('subnetPrefix')]"</p>
+			<p class="snippet">            }</p>
+			<p class="snippet">          }</p>
+			<p class="snippet">        ]</p>
+			<p class="snippet">      }</p>
+			<p class="snippet">    },</p>
+			<p>If the virtual machine needs to be accessed over the public internet, a public IP address can also be created, as shown in the following code. Again, it is a completely independent resource and can be created in parallel with the storage account and virtual network:</p>
+			<p class="snippet">    {</p>
+			<p class="snippet">      "apiVersion": "2019-11-01",</p>
+			<p class="snippet">      "type": "Microsoft.Network/publicIPAddresses",</p>
+			<p class="snippet">      "name": "[variables('publicIPAddressName')]",</p>
+			<p class="snippet">      "location": "[parameters('location')]",</p>
+			<p class="snippet">      "properties": {</p>
+			<p class="snippet">        "publicIPAllocationMethod": "Dynamic",</p>
+			<p class="snippet">        "dnsSettings": {</p>
+			<p class="snippet">          "domainNameLabel": "[parameters('dnsLabelPrefix')]"</p>
+			<p class="snippet">        }</p>
+			<p class="snippet">      }</p>
+			<p class="snippet">    },</p>
+			<p>After creating the virtual network, storage account, and public IP address, a network interface can be created. A network interface is dependent on a virtual network and subnet resource. It can optionally also be associated with a public IP address as well. This is shown in the following code:</p>
+			<p class="snippet">{</p>
+			<p class="snippet">      "apiVersion": "2019-11-01",</p>
+			<p class="snippet">      "type": "Microsoft.Network/networkInterfaces",</p>
+			<p class="snippet">      "name": "[variables('nicName')]",</p>
+			<p class="snippet">      "location": "[parameters('location')]",</p>
+			<p class="snippet">      "dependsOn": [</p>
+			<p class="snippet">        "[resourceId('Microsoft.Network/publicIPAddresses/', variables('publicIPAddressName'))]",</p>
+			<p class="snippet">        "[resourceId('Microsoft.Network/virtualNetworks/', variables('virtualNetworkName'))]"</p>
+			<p class="snippet">      ],</p>
+			<p class="snippet">      "properties": {</p>
+			<p class="snippet">        "ipConfigurations": [</p>
+			<p class="snippet">          {</p>
+			<p class="snippet">            "name": "ipconfig1",</p>
+			<p class="snippet">            "properties": {</p>
+			<p class="snippet">              "privateIPAllocationMethod": "Dynamic",</p>
+			<p class="snippet">              "publicIPAddress": {</p>
+			<p class="snippet">"id": "[resourceId('Microsoft.Network/publicIPAddresses',variables('publicIPAddressName'))]"</p>
+			<p class="snippet">              },</p>
+			<p class="snippet">"subnet": {</p>
+			<p class="snippet">"id": "[variables('subnetRef')]"</p>
+			<p class="snippet">              }</p>
+			<p class="snippet">            }</p>
+			<p class="snippet">          }</p>
+			<p class="snippet">        ]</p>
+			<p class="snippet">      }</p>
+			<p class="snippet">    },</p>
+			<p>It is important to note that both the public IP address and the subnet are referred to by their unique Azure identifiers.</p>
+			<p>After the creation of the network interface, we have all the resources that are needed to create a virtual machine. The next code block shows how to create a virtual machine using an ARM template. It has a dependency on the network card and storage account. This indirectly creates dependencies on the virtual network, subnet, and the public IP address.</p>
+			<p>For the virtual machine, we configure the mandatory resource configuration, lincluding <strong class="inline">type</strong>, <strong class="inline">apiVersion</strong>, <strong class="inline">location</strong>, and <strong class="inline">name</strong>, along with any dependencies, as shown in the following code:</p>
+			<p class="snippet">{</p>
+			<p class="snippet">"apiVersion": "2019-07-01",</p>
+			<p class="snippet">"type": "Microsoft.Compute/virtualMachines",</p>
+			<p class="snippet">"name": "[variables('vmName')]",</p>
+			<p class="snippet">"location": "[resourceGroup().location]",</p>
+			<p class="snippet">"tags": {</p>
+			<p class="snippet">"displayName": "VirtualMachine"</p>
+			<p class="snippet">      },</p>
+			<p class="snippet">"dependsOn": [</p>
+			<p class="snippet">"[concat('Microsoft.Storage/storageAccounts/', variables('storageAccountName'))]",</p>
+			<p class="snippet">"[concat('Microsoft.Network/networkInterfaces/', variables('nicName'))]"</p>
+			<p class="snippet">      ],</p>
+			<p class="snippet">"properties": {</p>
+			<p class="snippet">"hardwareProfile": { "vmSize": "[variables('vmSize')]" },</p>
+			<p class="snippet">"availabilitySet": {</p>
+			<p class="snippet">"id": "[resourceId('Microsoft.Compute/availabilitySets', parameters('adAvailabilitySetName'))]"</p>
+			<p class="snippet">        },</p>
+			<p class="snippet">"osProfile": {</p>
+			<p class="snippet">"computerName": "[variables('vmName')]",</p>
+			<p class="snippet">"adminUsername": "[parameters('adminUsername')]",</p>
+			<p class="snippet">"adminPassword": "[parameters('adminPassword')]"</p>
+			<p class="snippet">        },</p>
+			<p class="snippet">"storageProfile": {</p>
+			<p class="snippet">"imageReference": {</p>
+			<p class="snippet">"publisher": "[variables('imagePublisher')]",</p>
+			<p class="snippet">"offer": "[variables('imageOffer')]",</p>
+			<p class="snippet">"sku": "[parameters('windowsOSVersion')]",</p>
+			<p class="snippet">"version": "latest"</p>
+			<p class="snippet">          },</p>
+			<p class="snippet">"osDisk": { "createOption": "FromImage" },</p>
+			<p class="snippet">"copy": [</p>
+			<p class="snippet">            {</p>
+			<p class="snippet">"name": "dataDisks",</p>
+			<p class="snippet">"count": 3,</p>
+			<p class="snippet">"input": {</p>
+			<p class="snippet">"lun": "[copyIndex('dataDisks')]",</p>
+			<p class="snippet">"createOption": "Empty",</p>
+			<p class="snippet">"diskSizeGB": "1023",</p>
+			<p class="snippet">"name": "[concat(variables('vmName'), '-datadisk', copyIndex('dataDisks'))]"</p>
+			<p class="snippet">              }</p>
+			<p class="snippet">            }</p>
+			<p class="snippet">          ]</p>
+			<p class="snippet">        },</p>
+			<p class="snippet">"networkProfile": {</p>
+			<p class="snippet">"networkInterfaces": [</p>
+			<p class="snippet">            {</p>
+			<p class="snippet">"id": "[resourceId('Microsoft.Network/networkInterfaces', variables('nicName'))]"</p>
+			<p class="snippet">            }</p>
+			<p class="snippet">          ]</p>
+			<p class="snippet">        }</p>
+			<p class="snippet">      }</p>
+			<p class="snippet">    }</p>
+			<p>In the preceding code, the virtual machine is configured with:</p>
+			<ul>
+				<li>A hardware profile—the size of the virtual machine.</li>
+				<li>An OS profile—the name and credentials for logging in to the virtual machine.</li>
+				<li>A storage profile—the storage account on which to store the <strong class="bold">Virtual Hard Disk</strong> (<strong class="bold">VHD</strong>) file for the virtual machine, including data disks.</li>
+				<li>A network profile—the reference to the network interface card.</li>
+			</ul>
+			<p>The next section will show an example of using ARM templates to provision a Platform as a Service solution.</p>
+			<h2 id="_idParaDest-376"><a id="_idTextAnchor392"/>PaaS solutions using ARM templates</h2>
+			<p><strong class="bold">Platform as a service</strong> (<strong class="bold">PaaS</strong>) resources and solutions can be deployed using ARM templates. One of the main resources related to PaaS is Azure Web Apps, and in this section, we will focus on creating web apps on Azure using ARM templates.</p>
+			<p>The template expects a few parameters to be supplied while executing it. The parameters needed are the SKU for the App Service plan, the Azure region hosting the resources, and the SKU capacity of the App Service plan.</p>
+			<p>There are a couple of variables declared within the template to make it generic and maintainable. The first one, <strong class="inline">hostingPlanName</strong>, is for the App Service plan name, and the next one, <strong class="inline">webSiteName</strong>, is for the app service itself. </p>
+			<p>There are at minimum two resources that should be declared and provisioned for a working web app in Azure. They are the following:</p>
+			<ul>
+				<li>The Azure App Service plan</li>
+				<li>Azure App Service</li>
+			</ul>
+			<p>The first step in creating a web app on Azure is defining the configuration for an Azure App Service plan. The following code defines a new App Service plan. It is important to note that the resource type is <strong class="inline">Microsoft.Web/serverfarms</strong>. Most of the configuration values of the plan, such as <strong class="inline">location</strong>, <strong class="inline">name</strong>, and <strong class="inline">capacity</strong>, come as parameters to the ARM template:</p>
+			<p class="snippet">  {</p>
+			<p class="snippet">"apiVersion": "2019-08-01",</p>
+			<p class="snippet">"name": "[variables('hostingPlanName')]",</p>
+			<p class="snippet">"type": "Microsoft.Web/serverfarms",</p>
+			<p class="snippet">"location": "[parameters('location')]",</p>
+			<p class="snippet">"tags": {</p>
+			<p class="snippet">"displayName": "HostingPlan"</p>
+			<p class="snippet">      },</p>
+			<p class="snippet">"sku": {</p>
+			<p class="snippet">"name": "[parameters('skuName')]",</p>
+			<p class="snippet">"capacity": "[parameters('skuCapacity')]"</p>
+			<p class="snippet">      },</p>
+			<p class="snippet">"properties": {</p>
+			<p class="snippet">"name": "[variables('hostingPlanName')]"</p>
+			<p class="snippet">      }</p>
+			<p class="snippet">    },</p>
+			<p>The next resource that should be provisioned after a plan is the app service itself. It is important that a dependency between both these resources is created such that a plan is already created before the app service itself is created:</p>
+			<p class="snippet">  {</p>
+			<p class="snippet">"apiVersion": "2019-08-01",</p>
+			<p class="snippet">"name": "[variables('webSiteName')]",</p>
+			<p class="snippet">"type": "Microsoft.Web/sites",</p>
+			<p class="snippet">"location": "[parameters('location')]",</p>
+			<p class="snippet">"dependsOn": [</p>
+			<p class="snippet">"[variables('hostingPlanName')]"</p>
+			<p class="snippet">      ],</p>
+			<p class="snippet">"properties": {</p>
+			<p class="snippet">"name": "[variables('webSiteName')]",</p>
+			<p class="snippet">"serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('hostingPlanName'))]"</p>
+			<p class="snippet">      },</p>
+			<p class="snippet">"resources": [</p>
+			<p class="snippet">        {</p>
+			<p class="snippet">"apiVersion": "2019-08-01",</p>
+			<p class="snippet">"type": "config",</p>
+			<p class="snippet">"name": "connectionstrings",</p>
+			<p class="snippet">"dependsOn": [</p>
+			<p class="snippet">"[variables('webSiteName')]"</p>
+			<p class="snippet">          ],</p>
+			<p class="snippet">"properties": {</p>
+			<p class="snippet">"DefaultConnection": {</p>
+			<p class="snippet">"value": "[concat( 'sql connection string here')]",</p>
+			<p class="snippet">"type": "SQLAzure"</p>
+			<p class="snippet">            }</p>
+			<p class="snippet">          }</p>
+			<p class="snippet">        }</p>
+			<p class="snippet">      ]</p>
+			<p class="snippet">    }</p>
+			<p>In the preceding code, a resource of type <strong class="inline">Microsoft.Web/sites</strong> is defined and it has a dependency on the plan. It is also using the App Service plan and is associated with it using <strong class="inline">serverFarmId</strong>. It further declares a connection string that can be used for connecting to SQL Server.</p>
+			<p>This section showed an example of creating a PaaS solution on Azure using an ARM template. Similarly, other PaaS solutions, including Azure Function apps, Kubernetes Service, and Service Fabric, among many others, can be created using ARM templates.</p>
+			<h2 id="_idParaDest-377"><a id="_idTextAnchor393"/>Data-related solutions using ARM templates</h2>
+			<p>There are many resources in Azure related to data management and storage. Some of the important data-related resources include Azure SQL, Azure Cosmos DB, Azure Data Lake Storage, Data Lake Analytics, Azure Synapsis, Databricks, and Data Factory.</p>
+			<p>All of these resources can be provisioned and configured using an ARM template. In this section, we will create an ARM template to provision a Data Factory resource responsible for migrating data from Azure Blob storage to Azure SQL Database using stored procedures. </p>
+			<p>You will find the parameters file along with the template. These values might change from one deployment to another; we'll keep the template generic so that you can customize and use it easily with other deployments as well.</p>
+			<p>The entire code for this section can be found at <a href="https://github.com/Azure/azure-quickstart-templates/blob/master/101-data-factory-blob-to-sql-copy-stored-proc">https://github.com/Azure/azure-quickstart-templates/blob/master/101-data-factory-blob-to-sql-copy-stored-proc</a>.</p>
+			<p>The first step is to declare the configuration for the data factory in the ARM template, as shown in the following code: </p>
+			<p class="snippet">"name": "[variables('dataFactoryName')]",</p>
+			<p class="snippet">"apiVersion": "2018-06-01",</p>
+			<p class="snippet">"type": "Microsoft.DataFactory/datafactories",</p>
+			<p class="snippet">"location": "[parameters('location')]",</p>
+			<p>Each data factory has multiple linked services. These linked services act as connectors to get data into the data factory, or the data factory can send data to them. The following code listing creates a linked service for the Azure storage account from which the blobs will be read into the data factory, and another linked service for Azure SQL Database:</p>
+			<p class="snippet">  {</p>
+			<p class="snippet">"type": "linkedservices",</p>
+			<p class="snippet">"name": "[variables('storageLinkedServiceName')]",</p>
+			<p class="snippet">"apiVersion": "2018-06-01",</p>
+			<p class="snippet">"dependsOn": [</p>
+			<p class="snippet">"[variables('dataFactoryName')]"</p>
+			<p class="snippet">          ],</p>
+			<p class="snippet">"properties": {</p>
+			<p class="snippet">"type": "AzureStorage",</p>
+			<p class="snippet">"description": "Azure Storage Linked Service",</p>
+			<p class="snippet">"typeProperties": {</p>
+			<p class="snippet">"connectionString":</p>
+			<p class="snippet">"[concat('DefaultEndpointsProtocol=https; AccountName=',parameters('storageAccountName'),'; AccountKey=',parameters('storageAccountKey'))]"</p>
+			<p class="snippet">            }</p>
+			<p class="snippet">          }</p>
+			<p class="snippet">        },</p>
+			<p class="snippet">        {</p>
+			<p class="snippet">"type": "linkedservices",</p>
+			<p class="snippet">"name": "[variables('sqlLinkedServiceName')]",</p>
+			<p class="snippet">"apiVersion": "2018-06-01",</p>
+			<p class="snippet">"dependsOn": [</p>
+			<p class="snippet">"[variables('dataFactoryName')]"</p>
+			<p class="snippet">          ],</p>
+			<p class="snippet">"properties": {</p>
+			<p class="snippet">"type": "AzureSqlDatabase",</p>
+			<p class="snippet">"description": "Azure SQL linked service",</p>
+			<p class="snippet">"typeProperties": {</p>
+			<p class="snippet">"connectionString": "[concat('Data Source=tcp:', parameters('sqlServerName'), '.database.windows.net,1433;Initial Catalog=', parameters('sqlDatabaseName'), ';Integrated Security=False;User ID=', parameters('sqlUserId'), ';Password=', parameters('sqlPassword'), ';Connect Timeout=30;Encrypt=True')]"</p>
+			<p class="snippet">            }</p>
+			<p class="snippet">          }</p>
+			<p class="snippet">        },</p>
+			<p>After linked services, it's time to define the datasets for Azure Data Factory. Datasets help in identifying the data that should be read and placed in the data factory. They could also represent the temporary data that needs to be stored by the Data Factory during the transformation, or even the destination location where the data will be written. The next code block creates three datasets—one for each of the aspects of datasets that were just mentioned.</p>
+			<p>The read dataset is shown in the following code block:</p>
+			<p class="snippet"> {</p>
+			<p class="snippet">"type": "datasets",</p>
+			<p class="snippet">"name": "[variables('storageDataset')]",</p>
+			<p class="snippet">"dependsOn": [</p>
+			<p class="snippet">"[variables('dataFactoryName')]",</p>
+			<p class="snippet">"[variables('storageLinkedServiceName')]"</p>
+			<p class="snippet">          ],</p>
+			<p class="snippet">"apiVersion": "2018-06-01",</p>
+			<p class="snippet">"properties": {</p>
+			<p class="snippet">"type": "AzureBlob",</p>
+			<p class="snippet">"linkedServiceName": "[variables('storageLinkedServiceName')]",</p>
+			<p class="snippet">"typeProperties": {</p>
+			<p class="snippet">"folderPath": "[concat(parameters('sourceBlobContainer'), '/')]",</p>
+			<p class="snippet">"fileName": "[parameters('sourceBlobName')]",</p>
+			<p class="snippet">"format": {</p>
+			<p class="snippet">"type": "TextFormat"</p>
+			<p class="snippet">              }</p>
+			<p class="snippet">            },</p>
+			<p class="snippet">"availability": {</p>
+			<p class="snippet">"frequency": "Hour",</p>
+			<p class="snippet">"interval": 1</p>
+			<p class="snippet">            },</p>
+			<p class="snippet">"external": true</p>
+			<p class="snippet">          }</p>
+			<p class="snippet">        },</p>
+			<p>The intermediate dataset is shown in the following lines of code:</p>
+			<p class="snippet"> {</p>
+			<p class="snippet">"type": "datasets",</p>
+			<p class="snippet">"name": "[variables('intermediateDataset')]",</p>
+			<p class="snippet">"dependsOn": [</p>
+			<p class="snippet">"[variables('dataFactoryName')]",</p>
+			<p class="snippet">"[variables('sqlLinkedServiceName')]"</p>
+			<p class="snippet">          ],</p>
+			<p class="snippet">"apiVersion": "2018-06-01",</p>
+			<p class="snippet">"properties": {</p>
+			<p class="snippet">"type": "AzureSqlTable",</p>
+			<p class="snippet">"linkedServiceName": "[variables('sqlLinkedServiceName')]",</p>
+			<p class="snippet">"typeProperties": {</p>
+			<p class="snippet">"tableName": "[variables('intermediateDataset')]"</p>
+			<p class="snippet">            },</p>
+			<p class="snippet">"availability": {</p>
+			<p class="snippet">"frequency": "Hour",</p>
+			<p class="snippet">"interval": 1</p>
+			<p class="snippet">            }</p>
+			<p class="snippet">          }</p>
+			<p class="snippet">        },</p>
+			<p>Finally, the dataset used for the destination is shown here:</p>
+			<p class="snippet"> {</p>
+			<p class="snippet">"type": "datasets",</p>
+			<p class="snippet">"name": "[variables('sqlDataset')]",</p>
+			<p class="snippet">"dependsOn": [</p>
+			<p class="snippet">"[variables('dataFactoryName')]",</p>
+			<p class="snippet">"[variables('sqlLinkedServiceName')]"</p>
+			<p class="snippet">          ],</p>
+			<p class="snippet">"apiVersion": "2018-06-01",</p>
+			<p class="snippet">"properties": {</p>
+			<p class="snippet">"type": "AzureSqlTable",</p>
+			<p class="snippet">"linkedServiceName": "[variables('sqlLinkedServiceName')]",</p>
+			<p class="snippet">"typeProperties": {</p>
+			<p class="snippet">"tableName": "[parameters('sqlTargetTable')]"</p>
+			<p class="snippet">            },</p>
+			<p class="snippet">"availability": {</p>
+			<p class="snippet">"frequency": "Hour",</p>
+			<p class="snippet">"interval": 1</p>
+			<p class="snippet">            }</p>
+			<p class="snippet">          }</p>
+			<p class="snippet">        },</p>
+			<p>Finally, we need a pipeline in Data Factory that can bring together all the datasets and linked services, and help in creating extract-transform-load data solutions. A pipeline consists of multiple activities, each fulfilling a particular task. All these activities can be defined within the ARM template, as you'll see now. The first activity copies the blobs in the storage account to an intermediate SQL Server, as shown in the following code:</p>
+			<p class="snippet">{</p>
+			<p class="snippet">"type": "dataPipelines",</p>
+			<p class="snippet">"name": "[variables('pipelineName')]",</p>
+			<p class="snippet">"dependsOn": [</p>
+			<p class="snippet">"[variables('dataFactoryName')]",</p>
+			<p class="snippet">"[variables('storageLinkedServiceName')]",</p>
+			<p class="snippet">"[variables('sqlLinkedServiceName')]",</p>
+			<p class="snippet">"[variables('storageDataset')]",</p>
+			<p class="snippet">"[variables('sqlDataset')]"</p>
+			<p class="snippet">          ],</p>
+			<p class="snippet">"apiVersion": "2018-06-01",</p>
+			<p class="snippet">"properties": {</p>
+			<p class="snippet">"description": "Copies data from Azure Blob to Sql DB while invoking stored procedure",</p>
+			<p class="snippet">"activities": [</p>
+			<p class="snippet">              {</p>
+			<p class="snippet">"name": "BlobtoSqlTableCopyActivity",</p>
+			<p class="snippet">"type": "Copy",</p>
+			<p class="snippet">"typeProperties": {</p>
+			<p class="snippet">"source": {</p>
+			<p class="snippet">"type": "BlobSource"</p>
+			<p class="snippet">                  },</p>
+			<p class="snippet">"sink": {</p>
+			<p class="snippet">"type": "SqlSink",</p>
+			<p class="snippet">"writeBatchSize": 0,</p>
+			<p class="snippet">"writeBatchTimeout": "00:00:00"</p>
+			<p class="snippet">                  }</p>
+			<p class="snippet">                },</p>
+			<p class="snippet">"inputs": [</p>
+			<p class="snippet">                  {</p>
+			<p class="snippet">"name": "[variables('storageDataset')]"</p>
+			<p class="snippet">                  }</p>
+			<p class="snippet">                ],</p>
+			<p class="snippet">"outputs": [</p>
+			<p class="snippet">                  {</p>
+			<p class="snippet">"name": "[variables('intermediateDataset')]"</p>
+			<p class="snippet">                  }</p>
+			<p class="snippet">                ]</p>
+			<p class="snippet">              },</p>
+			<p class="snippet">              {</p>
+			<p class="snippet">"name": "SqlTabletoSqlDbSprocActivity",</p>
+			<p class="snippet">"type": "SqlServerStoredProcedure",</p>
+			<p class="snippet">"inputs": [</p>
+			<p class="snippet">                  {</p>
+			<p class="snippet">"name": "[variables('intermediateDataset')]"</p>
+			<p class="snippet">                  }</p>
+			<p class="snippet">                ],</p>
+			<p class="snippet">"outputs": [</p>
+			<p class="snippet">                  {</p>
+			<p class="snippet">"name": "[variables('sqlDataset')]"</p>
+			<p class="snippet">                  }</p>
+			<p class="snippet">                ],</p>
+			<p class="snippet">"typeProperties": {</p>
+			<p class="snippet">"storedProcedureName": "[parameters('sqlWriterStoredProcedureName')]"</p>
+			<p class="snippet">                },</p>
+			<p class="snippet">"scheduler": {</p>
+			<p class="snippet">"frequency": "Hour",</p>
+			<p class="snippet">"interval": 1</p>
+			<p class="snippet">                },</p>
+			<p class="snippet">"policy": {</p>
+			<p class="snippet">"timeout": "02:00:00",</p>
+			<p class="snippet">"concurrency": 1,</p>
+			<p class="snippet">"executionPriorityOrder": "NewestFirst",</p>
+			<p class="snippet">"retry": 3</p>
+			<p class="snippet">                }</p>
+			<p class="snippet">              }</p>
+			<p class="snippet">            ],</p>
+			<p class="snippet">"start": "2020-10-01T00:00:00Z",</p>
+			<p class="snippet">"end": "2020-10-02T00:00:00Z"</p>
+			<p class="snippet">          }</p>
+			<p class="snippet">        }</p>
+			<p class="snippet">      ]</p>
+			<p class="snippet">    }</p>
+			<p>The last activity copies data from the intermediate dataset to the final destination dataset. </p>
+			<p>There are also start and end times during which the pipeline should be running.</p>
+			<p>This section focused on creating an ARM template for a data-related solution. In the next section, we will deal with ARM templates for creating datacenters on Azure with Active Directory and DNS.</p>
+			<h2 id="_idParaDest-378"><a id="_idTextAnchor394"/>Creating an IaaS solution on Azure with Active Directory and DNS</h2>
+			<p>Creating an IaaS solution on Azure means creating multiple virtual machines, promoting a virtual machine to be a domain controller, and making other virtual machines join the domain controller as domain-joined nodes. It also means installing a DNS server for name resolution and, optionally, a jump server for accessing these virtual machines securely.</p>
+			<p>The template creates an Active Directory forest on the virtual machines. It creates multiple virtual machines based on the parameters supplied. </p>
+			<p>The template creates:</p>
+			<ul>
+				<li>A couple of availability sets</li>
+				<li>A virtual network</li>
+				<li>Network security groups to define the allowed and disallowed ports and IP addresses</li>
+			</ul>
+			<p>The template then does the following:</p>
+			<ul>
+				<li>Provisions one or two domains. The root domain is created by default; the child domain is optional</li>
+				<li>Provisions two domain controllers per domain</li>
+				<li>Executes the desired state configuration scripts to promote a virtual machine to be a domain controller</li>
+			</ul>
+			<p>We can create multiple virtual machines using the approach discussed in the <em class="italics">Virtual machine solutions using ARM templates</em> section. However, these virtual machines should be part of an availability set if they need to be highly available. It is to be noted that availability sets provide 99.95% availability for applications deployed on these virtual machines, while Availability Zones provide 99.99% availability.</p>
+			<p>An availability set can be configured as shown in the following code:</p>
+			<p class="snippet">  {</p>
+			<p class="snippet">"name": "[variables('adAvailabilitySetNameRoot')]",</p>
+			<p class="snippet">"type": "Microsoft.Compute/availabilitySets",</p>
+			<p class="snippet">"apiVersion": "2019-07-01",</p>
+			<p class="snippet">"location": "[parameters('location')]",</p>
+			<p class="snippet">"sku": {</p>
+			<p class="snippet">"name": "Aligned"</p>
+			<p class="snippet">      },</p>
+			<p class="snippet">"properties": {</p>
+			<p class="snippet">"PlatformUpdateDomainCount": 3,</p>
+			<p class="snippet">"PlatformFaultDomainCount": 2</p>
+			<p class="snippet">      }</p>
+			<p class="snippet">    },</p>
+			<p>Once the availability set is created, an additional profile should be added to the virtual machine configuration to associate the virtual machine with the availability set, as shown in the following code:</p>
+			<p class="snippet">"availabilitySet" : {</p>
+			<p class="snippet">"id": "[resourceId('Microsoft.Compute/availabilitySets', parameters('adAvailabilitySetName'))]"</p>
+			<p class="snippet">      }</p>
+			<p>You should note that availability sets are mandatory in order to use load balancers with virtual machines.</p>
+			<p>Another change needed in the virtual network configuration is adding DNS information, as shown in the following code:</p>
+			<p class="snippet">  {</p>
+			<p class="snippet">"name": "[parameters('virtualNetworkName')]",</p>
+			<p class="snippet">"type": "Microsoft.Network/virtualNetworks",</p>
+			<p class="snippet">"location": "[parameters('location')]",</p>
+			<p class="snippet">"apiVersion": "2019-09-01",</p>
+			<p class="snippet">"properties": {</p>
+			<p class="snippet">"addressSpace": {</p>
+			<p class="snippet">"addressPrefixes": [</p>
+			<p class="snippet">"[parameters('virtualNetworkAddressRange')]"</p>
+			<p class="snippet">          ]</p>
+			<p class="snippet">        },</p>
+			<p class="snippet">"dhcpOptions": {</p>
+			<p class="snippet">"dnsServers": "[parameters('DNSServerAddress')]"</p>
+			<p class="snippet">        },</p>
+			<p class="snippet">"subnets": [</p>
+			<p class="snippet">          {</p>
+			<p class="snippet">"name": "[parameters('subnetName')]",</p>
+			<p class="snippet">"properties": {</p>
+			<p class="snippet">"addressPrefix": "[parameters('subnetRange')]"</p>
+			<p class="snippet">            }</p>
+			<p class="snippet">          }</p>
+			<p class="snippet">        ]</p>
+			<p class="snippet">      }</p>
+			<p class="snippet">    },</p>
+			<p>Finally, to convert a virtual machine into Active Directory, a PowerShell script or <strong class="bold">desired state configuration</strong> (<strong class="bold">DSC</strong>) script should be executed on the virtual machine. Even for joining other virtual machines to the domain, another set of scripts should be executed on those virtual machines.</p>
+			<p>Scripts can be executed on the virtual machine using the <strong class="inline">CustomScriptExtension</strong> resource, as shown in the following code:</p>
+			<p class="snippet"> {</p>
+			<p class="snippet">"type": "Microsoft.Compute/virtualMachines/extensions",</p>
+			<p class="snippet">"name": "[concat(parameters('adNextDCVMName'),'/PrepareNextDC')]",</p>
+			<p class="snippet">"apiVersion": "2018-06-01",</p>
+			<p class="snippet">"location": "[parameters('location')]",</p>
+			<p class="snippet">"properties": {</p>
+			<p class="snippet">"publisher": "Microsoft.Powershell",</p>
+			<p class="snippet">"type": "DSC",</p>
+			<p class="snippet">"typeHandlerVersion": "2.21",</p>
+			<p class="snippet">"autoUpgradeMinorVersion": true,</p>
+			<p class="snippet">"settings": {</p>
+			<p class="snippet">"modulesURL": "[parameters('adNextDCConfigurationModulesURL')]",</p>
+			<p class="snippet">"configurationFunction": "[parameters('adNextDCConfigurationFunction')]",</p>
+			<p class="snippet">"properties": {</p>
+			<p class="snippet">"domainName": "[parameters('domainName')]",</p>
+			<p class="snippet">"DNSServer": "[parameters('DNSServer')]",</p>
+			<p class="snippet">"DNSForwarder": "[parameters('DNSServer')]",</p>
+			<p class="snippet">"adminCreds": {</p>
+			<p class="snippet">"userName": "[parameters('adminUserName')]",</p>
+			<p class="snippet">"password": "privateSettingsRef:adminPassword"</p>
+			<p class="snippet">            }</p>
+			<p class="snippet">          }</p>
+			<p class="snippet">        },</p>
+			<p class="snippet">"protectedSettings": {</p>
+			<p class="snippet">"items": {</p>
+			<p class="snippet">"adminPassword": "[parameters('adminPassword')]"</p>
+			<p class="snippet">          }</p>
+			<p class="snippet">        }</p>
+			<p class="snippet">      }</p>
+			<p class="snippet">    },</p>
+			<p>In this section, we created a datacenter on Azure using the IaaS paradigm. We created multiple virtual machines and converted one of them into domain controller, installed DNS, and assigned a domain to it. Now, other virtual machines on the network can be joined to this domain and they can form a complete datacenter on Azure.</p>
+			<p>Please refer to <a href="https://github.com/Azure/azure-quickstart-templates/tree/master/301-create-ad-forest-with-subdomain">https://github.com/Azure/azure-quickstart-templates/tree/master/301-create-ad-forest-with-subdomain</a> for the complete code listing for creating a datacenter on Azure.</p>
+			<h2 id="_idParaDest-379"><a id="_idTextAnchor395"/>Summary</h2>
+			<p>The option to deploy resources using a single deployment to multiple subscriptions, resource groups, and regions provides enhanced abilities to deploy, reduce bugs in deployment, and access advanced benefits, such as creating disaster recovery sites and achieving high availability. </p>
+			<p>In this chapter, you saw how to create a few different kinds of solution using ARM templates. This included creating an infrastructure-based solution comprising virtual machines; a platform-based solution using Azure App Service; a data-related solution using the Data Factory resource (including its configuration); and a datacenter on Azure with virtual machines, Active Directory, and DNS installed on top of the virtual machine.</p>
+			<p>In the next chapter, we will focus on creating modular ARM templates, an essential skill for architects who really want to take their ARM templates to the next level. The chapter will also show you various ways to design ARM templates and create reusable and modular ARM templates.</p>
+		</div>
+	</body></html>

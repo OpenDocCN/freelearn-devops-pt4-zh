@@ -199,11 +199,13 @@
   id: totrans-30
   prefs: []
   type: TYPE_NORMAL
+  zh: 当规则中评估的 PromQL 表达式产生非空结果时，警报规则会触发。它们是 Prometheus 中进行时间序列警报的机制。警报规则触发时也会生成新的时间序列，但不会将评估结果作为样本；相反，它们会创建一个`ALERTS`度量，其中包含警报名称和状态作为标签，以及配置中定义的任何其他标签。下一节将进一步分析这一点。
 - en: Using recording rules
   id: totrans-31
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 使用记录规则
 - en: Rules are defined separately from the main Prometheus configuration file, and
     are included by the latter through the `rule_files` top-level configuration key.
     They are evaluated periodically, and that interval can be defined globally with
@@ -211,10 +213,12 @@
   id: totrans-32
   prefs: []
   type: TYPE_NORMAL
+  zh: 规则与主 Prometheus 配置文件分开定义，并通过`rule_files`顶级配置键包含在主配置文件中。它们会定期评估，这个间隔可以通过`global`中的`evaluation_interval`全局定义（默认为一分钟）。
 - en: 'We can see this by looking at the configuration provided with the test environment:'
   id: totrans-33
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们可以通过查看测试环境中提供的配置来看到这一点：
 - en: '[PRE6]'
   id: totrans-34
   prefs: []
@@ -234,11 +238,17 @@
   id: totrans-35
   prefs: []
   type: TYPE_NORMAL
+  zh: '`rule_files`接受一个路径列表，这些路径可以是相对于主 Prometheus 配置的相对路径或绝对路径。此外，可以使用通配符匹配文件名（而不是目录）；例如，`/etc/prometheus/rules/*.yml`。规则文件中的更改不会被
+    Prometheus 自动检测到，因此需要重新加载（如[第 5 章](12e775c2-bee9-4ebe-ad73-2f9313eeeeee.xhtml)《运行
+    Prometheus 服务器》中所述，*Running a Prometheus Server*）。如果规则文件中发现错误，Prometheus 将无法重新加载，并将继续使用先前的配置运行。然而，如果服务器被重启，它将无法启动。为了确保这种情况不发生，可以使用`promtool`提前测试错误（如[第
+    8 章](19357d8c-dfcf-4497-ae80-4761f6633d14.xhtml)《故障排除与验证》中所述，*Troubleshooting
+    and Validation*）– 在使用自动化部署规则时，强烈建议这样做。'
 - en: 'Just like the `prometheus.yml` configuration file, the `rules` files are also
     defined in are YAML format. The actual format is very easy to understand:'
   id: totrans-36
   prefs: []
   type: TYPE_NORMAL
+  zh: 就像`prometheus.yml`配置文件一样，`rules`文件也是以 YAML 格式定义的。实际格式非常容易理解：
 - en: '[PRE7]'
   id: totrans-37
   prefs: []
@@ -258,10 +268,13 @@
   id: totrans-38
   prefs: []
   type: TYPE_NORMAL
+  zh: 每个文件在`groups`键下定义一个或多个规则组。每个组都有一个`name`，一个可选的评估`interval`（默认为在主 Prometheus 配置文件中定义的全局评估间隔），以及一个`rules`列表。每个规则指示
+    Prometheus 将评估在`expr`中定义的 PromQL 表达式的结果记录到指定的度量名称中，并可以通过在`labels`中设置它们来选择性地添加或覆盖存储结果之前设置的系列标签。每个组中的规则按声明的顺序依次评估，这意味着由某个规则生成的时间序列可以安全地在同一组内的后续规则中使用。由规则生成的样本将具有与规则组评估时间相对应的时间戳。下图说明了前述过程：
 - en: '![](img/74b724c0-a869-455c-8a0d-1382e5fab039.png)'
   id: totrans-39
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/74b724c0-a869-455c-8a0d-1382e5fab039.png)'
 - en: 'Figure 9.1: The Rule Manager is the Prometheus internal subsystem responsible
     for the periodic evaluation of rules according to their group''s evaluation interval,
     as well as managing the alerting life cycle'
@@ -445,11 +458,13 @@
   id: totrans-63
   prefs: []
   type: TYPE_NORMAL
+  zh: 到目前为止，我们已经讨论了PromQL如何在查询收集到的数据时发挥重要作用，但当我们需要一个表达式持续评估，以便在满足定义的条件时触发事件时，我们便进入了告警部分。我们在[第1章](4214ddff-8289-4dc6-b0ef-240510a22192.xhtml)中解释了告警是监控组件之一，*监控基础知识*。需要明确的是，Prometheus并不负责发送电子邮件、Slack或其他形式的通知；这通常是另一个服务的责任。这个服务通常是Alertmanager，我们将在[第11章](db658650-14d2-4a7e-9ae0-1c003e63109c.xhtml)中讨论，*理解与扩展Alertmanager*。Prometheus利用告警规则的强大功能来推送告警，接下来我们将讨论这个话题。
 - en: What is an alerting rule?
   id: totrans-64
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 什么是告警规则？
 - en: An alerting rule is much like a recording rule with some additional definitions;
     they can even share the same rule group without any issues. The biggest difference
     is that, when firing, they are sent to an external endpoint via an HTTP POST with
@@ -459,6 +474,7 @@
   id: totrans-65
   prefs: []
   type: TYPE_NORMAL
+  zh: 告警规则就像是记录规则，只是有一些额外的定义；它们甚至可以共享同一个规则组而不产生任何问题。最大的区别是，当触发时，它们会通过HTTP POST和JSON有效负载发送到外部端点，进行进一步处理。扩展一下“激活”这个术语，在这个上下文中，我们指的是当前状态与期望状态不同的情况，简而言之，就是当表达式返回一个或多个样本时。
 - en: Alerting rules, such as recording rules, rely on PromQL expressions that are
     evaluated on a defined interval. This interval can be a globally configured one
     or can be local to the specific rule group. In each of the interval iterations,
@@ -467,17 +483,20 @@
   id: totrans-66
   prefs: []
   type: TYPE_NORMAL
+  zh: 告警规则，例如记录规则，依赖于在定义的间隔内评估的PromQL表达式。这个间隔可以是全局配置的，也可以是特定规则组的本地配置。在每次间隔迭代中，触发的告警会被验证，以确保它们仍然有效；如果不再有效，则认为它们已被解决。
 - en: For every sample returned by our expression, it will trigger an alert. This
     is important to keep in mind, because a relaxed PromQL expression can generate
     a deluge of alerts, so keep them as aggregated as possible.
   id: totrans-67
   prefs: []
   type: TYPE_NORMAL
+  zh: 对于每个由我们的表达式返回的样本，它都会触发一个告警。记住这一点非常重要，因为宽松的PromQL表达式可能会生成大量的告警，所以尽量将它们聚合在一起。
 - en: Configuring alerting rules
   id: totrans-68
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 配置告警规则
 - en: To demonstrate how to create and understand alerting rules, we'll guide you
     through the entire process. This will touch not only on the main Prometheus configuration
     file, but also on rule files and how the web interface of the server behaves with
@@ -485,16 +504,19 @@
   id: totrans-69
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了演示如何创建和理解告警规则，我们将引导您完成整个过程。这不仅涉及到主要的Prometheus配置文件，还涉及规则文件以及服务器的Web界面在处理告警时的表现。
 - en: Prometheus server configuration file
   id: totrans-70
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: Prometheus服务器配置文件
 - en: 'Inside this chapter''s test environment, we can find the following Prometheus
     configuration:'
   id: totrans-71
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本章的测试环境中，我们可以找到以下Prometheus配置：
 - en: '[PRE12]'
   id: totrans-72
   prefs: []
@@ -504,6 +526,7 @@
   id: totrans-73
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这个配置中，有三个组件需要注意：
 - en: '`evaluation_interval`: This is responsible for defining the global evaluation
     interval for recording and alerting rules, which can be overridden at the rule
     group level using the `interval` keyword.'
@@ -511,18 +534,21 @@
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`evaluation_interval`：它负责定义用于记录和告警规则的全局评估间隔，可以在规则组层级通过使用`interval`关键字进行覆盖。'
 - en: '`rule_files`: This is the file location where Prometheus can read the configured
     recording and/or alerting rules.'
   id: totrans-75
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`rule_files`：这是Prometheus读取已配置的记录和/或告警规则的文件位置。'
 - en: '`alerting`: This is the endpoint(s) where Prometheus sends alerts for further
     processing.'
   id: totrans-76
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`alerting`：这是Prometheus发送告警进行进一步处理的端点。'
 - en: In the alerting section, we've configured `“prometheus:5001”`. Behind this endpoint,
     there is nothing more than a small service, called **alertdump**, that is listening
     on port `5001` for the HTTP POST requests and is simply dumping their payload
@@ -531,17 +557,21 @@
   id: totrans-77
   prefs: []
   type: TYPE_NORMAL
+  zh: 在告警部分，我们配置了 `“prometheus:5001”`。在这个端点背后，实际上只是一个名为 **alertdump** 的小服务，它在 `5001`
+    端口上监听 HTTP POST 请求，并简单地将其有效负载转储到日志文件中。这将有助于分析 Prometheus 在告警触发时发送的内容。
 - en: Rule file configuration
   id: totrans-78
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 规则文件配置
 - en: 'Previously, we took a look at the Prometheus configuration file; we''ll now
     move onto the provided alerting rules example, which we can see in the following
     snippet:'
   id: totrans-79
   prefs: []
   type: TYPE_NORMAL
+  zh: 之前，我们查看了 Prometheus 配置文件；接下来，我们将转到提供的告警规则示例，以下是相应代码片段：
 - en: '[PRE13]'
   id: totrans-80
   prefs: []
@@ -553,35 +583,44 @@
   id: totrans-81
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们更详细地查看 `NodeExporterDown` 告警定义。我们可以将配置分为五个不同的部分：`alert`、`expr`、`for`、`labels`
+    和 `annotations`。接下来，我们将在下表中逐一介绍这些部分：
 - en: '| **Section** | **Description** | **Mandatory** |'
   id: totrans-82
   prefs: []
   type: TYPE_TB
+  zh: '| **部分** | **描述** | **是否必需** |'
 - en: '| `alert` | The alert name to use | Yes |'
   id: totrans-83
   prefs: []
   type: TYPE_TB
+  zh: '| `alert` | 使用的告警名称 | 是 |'
 - en: '| `expr` | The PromQL expression to evaluate | Yes |'
   id: totrans-84
   prefs: []
   type: TYPE_TB
+  zh: '| `expr` | 要评估的 PromQL 表达式 | 是 |'
 - en: '| `for` | The time to ensure that the alert is being triggered before sending
     the alert, defaults to 0 | No |'
   id: totrans-85
   prefs: []
   type: TYPE_TB
+  zh: '| `for` | 发送告警前，确保告警已触发的时间，默认为 0 | 否 |'
 - en: '| `labels` | User-defined key-value pairs | No |'
   id: totrans-86
   prefs: []
   type: TYPE_TB
+  zh: '| `labels` | 用户定义的键值对 | 否 |'
 - en: '| `annotations` | User-defined key-value pairs | No |'
   id: totrans-87
   prefs: []
   type: TYPE_TB
+  zh: '| `annotations` | 用户定义的键值对 | 否 |'
 - en: The Prometheus community typically uses CamelCase for alert naming.
   id: totrans-88
   prefs: []
   type: TYPE_NORMAL
+  zh: Prometheus 社区通常使用驼峰命名法（CamelCase）来命名告警。
 - en: Prometheus does not carry out validation to check whether an alert name is already
     in use, so it is possible for two or more alerts to share the same name but evaluate
     different expressions. This might cause issues, such as tracking which specific
@@ -589,12 +628,15 @@
   id: totrans-89
   prefs: []
   type: TYPE_NORMAL
+  zh: Prometheus 不会执行验证来检查告警名称是否已被使用，因此可能会有两个或多个告警共享相同的名称，但评估不同的表达式。这可能会导致问题，例如追踪哪个特定的告警触发，或编写告警测试。
 - en: 'The `NodeExporterDown` rule will only trigger when the `up` metric with the
     `job=”node”` selector is not `1` for more than one minute, which we''ll now test
     by stopping the Node Exporter service:'
   id: totrans-90
   prefs: []
   type: TYPE_NORMAL
+  zh: '`NodeExporterDown` 规则仅在 `job="node"` 选择器的 `up` 指标超过 1 分钟不为 `1` 时触发，我们现在通过停止
+    Node Exporter 服务来测试这一点：'
 - en: '[PRE14]'
   id: totrans-91
   prefs: []
@@ -605,36 +647,44 @@
   id: totrans-92
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们现在强制使告警变为活动状态。这将迫使告警经历三个不同的状态：
 - en: '| **Order** | **State** | **Description** |'
   id: totrans-93
   prefs: []
   type: TYPE_TB
+  zh: '| **顺序** | **状态** | **描述** |'
 - en: '| 1 | Inactive | Not yet pending or firing |'
   id: totrans-94
   prefs: []
   type: TYPE_TB
+  zh: '| 1 | 非活动 | 尚未进入待处理或触发状态 |'
 - en: '| 2 | Pending | Not yet active long enough to become firing |'
   id: totrans-95
   prefs: []
   type: TYPE_TB
+  zh: '| 2 | 待处理 | 尚未足够长时间以变为触发状态 |'
 - en: '| 3 | Firing | Active `for` more than the defined `for` clause threshold |'
   id: totrans-96
   prefs: []
   type: TYPE_TB
+  zh: '| 3 | 触发 | 活跃时间超过定义的 `for` 子句阈值 |'
 - en: 'Going to the `/alerts` endpoint on the Prometheus server web interface, we
     can visualize the three different states for the `NodeExporterDown` alert. First,
     the alert is inactive, as we can see in the following figure:'
   id: totrans-97
   prefs: []
   type: TYPE_NORMAL
+  zh: 进入 Prometheus 服务器网页界面的 `/alerts` 端点，我们可以查看 `NodeExporterDown` 告警的三种不同状态。首先，告警处于非活动状态，正如我们在下图中看到的：
 - en: '![](img/f1780ac8-5699-40ba-ac51-fe19d917fb04.png)'
   id: totrans-98
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/f1780ac8-5699-40ba-ac51-fe19d917fb04.png)'
 - en: 'Figure 9.3: The NodeExporterDown alert is inactive'
   id: totrans-99
   prefs: []
   type: TYPE_NORMAL
+  zh: 图 9.3：NodeExporterDown 告警处于非活动状态
 - en: 'Then, we can see the alert in a pending state. This means that, while the alert
     condition has been triggered, Prometheus will continue to check whether that condition
     keeps being triggered for each evaluation cycle until the `for` duration has passed.
@@ -643,28 +693,34 @@
   id: totrans-100
   prefs: []
   type: TYPE_NORMAL
+  zh: 然后，我们可以看到告警处于待处理状态。这意味着，尽管告警条件已经触发，Prometheus 会继续检查该条件是否在每个评估周期中持续触发，直到`for`时间段过去。下图展示了待处理状态；请注意，**显示注释**复选框已被选中，这会展开告警注释：
 - en: '![](img/b30ea059-23e0-4025-95e2-19505112ae71.png)'
   id: totrans-101
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/b30ea059-23e0-4025-95e2-19505112ae71.png)'
 - en: 'Figure 9.4: The NodeExporterDown alert is pending'
   id: totrans-102
   prefs: []
   type: TYPE_NORMAL
+  zh: 图 9.4：NodeExporterDown 告警处于待处理状态
 - en: 'Finally, we can see the alert turn to firing. This means that the alert is
     active for more than the duration defined by the `for` clause – in this case,
     1 minute:'
   id: totrans-103
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后，我们可以看到告警变为触发状态。这意味着告警已活跃超过 `for` 子句定义的持续时间——在这种情况下是 1 分钟：
 - en: '![](img/0e0284b0-8f88-4c81-a54b-f19bb7618cb7.png)'
   id: totrans-104
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/0e0284b0-8f88-4c81-a54b-f19bb7618cb7.png)'
 - en: 'Figure 9.5: The NodeExporterDown alert is firing'
   id: totrans-105
   prefs: []
   type: TYPE_NORMAL
+  zh: 图 9.5：NodeExporterDown 告警正在触发
 - en: 'When an alert becomes firing, Prometheus sends a JSON payload to the configured
     alerting service endpoint, which, in our case, is the alertdump service, which
     is configured to log to the `/vagrant/cache/alerting.log` file. This makes it
@@ -673,6 +729,8 @@
   id: totrans-106
   prefs: []
   type: TYPE_NORMAL
+  zh: 当告警变为触发状态时，Prometheus 会向配置的告警服务端点发送 JSON 负载，在我们的案例中，端点是 alertdump 服务，该服务配置为将日志记录到
+    `/vagrant/cache/alerting.log` 文件。这使得我们很容易理解正在发送什么样的信息，并且可以进行如下验证：
 - en: '[PRE15]'
   id: totrans-107
   prefs: []
@@ -684,11 +742,13 @@
   id: totrans-108
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在我们已经了解了如何配置一些告警规则，并验证了 Prometheus 向配置的告警系统发送的内容，接下来让我们探索如何通过使用标签和注释来丰富这些告警的上下文信息。
 - en: Labels and annotations
   id: totrans-109
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 标签和注释
 - en: 'In the alert rule definition, there were two optional sections: labels and
     annotations. Labels define the identity of an alert and they can change according
     to the evaluation cycle they''re in; if they do this, it will alter the alert
@@ -699,14 +759,19 @@
   id: totrans-110
   prefs: []
   type: TYPE_NORMAL
+  zh: 在告警规则定义中，有两个可选部分：标签和注释。标签定义了告警的身份，并且可以根据它们所在的评估周期发生变化；如果发生变化，将会改变告警的身份。为了说明这一点，我们将介绍
+    `ALERTS` 指标，它跟踪所有活动告警及其标签。正如我们在下面的图示中看到的，我们有一个名为 `alertstate` 的标签，它跟踪告警的状态，并且会从
+    `pending` 状态过渡到 `firing` 状态：
 - en: '![](img/bb8a64c2-1844-4c5d-8e47-a29cba583986.png)'
   id: totrans-111
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/bb8a64c2-1844-4c5d-8e47-a29cba583986.png)'
 - en: 'Figure 9.6: The ALERTS metric'
   id: totrans-112
   prefs: []
   type: TYPE_NORMAL
+  zh: 图 9.6：ALERTS 指标
 - en: Something to keep in mind is the issue of using a sample value in a label. Although
     it is technically possible, it's also a very bad idea. Doing so will change the
     alert identity every time the value changes, and, as such, will always be restarting
@@ -715,6 +780,8 @@
   id: totrans-113
   prefs: []
   type: TYPE_NORMAL
+  zh: 需要注意的是，标签中使用示例值的问题。虽然技术上是可行的，但这是一个非常糟糕的主意。这样做每次值发生变化时都会改变告警的身份，从而始终会重置定义的 `for`
+    倒计时，导致告警永远不会进入 `firing` 状态。
 - en: On the other hand, annotations do not belong to the identity of an alert, and,
     as such, are not stored in the `ALERTS` metric. These are useful to enrich the
     alert with more context and information. Annotations are also templated using
@@ -725,15 +792,20 @@
   id: totrans-114
   prefs: []
   type: TYPE_NORMAL
+  zh: 另一方面，注释不属于告警的身份，因此它们不会存储在 `ALERTS` 指标中。这些注释对于丰富告警的上下文信息非常有用。注释也使用 Go 模板语言进行模板化，就像我们在示例中看到的那样。通过使用
+    `{{ .Labels.instance }}` 模板语法，我们可以访问可用的告警标签，选择 `instance` 标签，并在注释的 `description`
+    字段中使用其值。如果需要，还可以通过 `{{ .Value }}` 来获取触发样本的值。
 - en: The Golang template `.Labels` and `.Value` variables are also available as `$labels`
     and `$value` for convenience.
   id: totrans-115
   prefs: []
   type: TYPE_NORMAL
+  zh: Golang 模板中的 `.Labels` 和 `.Value` 变量也可以作为 `$labels` 和 `$value` 使用，以方便操作。
 - en: 'The following snippet shows the alert rule in our example:'
   id: totrans-116
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下代码段展示了我们示例中的告警规则：
 - en: '[PRE16]'
   id: totrans-117
   prefs: []
@@ -743,6 +815,7 @@
   id: totrans-118
   prefs: []
   type: TYPE_NORMAL
+  zh: 当告警处于 `firing` 状态时，将产生以下渲染结果：
 - en: '[PRE17]'
   id: totrans-119
   prefs: []
@@ -752,11 +825,14 @@
   id: totrans-120
   prefs: []
   type: TYPE_NORMAL
+  zh: 您可以在 [https://golang.org/pkg/text/template/](https://golang.org/pkg/text/template/)
+    获得更多关于 Golang 模板的信息。
 - en: Delays on alerting
   id: totrans-121
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 告警延迟
 - en: 'In the previous topics, we talked about the three states that an alert goes
     through; but there''s more to it when calculating the total time required for
     an alert to become firing. First, there''s the scrape interval (which, in our
@@ -850,6 +926,7 @@
   id: totrans-132
   prefs: []
   type: TYPE_NORMAL
+  zh: 该文件包含本章介绍的所有记录和告警规则的测试。虽然你不需要在一个文件中定义所有的测试（实际上，为了保持组织性，每个规则组使用单独的测试文件更为整洁），但为了简便，这里统一在一个文件中进行了定义。现在，我们只分析记录规则，因为它们更容易理解。测试文件的顶层配置键定义了要加载的规则文件以及测试的默认评估间隔，它决定了当规则没有明确指定自己的评估周期时，记录和告警规则评估的周期性：
 - en: '[PRE19]'
   id: totrans-133
   prefs: []
@@ -861,6 +938,7 @@
   id: totrans-134
   prefs: []
   type: TYPE_NORMAL
+  zh: 虽然测试文件中的 `rule_files` 配置键看起来与主 Prometheus 配置文件中的相同，但它不支持通配符（使用文件名通配符）。
 - en: 'Following these global configurations comes the definition of the test cases,
     under the `tests` key. You can define multiple test packs, each with their own
     simulated scrape intervals, collected series, and rules under test. Let''s have
@@ -869,6 +947,7 @@
   id: totrans-135
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这些全局配置之后，紧接着是 `tests` 键下的测试用例定义。你可以定义多个测试包，每个包有自己独立的模拟抓取间隔、采集的系列和待测规则。让我们看看文件中定义的第一个测试，我们在其中添加了一些注释以便于理解：
 - en: '[PRE20]'
   id: totrans-136
   prefs: []
@@ -879,6 +958,7 @@
   id: totrans-137
   prefs: []
   type: TYPE_NORMAL
+  zh: '`interval` 设置了在我们的模拟时间序列中生成间隔样本的时间：'
 - en: '[PRE21]'
   id: totrans-138
   prefs: []
@@ -889,6 +969,7 @@
   id: totrans-139
   prefs: []
   type: TYPE_NORMAL
+  zh: '`input_series` 的列表定义了生成哪些时间序列以及在每次模拟采集间隔的迭代中生成哪些值：'
 - en: '[PRE22]'
   id: totrans-140
   prefs: []
@@ -898,6 +979,7 @@
   id: totrans-141
   prefs: []
   type: TYPE_NORMAL
+  zh: 用于测试的 PromQL 表达式列表被定义为 `promql_expr_test`：
 - en: '[PRE23]'
   id: totrans-142
   prefs: []
@@ -907,6 +989,7 @@
   id: totrans-143
   prefs: []
   type: TYPE_NORMAL
+  zh: 每个 `expr` 定义了一个特定的表达式：
 - en: '[PRE24]'
   id: totrans-144
   prefs: []
@@ -917,6 +1000,7 @@
   id: totrans-145
   prefs: []
   type: TYPE_NORMAL
+  zh: 设置 `eval_time` 来确定该表达式运行的时间点，预期的样本应该通过运行该表达式返回，称为 `exp_samples`：
 - en: '[PRE25]'
   id: totrans-146
   prefs: []
@@ -934,10 +1018,15 @@
   id: totrans-147
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这个测试包中，我们可以看到每 15 秒生成四个时间序列，都是针对相同的指标 `node_cpu_seconds_total`。由于这些序列的实际值对该记录规则并不重要（它仅计算每个实例的
+    CPU 数量），因此每个样本的值都设置为 `1`。请注意标签的变化，具体来说，`prometheus:9100` 实例报告的是两个 CPU 的指标，而 `example:9100`
+    实例报告的是一个 CPU。实际测试只是验证，当 `instance:node_cpu:count` 表达式在 `t=1m` 时评估（假设从生成的采集开始经过了
+    1 分钟），返回的样本应显示每个实例的正确 CPU 数量。
 - en: 'We are now ready to execute the tests using the following instruction:'
   id: totrans-148
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们现在可以使用以下指令来执行测试：
 - en: '[PRE26]'
   id: totrans-149
   prefs: []
@@ -950,6 +1039,8 @@
   id: totrans-150
   prefs: []
   type: TYPE_NORMAL
+  zh: 这确保了配置的记录规则按我们预期的方式运行。你可以通过从 `prometheus:9100` 实例的 `instance:node_cpu:count`
+    测试包中移除一个输入序列来尝试破坏测试。当你重新运行测试时，以下内容将显示出来，因为其中一个测试现在失败了：
 - en: '[PRE27]'
   id: totrans-151
   prefs: []
@@ -962,11 +1053,14 @@
   id: totrans-152
   prefs: []
   type: TYPE_NORMAL
+  zh: 这个输出告诉我们，`promtool` 期待的是已定义的样本集，但返回了一个不同的样本集。你可以看到，正如我们配置的那样，记录规则现在只报告了 `prometheus:9100`
+    实例的一个 CPU。这让我们对规则的行为是否如我们所愿充满信心。
 - en: 'The tests for the second recording rule group are mostly the same, but they
     showcase a powerful notation for generating a richer input series:'
   id: totrans-153
   prefs: []
   type: TYPE_NORMAL
+  zh: 第二组记录规则的测试大部分相同，但它们展示了生成更丰富输入序列的强大表示法：
 - en: '[PRE28]'
   id: totrans-154
   prefs: []
@@ -981,10 +1075,13 @@
   id: totrans-155
   prefs: []
   type: TYPE_NORMAL
+  zh: 这称为**展开表示法**。这是一种紧凑的方式，用于声明生成时间序列值的公式。它的形式可以是`A+BxC` 或 `A-BxC`，其中 `A` 是起始值，`B`
+    是每次迭代中序列值应增加（前有 `+`）或减少（前有 `-`）的量，`C` 是这种增加或减少应应用多少次。
 - en: 'Coming back to our example, `0+5x60` will expand to the following series:'
   id: totrans-156
   prefs: []
   type: TYPE_NORMAL
+  zh: 回到我们的示例，`0+5x60` 将展开成以下系列：
 - en: '[PRE29]'
   id: totrans-157
   prefs: []
@@ -996,6 +1093,7 @@
   id: totrans-158
   prefs: []
   type: TYPE_NORMAL
+  zh: 在声明输入时间序列的值时，您可以将字面值与展开表示法混合使用。这使得您可以轻松创建复杂的行为。以下是一个例子：
 - en: '[PRE30]'
   id: totrans-159
   prefs: []
@@ -1005,6 +1103,7 @@
   id: totrans-160
   prefs: []
   type: TYPE_NORMAL
+  zh: 这将展开成如下所示：
 - en: '[PRE31]'
   id: totrans-161
   prefs: []
@@ -1017,11 +1116,13 @@
   id: totrans-162
   prefs: []
   type: TYPE_NORMAL
+  zh: 测试对于避免不可预见的问题至关重要，凭借目前所涵盖的信息，您现在可以为记录规则生成自己的单元测试。接下来，我们将继续处理单元测试，但这次特别针对警报规则。
 - en: Alerting rules tests
   id: totrans-163
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 警报规则测试
 - en: 'Unit tests for alerting rules are quite similar to the ones used for recording
     rules. We''ll be using the example alert provided earlier in this chapter to perform
     a walkthrough on how to configure alerting tests and how to validate them. As
@@ -1031,6 +1132,7 @@
   id: totrans-164
   prefs: []
   type: TYPE_NORMAL
+  zh: 警报规则的单元测试与记录规则的单元测试非常相似。我们将使用本章之前提供的示例警报来演示如何配置警报测试以及如何验证它们。如前所述，本章的测试环境包含了一套用于测试此处呈现规则的测试，包括我们感兴趣的警报规则。再次提醒，您可以使用以下命令查看测试文件：
 - en: '[PRE32]'
   id: totrans-165
   prefs: []
@@ -1041,6 +1143,7 @@
   id: totrans-166
   prefs: []
   type: TYPE_NORMAL
+  zh: 专注于警报组件，我们可以看到我们首先定义了警报规则的位置：
 - en: '[PRE33]'
   id: totrans-167
   prefs: []
@@ -1051,6 +1154,7 @@
   id: totrans-168
   prefs: []
   type: TYPE_NORMAL
+  zh: 默认的规则评估间隔在同一文件中的记录规则和警报规则之间共享：
 - en: '[PRE34]'
   id: totrans-169
   prefs: []
@@ -1061,6 +1165,7 @@
   id: totrans-170
   prefs: []
   type: TYPE_NORMAL
+  zh: 警报测试便捷地位于自己的测试组中，让我们来看一下它的完整定义：
 - en: '[PRE35]'
   id: totrans-171
   prefs: []
@@ -1073,6 +1178,8 @@
   id: totrans-172
   prefs: []
   type: TYPE_NORMAL
+  zh: 测试组定义与之前解释的相同，唯一的例外是 `alert_rule_test` 部分，这里我们定义了警报测试。需要注意的是，在这个示例中，第二个输入序列永远不应被我们的测试规则匹配，因为已定义的警报特别匹配
+    `job="node"`：
 - en: '[PRE36]'
   id: totrans-173
   prefs: []
@@ -1085,6 +1192,7 @@
   id: totrans-174
   prefs: []
   type: TYPE_NORMAL
+  zh: '`alert_rule_test` 和 `promql_expr_test` 不必放在单独的测试块中；当记录规则和警报规则使用相同的输入时间序列并且具有相同的评估间隔时，您可以将两者放在同一测试组中。'
 - en: The `alert_rule_test` section lists what alerts should be evaluated (`alertname`)
     at what time relative to the simulated start of the test run (`eval_time`). If
     the alert is expected to be firing at that time, an additional `exp_alerts` section
@@ -1095,6 +1203,7 @@
   id: totrans-175
   prefs: []
   type: TYPE_NORMAL
+  zh: '`alert_rule_test`部分列出了应在模拟测试运行开始时（`eval_time`）评估哪些警报（`alertname`）。如果预计该警报会在该时刻触发，则应定义一个额外的`exp_alerts`部分，列出每个警报实例应包含的预期标签（`exp_labels`）和注释（`exp_annotations`）。如果`exp_alerts`部分为空，意味着该警报在指定的时间不应触发。'
 - en: The first alerting test will be executed at the third minute, and, as the matching
     series we provided previously returns the value `1` at that moment, the alert
     expression defined at `alerting_rules.yml` will not trigger – this means that
@@ -1102,6 +1211,7 @@
   id: totrans-176
   prefs: []
   type: TYPE_NORMAL
+  zh: 第一个警报测试将在第三分钟执行，由于我们之前提供的匹配系列在该时刻返回值`1`，因此在`alerting_rules.yml`中定义的警报表达式不会触发——这意味着警报中定义的表达式没有返回数据。
 - en: The second alerting rule will be executed at the fourth minute and will return
     data, as the matching series we provided has the sample value `0` at that specific
     moment. All the labels returned by the alerting rule needs to be explicitly checked.
@@ -1110,10 +1220,12 @@
   id: totrans-177
   prefs: []
   type: TYPE_NORMAL
+  zh: 第二个警报规则将在第四分钟执行，并返回数据，因为我们提供的匹配系列在该特定时刻的样本值为`0`。警报规则返回的所有标签需要明确检查。测试还必须检查警报返回的所有描述，并完全展开任何模板变量。
 - en: 'We can now run the test using the following instruction:'
   id: totrans-178
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们现在可以使用以下指令运行测试：
 - en: '[PRE37]'
   id: totrans-179
   prefs: []
@@ -1125,6 +1237,7 @@
   id: totrans-180
   prefs: []
   type: TYPE_NORMAL
+  zh: 作为额外步骤，尝试将第二个警报的描述从`prometheus:9100`更改为类似`prometheus:9999`的内容，然后重新运行测试。你应该会得到以下输出：
 - en: '[PRE38]'
   id: totrans-181
   prefs: []
@@ -1137,11 +1250,13 @@
   id: totrans-182
   prefs: []
   type: TYPE_NORMAL
+  zh: 尽管这个警报非常简单，容易确定在何种条件下会触发，但警报规则的测试能够确保在你无法合理重现的环境条件下，警报会触发。
 - en: Summary
   id: totrans-183
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 总结
 - en: In this chapter, we had the opportunity to observe a different way to produce
     a derivative time series. Recording rules help improve monitoring system stability
     and performance when recurrent heavy queries are required by pre-computing them
@@ -1156,27 +1271,32 @@
   id: totrans-184
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本章中，我们有机会观察另一种生成衍生时间序列的方法。记录规则通过将重复的重查询预先计算成新的时间序列，帮助提高监控系统的稳定性和性能，这些新时间序列相对便宜，便于查询。警报规则将PromQL的强大功能和灵活性带入警报中；它们使得可以为复杂且动态的阈值触发警报，并且使用单个警报规则针对多个实例甚至不同应用进行目标定位。现在，了解警报中如何引入延迟将帮助你根据需求调整它们，但记住，稍微的延迟总比产生噪音的警报要好。最后，我们探索了如何为规则创建单元测试，并在Prometheus服务器运行之前验证它们。
 - en: 'The next chapter will step into another component of monitoring: visualization.
     We''ll be diving into Grafana, the community-preferred choice for Prometheus-powered
     dashboards.'
   id: totrans-185
   prefs: []
   type: TYPE_NORMAL
+  zh: 下一章将进入监控的另一个组件：可视化。我们将深入探讨Grafana，这是社区首选的Prometheus驱动仪表板工具。
 - en: Questions
   id: totrans-186
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 问题
 - en: What are the primary uses for recording rules?
   id: totrans-187
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 记录规则的主要用途是什么？
 - en: Why should you avoid setting different evaluation intervals in rule groups?
   id: totrans-188
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 为什么应避免在规则组中设置不同的评估间隔？
 - en: If you were presented with the `instance_job:latency_seconds_bucket:rate30s`
     metric, what labels would you expect to find and what would be the expression
     used to record it?
@@ -1184,49 +1304,59 @@
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 如果你看到`instance_job:latency_seconds_bucket:rate30s`指标，你期望看到哪些标签，并且会使用什么表达式来记录它？
 - en: Why is using the sample value of an alert in the alert labels a bad idea?
   id: totrans-190
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 为什么在告警标签中使用告警的样本值是一个不好的主意？
 - en: What is the pending state of an alert?
   id: totrans-191
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 警报的待处理状态是什么？
 - en: How long would an alert wait between being triggered and transitioning to the
     `firing` state when the `for` clause is not specified?
   id: totrans-192
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 当没有指定 `for` 子句时，警报从触发到过渡到 `firing` 状态之间会等待多长时间？
 - en: How can you test your rules without using Prometheus?
   id: totrans-193
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 如何在不使用 Prometheus 的情况下测试你的规则？
 - en: Further reading
   id: totrans-194
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 深入阅读
 - en: '**Prometheus recording rules**: [https://prometheus.io/docs/prometheus/latest/configuration/recording_rules/](https://prometheus.io/docs/prometheus/latest/configuration/recording_rules/)'
   id: totrans-195
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**Prometheus 记录规则**: [https://prometheus.io/docs/prometheus/latest/configuration/recording_rules/](https://prometheus.io/docs/prometheus/latest/configuration/recording_rules/)'
 - en: '**Rule naming best practices**: [https://prometheus.io/docs/practices/rules/](https://prometheus.io/docs/practices/rules/)'
   id: totrans-196
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**规则命名最佳实践**: [https://prometheus.io/docs/practices/rules/](https://prometheus.io/docs/practices/rules/)'
 - en: '**Prometheus alerting rules**: [https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/](https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/)'
   id: totrans-197
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**Prometheus 告警规则**: [https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/](https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/)'
 - en: '**Prometheus unit testing**: [https://prometheus.io/docs/prometheus/latest/configuration/unit_testing_rules/](https://prometheus.io/docs/prometheus/latest/configuration/unit_testing_rules/)'
   id: totrans-198
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**Prometheus 单元测试**: [https://prometheus.io/docs/prometheus/latest/configuration/unit_testing_rules/](https://prometheus.io/docs/prometheus/latest/configuration/unit_testing_rules/)'

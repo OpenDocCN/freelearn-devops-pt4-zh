@@ -1,12 +1,17 @@
 - en: Deep Diving into Terraform
+  id: totrans-0
   prefs: []
   type: TYPE_NORMAL
+  zh: 深入探索 Terraform
 - en: In this book, we started with recipes for Terraform that concern its installation,
     the writing of the Terraform configuration, as well as the use of the Terraform
     CLI commands. Then we studied the sharing of the Terraform configuration by using
     modules. Finally, we focused on the use of Terraform to build an Azure infrastructure.
+  id: totrans-1
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本书中，我们从与 Terraform 安装相关的配方开始，涵盖了 Terraform 配置的编写以及使用 Terraform CLI 命令。接着我们研究了通过使用模块共享
+    Terraform 配置。最后，我们专注于使用 Terraform 构建 Azure 基础设施。
 - en: Now, in this chapter, we will discuss recipes that allow us to go further in
     our usage of Terraform. We will learn how to use the templates in Terraform via
     the generation of an inventory for Ansible using Terraform, and will test the
@@ -14,499 +19,742 @@
     how to prevent the destruction of resources, how to implement a zero-downtime
     deployment technique with Terraform, and how to detect the deletion of resources
     when Terraform applies changes.
+  id: totrans-2
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，在本章中，我们将讨论一些配方，帮助我们更深入地使用 Terraform。我们将学习如何通过 Terraform 模板生成 Ansible 库存，并使用
+    `kitchen-terraform` 插件测试 Terraform 配置。我们将讨论如何防止资源被销毁，如何使用 Terraform 实现零停机部署技术，以及如何检测在
+    Terraform 应用更改时资源的删除。
 - en: Then we will discuss the use of **Terragrunt** to manage the Terraform configuration
     dependency and its use as a wrapper for the Terraform CLI. Finally, we will study
     the integration of the Terraform runtime as well as the management of workspaces
     in a CI/CD pipeline.
+  id: totrans-3
   prefs: []
   type: TYPE_NORMAL
+  zh: 然后我们将讨论使用 **Terragrunt** 来管理 Terraform 配置的依赖关系，并将其用作 Terraform CLI 的封装器。最后，我们将研究
+    Terraform 运行时的集成以及在 CI/CD 流水线中管理工作区。
 - en: 'In this chapter, we cover the following recipes:'
+  id: totrans-4
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本章中，我们涵盖了以下配方：
 - en: Creating an Ansible inventory with Terraform
+  id: totrans-5
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 使用 Terraform 创建 Ansible 库存
 - en: Testing the Terraform configuration with kitchen-terraform
+  id: totrans-6
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 使用 kitchen-terraform 测试 Terraform 配置
 - en: Preventing resources from getting destroyed
+  id: totrans-7
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 防止资源被销毁
 - en: Zero-downtime deployment with Terraform
+  id: totrans-8
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 使用 Terraform 实现零停机部署
 - en: Detecting resources deleted by the plan command
+  id: totrans-9
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 检测由计划命令删除的资源
 - en: Managing Terraform configuration dependencies using Terragrunt
+  id: totrans-10
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 使用 Terragrunt 管理 Terraform 配置依赖
 - en: Using Terragrunt as a wrapper for Terraform
+  id: totrans-11
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 使用 Terragrunt 作为 Terraform 的封装器
 - en: Building CI/CD pipelines for Terraform configurations in Azure Pipelines
+  id: totrans-12
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 在 Azure Pipelines 中为 Terraform 配置构建 CI/CD 流水线
 - en: Working with workspaces in CI/CD
+  id: totrans-13
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 在 CI/CD 中使用工作区
 - en: Technical requirements
+  id: totrans-14
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 技术要求
 - en: 'For the recipes in this chapter, we will need the following prerequisites:'
+  id: totrans-15
   prefs: []
   type: TYPE_NORMAL
+  zh: 本章的配方需要以下前提条件：
 - en: '`kitchen-terraform`, which is available at [https://github.com/newcontext-oss/kitchen-terraform](https://github.com/newcontext-oss/kitchen-terraform),
     and also Ruby, available to download from [https://www.ruby-lang.org/en/](https://www.ruby-lang.org/en/).'
+  id: totrans-16
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`kitchen-terraform`，可以在 [https://github.com/newcontext-oss/kitchen-terraform](https://github.com/newcontext-oss/kitchen-terraform)上找到，同时还需要
+    Ruby，可以从 [https://www.ruby-lang.org/en/](https://www.ruby-lang.org/en/) 下载。'
 - en: Terragrunt, whose documentation is available at [https://terragrunt.gruntwork.io/](https://terragrunt.gruntwork.io/).
+  id: totrans-17
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: Terragrunt 的文档可以在 [https://terragrunt.gruntwork.io/](https://terragrunt.gruntwork.io/) 找到。
 - en: In addition, we will also use the **jq** utility for parsing JSON. You can download
     it from [https://stedolan.github.io/jq/](https://stedolan.github.io/jq/).
+  id: totrans-18
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 此外，我们还将使用 **jq** 工具来解析 JSON。你可以从 [https://stedolan.github.io/jq/](https://stedolan.github.io/jq/) 下载它。
 - en: Finally, when working with CI/CD, we will use Azure Pipelines as our CI/CD platform.
     Azure Pipelines is a service of Azure DevOps. You can create a free account via [https://azure.microsoft.com/en-us/services/devops/](https://azure.microsoft.com/en-us/services/devops/).
+  id: totrans-19
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 最后，在与 CI/CD 一起工作时，我们将使用 Azure Pipelines 作为我们的 CI/CD 平台。Azure Pipelines 是 Azure
+    DevOps 的一项服务。你可以通过 [https://azure.microsoft.com/en-us/services/devops/](https://azure.microsoft.com/en-us/services/devops/) 创建一个免费账户。
 - en: The source code for this chapter is available on the book's GitHub repository,
     at [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP07](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP07).
+  id: totrans-20
   prefs: []
   type: TYPE_NORMAL
+  zh: 本章的源代码可以在本书的 GitHub 仓库中找到，地址为 [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP07](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP07)。
 - en: 'Check out the following video to see the Code in Action:'
+  id: totrans-21
   prefs: []
   type: TYPE_NORMAL
+  zh: 查看以下视频以查看代码实例：
 - en: '"YouTube Bitly link"'
+  id: totrans-22
   prefs: []
   type: TYPE_NORMAL
+  zh: '"YouTube Bitly 链接"'
 - en: Creating an Ansible inventory with Terraform
+  id: totrans-23
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 使用 Terraform 创建 Ansible 库存
 - en: Terraform is a very good **Infrastructure-as-Code** (**IaC**) tool that allows
     us to build complex infrastructure with code.
+  id: totrans-24
   prefs: []
   type: TYPE_NORMAL
+  zh: Terraform 是一个非常好的**基础设施即代码**（**IaC**）工具，它允许我们通过代码构建复杂的基础设施。
 - en: As we studied in [Chapter 6](d054157b-d534-47c9-8079-3af13107c4ef.xhtml), *Provisioning
     Azure Infrastructure with Terraform*, concerning the construction of virtual machines,
     on all cloud providers, the common objective of Terraform is to build a VM without
     configuring it, which includes the installation of its middleware and its administration.
+  id: totrans-25
   prefs: []
   type: TYPE_NORMAL
+  zh: 正如我们在[第 6 章](d054157b-d534-47c9-8079-3af13107c4ef.xhtml)的*使用 Terraform 配置 Azure
+    基础设施*中研究过的，关于虚拟机的构建，所有云提供商中，Terraform 的共同目标是构建一个虚拟机，但不进行配置，这包括其中间件的安装和管理。
 - en: Among the **Configuration-as-Code** (**CaC**) tools that allow us to use Terraform
     to configure a VM after its creation, there is **Ansible** ([https://www.ansible.com/](https://www.ansible.com/)),
     which is very popular in the open source world (much like Chef and Puppet).
+  id: totrans-26
   prefs: []
   type: TYPE_NORMAL
+  zh: 在允许我们使用 Terraform 配置虚拟机（VM）创建后进行配置的**配置即代码**（**CaC**）工具中，有一个非常受欢迎的工具是**Ansible** ([https://www.ansible.com/](https://www.ansible.com/))，它在开源世界中非常流行（与
+    Chef 和 Puppet 类似）。
 - en: One of the advantages of Ansible is that it's agentless, which means you don't
     need to install an agent on the VMs you want to configure. Thus, to know which
     VMs to configure, Ansible uses a file called `inventory`, which contains the list
     of VMs that need configuring.
+  id: totrans-27
   prefs: []
   type: TYPE_NORMAL
+  zh: Ansible 的一个优点是它不需要代理，这意味着你无需在要配置的虚拟机上安装代理。因此，为了知道哪些虚拟机需要配置，Ansible 使用一个名为`inventory`的文件，该文件包含需要配置的虚拟机列表。
 - en: In this recipe, we will learn how to generate this `inventory` file using Terraform's
     templating features.
+  id: totrans-28
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本配方中，我们将学习如何使用 Terraform 的模板功能生成这个`inventory`文件。
 - en: Getting ready
+  id: totrans-29
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 准备工作
 - en: The purpose of this recipe is not to discuss the installation and use of Ansible
     but just the automatic creation of its `inventory` file.
+  id: totrans-30
   prefs: []
   type: TYPE_NORMAL
+  zh: 本配方的目的是讨论如何自动创建 Ansible 的`inventory`文件，而不是讨论 Ansible 的安装和使用。
 - en: To learn more about Ansible, I invite you to read *Chapter 3, Using Ansible
     for Configuring IaaS Infrastructure*, from my book entitled *Learning DevOps*,
     also available from Packt at [https://www.packtpub.com/eu/cloud-networking/learning-devops](https://www.packtpub.com/eu/cloud-networking/learning-devops).
+  id: totrans-31
   prefs: []
   type: TYPE_NORMAL
+  zh: 若要了解更多关于 Ansible 的信息，我邀请你阅读我书中的*第 3 章，使用 Ansible 配置 IaaS 基础设施*，这本书名为*学习 DevOps*，也可以在
+    Packt 上找到，网址为 [https://www.packtpub.com/eu/cloud-networking/learning-devops](https://www.packtpub.com/eu/cloud-networking/learning-devops)。
 - en: 'The starting point of our recipe is to use Terraform to create VMs in Azure
     whose private IP addresses are not known before they are created. In this Terraform
     configuration of VMs, we use the configuration we have already studied in the
     *Provisioning and configuring an Azure VM with Terraform* recipe of [Chapter 6](d054157b-d534-47c9-8079-3af13107c4ef.xhtml), *Provisioning
     Azure Infrastructure with Terraform*. So, to keep it simple, we use the Terraform
     modules published in the public registry with the following Terraform configuration:'
+  id: totrans-32
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们配方的起点是使用 Terraform 在 Azure 中创建虚拟机，而这些虚拟机的私有 IP 地址在创建之前是未知的。在此 Terraform 配置中，我们使用了在[第
+    6 章](d054157b-d534-47c9-8079-3af13107c4ef.xhtml)的*使用 Terraform 配置和部署 Azure 虚拟机*配方中已经学习过的配置，*使用
+    Terraform 配置 Azure 基础设施*。因此，为了简化起见，我们使用了公共注册表中发布的 Terraform 模块，并采用以下 Terraform
+    配置：
 - en: 'Instantiate a `vmhosts` variable that specifies the hostname of the VM we want
     to create:'
+  id: totrans-33
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 实例化一个`vmhosts`变量，该变量指定我们希望创建的虚拟机的主机名：
 - en: '[PRE0]'
+  id: totrans-34
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE0]'
 - en: 'Then, use the `network` module and compute from the public registry to create
     the VM inside the network:'
+  id: totrans-35
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 然后，使用`network`模块并从公共注册表计算来创建网络中的虚拟机：
 - en: '[PRE1]'
+  id: totrans-36
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE1]'
 - en: In the preceding Terraform configuration, we create a Virtual Network and a
     Subnet and two Linux VMs that will have private IP addresses.
+  id: totrans-37
   prefs: []
   type: TYPE_NORMAL
+  zh: 在前面的 Terraform 配置中，我们创建了一个虚拟网络和一个子网，并创建了两个将具有私有 IP 地址的 Linux 虚拟机。
 - en: 'The goal of this recipe is to generate an `inventory` text file, in the same
     Terraform configuration, which will contain the list of hosts (along with their
     IP addresses) that have been created by Terraform. This inventory file will be
     in the following form:'
+  id: totrans-38
   prefs: []
   type: TYPE_NORMAL
+  zh: 本配方的目标是在相同的 Terraform 配置中生成一个`inventory`文本文件，该文件将包含 Terraform 创建的主机列表（以及它们的
+    IP 地址）。这个清单文件将采用以下格式：
 - en: '[PRE2]'
+  id: totrans-39
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE2]'
 - en: The complete source code for this recipe is available at [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP07/ansible-inventory](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP07/ansible-inventory).
+  id: totrans-40
   prefs: []
   type: TYPE_NORMAL
+  zh: 本配方的完整源代码可以在 [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP07/ansible-inventory](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP07/ansible-inventory)找到。
 - en: How to do it…
+  id: totrans-41
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 如何操作……
 - en: 'To generate the Ansible inventory with Terraform, perform the following steps:'
+  id: totrans-42
   prefs: []
   type: TYPE_NORMAL
+  zh: 要通过 Terraform 生成 Ansible inventory，请执行以下步骤：
 - en: 'Inside the folder containing the Terraform configuration, we create a new file
     called `template-inventory.tpl` with the following content:'
+  id: totrans-43
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在包含 Terraform 配置的文件夹内，我们创建一个名为 `template-inventory.tpl` 的新文件，内容如下：
 - en: '[PRE3]'
+  id: totrans-44
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE3]'
 - en: 'Then, in the `main.tf` file of the Terraform configuration that creates a VM,
     we add the following code to generate the `inventory` file:'
+  id: totrans-45
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 然后，在创建 VM 的 Terraform 配置的 `main.tf` 文件中，我们添加以下代码来生成 `inventory` 文件：
 - en: '[PRE4]'
+  id: totrans-46
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE4]'
 - en: Finally, to create the VMs and generate the `inventory` file, we run the basic
     Terraform `init`, `plan`, and `apply` workflow commands.
+  id: totrans-47
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 最后，为了创建 VM 并生成 `inventory` 文件，我们运行基本的 Terraform `init`、`plan` 和 `apply` 工作流命令。
 - en: How it works…
+  id: totrans-48
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 它是如何工作的……
 - en: 'We first create a `template-inventory.tpl` file, which uses Terraform''s template
     format. In this file, we use a `for` loop with the syntax `%{ for host, ip in
     vm_dnshost ~}`, which allows us to loop the elements of the `vm_dnshost` variable.
     For each VM in this loop, we use the following syntax:'
+  id: totrans-49
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们首先创建一个 `template-inventory.tpl` 文件，该文件使用 Terraform 的模板格式。在这个文件中，我们使用一个 `for`
+    循环，语法为 `%{ for host, ip in vm_dnshost ~}`，它允许我们循环遍历 `vm_dnshost` 变量的元素。对于循环中的每个
+    VM，我们使用以下语法：
 - en: '[PRE5]'
+  id: totrans-50
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE5]'
 - en: We end the loop with the `%{ endfor ~}` syntax.
+  id: totrans-51
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们通过 `%{ endfor ~}` 语法结束循环。
 - en: For more details on this templating format, read the documentation at [https://www.terraform.io/docs/configuration/expressions.html#string-templates](https://www.terraform.io/docs/configuration/expressions.html#string-templates).
+  id: totrans-52
   prefs: []
   type: TYPE_NORMAL
+  zh: 有关此模板格式的更多详细信息，请阅读文档：[https://www.terraform.io/docs/configuration/expressions.html#string-templates](https://www.terraform.io/docs/configuration/expressions.html#string-templates)。
 - en: 'Then in *step 2*, to the Terraform configuration we add a `local_file` resource
     (which we have already studied in the *Manipulating local files with Terraform*
     recipe of [Chapter 2](3099c9ac-8c38-4e7d-8146-411fac26a2b7.xhtml), *Writing Terraform
     Configuration*) in which we fill in the following properties:'
+  id: totrans-53
   prefs: []
   type: TYPE_NORMAL
+  zh: 然后在 *第 2 步* 中，我们在 Terraform 配置中添加一个 `local_file` 资源（我们已经在[第 2 章](3099c9ac-8c38-4e7d-8146-411fac26a2b7.xhtml)的
+    *使用 Terraform 操作本地文件* 配方中学习过），在其中填写以下属性：
 - en: '`filename`: This contains `inventory` as its value, which is the name of the
     file that will be generated.'
+  id: totrans-54
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`filename`：它的值为 `inventory`，即将生成的文件名。'
 - en: In this recipe, the file will be generated inside the directory that currently contains
     this Terraform configuration. You are free to enter another folder for generation
     and storage.
+  id: totrans-55
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这个示例中，文件将在当前包含此 Terraform 配置的目录中生成。你可以选择进入另一个文件夹进行生成和存储。
 - en: '`content`: This contains the elements that will fill this file. Here, we use
     the `templatefile` function, passing the following as parameters:'
+  id: totrans-56
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`content`：包含将填充此文件的元素。这里，我们使用 `templatefile` 函数，传递以下作为参数：'
 - en: The name of the template file, `template-inventory.tpl`, that we created in
     *step 1*
+  id: totrans-57
   prefs:
   - PREF_IND
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 模板文件的名称 `template-inventory.tpl`，这是我们在 *第 1 步* 中创建的文件
 - en: The `vm_dnshost` variable that will fill the content of the template file. We
     use the built-in Terraform `zipmap` function that allows us to build a map from
     two lists, one being the keys list and the other the values list.
+  id: totrans-58
   prefs:
   - PREF_IND
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`vm_dnshost` 变量将填充模板文件的内容。我们使用内置的 Terraform `zipmap` 函数，它允许我们从两个列表构建一个映射，一个是键列表，另一个是值列表。'
 - en: Documentation on the `zipmap` function is available at [https://www.terraform.io/docs/configuration/functions/zipmap.html](https://www.terraform.io/docs/configuration/functions/zipmap.html).
+  id: totrans-59
   prefs: []
   type: TYPE_NORMAL
+  zh: 关于 `zipmap` 函数的文档可以在[https://www.terraform.io/docs/configuration/functions/zipmap.html](https://www.terraform.io/docs/configuration/functions/zipmap.html)找到。
 - en: '`depend_on`: This parameter is part of the Terraform language and indicates
     a dependency between two or more resources (the documentation on Terraform dependencies
     can be found at [https://learn.hashicorp.com/terraform/getting-started/dependencies](https://learn.hashicorp.com/terraform/getting-started/dependencies)).
     Here, in our case, we indicate a dependency between this `local_file` resource
     and the VM module so that Terraform only creates the `inventory` file after creating
     the VM.'
+  id: totrans-60
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`depend_on`：这个参数是 Terraform 语言的一部分，表示两个或多个资源之间的依赖关系（关于 Terraform 依赖关系的文档可以在[https://learn.hashicorp.com/terraform/getting-started/dependencies](https://learn.hashicorp.com/terraform/getting-started/dependencies)找到）。在这里，我们表示
+    `local_file` 资源与 VM 模块之间的依赖关系，这样 Terraform 只有在创建 VM 后才会创建 `inventory` 文件。'
 - en: 'Finally, in the last step, we execute the commands of the Terraform workflow,
     and at the end of its execution we can see that the `inventory` file has indeed
     been generated with the following content:'
+  id: totrans-61
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后，在最后一步中，我们执行Terraform工作流的命令，在执行结束时，我们可以看到`inventory`文件确实已经生成，内容如下：
 - en: '[PRE6]'
+  id: totrans-62
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE6]'
 - en: Now, all new VMs added to this Terraform configuration will be added dynamically
     to this Ansible inventory.
+  id: totrans-63
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，所有新添加到此Terraform配置中的虚拟机将动态地添加到此Ansible库存中。
 - en: There’s more…
+  id: totrans-64
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 还有更多……
 - en: The primary objective of this recipe is to show the use of templates with Terraform
     that we applied on an Ansible inventory. There can be several other use cases
     for these templates, such as using the `cloud-init` file to configure a VM, which
     is explained in the article at [https://grantorchard.com/dynamic-cloudinit-content-with-terraform-file-templates/](https://grantorchard.com/dynamic-cloudinit-content-with-terraform-file-templates/).
+  id: totrans-65
   prefs: []
   type: TYPE_NORMAL
+  zh: 本食谱的主要目的是展示我们在Ansible库存中应用的Terraform模板的使用。这些模板可以有多种其他用途，比如使用`cloud-init`文件来配置虚拟机，具体内容可以参考文章[https://grantorchard.com/dynamic-cloudinit-content-with-terraform-file-templates/](https://grantorchard.com/dynamic-cloudinit-content-with-terraform-file-templates/)。
 - en: See also
+  id: totrans-66
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 另见
 - en: The documentation on the Terraform `templatefile` function is available at [https://www.terraform.io/docs/configuration/functions/templatefile.html](https://www.terraform.io/docs/configuration/functions/templatefile.html).
+  id: totrans-67
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: Terraform `templatefile`函数的文档可以在[https://www.terraform.io/docs/configuration/functions/templatefile.html](https://www.terraform.io/docs/configuration/functions/templatefile.html)找到。
 - en: The documentation on the `local_file` resource of the `local` provider is available
     at [https://registry.terraform.io/providers/hashicorp/local/latest/docs/resources/file](https://registry.terraform.io/providers/hashicorp/local/latest/docs/resources/file).
+  id: totrans-68
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`local`提供者的`local_file`资源的文档可以在[https://registry.terraform.io/providers/hashicorp/local/latest/docs/resources/file](https://registry.terraform.io/providers/hashicorp/local/latest/docs/resources/file)找到。'
 - en: A list of books on Ansible from Packt is available at [https://subscription.packtpub.com/search?query=ansible](https://subscription.packtpub.com/search?query=ansible).
+  id: totrans-69
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: Packt出版的关于Ansible的书籍列表可以在[https://subscription.packtpub.com/search?query=ansible](https://subscription.packtpub.com/search?query=ansible)找到。
 - en: 'Here is a list of web articles that deal with the same subject of Ansible inventories
     generated by Terraform by proposing different solutions:'
+  id: totrans-70
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 这里有一系列关于Ansible库存由Terraform生成的网页文章，提供了不同的解决方案：
 - en: '[https://hooks.technology/2020/02/using-terraform-and-ansible-together/](https://hooks.technology/2020/02/using-terraform-and-ansible-together/)'
+  id: totrans-71
   prefs:
   - PREF_IND
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '[https://hooks.technology/2020/02/using-terraform-and-ansible-together/](https://hooks.technology/2020/02/using-terraform-and-ansible-together/)'
 - en: '[https://www.linkbynet.com/produce-an-ansible-inventory-with-terraform](https://www.linkbynet.com/produce-an-ansible-inventory-with-terraform)'
+  id: totrans-72
   prefs:
   - PREF_IND
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '[https://www.linkbynet.com/produce-an-ansible-inventory-with-terraform](https://www.linkbynet.com/produce-an-ansible-inventory-with-terraform)'
 - en: '[https://gist.github.com/hectorcanto/71f732dc02541e265888e924047d47ed](https://gist.github.com/hectorcanto/71f732dc02541e265888e924047d47ed)'
+  id: totrans-73
   prefs:
   - PREF_IND
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '[https://gist.github.com/hectorcanto/71f732dc02541e265888e924047d47ed](https://gist.github.com/hectorcanto/71f732dc02541e265888e924047d47ed)'
 - en: '[https://stackoverflow.com/questions/45489534/best-way-currently-to-create-an-ansible-inventory-from-terraform](https://stackoverflow.com/questions/45489534/best-way-currently-to-create-an-ansible-inventory-from-terraform)'
+  id: totrans-74
   prefs:
   - PREF_IND
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '[https://stackoverflow.com/questions/45489534/best-way-currently-to-create-an-ansible-inventory-from-terraform](https://stackoverflow.com/questions/45489534/best-way-currently-to-create-an-ansible-inventory-from-terraform)'
 - en: Testing the Terraform configuration using kitchen-terraform
+  id: totrans-75
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 使用kitchen-terraform测试Terraform配置
 - en: We have already studied, in the *Testing Terraform module code with Terratest*
     recipe of [Chapter 5](ddb13a41-5cdd-4931-b38f-d185d3a10c1e.xhtml), *Sharing Terraform
     Configuration with Modules*, how to test Terraform modules using the Terratest
     framework.
+  id: totrans-76
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们已经在[第5章](ddb13a41-5cdd-4931-b38f-d185d3a10c1e.xhtml)的*使用Terratest测试Terraform模块代码*食谱中，*共享Terraform配置与模块*，学习了如何使用Terratest框架测试Terraform模块。
 - en: In this recipe, we will test a Terraform configuration using another tool: **KitchenCI**
     and its `kitchen-terraform` plugin.
+  id: totrans-77
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这个食谱中，我们将使用另一个工具测试Terraform配置：**KitchenCI**及其`kitchen-terraform`插件。
 - en: Getting ready
+  id: totrans-78
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 准备工作
 - en: '`kitchen-terraform` is written in Ruby and is a plugin for **KitchenCI** (more
     simply called **Kitchen**), which is an IaC testing tool. In order to apply this
     recipe properly, you must first understand the principles and workflow of Kitchen,
     documented at [https://kitchen.ci/index.html](https://kitchen.ci/index.html).'
+  id: totrans-79
   prefs: []
   type: TYPE_NORMAL
+  zh: '`kitchen-terraform`是用Ruby编写的，并且是**KitchenCI**（简称**Kitchen**）的一个插件，Kitchen是一个基础设施即代码（IaC）测试工具。为了正确应用此食谱，您必须首先理解Kitchen的原理和工作流程，这些内容有文档记录在[https://kitchen.ci/index.html](https://kitchen.ci/index.html)。'
 - en: As Kitchen is written in **Ruby**, you will need to install Ruby (available
     at [https://www.ruby-lang.org/en/](https://www.ruby-lang.org/en/) – make sure
     to use version 2.4 at a minimum) on your computer by following the installation
     documentation available at [https://www.ruby-lang.org/en/documentation/installation/](https://www.ruby-lang.org/en/documentation/installation/).
+  id: totrans-80
   prefs: []
   type: TYPE_NORMAL
+  zh: 由于Kitchen是用**Ruby**编写的，你需要在计算机上安装Ruby（可以从[https://www.ruby-lang.org/en/](https://www.ruby-lang.org/en/)下载，确保使用至少2.4版本），并按照[https://www.ruby-lang.org/en/documentation/installation/](https://www.ruby-lang.org/en/documentation/installation/)提供的安装文档进行安装。
 - en: In addition to Ruby, we need to install **Bundle**, available from [https://bundler.io/](https://bundler.io/).
     This is the package dependency for Ruby packages.
+  id: totrans-81
   prefs: []
   type: TYPE_NORMAL
+  zh: 除了Ruby，我们还需要安装**Bundle**，可以从[https://bundler.io/](https://bundler.io/)获得。它是Ruby包的依赖管理工具。
 - en: 'We can install `kitchen-terraform` firstly by using RubyGems (which is the
     Ruby manager package) by running the following command:'
+  id: totrans-82
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们可以通过使用RubyGems（Ruby包管理器）来安装`kitchen-terraform`，可以通过运行以下命令来完成：
 - en: '[PRE7]'
+  id: totrans-83
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE7]'
 - en: 'Or, secondly, we can use the method recommended by Kitchen using gems and bundles
     by following this procedure:'
+  id: totrans-84
   prefs: []
   type: TYPE_NORMAL
+  zh: 或者，第二种方式是，我们可以使用Kitchen推荐的使用gem和bundle的方法，按照以下步骤进行：
 - en: 'In the folder that contains the Terraform configuration to be tested, we create
     a Gemfile that contains the list of packages (here, we specify the `kitchen-terraform`
     package) to install, containing the following:'
+  id: totrans-85
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在包含要测试的Terraform配置的文件夹中，我们创建一个Gemfile，其中包含要安装的包的列表（此处指定`kitchen-terraform`包），内容如下：
 - en: '[PRE8]'
+  id: totrans-86
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE8]'
 - en: 'In a terminal, execute the following command to install the packages referenced
     in the Gemfile:'
+  id: totrans-87
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在终端中，执行以下命令来安装Gemfile中引用的包：
 - en: '[PRE9]'
+  id: totrans-88
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE9]'
 - en: The execution of the preceding command installs all the packages necessary to
     run `kitchen-terraform`.
+  id: totrans-89
   prefs: []
   type: TYPE_NORMAL
+  zh: 执行上述命令会安装运行`kitchen-terraform`所需的所有包。
 - en: Finally, concerning the writing of the tests, we will use **Inspec**, which
     is a test framework based on Rspec. Inspec allows you to test local systems or
     even infrastructures in the cloud. For more information about Inspec, I suggest
     you read its documentation at [https://www.inspec.io/](https://www.inspec.io/).
+  id: totrans-90
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后，关于编写测试，我们将使用**Inspec**，这是一个基于Rspec的测试框架。Inspec允许你测试本地系统甚至是云中的基础设施。有关Inspec的更多信息，建议你阅读其文档：[https://www.inspec.io/](https://www.inspec.io/)。
 - en: To illustrate the use of `kitchen-terraform` in a simple way, we will test the
     proper functioning of the Terraform configuration in this recipe that generates
     an Ansible inventory file, which we studied in the previous recipe. The purpose
     of the tests we will write is to test that the `inventory` file has indeed been
     generated and that it is not empty.
+  id: totrans-91
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了简单地说明如何使用`kitchen-terraform`，我们将在本食谱中测试Terraform配置的正确性，该配置会生成一个Ansible清单文件，我们在之前的食谱中已经学习过。我们编写的测试目的是验证`inventory`文件是否确实已经生成并且不是空的。
 - en: In this recipe, the goal is not to test the creation of the network and the
     VMs, but only the `inventory` file.
+  id: totrans-92
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本食谱中，目标不是测试网络和虚拟机的创建，而是仅测试`inventory`文件。
 - en: Finally, as with all integration testing, it is preferable to have an isolated
     system or environment to run the tests.
+  id: totrans-93
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后，和所有集成测试一样，最好有一个隔离的系统或环境来运行测试。
 - en: The source code for this recipe is available at [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP07/kitchen](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP07/kitchen).
+  id: totrans-94
   prefs: []
   type: TYPE_NORMAL
+  zh: 本食谱的源代码可以在[https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP07/kitchen](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP07/kitchen)找到。
 - en: How to do it…
+  id: totrans-95
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 如何实现…
 - en: 'To test the Terraform configuration execution with `kitchen-terraform`, perform
     the following steps:'
+  id: totrans-96
   prefs: []
   type: TYPE_NORMAL
+  zh: 要测试使用`kitchen-terraform`执行的Terraform配置，执行以下步骤：
 - en: 'Inside the folder containing the Terraform configuration, create the Inspec
     `test` folder with the following tree:'
+  id: totrans-97
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在包含Terraform配置的文件夹内，创建Inspec的`test`文件夹，文件树结构如下：
 - en: '[PRE10]'
+  id: totrans-98
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE10]'
 - en: 'In this `kt_suite` folder, add the Inspec profile file named `inspec.yml` with
     the following content:'
+  id: totrans-99
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在`kt_suite`文件夹中，添加一个名为`inspec.yml`的Inspec配置文件，文件内容如下：
 - en: '[PRE11]'
+  id: totrans-100
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE11]'
 - en: 'In the `kt_suite` folder, create a new folder called `controls` that will contain
     the Inspec tests. Then, inside the `controls` folder, add a new `inventory.rb`
     file with the following content:'
+  id: totrans-101
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在`kt_suite`文件夹中，创建一个名为`controls`的新文件夹，该文件夹将包含Inspec测试。然后，在`controls`文件夹中，添加一个名为`inventory.rb`的文件，文件内容如下：
 - en: '[PRE12]'
+  id: totrans-102
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE12]'
 - en: 'At the root of the Terraform configuration folder, we create a Kitchen configuration
     file called `kitchen.yml` with the following content:'
+  id: totrans-103
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在Terraform配置文件夹的根目录下，我们创建一个名为`kitchen.yml`的Kitchen配置文件，内容如下：
 - en: '[PRE13]'
+  id: totrans-104
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE13]'
 - en: 'In a terminal (running in the root of the Terraform configuration folder),
     run the following `kitchen` command:'
+  id: totrans-105
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在终端（位于 Terraform 配置文件夹的根目录下）中，运行以下 `kitchen` 命令：
 - en: '[PRE14]'
+  id: totrans-106
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE14]'
 - en: How it works…
+  id: totrans-107
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 它是如何工作的…
 - en: 'The execution of this recipe takes place over three phases:'
+  id: totrans-108
   prefs: []
   type: TYPE_NORMAL
+  zh: 该配方的执行分为三个阶段：
 - en: Writing the inspection tests
+  id: totrans-109
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 编写检查测试
 - en: Writing the Kitchen configuration
+  id: totrans-110
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 编写 Kitchen 配置
 - en: Kitchen execution
+  id: totrans-111
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: Kitchen 执行
 - en: 'From *steps 1 to 3*, we wrote the inspection tests with the following steps:'
+  id: totrans-112
   prefs: []
   type: TYPE_NORMAL
+  zh: 从 *步骤 1 到 3*，我们通过以下步骤编写了检查测试：
 - en: First, we created the folder tree that will contain the profile and the Inspec
     tests. In the `kt_suite` folder, we created the `inspec.yml` file, which is the
     Inspec profile. In our case, this just contains the `name` property with the `default`
     value.
+  id: totrans-113
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 首先，我们创建了一个文件夹结构，用于存放配置文件和 Inspec 测试。在 `kt_suite` 文件夹中，我们创建了 `inspec.yml` 文件，这是
+    Inspec 配置文件。在我们的案例中，这个文件仅包含 `name` 属性，并且其值为 `default`。
 - en: To learn more about Inspec profiles, refer to the documentation at [https://www.inspec.io/docs/reference/profiles/](https://www.inspec.io/docs/reference/profiles/).
+  id: totrans-114
   prefs: []
   type: TYPE_NORMAL
+  zh: 若要了解更多关于 Inspec 配置文件的信息，请参阅文档：[https://www.inspec.io/docs/reference/profiles/](https://www.inspec.io/docs/reference/profiles/)。
 - en: 'Then, in the `controls > inventory.rb` file, we wrote the Inspec tests (in
     Rspec format) by creating a `control "check_inventory_file" do` control that will
     contain the tests. In these tests, we use the resource `file` Inspec (see the
@@ -514,277 +762,423 @@
     which allows us to run tests on files. Here, the property of this resource is
     `inventory`, which is the name of the inventory file generated by Terraform. In
     this control, we have written two tests:'
+  id: totrans-115
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 然后，在 `controls > inventory.rb` 文件中，我们通过创建一个 `control "check_inventory_file"
+    do` 控制项来编写 Inspec 测试（使用 Rspec 格式），该控制项包含了这些测试。在这些测试中，我们使用了资源 `file` Inspec（参见文档：[https://www.inspec.io/docs/reference/resources/file/](https://www.inspec.io/docs/reference/resources/file/)），它允许我们对文件执行测试。在这个控制项中，资源的属性是
+    `inventory`，这是由 Terraform 生成的库存文件的名称。在这个控制项中，我们编写了两个测试：
 - en: '`it { should exist }`: This inventory file must exist on disk.'
+  id: totrans-116
   prefs:
   - PREF_IND
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`it { should exist }`：此库存文件必须存在于磁盘上。'
 - en: '`its(''size'') { should be > 0 }`: The size of this file must be `> 0`, so
     it must contain some content.'
+  id: totrans-117
   prefs:
   - PREF_IND
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`its(''size'') { should be > 0 }`：此文件的大小必须大于 `0`，因此它必须包含一些内容。'
 - en: 'Once the writing of the tests is finished, in *step 4*, we create the `kitchen.yml`
     file, which contains the Kitchen configuration consisting of three parts, the
     first one being the driver:'
+  id: totrans-118
   prefs: []
   type: TYPE_NORMAL
+  zh: 测试编写完成后，在 *第 4 步* 中，我们创建了 `kitchen.yml` 文件，该文件包含 Kitchen 配置，由三部分组成，第一部分是驱动程序：
 - en: '[PRE15]'
+  id: totrans-119
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE15]'
 - en: The driver is the platform that is used for testing. Kitchen supports a multitude
     of virtual and cloud platforms. In our case, we use the `terraform` driver provided
     by the `kitchen-terraform` plugin.
+  id: totrans-120
   prefs: []
   type: TYPE_NORMAL
+  zh: 驱动程序是用于测试的平台。Kitchen 支持多种虚拟和云平台。在我们的案例中，我们使用由 `kitchen-terraform` 插件提供的 `terraform`
+    驱动程序。
 - en: Documentation on the drivers supported by Kitchen is available at [https://kitchen.ci/docs/drivers/](https://kitchen.ci/docs/drivers/).
+  id: totrans-121
   prefs: []
   type: TYPE_NORMAL
+  zh: Kitchen 支持的驱动程序文档可以在此查看：[https://kitchen.ci/docs/drivers/](https://kitchen.ci/docs/drivers/)。
 - en: 'The second part of the `kitchen.yml` file is the `provisioner`:'
+  id: totrans-122
   prefs: []
   type: TYPE_NORMAL
+  zh: '`kitchen.yml` 文件的第二部分是 `provisioner`：'
 - en: '[PRE16]'
+  id: totrans-123
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE16]'
 - en: The `provisioner` is the tool that will configure the VMs. It can use scripts,
     Chef, Ansible, or **Desired State Configuration** (**DSC**). In our case, since
     in our test we don't provision VMs, we use the `terraform` provisioner provided
     by `kitchen-terraform`.
+  id: totrans-124
   prefs: []
   type: TYPE_NORMAL
+  zh: '`provisioner` 是一个用于配置虚拟机的工具。它可以使用脚本、Chef、Ansible 或 **Desired State Configuration**（**DSC**）。在我们的案例中，由于我们在测试中不进行虚拟机配置，因此我们使用由
+    `kitchen-terraform` 提供的 `terraform` 提供者。'
 - en: Documentation on Kitchen-supported provisioners is available at [https://kitchen.ci/docs/provisioners/](https://kitchen.ci/docs/provisioners/).
+  id: totrans-125
   prefs: []
   type: TYPE_NORMAL
+  zh: Kitchen 支持的提供者文档可以在此查看：[https://kitchen.ci/docs/provisioners/](https://kitchen.ci/docs/provisioners/)。
 - en: 'The third part is the `verifier`:'
+  id: totrans-126
   prefs: []
   type: TYPE_NORMAL
+  zh: 第三部分是 `verifier`：
 - en: '[PRE17]'
+  id: totrans-127
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE17]'
 - en: The `verifier` is the system that will test the components applied by the provisioner. We
     can use Inspec, Chef, shell, or pester as our testing framework. In our case,
     we configure the verifier on the control and the Inspec test suite we wrote in
     *step 2*. In addition, the `control` property is optional – it allows us to filter
     the Inspec controls to be executed during the tests.
+  id: totrans-128
   prefs: []
   type: TYPE_NORMAL
+  zh: '`verifier` 是一个用于测试由提供者应用的组件的系统。我们可以使用 Inspec、Chef、shell 或 pester 作为我们的测试框架。在我们的案例中，我们在控制节点上配置了验证器，并编写了
+    *第 2 步* 中的 Inspec 测试套件。此外，`control` 属性是可选的——它允许我们在测试过程中筛选需要执行的 Inspec 控制项。'
 - en: Documentation on Kitchen-supported verifiers is available at [https://kitchen.ci/docs/verifiers/](https://kitchen.ci/docs/verifiers/).
+  id: totrans-129
   prefs: []
   type: TYPE_NORMAL
+  zh: 关于 Kitchen 支持的验证器的文档可以在 [https://kitchen.ci/docs/verifiers/](https://kitchen.ci/docs/verifiers/)
+    上查看。
 - en: 'Finally, in the last step, we perform the tests by executing the `kitchen test` command, which,
     based on the YAML kitchen configuration, will perform the following actions:'
+  id: totrans-130
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 最后，在最后一步，我们通过执行 `kitchen test` 命令来进行测试，该命令将根据 YAML 配置文件执行以下操作：
 - en: Execute the `init` and `apply` commands of the Terraform workflow.
+  id: totrans-131
   prefs:
   - PREF_IND
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 执行 Terraform 工作流的 `init` 和 `apply` 命令。
 - en: Run the Inspec tests.
+  id: totrans-132
   prefs:
   - PREF_IND
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 运行 Inspec 测试。
 - en: Execute the `destroy` Terraform command to delete all resources provisioned
     for the test.
+  id: totrans-133
   prefs:
   - PREF_IND
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 执行 `destroy` Terraform 命令来删除为测试提供的所有资源。
 - en: The result of this execution is shown in the following three screenshots.
+  id: totrans-134
   prefs: []
   type: TYPE_NORMAL
+  zh: 此次执行的结果显示在接下来的三张截图中。
 - en: In reality, this execution takes place in the same console and the same workflow.
     I've split this into three screenshots for better visibility because you can't
     see everything with just one screen.
+  id: totrans-135
   prefs: []
   type: TYPE_NORMAL
+  zh: 实际上，这些操作是在同一控制台和工作流中执行的。我将其拆分为三张截图，以便更好地展示，因为仅用一张截图无法看到全部内容。
 - en: 'The following screenshot shows the execution of the `init` and `apply` commands:'
+  id: totrans-136
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下截图显示了 `init` 和 `apply` 命令的执行过程：
 - en: '![](img/cdcd7e5b-c70d-46ee-80bf-a4694c608da3.png)'
+  id: totrans-137
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/cdcd7e5b-c70d-46ee-80bf-a4694c608da3.png)'
 - en: 'The following screenshot shows the execution of Inspec:'
+  id: totrans-138
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下截图显示了 Inspec 的执行过程：
 - en: '![](img/4cbf94f6-4c64-42de-b363-05a6060bbf78.png)'
+  id: totrans-139
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/4cbf94f6-4c64-42de-b363-05a6060bbf78.png)'
 - en: 'This last screenshot shows the `destroy` command:'
+  id: totrans-140
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后一张截图显示了 `destroy` 命令：
 - en: '![](img/20ced5e1-e92d-4d2f-8a8d-689c7b42bcd1.png)'
+  id: totrans-141
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/20ced5e1-e92d-4d2f-8a8d-689c7b42bcd1.png)'
 - en: These three screens show the execution of Terraform, then the successful execution
     of the Inspec tests, which indicates that my `inventory` file was indeed generated
     by Terraform, and finally the destruction of the resources that had been allocated
     for the tests.
+  id: totrans-142
   prefs: []
   type: TYPE_NORMAL
+  zh: 这三张截图显示了 Terraform 的执行过程，接着是 Inspec 测试的成功执行，表明我的 `inventory` 文件确实是由 Terraform
+    生成的，最后是销毁为测试分配的资源。
 - en: There’s more…
+  id: totrans-143
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 还有更多……
 - en: To go deeper into the writing of the tests, we could have added the Inspec `its('content')`
     expression, which allows us to test the content of the file, as explained in the
     Inspec documentation at [https://www.inspec.io/docs/reference/resources/file/](https://www.inspec.io/docs/reference/resources/file/).
+  id: totrans-144
   prefs: []
   type: TYPE_NORMAL
+  zh: 若要深入了解测试的编写，我们可以添加 Inspec 的 `its('content')` 表达式，这样我们就可以测试文件的内容，具体说明请参考 Inspec
+    文档 [https://www.inspec.io/docs/reference/resources/file/](https://www.inspec.io/docs/reference/resources/file/)。
 - en: Concerning the execution of the tests in this recipe, we have to execute the `kitchen
     test` command. In the case of integration tests in which, after executing the
     tests, we don't want to destroy the resources that have been built with Terraform,
     we can execute the `kitchen verify` command.
+  id: totrans-145
   prefs: []
   type: TYPE_NORMAL
+  zh: 关于本示例中测试的执行，我们需要执行 `kitchen test` 命令。如果是集成测试，在执行测试后，我们不想销毁通过 Terraform 创建的资源，可以执行
+    `kitchen verify` 命令。
 - en: Finally, as mentioned in the introduction, in this recipe we used `kitchen-terraform`
     to test a Terraform configuration, but we can also use it to test Terraform modules.
+  id: totrans-146
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后，如前言中所述，在本示例中我们使用 `kitchen-terraform` 来测试 Terraform 配置，但我们也可以使用它来测试 Terraform
+    模块。
 - en: See also
+  id: totrans-147
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 另见
 - en: KitchenCI documentation is available at [https://kitchen.ci/](https://kitchen.ci/).
+  id: totrans-148
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: KitchenCI 文档可以在 [https://kitchen.ci/](https://kitchen.ci/) 上查看。
 - en: The source code of the `kitchen-terraform` plugin on GitHub is available at [https://github.com/newcontext-oss/kitchen-terraform](https://github.com/newcontext-oss/kitchen-terraform).
+  id: totrans-149
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`kitchen-terraform` 插件的源代码可以在 [https://github.com/newcontext-oss/kitchen-terraform](https://github.com/newcontext-oss/kitchen-terraform)
+    上找到。'
 - en: You can find tutorials on `kitchen-terraform` at [https://newcontext-oss.github.io/kitchen-terraform/tutorials/](https://newcontext-oss.github.io/kitchen-terraform/tutorials/).
+  id: totrans-150
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 你可以在 [https://newcontext-oss.github.io/kitchen-terraform/tutorials/](https://newcontext-oss.github.io/kitchen-terraform/tutorials/)
+    上找到关于 `kitchen-terraform` 的教程。
 - en: For more information about the `kitchen test` command, see the documentation
     at [https://kitchen.ci/docs/getting-started/running-test/](https://kitchen.ci/docs/getting-started/running-test/).
+  id: totrans-151
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 有关 `kitchen test` 命令的更多信息，请参阅文档 [https://kitchen.ci/docs/getting-started/running-test/](https://kitchen.ci/docs/getting-started/running-test/)。
 - en: Preventing resources from getting destroyed
+  id: totrans-152
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 防止资源被销毁
 - en: The use of IaC requires attention in some cases. Indeed, when the IaC is integrated
     into a CI/CD pipeline, resources containing important data can be automatically
     deleted. This can be done either by changing a property of a Terraform resource,
     which requires the deletion and recreation of this resource, or by executing the
     `terraform destroy` command. Fortunately, Terraform includes a configuration in
     its language that prevents the destruction of sensitive resources.
+  id: totrans-153
   prefs: []
   type: TYPE_NORMAL
+  zh: 使用 IaC 时需要注意某些情况。实际上，当 IaC 集成到 CI/CD 管道中时，包含重要数据的资源可能会被自动删除。这可以通过更改 Terraform
+    资源的属性来完成，这需要删除并重新创建该资源，或者执行 `terraform destroy` 命令。幸运的是，Terraform 在其语言中包含了一项配置，防止敏感资源被销毁。
 - en: In this recipe, we will see how to prevent the destruction of resources that
     are managed in a Terraform configuration.
+  id: totrans-154
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本食谱中，我们将展示如何防止销毁 Terraform 配置中管理的资源。
 - en: Getting ready
+  id: totrans-155
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 准备工作
 - en: 'For this recipe, we will use a Terraform configuration, the code for which
     is available at [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP07/sample-app](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP07/sample-app).
     The purpose of this configuration is to manage the following resources in Azure:'
+  id: totrans-156
   prefs: []
   type: TYPE_NORMAL
+  zh: 对于本食谱，我们将使用一个 Terraform 配置，代码可在 [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP07/sample-app](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP07/sample-app)
+    找到。该配置旨在管理 Azure 中的以下资源：
 - en: A Resource Group
+  id: totrans-157
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 资源组
 - en: A Service Plan
+  id: totrans-158
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 一个服务计划
 - en: An Azure App Service (web app) instance
+  id: totrans-159
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 一个 Azure 应用服务（Web 应用）实例
 - en: An Azure Application Insights instance
+  id: totrans-160
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 一个 Azure Application Insights 实例
 - en: The problem that we often encounter in company projects concerns the resources
     that contain data. In our example, this is the Application Insights instance containing
     the logs and metrics of our application, which is in the web app and should not
     be deleted automatically.
+  id: totrans-161
   prefs: []
   type: TYPE_NORMAL
+  zh: 在公司项目中，我们常常遇到一个问题，涉及到包含数据的资源。在我们的示例中，这是包含应用程序日志和指标的 Application Insights 实例，该实例属于
+    Web 应用并且不应被自动删除。
 - en: 'Let''s take as a scenario a company that has decided to change the nomenclature
     of their resources, and we need to update the Terraform configuration with the
     new nomenclature. When running Terraform, we would get the following result from
     the `terraform plan` command:'
+  id: totrans-162
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们设想一个情境：一家公司决定更改其资源的命名规则，我们需要使用新的命名规则更新 Terraform 配置。当运行 Terraform 时，我们将从
+    `terraform plan` 命令中获得以下结果：
 - en: '![](img/44ffd996-a55c-4459-9d13-804cb8d8dc2c.png)'
+  id: totrans-163
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/44ffd996-a55c-4459-9d13-804cb8d8dc2c.png)'
 - en: As you can see, the name change requires the deletion of the Application Insights
     instance that contains important log metrics.
+  id: totrans-164
   prefs: []
   type: TYPE_NORMAL
+  zh: 如你所见，名称更改需要删除包含重要日志指标的 Application Insights 实例。
 - en: The purpose of this recipe is to change the Terraform configuration so that
     the Application Insights resource is never deleted.
+  id: totrans-165
   prefs: []
   type: TYPE_NORMAL
+  zh: 本食谱的目的是更改 Terraform 配置，使得 Application Insights 资源永远不会被删除。
 - en: The source code of this recipe is available at [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP07/preventdestroy](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP07/preventdestroy).
+  id: totrans-166
   prefs: []
   type: TYPE_NORMAL
+  zh: 本食谱的源代码可以在 [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP07/preventdestroy](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP07/preventdestroy)
+    找到。
 - en: How to do it…
+  id: totrans-167
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 如何操作…
 - en: 'To prevent the deletion of a resource by Terraform, perform the following steps:'
+  id: totrans-168
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了防止 Terraform 删除资源，请执行以下步骤：
 - en: 'Inside the Terraform configuration of the Application Insights resource, add
     the following `lifecycle` block:'
+  id: totrans-169
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在 Application Insights 资源的 Terraform 配置中，添加以下 `lifecycle` 块：
 - en: '[PRE18]'
+  id: totrans-170
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE18]'
 - en: In `variables.tf`, change the default value of the `app_name` variable with
     another name for the Application Insights such as `MyApp2-DEV1`.
+  id: totrans-171
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在 `variables.tf` 中，将 `app_name` 变量的默认值更改为另一个名称，如 `MyApp2-DEV1`。
 - en: 'Execute the Terraform CLI workflow and the result is shown in the following
     screenshot:'
+  id: totrans-172
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 执行 Terraform CLI 工作流，并且结果如下图所示：
 - en: '![](img/69601017-f88c-4cd7-a70c-bff317398c77.png)'
+  id: totrans-173
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/69601017-f88c-4cd7-a70c-bff317398c77.png)'
 - en: How it works…
+  id: totrans-174
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 工作原理…
 - en: In this recipe, we have added the Terraform `lifecycle` block, which contains
     the properties that allow interaction with resource management. Here, in our case,
     we used the `prevent_destroy` property, which, as its name indicates, prevents
     the destruction of the specified resource.
+  id: totrans-175
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本示例中，我们添加了 Terraform `lifecycle` 块，其中包含允许与资源管理交互的属性。在这里，我们使用了 `prevent_destroy`
+    属性，顾名思义，它可以防止指定资源被销毁。
 - en: There’s more…
+  id: totrans-176
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 还有更多…
 - en: As we have discussed, the `prevent_destroy` property allows you to prohibit
     the deletion of resources.
+  id: totrans-177
   prefs: []
   type: TYPE_NORMAL
+  zh: 正如我们讨论过的，`prevent_destroy`属性允许你禁止资源的删除。
 - en: Note that in our example with Azure, this property does not prohibit the deletion
     of resources via the Azure portal or the Azure CLI.
+  id: totrans-178
   prefs: []
   type: TYPE_NORMAL
+  zh: 请注意，在我们以Azure为例的情况下，此属性并不会禁止通过Azure门户或Azure CLI删除资源。
 - en: However, it should be noted that if a resource in the Terraform configuration
     contains this property, and this property must be deleted when executing the `terraform
     apply` command, then this `prevent_destroy` property prevents the application
@@ -795,55 +1189,79 @@
     separate Terraform state file), and the other resources in another folder. This
     way, we can apply changes to the resources without being blocked by our resource
     destruction prevention settings.
+  id: totrans-179
   prefs: []
   type: TYPE_NORMAL
+  zh: 但需要注意的是，如果Terraform配置中的资源包含此属性，并且在执行`terraform apply`命令时必须删除此属性，那么`prevent_destroy`属性会阻止应用程序对Terraform配置中描述的所有资源进行更改。这会阻止我们对资源应用更改。这也是我个人将Terraform配置拆分的原因之一，将不能被销毁的敏感资源配置放在一个文件夹中（因此会有一个单独的Terraform状态文件），而其他资源则放在另一个文件夹中。这样，我们可以应用资源的更改，而不会被资源销毁防护设置所阻塞。
 - en: Here, I'm writing about separating the Terraform configuration and the state
     files, but it's also necessary to separate the workflows in the CI/CD pipeline,
     with one pipeline that applies the changes and another that destroys the resources.
+  id: totrans-180
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这里，我写的是关于拆分Terraform配置和状态文件的内容，但在CI/CD流水线中，也有必要拆分工作流，一个流水线负责应用更改，另一个负责销毁资源。
 - en: 'In addition, mostly to prevent human mistakes, it isn''t possible to add variables
     to the values of the properties of the `lifecycle` block by wanting to make the
     value of this property dynamic. You might try using a `bool` type variable, such
     as in the following code:'
+  id: totrans-181
   prefs: []
   type: TYPE_NORMAL
+  zh: 此外，主要是为了防止人为错误，无法通过想要使该属性的值动态化的方式将变量添加到`lifecycle`块的属性值中。你可能尝试使用`bool`类型的变量，例如以下代码：
 - en: '[PRE19]'
+  id: totrans-182
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE19]'
 - en: 'However, when executing the `terraform apply` command, the following error
     occurs:'
+  id: totrans-183
   prefs: []
   type: TYPE_NORMAL
+  zh: 然而，在执行`terraform apply`命令时，会发生以下错误：
 - en: '![](img/e2f4f17f-c3bf-4865-a566-de5f5165c24d.png)'
+  id: totrans-184
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/e2f4f17f-c3bf-4865-a566-de5f5165c24d.png)'
 - en: These errors indicate that a variable is not allowed in the `lifecycle` block, so
     you have to keep true/false values in the code.
+  id: totrans-185
   prefs: []
   type: TYPE_NORMAL
+  zh: 这些错误表示在`lifecycle`块中不允许使用变量，因此你必须在代码中保持true/false的值。
 - en: See also
+  id: totrans-186
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 另请参见
 - en: Documentation on the `prevent_destroy` property is available at [https://www.terraform.io/docs/configuration/resources.html#prevent_destroy](https://www.terraform.io/docs/configuration/resources.html#prevent_destroy).
+  id: totrans-187
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`prevent_destroy`属性的文档可以在[https://www.terraform.io/docs/configuration/resources.html#prevent_destroy](https://www.terraform.io/docs/configuration/resources.html#prevent_destroy)找到。'
 - en: An interesting article on the HashiCorp blog about drift management can be found
     at [https://www.hashicorp.com/blog/detecting-and-managing-drift-with-terraform/](https://www.hashicorp.com/blog/detecting-and-managing-drift-with-terraform/).
+  id: totrans-188
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 有关漂移管理的有趣文章可以在[https://www.hashicorp.com/blog/detecting-and-managing-drift-with-terraform/](https://www.hashicorp.com/blog/detecting-and-managing-drift-with-terraform/)找到。
 - en: Read this article from HashiCorp about feature toggles, blue-green deployments,
     and canary testing using Terraform, available at [https://www.hashicorp.com/blog/terraform-feature-toggles-blue-green-deployments-canary-test/](https://www.hashicorp.com/blog/terraform-feature-toggles-blue-green-deployments-canary-test/).
+  id: totrans-189
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 阅读HashiCorp的这篇文章，了解如何使用Terraform实现功能切换、蓝绿部署和金丝雀测试，文章地址：[https://www.hashicorp.com/blog/terraform-feature-toggles-blue-green-deployments-canary-test/](https://www.hashicorp.com/blog/terraform-feature-toggles-blue-green-deployments-canary-test/)。
 - en: Zero-downtime deployment with Terraform
+  id: totrans-190
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 使用Terraform进行零停机部署
 - en: As discussed in the previous recipe, changing certain properties on resources
     described in the Terraform configuration can lead to their destruction and subsequent
     recreation. Resources are destroyed and recreated in the order in which they are
@@ -852,132 +1270,195 @@
     it will lead to downtime, that is, a service interruption. This downtime can be
     greater or smaller depending on the type of resources that will have to be destroyed
     and then recreated.
+  id: totrans-191
   prefs: []
   type: TYPE_NORMAL
+  zh: 如前一教程所讨论，改变 Terraform 配置中描述的某些资源属性可能导致资源被销毁并随后重新创建。资源按 Terraform 中执行的顺序被销毁和重新创建。换句话说，第一个执行的资源将首先被销毁，然后重新创建，在生产环境中，在这段时间内，可能会导致停机，也就是服务中断。停机时间的长短取决于需要销毁并重建的资源类型。
 - en: For example, in Azure, a VM takes much longer to destroy and rebuild than a
     web app or a **Network Security Group** (**NSG**) rule.
+  id: totrans-192
   prefs: []
   type: TYPE_NORMAL
+  zh: 例如，在 Azure 中，虚拟机（VM）销毁和重建的时间要比 Web 应用或**网络安全组**（**NSG**）规则更长。
 - en: In Terraform, there is a mechanism that allows for zero downtime and therefore
     avoids this service interruption when deleting a resource.
+  id: totrans-193
   prefs: []
   type: TYPE_NORMAL
+  zh: 在 Terraform 中，有一种机制可以实现零停机时间，从而避免在删除资源时出现服务中断。
 - en: In this recipe, we will study how to implement zero downtime on a resource described
     in a Terraform configuration.
+  id: totrans-194
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本教程中，我们将研究如何在 Terraform 配置中描述的资源上实现零停机时间。
 - en: Getting ready
+  id: totrans-195
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 准备工作
 - en: 'For this recipe, we will use the Terraform configuration available from [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP07/sample-app](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP07/sample-app).
     The purpose of this configuration is to manage the following resources in Azure:'
+  id: totrans-196
   prefs: []
   type: TYPE_NORMAL
+  zh: 对于本教程，我们将使用来自 [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP07/sample-app](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP07/sample-app)
+    的 Terraform 配置。此配置的目的是管理 Azure 中的以下资源：
 - en: A Resource Group
+  id: totrans-197
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 一个资源组
 - en: A Service Plan
+  id: totrans-198
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 一个服务计划
 - en: An App Service (web app) instance
+  id: totrans-199
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 一个应用服务（Web 应用）实例
 - en: An Application Insights instance
+  id: totrans-200
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 一个应用程序洞察实例
 - en: In addition, this Terraform configuration has already been applied to the Azure
     cloud.
+  id: totrans-201
   prefs: []
   type: TYPE_NORMAL
+  zh: 此外，这个 Terraform 配置已经应用于 Azure 云。
 - en: 'For our use case, let''s assume that a company has decided to change the resource
     name and that we need to update the Terraform configuration with the new name.
     When running Terraform, the following result would be obtained with the `terraform
     plan` command:'
+  id: totrans-202
   prefs: []
   type: TYPE_NORMAL
+  zh: 对于我们的使用案例，假设某公司决定更改资源名称，我们需要使用新名称更新 Terraform 配置。运行 Terraform 时，使用 `terraform
+    plan` 命令将获得以下结果：
 - en: '![](img/7ca19d92-8c6f-447f-8a22-2e0f0b57b010.png)'
+  id: totrans-203
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/7ca19d92-8c6f-447f-8a22-2e0f0b57b010.png)'
 - en: As you can see, the name change requires a deletion of the web app that hosts
     our web application. This deletion will result in the application not being accessible
     for a small amount of time while it is recreated. The purpose of this recipe is
     to modify the Terraform configuration so that even when the App Service resource
     is deleted, the web application will still be available.
+  id: totrans-204
   prefs: []
   type: TYPE_NORMAL
+  zh: 如你所见，名称更改需要删除托管我们 Web 应用的 Web 应用程序。这次删除将在重新创建时导致应用程序在短时间内无法访问。本教程的目的是修改 Terraform
+    配置，即使删除应用服务资源，Web 应用仍然可用。
 - en: The source code of this recipe is available at [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP07/zerodowntime](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP07/zerodowntime).
+  id: totrans-205
   prefs: []
   type: TYPE_NORMAL
+  zh: 本教程的源代码可以在 [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP07/zerodowntime](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP07/zerodowntime)
+    获取。
 - en: How to do it…
+  id: totrans-206
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 怎么做……
 - en: 'To provide zero downtime in a Terraform configuration, perform the following
     steps:'
+  id: totrans-207
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了在 Terraform 配置中实现零停机时间，执行以下步骤：
 - en: 'In the Terraform configuration, inside the `azurerm_app_service` resource,
     add the `lifecycle` block as shown in the following code:'
+  id: totrans-208
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在 Terraform 配置中，在 `azurerm_app_service` 资源内，添加 `lifecycle` 块，如下所示的代码：
 - en: '[PRE20]'
+  id: totrans-209
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE20]'
 - en: Change the `name` property of the App Service to apply the new nomenclature.
+  id: totrans-210
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 更改应用服务的 `name` 属性以应用新的命名法。
 - en: 'Execute the Terraform CLI workflow and the `terraform apply` result will be
     shown as in the following screenshot:'
+  id: totrans-211
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 执行 Terraform CLI 工作流，`terraform apply` 结果将显示如下截图所示：
 - en: '![](img/4d0c99fb-63ad-4621-b9c1-fb6521693be3.png)'
+  id: totrans-212
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/4d0c99fb-63ad-4621-b9c1-fb6521693be3.png)'
 - en: How it works…
+  id: totrans-213
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 它是如何工作的……
 - en: In *step 2*, we added the `lifecycle` block to the `azurerm_app_service` resource.
     In this block, we added the `create_before_destroy` property with its value set
     to `true`. This property makes the regeneration of a resource possible in the
     event of destruction by indicating to Terraform to first recreate the resource,
     and only then to delete the original resource.
+  id: totrans-214
   prefs: []
   type: TYPE_NORMAL
+  zh: 在*第2步*中，我们为`azurerm_app_service`资源添加了`lifecycle`块。在这个块中，我们添加了`create_before_destroy`属性，并将其值设置为`true`。这个属性使得在资源被销毁时，Terraform会先重新创建资源，然后再删除原始资源，从而实现资源的再生成。
 - en: There’s more…
+  id: totrans-215
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 还有更多…
 - en: As we've seen, by using this property, there is no more interruption of service.
     As long as the new resource is not created, the old one is not deleted and the
     application continues to be online.
+  id: totrans-216
   prefs: []
   type: TYPE_NORMAL
+  zh: 正如我们所看到的，使用这个属性后，服务不再中断。只要新资源未创建，旧资源就不会被删除，应用程序会继续在线。
 - en: 'However, before using `create_before_destroy`, there are some things to consider,
     as follows:'
+  id: totrans-217
   prefs: []
   type: TYPE_NORMAL
+  zh: 然而，在使用`create_before_destroy`之前，需要考虑以下几点：
 - en: The `create_before_destroy` property only works when a configuration change
     requires the deletion and then regeneration of resources. It only works when executing
     the `terraform apply` command; it does not work when executing the `terraform
     destroy` command.
+  id: totrans-218
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`create_before_destroy`属性仅在配置更改需要删除并重新生成资源时有效。它仅在执行`terraform apply`命令时有效；在执行`terraform
+    destroy`命令时无效。'
 - en: You must be careful that the names of the resources that will be created have
     different names than the ones that will be destroyed afterward. Otherwise, if
     the names are identical, the resource may not be created.
+  id: totrans-219
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 你必须小心确保将要创建的资源的名称与之后将被销毁的资源名称不同。否则，如果名称相同，资源可能不会被创建。
 - en: 'Moreover, this zero-downtime technique is only really effective if the resource
     that will be impacted is fully operational at the end of its creation. For example,
     let''s take the case of a VM: although Terraform can quickly create it, it still
@@ -986,715 +1467,1034 @@
     generate downtime, and in order to be efficient in this case, I advise you to
     use Packer from HashiCorp ([https://www.packer.io/](https://www.packer.io/)),
     which allows you to create images of VMs that are already fully configured.'
+  id: totrans-220
   prefs: []
   type: TYPE_NORMAL
+  zh: 此外，零停机时间技术只有在受影响的资源在创建完成时完全可用时才真正有效。例如，以虚拟机为例：尽管Terraform可以快速创建它，但它在所有配置（中间件安装和应用程序部署）完成后仍然存在。所有这些配置可能会产生停机时间，因此，在这种情况下，我建议使用HashiCorp的Packer（[https://www.packer.io/](https://www.packer.io/)），它可以创建已经完全配置好的虚拟机镜像。
 - en: To implement zero downtime in Azure with Packer and Terraform, read the tutorial
     at [https://docs.microsoft.com/en-us/azure/developer/terraform/create-vm-scaleset-network-disks-using-packer-hcl](https://docs.microsoft.com/en-us/azure/developer/terraform/create-vm-scaleset-network-disks-using-packer-hcl).
+  id: totrans-221
   prefs: []
   type: TYPE_NORMAL
+  zh: 要在Azure中使用Packer和Terraform实现零停机时间，请阅读教程[https://docs.microsoft.com/en-us/azure/developer/terraform/create-vm-scaleset-network-disks-using-packer-hcl](https://docs.microsoft.com/en-us/azure/developer/terraform/create-vm-scaleset-network-disks-using-packer-hcl)。
 - en: Finally, we have seen in this recipe how to implement zero-downtime deployments
     with Terraform, but according to your provider, there are most likely other practices
     that are native to them. For example, we can also use load balancers, and for
     an App Service instance on Azure, we can use slots, as explained in the documentation
     at [https://docs.microsoft.com/en-us/azure/app-service/deploy-staging-slots](https://docs.microsoft.com/en-us/azure/app-service/deploy-staging-slots).
+  id: totrans-222
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后，我们已经在本教程中看到如何使用Terraform实现零停机时间的部署，但根据你的提供者，可能还有其他本地的实践。例如，我们还可以使用负载均衡器，对于Azure上的App
+    Service实例，我们可以使用插槽，正如在文档中所解释的[https://docs.microsoft.com/en-us/azure/app-service/deploy-staging-slots](https://docs.microsoft.com/en-us/azure/app-service/deploy-staging-slots)。
 - en: See also
+  id: totrans-223
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 另请参见
 - en: Read the HashiCorp blog post about the `create_before_destroy` property at [https://www.hashicorp.com/blog/zero-downtime-updates-with-terraform/](https://www.hashicorp.com/blog/zero-downtime-updates-with-terraform/).
+  id: totrans-224
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 阅读关于`create_before_destroy`属性的HashiCorp博客文章，链接：[https://www.hashicorp.com/blog/zero-downtime-updates-with-terraform/](https://www.hashicorp.com/blog/zero-downtime-updates-with-terraform/)。
 - en: A good article on zero downtime can be found at [https://dzone.com/articles/zero-downtime-deployment](https://dzone.com/articles/zero-downtime-deployment).
+  id: totrans-225
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 关于零停机时间的好文章可以在[https://dzone.com/articles/zero-downtime-deployment](https://dzone.com/articles/zero-downtime-deployment)找到。
 - en: Detecting resources deleted by the plan command
+  id: totrans-226
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 检测由`plan`命令删除的资源
 - en: One of the key features of Terraform is the possibility to visualize a preview
     of changes in advance of their application to a given piece of infrastructure
     with the `terraform plan` command.
+  id: totrans-227
   prefs: []
   type: TYPE_NORMAL
+  zh: Terraform的一个关键特性是可以通过`terraform plan`命令预览将要应用到特定基础设施上的更改。
 - en: We have often discussed in this book displaying a visualization of changes in
     the terminal, but what we see less often is how to automatically evaluate and
     analyze the results of the `terraform plan` command.
+  id: totrans-228
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本书中，我们经常讨论如何在终端中显示更改的可视化效果，但我们较少讨论如何自动评估和分析`terraform plan`命令的结果。
 - en: In this recipe, we will see how to analyze the results of the `terraform plan`
     command.
+  id: totrans-229
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这个食谱中，我们将学习如何分析`terraform plan`命令的结果。
 - en: Getting ready
+  id: totrans-230
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 准备工作
 - en: For the application of this recipe, we need to have the **jq** tool installed,
     available for download for all platforms from [https://stedolan.github.io/jq/](https://stedolan.github.io/jq/).
+  id: totrans-231
   prefs: []
   type: TYPE_NORMAL
+  zh: 要应用这个食谱，我们需要安装**jq**工具，所有平台均可从[https://stedolan.github.io/jq/](https://stedolan.github.io/jq/)下载。
 - en: In this recipe, we will use jq on Windows with PowerShell, but all steps will
     be identical on other OSes.
+  id: totrans-232
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这个食谱中，我们将在Windows上使用PowerShell运行jq，但其他操作系统上的所有步骤都是一样的。
 - en: The Terraform configuration used is available at [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP07/detectdestroy](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP07/detectdestroy), and
     we must run it on our infrastructure beforehand.
+  id: totrans-233
   prefs: []
   type: TYPE_NORMAL
+  zh: 使用的Terraform配置可以在[https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP07/detectdestroy](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP07/detectdestroy)找到，并且我们必须在基础设施上预先运行它。
 - en: The purpose of this recipe is to detect via a script whether the execution of
     `terraform plan` will lead to the destruction of a resource.
+  id: totrans-234
   prefs: []
   type: TYPE_NORMAL
+  zh: 这个食谱的目的是通过脚本检测`terraform plan`的执行是否会导致资源被销毁。
 - en: How to do it…
+  id: totrans-235
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 如何操作…
 - en: 'Perform the following steps to analyze the results of the `plan` command:'
+  id: totrans-236
   prefs: []
   type: TYPE_NORMAL
+  zh: 执行以下步骤以分析`plan`命令的结果：
 - en: 'Inside the Terraform configuration, we change the value of the `name` property
     (by adding the word `test`) in the App Service instance, as shown in the following
     code:'
+  id: totrans-237
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在Terraform配置中，我们更改了App Service实例的`name`属性的值（通过添加`test`一词），如下所示：
 - en: '[PRE21]'
+  id: totrans-238
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE21]'
 - en: 'Then, we execute the `terraform init` command, followed by the `terraform plan`
     command:'
+  id: totrans-239
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 然后，我们执行`terraform init`命令，再执行`terraform plan`命令：
 - en: '[PRE22]'
+  id: totrans-240
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE22]'
 - en: 'Finally, we execute the following PowerShell script, which analyzes the number
     of deleted resources:'
+  id: totrans-241
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 最后，我们执行以下PowerShell脚本，分析被删除资源的数量：
 - en: '[PRE23]'
+  id: totrans-242
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE23]'
 - en: This script is also available at [https://github.com/PacktPublishing/Terraform-Cookbook/blob/master/CHAP07/detectdestroy/detectdestroy.ps1](https://github.com/PacktPublishing/Terraform-Cookbook/blob/master/CHAP07/detectdestroy/detectdestroy.ps1).
+  id: totrans-243
   prefs: []
   type: TYPE_NORMAL
+  zh: 此脚本也可以在[https://github.com/PacktPublishing/Terraform-Cookbook/blob/master/CHAP07/detectdestroy/detectdestroy.ps1](https://github.com/PacktPublishing/Terraform-Cookbook/blob/master/CHAP07/detectdestroy/detectdestroy.ps1)找到。
 - en: How it works…
+  id: totrans-244
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 它是如何工作的…
 - en: In *step 1*, we modify the Terraform configuration by changing the name of the
     App Service instance, which will lead to the destruction of this resource during
     the `apply` command.
+  id: totrans-245
   prefs: []
   type: TYPE_NORMAL
+  zh: 在*第1步*，我们通过更改App Service实例的名称来修改Terraform配置，这将在`apply`命令执行时导致该资源被销毁。
 - en: Then, in *step 2*, we execute the `terraform plan` command with the option `-out="tfout.tfplan"`,
     which allows us to get the output of `plan` in a file (in binary format).
+  id: totrans-246
   prefs: []
   type: TYPE_NORMAL
+  zh: 然后，在*第2步*，我们执行`terraform plan`命令，并使用`-out="tfout.tfplan"`选项，这样我们可以将`plan`的输出保存到文件中（以二进制格式）。
 - en: 'Finally, in *step 3*, we write the PowerShell script that analyzes the generated
     plan for the number of resources that will be destroyed during the application.
     This script is made up of four lines. Here are the details:'
+  id: totrans-247
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后，在*第3步*，我们编写PowerShell脚本，分析生成的计划中在应用过程中将要销毁的资源数量。该脚本由四行代码组成。以下是详细信息：
 - en: In line 1, we use the `terraform show` command on the `tfout.tfplan` file that
     was generated in *step 2.* To this command we added the `-json` option in order
     to get an output in JSON format.
+  id: totrans-248
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在第1行，我们在*第2步*生成的`tfout.tfplan`文件上使用`terraform show`命令。我们在此命令中添加了`-json`选项，以便以JSON格式获取输出。
 - en: In line 2, we use **jq** on the JSON result obtained from the previous line
     and filter the list of actions (which will be applied by Terraform) to obtain
     an array of actions (`add`, `delete`, and `no-op`).
+  id: totrans-249
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在第2行，我们在前一行获得的JSON结果上使用**jq**，并过滤出Terraform将要应用的操作列表，以获得操作数组（`add`、`delete`和`no-op`）。
 - en: In line 3, we filter on this array all `delete` actions and get the number of
     this filtered array using the  `Count` PowerShell object.
+  id: totrans-250
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在第3行，我们在此数组上筛选所有`delete`操作，并使用`Count` PowerShell对象获取该筛选数组的数量。
 - en: In the last line, we display the count value, which corresponds to the number
     of deleted resources.
+  id: totrans-251
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在最后一行，我们显示了计数值，该值对应于已删除的资源数量。
 - en: 'The following screenshot shows the result of this script:'
+  id: totrans-252
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下截图展示了此脚本的结果：
 - en: '![](img/1a286507-440d-4e30-a8cd-10b66c84cd88.png)'
+  id: totrans-253
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/1a286507-440d-4e30-a8cd-10b66c84cd88.png)'
 - en: '`$nbdelete.Count` returns `1`, which is equal to the number of resources that
     will be deleted.'
+  id: totrans-254
   prefs: []
   type: TYPE_NORMAL
+  zh: '`$nbdelete.Count`返回`1`，表示将被删除的资源数量。'
 - en: There’s more…
+  id: totrans-255
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 还有更多……
 - en: Regarding the language used for the scripting of this recipe, we wrote it in
     PowerShell, but it can of course be written in any scripting language, such as
     Bash or Python. We can also put this script into a function that was called just
     after the `terraform plan` command and did not `apply` the Terraform configuration if
     that function returned a positive delete number.
+  id: totrans-256
   prefs: []
   type: TYPE_NORMAL
+  zh: 关于此食谱所使用的脚本语言，我们使用了PowerShell编写，但当然也可以用任何脚本语言编写，如Bash或Python。我们还可以将此脚本放入一个函数中，该函数在执行`terraform
+    plan`命令后立即调用，并且在该函数返回正数删除数量时不`apply` Terraform配置。
 - en: There are also other tools for parsing and processing the plan generated by
     the `terraform plan` command. Among these tools, there are `npm` packages such
     as `terraform-plan-parser`, available at [https://github.com/lifeomic/terraform-plan-parser](https://github.com/lifeomic/terraform-plan-parser),
     or **Open Policy Agent for Terraform** at [https://www.openpolicyagent.org/docs/latest/terraform/](https://www.openpolicyagent.org/docs/latest/terraform/).
+  id: totrans-257
   prefs: []
   type: TYPE_NORMAL
+  zh: 还有其他工具用于解析和处理`terraform plan`命令生成的计划。在这些工具中，包括`npm`包，如`terraform-plan-parser`，可在[https://github.com/lifeomic/terraform-plan-parser](https://github.com/lifeomic/terraform-plan-parser)上获取，或**Terraform的Open
+    Policy Agent**，可在[https://www.openpolicyagent.org/docs/latest/terraform/](https://www.openpolicyagent.org/docs/latest/terraform/)上查看。
 - en: See also
+  id: totrans-258
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 另请参阅
 - en: More detailed documentation on the JSON format of the `terraform plan` command
     is available at [https://www.terraform.io/docs/internals/json-format.html](https://www.terraform.io/docs/internals/json-format.html).
+  id: totrans-259
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 有关`terraform plan`命令的JSON格式的详细文档，可在[https://www.terraform.io/docs/internals/json-format.html](https://www.terraform.io/docs/internals/json-format.html)查阅。
 - en: The `terraform show` command documentation is available at [https://www.terraform.io/docs/commands/show.html](https://www.terraform.io/docs/commands/show.html).
+  id: totrans-260
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`terraform show`命令的文档可以在[https://www.terraform.io/docs/commands/show.html](https://www.terraform.io/docs/commands/show.html)查阅。'
 - en: Managing Terraform configuration dependencies using Terragrunt
+  id: totrans-261
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 使用Terragrunt管理Terraform配置依赖关系
 - en: In several recipes in this book, we have discussed the organization of the files
     that contain the Terraform configuration. We examined this more specifically in
     the *Provisioning infrastructure in multiple environments* recipe in [Chapter
     2](3099c9ac-8c38-4e7d-8146-411fac26a2b7.xhtml), *Writing Terraform Configuration*,
     which outlines several architecture solutions.
+  id: totrans-262
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本书的几个食谱中，我们讨论了包含Terraform配置的文件组织。在[第2章](3099c9ac-8c38-4e7d-8146-411fac26a2b7.xhtml)的*在多个环境中配置基础设施*食谱中，我们对此进行了更具体的探讨，*编写Terraform配置*，概述了几种架构解决方案。
 - en: One of the best practices regarding the structure of the configuration is to
     separate the Terraform configuration into infrastructure and application components,
     as explained in the article at [https://www.cloudreach.com/en/resources/blog/how-to-simplify-your-terraform-code-structure/](https://www.cloudreach.com/en/resources/blog/how-to-simplify-your-terraform-code-structure/).
     The challenge with a structure split into several configurations is the maintenance
     of dependencies and run schedules between these components.
+  id: totrans-263
   prefs: []
   type: TYPE_NORMAL
+  zh: 关于配置结构的最佳实践之一是将Terraform配置分为基础设施和应用程序组件，如[https://www.cloudreach.com/en/resources/blog/how-to-simplify-your-terraform-code-structure/](https://www.cloudreach.com/en/resources/blog/how-to-simplify-your-terraform-code-structure/)文章中所述。将结构拆分为多个配置的挑战在于维护这些组件之间的依赖关系和运行计划。
 - en: Among all the third-party tools that revolve around Terraform, there is **Terragrunt**
     ([https://terragrunt.gruntwork.io/](https://terragrunt.gruntwork.io/)), developed
     by Gruntwork. Terragrunt is open source and offers a lot of additional functionality
     for the organization and execution of Terraform configurations.
+  id: totrans-264
   prefs: []
   type: TYPE_NORMAL
+  zh: 在所有与Terraform相关的第三方工具中，有一个由Gruntwork开发的**Terragrunt**([https://terragrunt.gruntwork.io/](https://terragrunt.gruntwork.io/))。Terragrunt是开源的，并为Terraform配置的组织和执行提供了许多附加功能。
 - en: In this recipe, we will learn how you can use Terragrunt to manage the dependencies
     of different Terraform configurations.
+  id: totrans-265
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本示例中，我们将学习如何使用Terragrunt管理不同Terraform配置之间的依赖关系。
 - en: Getting ready
+  id: totrans-266
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 准备工作
 - en: For this recipe, we must have previously installed the Terragrunt binary on
     our workstations by following the instructions at [https://terragrunt.gruntwork.io/docs/getting-started/install/#install-terragrunt](https://terragrunt.gruntwork.io/docs/getting-started/install/#install-terragrunt).
+  id: totrans-267
   prefs: []
   type: TYPE_NORMAL
+  zh: 对于本示例，我们必须提前在工作站上安装Terragrunt二进制文件，具体操作可以参考[https://terragrunt.gruntwork.io/docs/getting-started/install/#install-terragrunt](https://terragrunt.gruntwork.io/docs/getting-started/install/#install-terragrunt)。
 - en: 'In this recipe, we will build an infrastructure consisting of the following
     elements:'
+  id: totrans-268
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本示例中，我们将构建一个由以下元素组成的基础设施：
 - en: A Resource Group
+  id: totrans-269
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 一个资源组
 - en: A network with a Virtual Network and a Subnet
+  id: totrans-270
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 一个包含虚拟网络和子网的网络
 - en: A VM
+  id: totrans-271
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 一台虚拟机
 - en: 'The architecture of the folders containing this Terraform configuration is
     as follows:'
+  id: totrans-272
   prefs: []
   type: TYPE_NORMAL
+  zh: 包含此Terraform配置的文件夹架构如下：
 - en: '![](img/4f3576d6-6718-43f0-9d97-fb53780172f9.png)'
+  id: totrans-273
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/4f3576d6-6718-43f0-9d97-fb53780172f9.png)'
 - en: 'The problem with this architecture is the dependency between configurations,
     and the fact that they must be executed in a specific order. Indeed, to apply
     the network, the Resource Group must be applied first, and it''s the same for
     the VM: the network must be created beforehand. With Terraform, in the case of
     several changes, the Terraform workflow must be executed several times and in
     the correct order for each of those configurations.'
+  id: totrans-274
   prefs: []
   type: TYPE_NORMAL
+  zh: 这个架构的问题在于配置之间的依赖关系，以及它们必须按照特定顺序执行。实际上，为了应用网络，必须先应用资源组，虚拟机也是如此：网络必须先创建。使用Terraform时，在有多个更改的情况下，Terraform工作流必须针对每个配置多次执行，并确保顺序正确。
 - en: The purpose of this recipe is not to explain all the functionalities of Terragrunt
     in detail, but to demonstrate one of its features, which is to simplify the execution
     of Terraform when the Terraform configuration is separated into several folders
     that are linked by dependencies.
+  id: totrans-275
   prefs: []
   type: TYPE_NORMAL
+  zh: 本示例的目的是演示Terragrunt的一个功能：简化当Terraform配置被拆分到多个文件夹并通过依赖关系链接时的Terraform执行，而不是详尽地解释Terragrunt的所有功能。
 - en: The source code of this recipe is available at [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP07/demogrunt/dev](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP07/demogrunt/dev).
+  id: totrans-276
   prefs: []
   type: TYPE_NORMAL
+  zh: 本示例的源代码可以在[https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP07/demogrunt/dev](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP07/demogrunt/dev)找到。
 - en: How to do it…
+  id: totrans-277
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 如何做到这一点…
 - en: 'Perform the following steps to use Terragrunt with Terraform dependencies:'
+  id: totrans-278
   prefs: []
   type: TYPE_NORMAL
+  zh: 执行以下步骤以使用Terragrunt和Terraform的依赖关系：
 - en: 'To add the dependency between the `network` and `rg` configurations, inside
     the `network` folder add a new file called `terragrunt.hcl` with the following
     content:'
+  id: totrans-279
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 要在`network`和`rg`配置之间添加依赖关系，在`network`文件夹内添加一个名为`terragrunt.hcl`的新文件，内容如下：
 - en: '[PRE24]'
+  id: totrans-280
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE24]'
 - en: 'Inside the `vm-dev` folder, add a new file called `terragrunt.hcl` with the
     following content:'
+  id: totrans-281
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在`vm-dev`文件夹内，添加一个名为`terragrunt.hcl`的新文件，内容如下：
 - en: '[PRE25]'
+  id: totrans-282
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE25]'
 - en: 'In a terminal, inside the `network` folder, run the following `terragrunt`
     commands to create the Resource Group and the network:'
+  id: totrans-283
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在终端中，在`network`文件夹内运行以下`terragrunt`命令来创建资源组和网络：
 - en: '[PRE26]'
+  id: totrans-284
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE26]'
 - en: How it works…
+  id: totrans-285
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 它是如何工作的…
 - en: The `terragrunt.hcl` file we added contains the configuration for Terragrunt.
+  id: totrans-286
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们添加的`terragrunt.hcl`文件包含了Terragrunt的配置。
 - en: Here, in the configuration we wrote in *step 2*, we indicated a dependency between
     the network configuration and the Resource Group configuration. This is because
     the Resource Group must be created before executing the network configuration.
+  id: totrans-287
   prefs: []
   type: TYPE_NORMAL
+  zh: 在我们在*第2步*中编写的配置中，我们指明了网络配置和资源组配置之间的依赖关系。这是因为在执行网络配置之前，必须先创建资源组。
 - en: In *step 3*, we then executed the Terragrunt commands (`terragrunt init`, `terragrunt
     plan-all`, and `terragrunt apply-all`) and when executing them, thanks to the
     configuration we wrote, Terragrunt will first apply Terraform to the Resource
     Group and then to the network automatically. This without having to apply the
     Terraform workflow several times on several Terraform configurations and in the
     right order.
+  id: totrans-288
   prefs: []
   type: TYPE_NORMAL
+  zh: 在*第3步*中，我们执行了Terragrunt命令（`terragrunt init`，`terragrunt plan-all`和`terragrunt
+    apply-all`），执行时，凭借我们编写的配置，Terragrunt会先对资源组执行Terraform，再自动对网络执行Terraform。这使得我们无需多次在多个Terraform配置上执行Terraform工作流并确保正确顺序。
 - en: There’s more…
+  id: totrans-289
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 还有更多…
 - en: In this recipe, we studied how to improve the dependency between the Terraform
     configuration using Terragrunt and its configuration. We can go even further with
     this improvement, by externalizing the configuration (which is redundant between
     each environment) by reading the documentation available at [https://terragrunt.gruntwork.io/docs/features/execute-terraform-commands-on-multiple-modules-at-once/](https://terragrunt.gruntwork.io/docs/features/execute-terraform-commands-on-multiple-modules-at-once/).
+  id: totrans-290
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本教程中，我们学习了如何通过使用 Terragrunt 和其配置，改善 Terraform 配置之间的依赖关系。我们可以通过外部化配置（即在每个环境之间冗余的部分），进一步改进这一点，相关文档可以在[https://terragrunt.gruntwork.io/docs/features/execute-terraform-commands-on-multiple-modules-at-once/](https://terragrunt.gruntwork.io/docs/features/execute-terraform-commands-on-multiple-modules-at-once/)找到。
 - en: However, since Terragrunt runs the Terraform binary that is installed on your
     local computer, you should make sure to install a version of Terragrunt that is
     compatible with the version of the Terraform binary installed.
+  id: totrans-291
   prefs: []
   type: TYPE_NORMAL
+  zh: 然而，由于 Terragrunt 运行的是安装在本地计算机上的 Terraform 二进制文件，您需要确保安装与已安装的 Terraform 二进制文件版本兼容的
+    Terragrunt 版本。
 - en: In the next recipe, we will complete the configuration of Terragrunt to be able
     to use it as a wrapper for Terraform by simplifying the Terraform command lines.
+  id: totrans-292
   prefs: []
   type: TYPE_NORMAL
+  zh: 在下一个教程中，我们将完成 Terragrunt 的配置，使其能够作为 Terraform 的封装器，通过简化 Terraform 命令行来使用。
 - en: See also
+  id: totrans-293
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 另见
 - en: The detailed documentation of Terragrunt is available at [https://terragrunt.gruntwork.io/docs/#features](https://terragrunt.gruntwork.io/docs/#features).
+  id: totrans-294
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: Terragrunt 的详细文档可以在[https://terragrunt.gruntwork.io/docs/#features](https://terragrunt.gruntwork.io/docs/#features)找到。
 - en: The source code for Terragrunt is available on GitHub at [https://github.com/gruntwork-io/terragrunt](https://github.com/gruntwork-io/terragrunt).
+  id: totrans-295
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: Terragrunt 的源代码可以在 GitHub 上找到，地址为[https://github.com/gruntwork-io/terragrunt](https://github.com/gruntwork-io/terragrunt)。
 - en: A useful blog article on the architecture of the Terraform configuration can
     be found at [https://www.hashicorp.com/blog/structuring-hashicorp-terraform-configuration-for-production/](https://www.hashicorp.com/blog/structuring-hashicorp-terraform-configuration-for-production/).
+  id: totrans-296
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 有关 Terraform 配置架构的有用博客文章可以在[https://www.hashicorp.com/blog/structuring-hashicorp-terraform-configuration-for-production/](https://www.hashicorp.com/blog/structuring-hashicorp-terraform-configuration-for-production/)找到。
 - en: Using Terragrunt as a wrapper for Terraform
+  id: totrans-297
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 使用 Terragrunt 作为 Terraform 的封装器
 - en: In the many years that I have been working and supporting customers on Terraform,
     there is a recurring problem that prevents users from making full use of Terraform's
     functionality. What I have noticed is that these users do not encounter any problems
     with the language and the writing of the provider's resource configuration, but
     they do have difficulty with the automation of the Terraform client through the
     use of command lines for their workflow.
+  id: totrans-298
   prefs: []
   type: TYPE_NORMAL
+  zh: 在我多年的 Terraform 工作和客户支持过程中，出现了一个反复出现的问题，这使得用户无法充分利用 Terraform 的功能。我注意到，这些用户在编写提供商资源配置时并不会遇到任何问题，但他们在通过命令行自动化
+    Terraform 客户端的工作流时却遇到了困难。
 - en: To simplify the automation of the Terraform workflow, whether for use on a local
     workstation or in a CI/CD pipeline, we can use Terragrunt as Terraform wrapper
     that integrates the Terraform workflow.
+  id: totrans-299
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了简化 Terraform 工作流的自动化，无论是在本地工作站上使用，还是在 CI/CD 流水线中使用，我们可以将 Terragrunt 用作 Terraform
+    的封装器，整合 Terraform 工作流。
 - en: What we will learn in this recipe is how to use Terragrunt (which we have already
     studied in the previous recipe) as a Terraform wrapper.
+  id: totrans-300
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本教程中，我们将学习如何使用 Terragrunt（在之前的教程中已经学习过）作为 Terraform 的封装器。
 - en: Getting ready
+  id: totrans-301
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 准备工作
 - en: For this recipe, we must have previously installed the Terragrunt binary on
     our workstations by following the instructions at [https://terragrunt.gruntwork.io/docs/getting-started/install/#install-terragrunt](https://terragrunt.gruntwork.io/docs/getting-started/install/#install-terragrunt).
+  id: totrans-302
   prefs: []
   type: TYPE_NORMAL
+  zh: 对于本教程，我们必须事先在工作站上安装 Terragrunt 二进制文件，具体安装步骤请参阅[https://terragrunt.gruntwork.io/docs/getting-started/install/#install-terragrunt](https://terragrunt.gruntwork.io/docs/getting-started/install/#install-terragrunt)。
 - en: 'The Terraform configuration used in this recipe is available at [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP07/demogrunt-wrapper](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP07/demogrunt-wrapper).
     It allows us to build resources in Azure. It uses an `env-dev.tfvars` variable
     file and a remote backend configuration file (`azurerm`) in the `backend.tfvars` file. To
     create this infrastructure, the following Terraform commands must be executed:'
+  id: totrans-303
   prefs: []
   type: TYPE_NORMAL
+  zh: 本教程中使用的 Terraform 配置可以在 [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP07/demogrunt-wrapper](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP07/demogrunt-wrapper)
+    上找到。它允许我们在 Azure 中构建资源。它使用一个 `env-dev.tfvars` 变量文件和一个远程后端配置文件（`azurerm`），该文件位于
+    `backend.tfvars` 文件中。要创建此基础设施，必须执行以下 Terraform 命令：
 - en: '[PRE27]'
+  id: totrans-304
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE27]'
 - en: The Terraform configuration of this resource creates resources in Azure, but
     what we will study in this recipe applies to any Terraform configuration.
+  id: totrans-305
   prefs: []
   type: TYPE_NORMAL
+  zh: 该资源的 Terraform 配置在 Azure 中创建资源，但我们在本教程中研究的内容适用于任何 Terraform 配置。
 - en: The purpose of this recipe is to use the Terragrunt configuration to help execute
     these Terraform commands in an automation context.
+  id: totrans-306
   prefs: []
   type: TYPE_NORMAL
+  zh: 本文档的目的是使用 Terragrunt 配置帮助在自动化环境中执行这些 Terraform 命令。
 - en: How to do it…
+  id: totrans-307
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 如何操作…
 - en: 'Perform the following steps to use Terragrunt as a Terraform CLI wrapper:'
+  id: totrans-308
   prefs: []
   type: TYPE_NORMAL
+  zh: 执行以下步骤以将 Terragrunt 用作 Terraform CLI 的包装器：
 - en: Inside the folder that contains the Terraform configuration, create a new file
     called `terragrunt.hcl`.
+  id: totrans-309
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在包含 Terraform 配置的文件夹中，创建一个名为 `terragrunt.hcl` 的新文件。
 - en: 'In this file, add the following configuration section to configure the `init`
     command:'
+  id: totrans-310
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在此文件中，添加以下配置部分以配置 `init` 命令：
 - en: '[PRE28]'
+  id: totrans-311
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE28]'
 - en: 'Add the following code to configure the `plan` and `apply` commands:'
+  id: totrans-312
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 添加以下代码以配置 `plan` 和 `apply` 命令：
 - en: '[PRE29]'
+  id: totrans-313
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE29]'
 - en: 'In the command-line terminal, from the folder that contains the Terraform configuration,
     run the following Terragrunt command to initialize the Terraform context:'
+  id: totrans-314
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在命令行终端中，从包含 Terraform 配置的文件夹中运行以下 Terragrunt 命令以初始化 Terraform 上下文：
 - en: '[PRE30]'
+  id: totrans-315
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE30]'
 - en: 'Finally, run the following Terragrunt commands to apply the changes we''ve
     made:'
+  id: totrans-316
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 最后，运行以下 Terragrunt 命令以应用我们所做的更改：
 - en: '[PRE31]'
+  id: totrans-317
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE31]'
 - en: How it works…
+  id: totrans-318
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 它是如何工作的…
 - en: In *step 1*, we created the `terragrunt.hcl` file, which will contain the Terragrunt
     configuration of the Terraform wrapper. In *step 2*, we described in this file
     the Terraform execution configuration for the `init` command. In the list of commands,
     we indicate that this configuration applies for the `init` command and in the
     list of arguments we put an entry for the `--backend-config` option, which takes
     as a value the `backend.tfvars` file.
+  id: totrans-319
   prefs: []
   type: TYPE_NORMAL
+  zh: 在*步骤 1*中，我们创建了 `terragrunt.hcl` 文件，该文件将包含 Terraform 包装器的 Terragrunt 配置。在*步骤
+    2*中，我们在该文件中描述了 `init` 命令的 Terraform 执行配置。在命令列表中，我们指明该配置适用于 `init` 命令，并在参数列表中为
+    `--backend-config` 选项添加了一个条目，该选项的值为 `backend.tfvars` 文件。
 - en: Then in *step 3*, we did the same operation for the `plan` and `apply` commands.
     In this configuration, we specify the list of commands: `plan`, `apply`, `destroy`,
     and `refresh`. For the arguments, we indicate the `-var-file="env-vars.tfvars"` option.
+  id: totrans-320
   prefs: []
   type: TYPE_NORMAL
+  zh: 然后在*步骤 3*中，我们对 `plan` 和 `apply` 命令进行了相同的操作。在此配置中，我们指定了命令列表：`plan`、`apply`、`destroy`
+    和 `refresh`。对于参数，我们指明了 `-var-file="env-vars.tfvars"` 选项。
 - en: 'Once this configuration file is finished being written, we use it to run Terragrunt.
     In *step 4*, we execute the `terragrunt init` command, which will use the configuration
     we wrote and so will execute the following command:'
+  id: totrans-321
   prefs: []
   type: TYPE_NORMAL
+  zh: 配置文件编写完成后，我们使用它来运行 Terragrunt。在*步骤 4*中，我们执行 `terragrunt init` 命令，它将使用我们编写的配置，因此会执行以下命令：
 - en: '[PRE32]'
+  id: totrans-322
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE32]'
 - en: 'You can see this in the following screenshot:'
+  id: totrans-323
   prefs: []
   type: TYPE_NORMAL
+  zh: 你可以在以下截图中看到：
 - en: '![](img/c5dd8b74-c2f7-46fb-ac66-1736845a1a3d.png)'
+  id: totrans-324
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/c5dd8b74-c2f7-46fb-ac66-1736845a1a3d.png)'
 - en: 'Finally, to preview the changes, we execute the `terragrunt plan` command,
     which will use the configuration we wrote and will therefore execute the following command:'
+  id: totrans-325
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后，为了预览更改，我们执行 `terragrunt plan` 命令，它将使用我们编写的配置，因此会执行以下命令：
 - en: '[PRE33]'
+  id: totrans-326
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE33]'
 - en: 'You can see this in the following screenshot:'
+  id: totrans-327
   prefs: []
   type: TYPE_NORMAL
+  zh: 你可以在以下截图中看到：
 - en: '![](img/f109b541-10f0-4308-b031-ada3242cda89.png)'
+  id: totrans-328
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/f109b541-10f0-4308-b031-ada3242cda89.png)'
 - en: 'If these changes correspond to your expectations, you can use the following
     Terragrunt command to apply these changes:'
+  id: totrans-329
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果这些更改符合你的预期，你可以使用以下 Terragrunt 命令来应用这些更改：
 - en: '[PRE34]'
+  id: totrans-330
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE34]'
 - en: See also
+  id: totrans-331
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 另见
 - en: Detailed CLI configuration documentation is available at [https://terragrunt.gruntwork.io/docs/features/keep-your-cli-flags-dry/](https://terragrunt.gruntwork.io/docs/features/keep-your-cli-flags-dry/).
+  id: totrans-332
   prefs: []
   type: TYPE_NORMAL
+  zh: 详细的 CLI 配置文档可在[https://terragrunt.gruntwork.io/docs/features/keep-your-cli-flags-dry/](https://terragrunt.gruntwork.io/docs/features/keep-your-cli-flags-dry/)查看。
 - en: Building CI/CD pipelines for Terraform configurations in Azure Pipelines
+  id: totrans-333
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 在 Azure Pipelines 中为 Terraform 配置构建 CI/CD 流水线
 - en: In all of the previous recipes in this book, we've discussed Terraform configuration,
     CLI execution, and its benefits for IaC.
+  id: totrans-334
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本书的所有之前的食谱中，我们已经讨论了 Terraform 配置、CLI 执行以及其在 IaC 中的好处。
 - en: Now, in this recipe, we will discuss how we will integrate this Terraform workflow
     into a CI/CD pipeline in Azure Pipelines using the Terraform extension for Azure
     DevOps and Pipelines YAML.
+  id: totrans-335
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，在这个食谱中，我们将讨论如何将此 Terraform 工作流集成到 Azure Pipelines 的 CI/CD 流水线中，使用 Azure DevOps
+    的 Terraform 扩展和 Pipelines YAML。
 - en: Getting ready
+  id: totrans-336
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 准备就绪
 - en: 'Before automating Terraform in any CI/CD pipeline, it is recommended to read
     HashiCorp''s automation guides with recommendations for Terraform. These guides
     are available here:'
+  id: totrans-337
   prefs: []
   type: TYPE_NORMAL
+  zh: 在任何 CI/CD 流水线中自动化 Terraform 之前，建议阅读 HashiCorp 的自动化指南，其中包含对 Terraform 的建议。这些指南可在此处查看：
 - en: '[https://learn.hashicorp.com/terraform/development/running-terraform-in-automation](https://learn.hashicorp.com/terraform/development/running-terraform-in-automation)'
+  id: totrans-338
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '[https://learn.hashicorp.com/terraform/development/running-terraform-in-automation](https://learn.hashicorp.com/terraform/development/running-terraform-in-automation)'
 - en: '[https://www.terraform.io/docs/cloud/guides/recommended-practices/part3.html](https://www.terraform.io/docs/cloud/guides/recommended-practices/part3.html)'
+  id: totrans-339
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '[https://www.terraform.io/docs/cloud/guides/recommended-practices/part3.html](https://www.terraform.io/docs/cloud/guides/recommended-practices/part3.html)'
 - en: The purpose of this recipe is not to explain in detail how Azure Pipelines works,
     but just to focus on the execution of Terraform in Azure Pipelines. To learn more
     about Azure Pipelines, I suggest you look at the official documentation at [https://docs.microsoft.com/en-us/azure/devops/pipelines/index?view=azure-devops](https://docs.microsoft.com/en-us/azure/devops/pipelines/index?view=azure-devops).
+  id: totrans-340
   prefs: []
   type: TYPE_NORMAL
+  zh: 本食谱的目的不是详细解释 Azure Pipelines 的工作原理，而是专注于在 Azure Pipelines 中执行 Terraform。要了解更多关于
+    Azure Pipelines 的信息，建议你查看官方文档：[https://docs.microsoft.com/en-us/azure/devops/pipelines/index?view=azure-devops](https://docs.microsoft.com/en-us/azure/devops/pipelines/index?view=azure-devops)。
 - en: 'To use Terraform in Azure Pipelines, there are a couple of solutions:'
+  id: totrans-341
   prefs: []
   type: TYPE_NORMAL
+  zh: 在 Azure Pipelines 中使用 Terraform，有几种解决方案：
 - en: Using custom scripts (PowerShell and Bash) executing the Terraform CLI commands
+  id: totrans-342
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 使用自定义脚本（PowerShell 和 Bash）执行 Terraform CLI 命令
 - en: Using Terraform extensions for Azure DevOps
+  id: totrans-343
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 使用 Azure DevOps 的 Terraform 扩展
 - en: Here in this recipe, we will learn how to use the Terraform extension for Azure
     DevOps published by Charles Zipp (in the knowledge there are, of course, other
     extensions available by other publishers).
+  id: totrans-344
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本食谱中，我们将学习如何使用由 Charles Zipp 发布的 Azure DevOps Terraform 扩展（当然，在知识库中还有其他发布者提供的扩展）。
 - en: 'To install this extension, implement the following steps:'
+  id: totrans-345
   prefs: []
   type: TYPE_NORMAL
+  zh: 要安装此扩展，请执行以下步骤：
 - en: Go to [https://marketplace.visualstudio.com/items?itemName=charleszipp.azure-pipelines-tasks-terraform](https://marketplace.visualstudio.com/items?itemName=charleszipp.azure-pipelines-tasks-terraform)
     in your browser and click on Terraform Build & Release Tasks.
+  id: totrans-346
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在浏览器中访问[https://marketplace.visualstudio.com/items?itemName=charleszipp.azure-pipelines-tasks-terraform](https://marketplace.visualstudio.com/items?itemName=charleszipp.azure-pipelines-tasks-terraform)并点击“Terraform
+    构建与发布任务”。
 - en: At the top of the page, click on Get it free.
+  id: totrans-347
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在页面顶部，点击“免费获取”。
 - en: 'On the installation page, in the Organization dropdown, choose the organization
     to which the extension will be installed (1), then click on the Install button
     (2):'
+  id: totrans-348
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在安装页面中，在“组织”下拉菜单中选择将安装该扩展的组织（1），然后点击“安装”按钮（2）：
 - en: '![](img/22b2d1d6-ac59-4167-9388-1f4682edd62c.png)'
+  id: totrans-349
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/22b2d1d6-ac59-4167-9388-1f4682edd62c.png)'
 - en: The extension will be installed on your Azure DevOps organization.
+  id: totrans-350
   prefs: []
   type: TYPE_NORMAL
+  zh: 扩展将被安装到你的 Azure DevOps 组织中。
 - en: Additionally, for the Terraform state file, we will use a remote backend. In
     order to be able to use it in Azure (Azure Storage, to be precise) with Terraform,
     we learned in the *Protecting the state file in Azure remote backend* recipe of
     [Chapter 6](d054157b-d534-47c9-8079-3af13107c4ef.xhtml), *Provisioning Azure Infrastructure
     with Terraform*, that an Azure service principal must be created.
+  id: totrans-351
   prefs: []
   type: TYPE_NORMAL
+  zh: 此外，对于 Terraform 状态文件，我们将使用远程后端。为了能够在 Azure 中（准确来说是 Azure 存储）使用它，我们在[第 6 章](d054157b-d534-47c9-8079-3af13107c4ef.xhtml)的《使用
+    Terraform 配置 Azure 基础设施》中的*保护 Azure 远程后端中的状态文件*食谱中，了解到必须创建一个 Azure 服务主体。
 - en: To create this connection with Azure, in Azure Pipelines, we go to set up a
     service connection with the information from the created Azure service principal.
     To operate this, in the project settings, we navigate to the Service connections
     menu. Then we create a new Azure RM service connection and configure it with the
     service properties.
+  id: totrans-352
   prefs: []
   type: TYPE_NORMAL
 - en: 'The following screenshot shows the service connection to my Azure Terraform
     Demo configuration:'
+  id: totrans-353
   prefs: []
   type: TYPE_NORMAL
 - en: '![](img/12d4dda9-ac4b-4212-8a85-653e70ed3930.png)'
+  id: totrans-354
   prefs: []
   type: TYPE_IMG
 - en: Finally, the code that contains the Terraform configuration must be stored in
     a Git repository, such as GitHub or Azure Repos (in this recipe, we will use GitHub).
+  id: totrans-355
   prefs: []
   type: TYPE_NORMAL
 - en: Note that in this recipe, we will not study the deployed Terraform configuration
     code, which is very basic (it generates a random string) – its purpose is to demonstrate
     the implementation of the pipeline.
+  id: totrans-356
   prefs: []
   type: TYPE_NORMAL
 - en: The Terraform configuration source code that will be used in this recipe is
     available at [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP07/pipeline](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP07/pipeline).
+  id: totrans-357
   prefs: []
   type: TYPE_NORMAL
 - en: How to do it…
+  id: totrans-358
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
 - en: 'To create the pipeline, we performing the following steps:'
+  id: totrans-359
   prefs: []
   type: TYPE_NORMAL
 - en: 'In the Azure Pipelines menu, click Pipelines:'
+  id: totrans-360
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: '![](img/63f31f5c-6930-4ac5-abf6-098c5512bbaa.png)'
+  id: totrans-361
   prefs: []
   type: TYPE_IMG
 - en: 'Click on the Create Pipeline button:'
+  id: totrans-362
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: '![](img/8e9d534b-4e4a-4fa6-8276-4d19cf374cb8.png)'
+  id: totrans-363
   prefs: []
   type: TYPE_IMG
 - en: 'For the code source, select the Git repository that contains the Terraform
     configuration. For this recipe, we choose our GitHub repository and select the Starter
     pipeline option to start with a new pipeline from scratch:'
+  id: totrans-364
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: '![](img/0d40134d-ef1b-4ec1-aee5-c0ff3d1b9328.png)'
+  id: totrans-365
   prefs: []
   type: TYPE_IMG
 - en: 'The pipeline editor opens and you can start writing the CI/CD steps directly
     online. Let''s look at the code for this pipeline, which is in YAML format. First,
     we''re going to configure the pipeline options with the following code to use
     an Ubuntu agent:'
+  id: totrans-366
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: '[PRE35]'
+  id: totrans-367
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE35]'
 - en: 'Then, we tell the pipeline to download the desired version of the Terraform binary
     by adding this code:'
+  id: totrans-368
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: '[PRE36]'
+  id: totrans-369
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE36]'
 - en: 'We continue with the first command of the Terraform workflow and execute the `terraform init` command:'
+  id: totrans-370
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: '[PRE37]'
+  id: totrans-371
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE37]'
 - en: 'After the `init` step, the pipeline executes the `terraform plan` command for
     preview and displays the changes that the pipeline will apply:'
+  id: totrans-372
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: '[PRE38]'
+  id: totrans-373
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE38]'
 - en: 'And finally, the pipeline runs the `terraform apply` command to apply the changes:'
+  id: totrans-374
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: '[PRE39]'
+  id: totrans-375
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE39]'
 - en: The complete source code of this pipeline in YAML is available at [https://github.com/PacktPublishing/Terraform-Cookbook/blob/master/CHAP07/pipeline/azure-pipelines.yml](https://github.com/PacktPublishing/Terraform-Cookbook/blob/master/CHAP07/pipeline/azure-pipelines.yml).
+  id: totrans-376
   prefs: []
   type: TYPE_NORMAL
 - en: 'After editing the YAML code of the pipeline, we can test it and trigger the
     execution of the pipeline by clicking on Save and run at the top right of the
     page:'
+  id: totrans-377
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: '![](img/fc7be25f-c673-4008-a1f7-f1312c953c2c.png)'
+  id: totrans-378
   prefs: []
   type: TYPE_IMG
 - en: 'When the execution of the pipeline is finished, we will be able to see the log
     results of the execution:'
+  id: totrans-379
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: '![](img/14c19538-458b-4e02-b20f-054f707033a8.png)'
+  id: totrans-380
   prefs: []
   type: TYPE_IMG
 - en: How it works…
+  id: totrans-381
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
 - en: In *steps 1* to *3* of this recipe, we used Azure Pipelines via the web interface to
     create a new pipeline that we configured on our GitHub repository. Moreover, we
     made the choice to configure it by starting with a new YAML file.
+  id: totrans-382
   prefs: []
   type: TYPE_NORMAL
 - en: '*Step 4* was dedicated to writing the YAML code for our pipeline in which we
     defined the following steps:'
+  id: totrans-383
   prefs: []
   type: TYPE_NORMAL
 - en: We downloaded the Terraform binary and specified the version that is compatible
     with our Terraform configuration.
+  id: totrans-384
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: Even if you are using an agent hosted by Microsoft that already has Terraform
     installed, I advise you to download Terraform because the version installed by
     default may not be compatible with your configuration.
+  id: totrans-385
   prefs: []
   type: TYPE_NORMAL
 - en: Then, using the extension installed in the prerequisites, we execute the Terraform
@@ -1702,30 +2502,36 @@
     remote backend. We then execute the `terraform plan` command with the `out` argument,
     which generates a `plan` output file. Finally, we apply the changes by executing
     the `terraform apply` command using the generated plan file.
+  id: totrans-386
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: The `terraform apply` command used by this last task has the `-auto-appprove`
     option to allow changes to be applied automatically.
+  id: totrans-387
   prefs: []
   type: TYPE_NORMAL
 - en: Finally, in the last step of the recipe, the pipeline is triggered and it is
     clear from the output logs that the changes described in the Terraform configuration
     have been applied.
+  id: totrans-388
   prefs: []
   type: TYPE_NORMAL
 - en: There's more…
+  id: totrans-389
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
 - en: We have seen in this recipe how to create a pipeline for Terraform from an empty
     YAML file, but you can also create a pipeline using a prewritten YAML file archived
     in your Git repository.
+  id: totrans-390
   prefs: []
   type: TYPE_NORMAL
 - en: If you want to use Terraform in an Azure DevOps pipeline using the classic mode
     (that is, in graphical mode without YAML), you can refer to the hands-on labs
     at [https://www.azuredevopslabs.com/labs/vstsextend/terraform/](https://www.azuredevopslabs.com/labs/vstsextend/terraform/).
+  id: totrans-391
   prefs: []
   type: TYPE_NORMAL
 - en: 'If your Terraform configuration deploys an infrastructure in Azure, and you
@@ -1734,67 +2540,83 @@
     of the main service used for authentication in Azure (we studied these in the
     *Protecting the Azure Credential Provider* recipe of [Chapter 6](d054157b-d534-47c9-8079-3af13107c4ef.xhtml), *Provisioning
     Azure Infrastructure with Terraform*), as shown in the following screenshot:'
+  id: totrans-392
   prefs: []
   type: TYPE_NORMAL
 - en: '![](img/8bef1b55-c150-4b7a-b12f-a3152e7a8a06.png)'
+  id: totrans-393
   prefs: []
   type: TYPE_IMG
 - en: These four variables will be automatically loaded as environment variables in
     the pipeline execution session.
+  id: totrans-394
   prefs: []
   type: TYPE_NORMAL
 - en: Additionally, in this recipe, we used a CI/CD Azure Pipelines platform as an
     example, but the automation principle remains the same for all DevOps tools, including
     Jenkins, GitHub Actions, GitLab, and so on.
+  id: totrans-395
   prefs: []
   type: TYPE_NORMAL
 - en: See also
+  id: totrans-396
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
 - en: 'The following is a list of links to articles and videos related to this topic:'
+  id: totrans-397
   prefs: []
   type: TYPE_NORMAL
 - en: 'Terraform on Microsoft Azure – *Continuous Deployment using Azure Pipelines*:
     [https://blog.jcorioland.io/archives/2019/10/02/terraform-microsoft-azure-pipeline-continuous-deployment.html](https://blog.jcorioland.io/archives/2019/10/02/terraform-microsoft-azure-pipeline-continuous-deployment.html)'
+  id: totrans-398
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: 'A CI/CD journey with Azure DevOps and Terraform: [https://medium.com/faun/a-ci-cd-journey-with-azure-devops-and-terraform-part-3-8122624efa97](https://medium.com/faun/a-ci-cd-journey-with-azure-devops-and-terraform-part-3-8122624efa97)
     (see part 1 and part 2)'
+  id: totrans-399
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: 'Deploying Terraform Infrastructure using Azure DevOps Pipelines step by step:
     [https://medium.com/@gmusumeci/deploying-terraform-infrastructure-using-azure-devops-pipelines-step-by-step-d58b68fc666d](https://medium.com/@gmusumeci/deploying-terraform-infrastructure-using-azure-devops-pipelines-step-by-step-d58b68fc666d)'
+  id: totrans-400
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: 'Terraform deployment with Azure DevOps: [https://www.starwindsoftware.com/blog/azure-devops-terraform-deployment-with-azure-devops-part-1](https://www.starwindsoftware.com/blog/azure-devops-terraform-deployment-with-azure-devops-part-1)'
+  id: totrans-401
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: 'Infrastructure as Code (IaC) with Terraform and Azure DevOps: [https://itnext.io/infrastructure-as-code-iac-with-terraform-azure-devops-f8cd022a3341](https://itnext.io/infrastructure-as-code-iac-with-terraform-azure-devops-f8cd022a3341)'
+  id: totrans-402
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: 'Terraform all the Things with VSTS: [https://www.colinsalmcorner.com/terraform-all-the-things-with-vsts/](https://www.colinsalmcorner.com/terraform-all-the-things-with-vsts/)'
+  id: totrans-403
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: 'Terraform CI/CD with Azure DevOps: [https://www.youtube.com/watch?v=_oMacTRQfyI](https://www.youtube.com/watch?v=_oMacTRQfyI)'
+  id: totrans-404
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: 'Deploying your Azure Infrastructure with Terraform: [https://www.youtube.com/watch?v=JaesylupZa8](https://www.youtube.com/watch?v=JaesylupZa8)'
+  id: totrans-405
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: 'Enterprise Deployment to Azure and AWS in Azure DevOps: [https://www.hashicorp.com/resources/enterprise-deployment-to-azure-and-aws-in-azure-devops/](https://www.hashicorp.com/resources/enterprise-deployment-to-azure-and-aws-in-azure-devops/)'
+  id: totrans-406
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: Working with workspaces in CI/CD
+  id: totrans-407
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
@@ -1803,32 +2625,39 @@
     and create workspaces. In Terraform's vision, workspaces make it possible to manage
     several environments by creating several Terraform state files for the same Terraform
     configuration.
+  id: totrans-408
   prefs: []
   type: TYPE_NORMAL
 - en: In this recipe, we will go further with the use of workspaces by automating
     their creation in a CI/CD pipeline.
+  id: totrans-409
   prefs: []
   type: TYPE_NORMAL
 - en: Getting ready
+  id: totrans-410
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
 - en: The prerequisite for this recipe is to know the Terraform command-line options
     for the workspaces, the documentation for which is available at [https://www.terraform.io/docs/commands/workspace/index.html](https://www.terraform.io/docs/commands/workspace/index.html).
+  id: totrans-411
   prefs: []
   type: TYPE_NORMAL
 - en: Concerning the CI/CD pipeline, we will implement it in Azure Pipelines, which
     we have already seen in this chapter, in the *Building CI/CD pipelines for Terraform
     configuration in Azure Pipelines *recipe.
+  id: totrans-412
   prefs: []
   type: TYPE_NORMAL
 - en: The purpose of this recipe is to illustrate a scenario I recently implemented,
     which is the creation of on-demand environments with Terraform. These environments
     will be used to test the functionalities during the development of an application.
+  id: totrans-413
   prefs: []
   type: TYPE_NORMAL
 - en: To summarize, we want to deploy the code of a branch of a Git repository in
     a specific environment that will be used to test this development.
+  id: totrans-414
   prefs: []
   type: TYPE_NORMAL
 - en: In this recipe, we will use the Terraform configuration at [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP07/workspace-pipeline](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP07/workspace-pipeline)
@@ -1836,51 +2665,66 @@
     We will just complete it with our workspace management practice. We assume that
     the name of the workspace we will create will be the name of the Git branch that
     will be deployed.
+  id: totrans-415
   prefs: []
   type: TYPE_NORMAL
 - en: The complete source code of this recipe is available at [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP07/workspace-pipeline](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP07/workspace-pipeline).
+  id: totrans-416
   prefs: []
   type: TYPE_NORMAL
 - en: How to do it…
+  id: totrans-417
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
 - en: 'To manage workspaces in the YAML pipeline, perform the following steps:'
+  id: totrans-418
   prefs: []
   type: TYPE_NORMAL
 - en: 'Inside the folder that contains the Terraform configuration, add the `ManageWorkspaces.ps1`
     file with the following content:'
+  id: totrans-419
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: '[PRE40]'
+  id: totrans-420
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE40]'
 - en: 'Inside the `azure-pipelines.yaml` file, add the following code just after the
     Terraform `init` step:'
+  id: totrans-421
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: '[PRE41]'
+  id: totrans-422
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE41]'
 - en: Commit and push the PowerShell script that we just created and the YAML pipeline
     file changes inside your Git repository.
+  id: totrans-423
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: 'In Azure Pipelines, run the pipeline, and during the configuration step, choose
     the right branch to deploy to from the Branch/tag drop-down menu:'
+  id: totrans-424
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: '![](img/2aced576-143b-410c-b6d5-7f92efc7756e.png)'
+  id: totrans-425
   prefs: []
   type: TYPE_IMG
 - en: Lastly, run the pipeline by clicking on the Run button.
+  id: totrans-426
   prefs: []
   type: TYPE_NORMAL
 - en: How it works…
+  id: totrans-427
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
@@ -1892,60 +2736,75 @@
     a workspace, it executes the `terraform workspace new` command to create it. Otherwise,
     if the workspace exists, this script executes the `terraform workspace select`
     command to select it.
+  id: totrans-428
   prefs: []
   type: TYPE_NORMAL
 - en: Note that the `terraform workspace create` command creates a workspace and selects
     it as well.
+  id: totrans-429
   prefs: []
   type: TYPE_NORMAL
 - en: In *step 2*, we complete the YAML pipeline that we created in the previous recipe
     by inserting between `init` and `plan` the execution of this PowerShell script
     by passing as an argument the name of the branch that we sectioned.
+  id: totrans-430
   prefs: []
   type: TYPE_NORMAL
 - en: Then, we commit these code changes (the PowerShell script and the pipeline YAML
     file) to the Git repository.
+  id: totrans-431
   prefs: []
   type: TYPE_NORMAL
 - en: Finally, in *step 4*, we execute the pipeline in Azure Pipelines by selecting
     the branch to be deployed, the name of which will be used as the workspace name.
+  id: totrans-432
   prefs: []
   type: TYPE_NORMAL
 - en: 'The following screenshot shows the execution result in the pipeline logs:'
+  id: totrans-433
   prefs: []
   type: TYPE_NORMAL
 - en: '![](img/e6ac8cfb-5e31-419a-bbba-eb4c351acabb.png)'
+  id: totrans-434
   prefs: []
   type: TYPE_IMG
 - en: 'And in the end, we can see the Terraform state files that were created automatically:'
+  id: totrans-435
   prefs: []
   type: TYPE_NORMAL
 - en: '![](img/c89ad528-1f42-4116-a9a6-51c354b7d398.png)'
+  id: totrans-436
   prefs: []
   type: TYPE_IMG
 - en: As you can see, the Terraform state files created by the workspaces contain
     the workspace name at the end.
+  id: totrans-437
   prefs: []
   type: TYPE_NORMAL
 - en: There's more…
+  id: totrans-438
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
 - en: In this recipe, we have managed the workspaces using a PowerShell script, but
     you are of course free to write it in another scripting language of your choice,
     such as Bash or Python.
+  id: totrans-439
   prefs: []
   type: TYPE_NORMAL
 - en: See also
+  id: totrans-440
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
 - en: Before using multiple workspaces, make sure to check their compatibility with
     the backends by following the instructions at [https://www.terraform.io/docs/state/workspaces.html](https://www.terraform.io/docs/state/workspaces.html).
+  id: totrans-441
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: The documentation on CLI commands for workspaces in Terraform is available at [https://www.terraform.io/docs/commands/workspace/index.html](https://www.terraform.io/docs/commands/workspace/index.html).
+  id: totrans-442
   prefs:
   - PREF_UL
   type: TYPE_NORMAL

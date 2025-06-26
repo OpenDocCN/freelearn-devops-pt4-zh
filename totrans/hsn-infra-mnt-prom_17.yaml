@@ -1,7 +1,9 @@
 - en: Scaling and Federating Prometheus
+  id: totrans-0
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 扩展和联邦 Prometheus
 - en: Prometheus was designed to be run as a single server. This approach will allow
     you to handle thousands of targets and millions of time series but, as you scale,
     you might find yourself in a situation where this just is not enough. This chapter
@@ -10,136 +12,212 @@
     address this, we will also go through the advantages and disadvantages of sharding,
     how federation comes into the picture, and, lastly, introduce Thanos, a component
     that was created by the Prometheus community to address some of the issues presented.
+  id: totrans-1
   prefs: []
   type: TYPE_NORMAL
+  zh: Prometheus 被设计为单一服务器运行。这种方法可以让你处理成千上万的目标和数百万个时间序列，但随着扩展，你可能会发现这种方法不足以应对。在这一章中，我们将讨论这一需求，并阐明如何通过分片扩展
+    Prometheus。然而，分片使得获得全局视图变得更加困难。为了解决这个问题，我们还将介绍分片的优缺点、联邦是如何介入的，最后，我们将介绍 Thanos，这是由
+    Prometheus 社区创建的一个组件，旨在解决一些提出的问题。
 - en: 'In brief, the following topics will be covered in this chapter:'
+  id: totrans-2
   prefs: []
   type: TYPE_NORMAL
+  zh: 简而言之，本章将涵盖以下主题：
 - en: Test environment for this chapter
+  id: totrans-3
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 本章的测试环境
 - en: Scaling with the help of sharding
+  id: totrans-4
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 利用分片扩展
 - en: Having a global view using federation
+  id: totrans-5
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 通过联邦实现全局视图
 - en: Using Thanos to mitigate Prometheus shortcomings at scale
+  id: totrans-6
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 使用 Thanos 来缓解 Prometheus 在大规模部署中的不足
 - en: Test environment for this chapter
+  id: totrans-7
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 本章的测试环境
 - en: In this chapter, we'll be focusing on scaling and federating Prometheus. For
     this, we'll be deploying three instances to simulate a scenario where a global
     Prometheus instance gathers metrics from two others. This approach will allow
     us not only to explore the required configurations, but also to understand how
     everything works together.
+  id: totrans-8
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本章中，我们将重点讨论如何扩展和联合 Prometheus。为此，我们将部署三个实例，模拟一个全局 Prometheus 实例从另外两个实例收集度量数据的场景。这种方法不仅可以帮助我们探索所需的配置，还可以理解各个组件是如何协同工作的。
 - en: 'The setup we''ll be using is illustrated in the following diagram:'
+  id: totrans-9
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们将使用的设置如下面的图表所示：
 - en: '![](img/57bf01ed-f3df-4e4b-b9bf-3977295a3656.png)'
+  id: totrans-10
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/57bf01ed-f3df-4e4b-b9bf-3977295a3656.png)'
 - en: 'Figure 13.1: Test environment for this chapter'
+  id: totrans-11
   prefs: []
   type: TYPE_NORMAL
+  zh: 图 13.1：本章的测试环境
 - en: In the next section, we will explain how to get the test environment up and
     running.
+  id: totrans-12
   prefs: []
   type: TYPE_NORMAL
+  zh: 在下一节中，我们将解释如何启动和运行测试环境。
 - en: Deployment
+  id: totrans-13
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 部署
 - en: 'To launch a new test environment, move into the following chapter path, relative
     to the code repository root:'
+  id: totrans-14
   prefs: []
   type: TYPE_NORMAL
+  zh: 要启动新的测试环境，请进入以下章节路径，该路径相对于代码库的根目录：
 - en: '[PRE0]'
+  id: totrans-15
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE0]'
 - en: 'Ensure that no other test environments are running and spin up this chapter''s
     environment, by using this command:'
+  id: totrans-16
   prefs: []
   type: TYPE_NORMAL
+  zh: 确保没有其他测试环境正在运行，并使用以下命令启动本章的环境：
 - en: '[PRE1]'
+  id: totrans-17
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE1]'
 - en: 'You can validate the successful deployment of the test environment using the
     following command:'
+  id: totrans-18
   prefs: []
   type: TYPE_NORMAL
+  zh: 你可以使用以下命令验证测试环境是否成功部署：
 - en: '[PRE2]'
+  id: totrans-19
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE2]'
 - en: 'This will output the following:'
+  id: totrans-20
   prefs: []
   type: TYPE_NORMAL
+  zh: 这将输出以下内容：
 - en: '[PRE3]'
+  id: totrans-21
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE3]'
 - en: 'When the deployment tasks end, you''ll be able to validate the following endpoints
     on your host machine using your favorite JavaScript-enabled web browser:'
+  id: totrans-22
   prefs: []
   type: TYPE_NORMAL
+  zh: 部署任务完成后，你可以使用你喜欢的支持 JavaScript 的网页浏览器，在主机上验证以下端点：
 - en: '| **Service** | **Endpoint** |'
+  id: totrans-23
   prefs: []
   type: TYPE_TB
+  zh: '| **服务** | **端点** |'
 - en: '| Shard01 Prometheus | `http://192.168.42.10:9090` |'
+  id: totrans-24
   prefs: []
   type: TYPE_TB
+  zh: '| Shard01 Prometheus | `http://192.168.42.10:9090` |'
 - en: '| Shard02 Prometheus | `http://192.168.42.11:9090` |'
+  id: totrans-25
   prefs: []
   type: TYPE_TB
+  zh: '| Shard02 Prometheus | `http://192.168.42.11:9090` |'
 - en: '| Global Prometheus | `http://192.168.42.12:9090` |'
+  id: totrans-26
   prefs: []
   type: TYPE_TB
+  zh: '| 全局 Prometheus | `http://192.168.42.12:9090` |'
 - en: '| Global Thanos querier | `http://192.168.42.12:10902` |'
+  id: totrans-27
   prefs: []
   type: TYPE_TB
+  zh: '| 全局 Thanos 查询器 | `http://192.168.42.12:10902` |'
 - en: 'You should be able to access each of these instances by using the respective
     command:'
+  id: totrans-28
   prefs: []
   type: TYPE_NORMAL
+  zh: 你应该能够使用相应的命令访问这些实例：
 - en: '| **Instance** | **Command** |'
+  id: totrans-29
   prefs: []
   type: TYPE_TB
+  zh: '| **实例** | **命令** |'
 - en: '| Shard01 | `vagrant ssh shard01` |'
+  id: totrans-30
   prefs: []
   type: TYPE_TB
+  zh: '| Shard01 | `vagrant ssh shard01` |'
 - en: '| Shard02 | `vagrant ssh shard02` |'
+  id: totrans-31
   prefs: []
   type: TYPE_TB
+  zh: '| Shard02 | `vagrant ssh shard02` |'
 - en: '| Global | `vagrant ssh global` |'
+  id: totrans-32
   prefs: []
   type: TYPE_TB
+  zh: '| 全局 | `vagrant ssh global` |'
 - en: Cleanup
+  id: totrans-33
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 清理
 - en: 'When you''ve finished testing, just make sure that you''re inside `./chapter13/`
     and execute the following command:'
+  id: totrans-34
   prefs: []
   type: TYPE_NORMAL
+  zh: 测试完成后，只需确保你处于`./chapter13/`目录下，并执行以下命令：
 - en: '[PRE4]'
+  id: totrans-35
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE4]'
 - en: Don't worry too much: you can easily spin up the environment again if you need
     to.
+  id: totrans-36
   prefs: []
   type: TYPE_NORMAL
+  zh: 不用太担心：如果需要，你可以很容易地再次启动环境。
 - en: Scaling with the help of sharding
+  id: totrans-37
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 利用分片扩展
 - en: 'With growth come more teams, more infrastructure, more applications. With time,
     running a single Prometheus server can start to become infeasible: changes in
     recording/alerting rules and scrape jobs become more frequent (thus requiring
@@ -151,8 +229,10 @@
     something the community has tackled time and time again, and so there are some
     recommendations on how to approach this problem. These recommendations revolve
     around sharding.'
+  id: totrans-38
   prefs: []
   type: TYPE_NORMAL
+  zh: 随着业务增长，团队、基础设施和应用的增多，单一Prometheus服务器的运行开始变得不可行：记录/告警规则和抓取任务的变化变得更加频繁（因此需要重新加载，具体时间取决于配置的抓取间隔，可能需要几分钟），Prometheus在处理大量数据时可能会错过一些抓取，或者负责该实例的人员或团队可能会成为组织流程中的瓶颈。出现这种情况时，我们需要重新思考解决方案的架构，以便其能够按需扩展。幸运的是，这是社区反复解决过的问题，因此已经有了一些关于如何处理此问题的建议。这些建议围绕着分片展开。
 - en: 'In this context, sharding means splitting the list of scrape targets among
     two or more Prometheus instances. This can be accomplished in two ways: via vertical
     or horizontal sharding. Sharding vertically is by far the most common method,
@@ -163,18 +243,24 @@
     scraping a subset of targets for a given job. Horizontal sharding is seldom used,
     as it is uncommon for a scrape job to be larger than a single Prometheus instance
     can handle.'
+  id: totrans-39
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这个背景下，分片意味着将抓取目标列表分配到两个或更多Prometheus实例中。这可以通过两种方式实现：垂直分片或水平分片。垂直分片是最常用的方法，它通过将抓取任务按照逻辑（例如按范围、技术、组织边界等）分配到不同的Prometheus实例中来实现，其中分片的单位是抓取任务。相对而言，水平分片是在抓取任务层级进行的，它意味着为每个任务配置多个Prometheus实例，每个实例抓取目标列表的一个子集。水平分片很少使用，因为抓取任务通常不会大到超出单个Prometheus实例的处理能力。
 - en: Additionally, we're not considering having a Prometheus for each datacenter/environment
     as sharding; Prometheus is supposed to be run alongside the systems/services it
     monitors for reasons of bandwidth and latency, as well as resiliency (less prone
     to suffer from network failures).
+  id: totrans-40
   prefs: []
   type: TYPE_NORMAL
+  zh: 此外，我们并未考虑为每个数据中心/环境配置一个Prometheus实例作为分片；Prometheus应该与其监控的系统/服务一起运行，以便减少带宽和延迟问题，同时提高系统的弹性（更不容易受到网络故障的影响）。
 - en: Logical grouping of jobs
+  id: totrans-41
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 作业的逻辑分组
 - en: 'A good starting point for scaling when a single Prometheus instance isn''t
     enough is to split scrape jobs into logical groups and then assign these groups
     to different Prometheus instances. This is called vertical sharding. The groups
@@ -182,46 +268,66 @@
     backend, databases), by layers (OS-level metrics, infrastructure services, applications),
     by internal organization vertical, by team, by network security boundary (so that
     scrapes don''t need to cross firewalls), or even by application cluster.'
+  id: totrans-42
   prefs: []
   type: TYPE_NORMAL
+  zh: 当单个Prometheus实例无法满足扩展需求时，一个好的起点是将抓取任务分为逻辑组，并将这些组分配到不同的Prometheus实例。这就是垂直分片。可以根据任何对你有意义的方式来分组：按架构/范围（前端、后端、数据库）、按层次（操作系统级指标、基础设施服务、应用程序）、按内部组织结构、按团队、按网络安全边界（以避免抓取跨越防火墙），甚至按应用集群分组。
 - en: 'The following diagram exemplifies what this type of vertical sharding looks
     like:'
+  id: totrans-43
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下图示例展示了这种垂直分片的实现方式：
 - en: '![](img/dd2d2b9e-ac12-4bbe-bb59-667bb81f010c.png)'
+  id: totrans-44
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/dd2d2b9e-ac12-4bbe-bb59-667bb81f010c.png)'
 - en: 'Figure 13.2: Diagram illustrating vertical sharding'
+  id: totrans-45
   prefs: []
   type: TYPE_NORMAL
+  zh: 图13.2：展示垂直分片的示意图
 - en: This type of sharding also enables isolation between Prometheus instances, which
     means that a heavily used subset of metrics from a given set of targets can be
     split into multiple instances, possibly with more resources. This way, any negative
     side-effects from their heavy usage will be circumscribed, and won't affect the
     overall monitoring platform stability.
+  id: totrans-46
   prefs: []
   type: TYPE_NORMAL
+  zh: 这种分片方式还可以实现Prometheus实例之间的隔离，意味着从一组目标中提取的高频使用的部分指标可以被拆分到多个实例中，可能会有更多的资源。这样，任何由于高负载使用导致的负面副作用都能被限定在一定范围内，不会影响整体监控平台的稳定性。
 - en: 'Additionally, doing vertical sharding for each team can have a couple of organizational
     benefits:'
+  id: totrans-47
   prefs: []
   type: TYPE_NORMAL
+  zh: 此外，为每个团队执行垂直分片可以带来一些组织上的好处：
 - en: It makes cardinality considerations more visible to the service owners.
+  id: totrans-48
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 它使服务拥有者能更清楚地看到基数（cardinality）问题。
 - en: Teams feel both empowered and accountable for the monitoring of their services.
+  id: totrans-49
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 团队可以感到既有权力也有责任监控自己的服务。
 - en: It can enable more experimentation for rules and dashboards without the fear
     of impacting others.
+  id: totrans-50
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 它可以在不影响其他人的情况下，促进规则和仪表盘的更多实验。
 - en: The single job scale problem
+  id: totrans-51
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 单一作业规模问题
 - en: 'We went through a couple of strategies for vertically sharding Prometheus,
     but there''s a problem we still haven''t addressed: scaling requirements tied
     to a single job. Imagine that you have a job with tens of thousands of scrape
@@ -229,64 +335,94 @@
     further. In this type of scenario, your best bet is to shard horizontally, spreading
     the same job across multiple Prometheus servers. The following diagram provides
     an example of this type of sharding:'
+  id: totrans-52
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们已经探讨了几种垂直分片 Prometheus 的策略，但还有一个问题我们尚未解决：与单一作业相关的扩展需求。假设你有一个作业，其中包含成千上万的抓取目标，且这些目标都位于同一个数据中心，并且没有合适的方式再进行进一步拆分。在这种情况下，最好的选择是进行水平分片，将相同的作业分布到多个
+    Prometheus 服务器上。以下示意图展示了这种类型的分片示例：
 - en: '![](img/a429d809-62ee-4c83-9cf8-968da4472c31.png)'
+  id: totrans-53
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/a429d809-62ee-4c83-9cf8-968da4472c31.png)'
 - en: 'Figure 13.3: Diagram illustrating horizontal sharding'
+  id: totrans-54
   prefs: []
   type: TYPE_NORMAL
+  zh: 图 13.3：展示水平分片的示意图
 - en: 'To accomplish this, we must rely on the `hashmod` relabeling action. The way
     `hashmod` works is by setting `target_label` to the `modulus` of a hash of the
     concatenated `source_labels`, which we then place in a Prometheus server. We can
     see this configuration in action in our test environment in both `shard01` and
     `shard02`, effectively sharding the node job. Let''s go through the following
     configuration, which can be found at `/etc/prometheus/prometheus.yml`:'
+  id: totrans-55
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了实现这一点，我们必须依赖 `hashmod` 重标记操作。`hashmod` 的工作方式是通过将 `target_label` 设置为 `source_labels`
+    连接后哈希值的 `modulus`，然后将其放置在 Prometheus 服务器中。我们可以在我们的测试环境中看到这个配置在 `shard01` 和 `shard02`
+    中的实际应用，有效地将节点作业进行了分片。让我们查看以下配置，它可以在 `/etc/prometheus/prometheus.yml` 中找到：
 - en: '[PRE5]'
+  id: totrans-56
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE5]'
 - en: When using temporary labels, like in the previous example, always use the `__tmp`
     prefix, as that prefix is guaranteed to never be used internally by Prometheus.
+  id: totrans-57
   prefs: []
   type: TYPE_NORMAL
+  zh: 使用临时标签时，像前面例子中那样，始终使用 `__tmp` 前缀，因为该前缀保证不会被 Prometheus 内部使用。
 - en: 'In the following screenshot, we can see the `/service-discovery` endpoint from
     the `shard01` and `shard02` Prometheus instances side by side. The result of the
     `hashmod` action allowed us to split the node exporter job across both instances,
     as shown:'
+  id: totrans-58
   prefs: []
   type: TYPE_NORMAL
+  zh: 在以下截图中，我们可以看到 `shard01` 和 `shard02` Prometheus 实例并排显示的 `/service-discovery`
+    端点。`hashmod` 操作的结果使我们能够将节点导出器作业分配到两个实例，如图所示：
 - en: '![](img/0ec079f8-859e-407e-9f1d-dba2f2eee0bd.png)'
+  id: totrans-59
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/0ec079f8-859e-407e-9f1d-dba2f2eee0bd.png)'
 - en: 'Figure 13.4: shard01 and shard02 */service-discovery* endpoints showing the
     *hashmod* result'
+  id: totrans-60
   prefs: []
   type: TYPE_NORMAL
+  zh: 图 13.4：`shard01` 和 `shard02` */service-discovery* 端点展示 *hashmod* 结果
 - en: Few reach the scale where this type of sharding is needed, but it's great to
     know that Prometheus supports it out of the box.
+  id: totrans-61
   prefs: []
   type: TYPE_NORMAL
+  zh: 很少有人达到需要这种类型分片的规模，但很高兴知道 Prometheus 原生支持这一功能。
 - en: What to consider when sharding
+  id: totrans-62
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 进行分片时需要考虑的事项
 - en: A sharding strategy, whether vertical or horizontal, while necessary in certain
     situations, shouldn't be taken lightly. The complexity in managing multiple configurations
     for multiple Prometheus instances quickly adds up, making your life more difficult
     if you didn't plan the required automation accordingly. Things such as external
     labels, external URLs, user consoles, and scrape jobs can be programmatically
     set to reduce the operational toil for the team maintaining the shards.
+  id: totrans-63
   prefs: []
   type: TYPE_NORMAL
+  zh: 无论是垂直分片还是水平分片，分片策略在某些情况下是必需的，但不应轻视。管理多个 Prometheus 实例的多个配置的复杂性会迅速增加，如果没有相应地规划所需的自动化，这将使你的工作更加困难。诸如外部标签、外部
+    URL、用户控制台和抓取作业等内容可以通过编程设置，以减少维护分片的团队的运维工作。
 - en: Having a global view also becomes a problem as each Prometheus instance will
     have its own subset of the data. This can make dashboarding harder as the location
     of the data may not be immediately clear (for example, when using multiple data
     sources in Grafana), and can also prevent some queries from aggregating services
     that are spread over many shards globally. This issue can be mitigated through
     a couple of techniques, which we'll explore later in this chapter.
+  id: totrans-64
   prefs: []
   type: TYPE_NORMAL
 - en: Lastly, some recording and alerting rules might become impractical if the required
@@ -298,9 +434,11 @@
     using a remote write to external systems that can do this outside Prometheus (as
     we'll see in [Chapter 14](1fb2aaff-5fe3-44ed-9df8-1cd27f383906.xhtml),* Integrating
     Long-Term Storage with Prometheus*).
+  id: totrans-65
   prefs: []
   type: TYPE_NORMAL
 - en: Alternatives to sharding
+  id: totrans-66
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
@@ -312,26 +450,33 @@
     per scrape job. For this, you just need to add `sample_limit` to the scrape job;
     if the number of samples after `metric_relabel_configs` goes over the configured
     limit, the scrape will be dropped entirely. An example configuration is as follows:'
+  id: totrans-67
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE6]'
+  id: totrans-68
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE6]'
 - en: 'The following screenshot illustrates what happens when a scrape hits the configured
     `sample_limit`:'
+  id: totrans-69
   prefs: []
   type: TYPE_NORMAL
 - en: '![](img/ac48f1e9-23ab-4093-8f91-146727e3826f.png)'
+  id: totrans-70
   prefs: []
   type: TYPE_IMG
 - en: 'Figure 13.5: Prometheus targets endpoint showing scrape jobs being dropped
     due to exceeded sample limit'
+  id: totrans-71
   prefs: []
   type: TYPE_NORMAL
 - en: When using this limiter, you should keep an eye out for scrapes getting dropped
     using the `prometheus_target_scrapes_exceeded_sample_limit_total`metric in conjunction
     with the `up` metric. While the latter tells you Prometheus couldn't scrape the
     target, the former will give you the reason why.
+  id: totrans-72
   prefs: []
   type: TYPE_NORMAL
 - en: If dropping scrapes is out of the question and you are able to sustain the loss
@@ -339,9 +484,11 @@
     that you shouldn't increase it over two minutes, as doing so creates the risk
     of metric staleness due to a single scrape failing, as we explained in [Chapter
     5](12e775c2-bee9-4ebe-ad73-2f9313eeeeee.xhtml), *Running a Prometheus Server.*
+  id: totrans-73
   prefs: []
   type: TYPE_NORMAL
 - en: Having a global view using federation
+  id: totrans-74
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
@@ -357,16 +504,23 @@
     rules become possible. For example, you could collect data for service throughput
     or latency in each shard, and then aggregate them across all the shards to have
     a global value.
+  id: totrans-75
   prefs: []
   type: TYPE_NORMAL
+  zh: 当你有多个 Prometheus 服务器时，确定查询哪个服务器来获取特定的指标可能会变得相当繁琐。另一个很快出现的问题是如何从多个实例中汇总数据，可能还分布在多个数据中心。这时，联邦机制就派上了用场。联邦机制允许你拥有一个
+    Prometheus 实例，从其他实例中抓取选定的时间序列，实际上充当一个更高级别的汇总实例。这可以以层级的方式进行，每一层将下级实例的指标聚合成更大范围的时间序列，或者以跨服务的模式进行，在同一级别的实例中选择一些指标进行联邦，以便某些记录和告警规则成为可能。例如，你可以收集每个分片的服务吞吐量或延迟数据，然后跨所有分片进行聚合，得到一个全局值。
 - en: Let's have a look at what is needed to set up federation in Prometheus, and
     then go into each of the aforementioned federation patterns.
+  id: totrans-76
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们来看看设置 Prometheus 联邦所需的内容，然后再深入讨论前述的每种联邦模式。
 - en: Federation configuration
+  id: totrans-77
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 联邦配置
 - en: 'A running Prometheus server exposes a special endpoint served at `/federate`.
     This endpoint allows for the retrieval of time series that match one or more instant
     vector selectors (which we covered in [Chapter 7](205ddb34-6ee8-4e22-b80f-39d5b2198c29.xhtml),
@@ -374,19 +528,28 @@
     a very simple example in our test environment. Each one of the shard instances
     has a recording rule producing aggregate metrics representing the number of HTTP
     requests to exporters, illustrated in the following code block:'
+  id: totrans-78
   prefs: []
   type: TYPE_NORMAL
+  zh: 一个运行中的 Prometheus 服务器会暴露一个特别的端点 `/federate`。这个端点允许检索与一个或多个瞬时向量选择器匹配的时间序列（我们在[第7章](205ddb34-6ee8-4e22-b80f-39d5b2198c29.xhtml)中讨论过，*Prometheus
+    查询语言 – PromQL*）。为了让这些机制更清晰，我们在测试环境中提供了一个非常简单的示例。每个分片实例都有一个记录规则，生成表示 HTTP 请求次数的汇总指标，示例如下代码块：
 - en: '[PRE7]'
+  id: totrans-79
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE7]'
 - en: 'To provide a global view, we can use the `global` instance in the test environment
     to scrape the federation endpoint of both shards, requesting only those aggregate metrics
     (all that start with `job:`), as can be seen in the following snippet:'
+  id: totrans-80
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了提供全球视图，我们可以在测试环境中使用 `global` 实例，抓取两个分片的联邦端点，只请求那些汇总指标（所有以 `job:` 开头的指标），如下片段所示：
 - en: '[PRE8]'
+  id: totrans-81
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE8]'
 - en: 'There are a couple of things to note in this snippet. Federation uses the same
     mechanics as regular scrape jobs, but needs the configuration of a different scrape
     endpoint, and a HTTP parameter to specify which metrics we want to collect. Additionally,
@@ -394,19 +557,29 @@
     kept and never overridden; this needs to be configured, as otherwise Prometheus
     would set labels such as `instance` and `job` to the values from the scrape job
     otherwise.'
+  id: totrans-82
   prefs: []
   type: TYPE_NORMAL
+  zh: '在这个片段中有几点需要注意。联邦使用与常规抓取任务相同的机制，但需要配置一个不同的抓取端点，以及一个 HTTP 参数来指定我们想要收集哪些指标。此外，设置
+    `honor_labels: true` 会确保所有原始标签值保持不变，永远不会被覆盖；这一点需要配置，否则 Prometheus 会将诸如 `instance`
+    和 `job` 等标签设置为抓取任务的值。'
 - en: 'You can check on the status of federated targets in the aggregator Prometheus
     instance in our test environment at the `http://192.168.42.12:9090/targets` endpoint,
     as shown:'
+  id: totrans-83
   prefs: []
   type: TYPE_NORMAL
+  zh: 你可以在我们的测试环境中，通过访问 `http://192.168.42.12:9090/targets` 端点，检查聚合 Prometheus 实例中联邦目标的状态，如下所示：
 - en: '![](img/9f52e211-b803-40c2-9dd3-0e4bb46c051b.png)'
+  id: totrans-84
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/9f52e211-b803-40c2-9dd3-0e4bb46c051b.png)'
 - en: 'Figure 13.6: Prometheus *targets* endpoint showing the federated servers'
+  id: totrans-85
   prefs: []
   type: TYPE_NORMAL
+  zh: 图 13.6：Prometheus *targets* 端点，显示联邦服务器
 - en: 'We can also test the federation of metrics in the global Prometheus web interface:
     even though this instance is not scraping any exporter nor does it have the recording
     rule, we can get every time series from the `job:promhttp_metric_handler_requests:sum_rate1m` metric,
@@ -416,63 +589,89 @@
     in our instances is present here; labels defined in the `external_labels` section
     are automatically added to metrics that are returned from the `/federate` endpoint,
     as follows:'
+  id: totrans-86
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们还可以在全球 Prometheus Web 界面上测试度量指标的联邦：即使该实例没有抓取任何导出器，也没有录制规则，我们仍然可以从`job:promhttp_metric_handler_requests:sum_rate1m`指标中获取每个时间序列，这些指标最初是在每个分片实例中生成的。请注意，返回的`job`标签来自原始的作业，而不是联邦抓取作业。此外，我们可以看到我们在实例中配置为外部标签的`shard`标签也出现在这里；在`external_labels`部分定义的标签会自动添加到从`/federate`端点返回的指标中，具体如下：
 - en: '![](img/005b3725-ddee-4240-b196-c0e917630bd5.png)'
+  id: totrans-87
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/005b3725-ddee-4240-b196-c0e917630bd5.png)'
 - en: 'Figure 13.7: Global Prometheus view on the aggregate metric'
+  id: totrans-88
   prefs: []
   type: TYPE_NORMAL
+  zh: 图 13.7：全局 Prometheus 视图上的聚合指标
 - en: Now that we understand the mechanics of how federation works, we can proceed
     to look at common patterns and best practices for federation.
+  id: totrans-89
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在我们了解了联邦的工作原理，可以继续探讨联邦的常见模式和最佳实践。
 - en: Federation patterns
+  id: totrans-90
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 联邦模式
 - en: 'The first thing to be aware of when starting to implement federation in Prometheus
     is that the set of federated metrics should either be pre-aggregated or hand-picked.
     Trying to import big chunks of data, or even every metric, from one Prometheus
     into another using federation is generally a bad idea, for a couple of reasons:'
+  id: totrans-91
   prefs: []
   type: TYPE_NORMAL
+  zh: 在开始实现 Prometheus 联邦时，首先要注意的是，联邦指标集应该是预先聚合或手动选择的。试图通过联邦将大量数据或甚至每个指标从一个 Prometheus
+    实例导入到另一个实例通常是一个坏主意，原因有几个：
 - en: Due to the massive amount of data being collected in each scrape, it will have
     a negative performance impact on both the instance producing the metrics and the
     one consuming them.
+  id: totrans-92
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 由于每次抓取时收集的数据量庞大，这将对生成指标的实例和消费指标的实例都产生负面性能影响。
 - en: Since scrape ingestion is atomic but not isolated, the Prometheus instance being
     targeted can present an incomplete snapshot of its time series due to races: it
     can be in the middle of processing scrape jobs and will return what is had processed
     at that moment. This is especially relevant for multi-series metric types such
     as histograms and summaries.
+  id: totrans-93
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 由于抓取数据的摄取是原子性的，但不是隔离的，因此目标 Prometheus 实例可能会因为竞争条件而呈现出其时间序列的一个不完整快照：它可能正处于处理抓取作业的过程中，并会返回当时已处理的内容。这对于多系列的指标类型（如直方图和摘要）尤其相关。
 - en: Bigger scrapes are more likely to suffer from timeouts, which will in turn create gaps
     in the data on the Prometheus instance doing the federation scrapes.
+  id: totrans-94
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 更大的抓取更容易受到超时的影响，这将导致在进行联邦抓取的 Prometheus 实例中出现数据缺口。
 - en: Trying to get all time series from a Prometheus instance into another defeats
     the point of federation. If it's a matter of proxying metrics, an actual proxy
     server would probably be a better choice. Nevertheless, the best practice is still
     to run Prometheus near what you're trying to monitor.
+  id: totrans-95
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 试图将一个 Prometheus 实例的所有时间序列导入到另一个实例中，实际上违背了联邦的意义。如果问题只是代理指标，实际的代理服务器可能会是更好的选择。不过，最佳实践仍然是在你要监控的对象附近运行
+    Prometheus。
 - en: 'There are two main ways a Prometheus time series federation is implemented:
     hierarchical and cross-service. As we''ll see, both patterns are complementary
     and can be used together.'
+  id: totrans-96
   prefs: []
   type: TYPE_NORMAL
+  zh: Prometheus 时间序列联邦的实现有两种主要方式：层次化和跨服务。如我们所见，这两种模式是互补的，可以一起使用。
 - en: Hierarchical
+  id: totrans-97
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 层次化
 - en: 'Having multiple shards, or even just more than one datacenter, means that time
     series data is now spread out across different Prometheus instances. Hierarchical
     federation aims to solve this issue by having one or more Prometheus servers collecting
@@ -482,78 +681,113 @@
     and its applications. However, as only aggregated metrics should be federated,
     those with the most context and detail will still reside on the lower tiers. The
     following diagram illustrates how this works:'
+  id: totrans-98
   prefs: []
   type: TYPE_NORMAL
+  zh: 拥有多个分片，甚至仅仅是多个数据中心，意味着时间序列数据现在分布在不同的 Prometheus 实例中。分层联合的目标是通过一个或多个 Prometheus
+    服务器收集来自其他 Prometheus 实例的高层次聚合时间序列来解决这个问题。你可以拥有超过两级的联合，尽管这需要较大的规模。这使得更高层次的 Prometheus
+    能够更广泛地查看基础设施及其应用程序。然而，由于只有聚合的度量数据应被联合，那些具有更多上下文和细节的度量数据仍然会保留在较低层次。下图展示了这一工作的方式：
 - en: '![](img/60578769-7278-4629-9950-3ea794676403.png)'
+  id: totrans-99
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/60578769-7278-4629-9950-3ea794676403.png)'
 - en: 'Figure 13.8: Hierarchical federation example diagram'
+  id: totrans-100
   prefs: []
   type: TYPE_NORMAL
+  zh: 图 13.8：分层联合示例图
 - en: 'As an example, you may want to have a view of latency across several datacenters.
     A three-tiered Prometheus hierarchy to fulfil that requirement could look like
     the following:'
+  id: totrans-101
   prefs: []
   type: TYPE_NORMAL
+  zh: 例如，你可能希望查看跨多个数据中心的延迟。为满足这一需求，三层 Prometheus 层级结构可能如下所示：
 - en: A couple of vertical shards scraping several jobs
+  id: totrans-102
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 一些垂直分片抓取多个作业
 - en: A datacenter instance scraping those shards for time series aggregated at the
     job level (`__name__=~"job:.+"`)
+  id: totrans-103
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 一个数据中心实例抓取这些分片，聚合在作业级别的时间序列（`__name__=~"job:.+"`）
 - en: A global Prometheus that scrapes the datacenter instances for time series aggregated
     at the datacenter level (`__name__=~"dc:.+"`)
+  id: totrans-104
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 一个全局 Prometheus，它抓取数据中心实例的时间序列，这些时间序列是在数据中心级别聚合的（`__name__=~"dc:.+"`）
 - en: When using a monitoring platform with this layout, it is common to start at
     the highest level and then drill down to the next level. This can be easily done
     with Grafana, as you can have each tier in the federation hierarchy configured
     as a data source.
+  id: totrans-105
   prefs: []
   type: TYPE_NORMAL
+  zh: 当使用具有这种布局的监控平台时，通常从最高层开始，然后逐步深入到下一级。这可以通过 Grafana 很容易地实现，因为你可以将联合层级中的每一层配置为数据源。
 - en: Alerting rules should be run as close to the origin of the time series they
     use as possible, as every federation layer that needs to be crossed will introduce
     new points of failure in the alerting critical path. This is especially true when
     aggregating across datacenters, given that the scrapes might need to go through
     less reliable networks or even through an internet link.
+  id: totrans-106
   prefs: []
   type: TYPE_NORMAL
+  zh: 告警规则应尽可能在它们使用的时间序列的源头附近执行，因为每个需要穿越的联合层都会在告警的关键路径中引入新的故障点。这一点在跨数据中心进行聚合时尤其如此，因为抓取可能需要通过不太可靠的网络，甚至是通过互联网连接。
 - en: Cross-service
+  id: totrans-107
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 跨服务
 - en: 'This type of federation is useful when you need a few select time series from
     another Prometheus instance locally for recording or alerting rules. Going back
     to the example scenario where you have a Prometheus instance tasked with scraping
     Node Exporters and another for applications, this pattern would allow you to federate
     specific OS-level metrics that could then be used in applications alerts, as shown
     in the following diagram:'
+  id: totrans-108
   prefs: []
   type: TYPE_NORMAL
+  zh: 当你需要从另一个 Prometheus 实例本地获取一些特定的时间序列，用于记录或告警规则时，这种类型的联合非常有用。回到之前的示例场景，其中有一个 Prometheus
+    实例负责抓取 Node Exporters，另一个实例用于应用程序，这种模式可以让你联合特定的操作系统级别的度量数据，然后在应用程序的告警中使用，如下图所示：
 - en: '![](img/d9c9f938-da34-427e-a2e5-f993ef28d19c.png)'
+  id: totrans-109
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/d9c9f938-da34-427e-a2e5-f993ef28d19c.png)'
 - en: 'Figure 13.9: Cross-service federation example diagram'
+  id: totrans-110
   prefs: []
   type: TYPE_NORMAL
+  zh: 图 13.9：跨服务联合示例图
 - en: The configuration of cross-service federation looks mostly the same as the previous
     pattern, but in this case the scraped Prometheus is in the same logical tier and
     the selectors that were used should be matching specific metrics instead of aggregates.
+  id: totrans-111
   prefs: []
   type: TYPE_NORMAL
+  zh: 跨服务联合的配置与之前的模式基本相同，但在这种情况下，抓取的 Prometheus 位于同一逻辑层级，所使用的选择器应匹配特定的度量数据，而不是聚合数据。
 - en: In the next section, we're going to introduce a new component that has been
     gaining traction in the Prometheus community and tackles the challenge of having
     a global view in a new and interesting way.
+  id: totrans-112
   prefs: []
   type: TYPE_NORMAL
+  zh: 在接下来的章节中，我们将介绍一个在 Prometheus 社区中逐渐受到关注的新组件，它通过一种新颖有趣的方式解决了全局视图的问题。
 - en: Using Thanos to mitigate Prometheus shortcomings at scale
+  id: totrans-113
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 使用 Thanos 来缓解 Prometheus 在大规模时的不足
 - en: When you start to scale Prometheus, you quickly bump into the problem of cross-shard
     visibility. Indeed, Grafana can help, as you can add multiple datastore sources
     in the same dashboard panel, but this becomes harder to maintain, especially if
@@ -562,22 +796,29 @@
     might not be a problem when you have a shard per team as each team might only
     care about their own metrics, issues arise when there are several shards maintained
     by a single team and exposed as a service to the organization.
+  id: totrans-114
   prefs: []
   type: TYPE_NORMAL
+  zh: 当你开始扩展Prometheus时，你很快会遇到跨分片可见性的问题。事实上，Grafana可以提供帮助，因为你可以在同一个仪表板面板中添加多个数据源，但这变得越来越难以维护，尤其是当多个团队有不同的需求时。在没有明确界定边界的情况下，追踪哪个分片包含哪个指标可能并不简单——当每个团队只关心自己的指标时，如果每个团队都有一个分片，这可能不是问题，但当多个分片由同一个团队维护并作为服务向组织公开时，就会出现问题。
 - en: Additionally, it is common practice to run two identical Prometheus instances
     to prevent single points of failure (SPOF) in the alerting path - known as HA
     (or high-availability) pairs. This complicates dashboarding further, as each instance
     will have slightly different data (especially in gauge metrics), and having a
     load balancer distributing queries will result in inconsistent results across
     dashboard data refreshes.
+  id: totrans-115
   prefs: []
   type: TYPE_NORMAL
+  zh: 此外，通常的做法是运行两个相同的Prometheus实例，以防止告警路径中的单点故障（SPOF）——这种做法被称为HA（高可用性）对。这进一步复杂化了仪表板的使用，因为每个实例会有略微不同的数据（尤其是在计量指标方面），并且负载均衡器分配查询时，会导致仪表板数据刷新时出现不一致的结果。
 - en: Thankfully, a project was initiated to, among other things, tackle this exact
     issue – this project is called Thanos. It was developed at Improbable I/O with
     the collaboration of Fabian Reinartz (the author of the new storage engine/time
     series database in Prometheus 2.x).
+  id: totrans-116
   prefs: []
   type: TYPE_NORMAL
+  zh: 幸运的是，一个项目已经启动，旨在解决这个具体问题——这个项目被称为Thanos。它在Improbable I/O开发，并由Fabian Reinartz（Prometheus
+    2.x中新存储引擎/时间序列数据库的作者）合作开发。
 - en: Prometheus has a well-defined scope of action; for example, it was not built
     for clustering, and all the decisions that have been made so far have always been
     aimed at reliability and performance above all else. These design choices are
@@ -589,37 +830,50 @@
     so with some limitations, such as having to select which metrics to federate.
     It is in these cases that creative solutions appear to try and overcome some of
     these limitations. Thanos is an elegant example of this, as we'll see later.
+  id: totrans-117
   prefs: []
   type: TYPE_NORMAL
+  zh: Prometheus有一个明确的作用范围；例如，它不是为集群设计的，到目前为止所做的所有决策始终以可靠性和性能为首要目标。这些设计选择是Prometheus成功的基石之一，使它能够从处理少量目标的简单部署扩展到每秒处理百万级采样的大型实例，但这些选择几乎总是伴随着权衡。虽然Prometheus确实提供了一些变通方法来实现功能而不依赖共享状态（如我们之前看到的通过联合），但这样做也有限制，比如必须选择要联合的指标。在这些情况下，出现了一些创意解决方案，试图克服这些限制。Thanos就是一个优雅的例子，正如我们稍后会看到的那样。
 - en: We'll be discussing more of Thanos' features in [Chapter 14](1fb2aaff-5fe3-44ed-9df8-1cd27f383906.xhtml),
     *Integrating Long-Term Storage with Prometheus*, but for now our focus will be
     on the global querying aspect of this project.
+  id: totrans-118
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们将在[第14章](1fb2aaff-5fe3-44ed-9df8-1cd27f383906.xhtml)中讨论更多Thanos的功能，*将长期存储与Prometheus集成*，但目前我们将重点关注这个项目的全局查询方面。
 - en: Thanos' global view components
+  id: totrans-119
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: Thanos的全局视图组件
 - en: To attain a global view using Thanos, we must first understand some of its components.
     Thanos, like Prometheus, is written in Go and ships a single binary (for each
     platform/architecture) that behaves differently depending on the provided sub-command
     in its execution. In our case, we'll be expanding on sidecar and Query components.
+  id: totrans-120
   prefs: []
   type: TYPE_NORMAL
+  zh: 要使用Thanos实现全局视图，我们必须首先了解一些其组件。像Prometheus一样，Thanos是用Go编写的，并且提供一个单一的二进制文件（针对每个平台/架构），其行为会根据执行时提供的子命令不同而有所不同。在我们的案例中，我们将扩展讨论sidecar和Query组件。
 - en: You can find all the source code and installation files for Thanos at [https://github.com/improbable-eng/thanos](https://github.com/improbable-eng/thanos).
+  id: totrans-121
   prefs: []
   type: TYPE_NORMAL
+  zh: 你可以在[https://github.com/improbable-eng/thanos](https://github.com/improbable-eng/thanos)上找到Thanos的所有源代码和安装文件。
 - en: 'In short, the sidecar makes data from a Prometheus instance available to other
     Thanos components, while the Query component is an API-compatible replacement
     for Prometheus that distributes queries it receives to other Thanos components,
     such as sidecars or even other Query instances. Conceptually, the global-view
     approach Thanos takes resembles the following diagram:'
+  id: totrans-122
   prefs: []
   type: TYPE_NORMAL
 - en: '![](img/b3048a37-faa6-4f29-ba14-3e4853c86f39.png)'
+  id: totrans-123
   prefs: []
   type: TYPE_IMG
 - en: 'Figure 13.10: Global view with Thanos example diagram'
+  id: totrans-124
   prefs: []
   type: TYPE_NORMAL
 - en: Thanos components that can return query results implement what is called a *store
@@ -630,13 +884,16 @@
     and then perform the required PromQL query over the dataset. The deduplication
     feature is particularly useful when using pairs of Prometheus servers for high
     availability.
+  id: totrans-125
   prefs: []
   type: TYPE_NORMAL
 - en: Now, let's take a look at each of these components, digging deeper into how
     they work and how to set them up.
+  id: totrans-126
   prefs: []
   type: TYPE_NORMAL
 - en: Sidecar
+  id: totrans-127
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
@@ -651,33 +908,41 @@
     from the querier's point of view. Sidecar also exposes an HTTP endpoint on port
     `10902` with a handler for `/metrics` so that you can collect its internal metrics
     in Prometheus.
+  id: totrans-128
   prefs: []
   type: TYPE_NORMAL
 - en: The Prometheus instance that the sidecar is attached to must set `external_labels`
     so that each instance is uniquely identified. This is essential for Thanos to
     filter out which store APIs to query and for deduplication to work.
+  id: totrans-129
   prefs: []
   type: TYPE_NORMAL
 - en: Unfortunately, having unique external labels will break Alertmanager deduplication
     when using pairs of Prometheus instances for high availability. You should use
     `alert_relabel_configs` in the `alerting` section to drop any label that is unique
     to each Prometheus instance.
+  id: totrans-130
   prefs: []
   type: TYPE_NORMAL
 - en: 'In our test environment, we can find a Thanos sidecar running in each of the
     available shards. To quickly validate the configuration in use, we can run the
     following instruction in any shard instances:'
+  id: totrans-131
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE9]'
+  id: totrans-132
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE9]'
 - en: The previous snippet indicates that the sidecar is connecting to the local Prometheus
     instance. Sidecar offers a lot more functionality, as we'll see in the next chapter,
     but for the purpose of implementing a global view, this configuration will suffice.
+  id: totrans-133
   prefs: []
   type: TYPE_NORMAL
 - en: Query
+  id: totrans-134
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
@@ -688,31 +953,39 @@
     completely stateless and can be scaled horizontally. Due to being compatible with
     the Prometheus API, it can be used directly in Grafana as a data source of the
     Prometheus type, enabling drop-in replacement of Prometheus querying for Thanos.
+  id: totrans-135
   prefs: []
   type: TYPE_NORMAL
 - en: 'This Thanos component is also running in our test environment, specifically
     in the *global* instance, and its configuration can be viewed by running the following
     instruction:'
+  id: totrans-136
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE10]'
+  id: totrans-137
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE10]'
 - en: 'As we can see in the previous snippet, we are required to specify all the components
     with a store API that we want to make available through the querier. Since we''re
     using most of the default values for this component, the web interface is available
     on port `10902`, which we can validate by pointing our browser to `http://192.168.42.12:10902/stores`,
     as shown in the following screenshot:'
+  id: totrans-138
   prefs: []
   type: TYPE_NORMAL
 - en: '![](img/812e6400-0a6d-48a5-a309-6d8d2757c29e.png)'
+  id: totrans-139
   prefs: []
   type: TYPE_IMG
 - en: 'Figure 13.11: Thanos query web interface showing the /stores endpoint'
+  id: totrans-140
   prefs: []
   type: TYPE_NORMAL
 - en: The querier HTTP port also serves the `/metrics` endpoint for Prometheus metric
     collection.
+  id: totrans-141
   prefs: []
   type: TYPE_NORMAL
 - en: 'The `--query.replica-label` flag allows for the deduplication of metrics using
@@ -726,20 +999,25 @@
     the **deduplication** option), depending on whether we want to include metrics
     from all the store APIs or just for single results as if only a single Prometheus
     instance had the data. The following screenshot exemplifies this difference:'
+  id: totrans-142
   prefs: []
   type: TYPE_NORMAL
 - en: '![](img/6e7ca518-d237-4ec1-b1b1-0a795993e048.png)'
+  id: totrans-143
   prefs: []
   type: TYPE_IMG
 - en: 'Figure 13.12: Thanos query deduplication disabled and enabled'
+  id: totrans-144
   prefs: []
   type: TYPE_NORMAL
 - en: The deduplication feature is enabled by default so that the querier can seamlessly
     replace Prometheus in serving queries. This way, upstream systems such as Grafana
     can continue functioning without even knowing that the query layer has changed.
+  id: totrans-145
   prefs: []
   type: TYPE_NORMAL
 - en: Summary
+  id: totrans-146
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
@@ -751,60 +1029,74 @@
     or cross-service), and how to choose between them depending on our  requirements.
     Since, sometimes, we want more than the out-of-the-box federation, we were introduced
     to the Thanos project and how it solves the global view problem.
+  id: totrans-147
   prefs: []
   type: TYPE_NORMAL
 - en: In the next chapter, we'll be tackling another common requirement and one that
     isn't a core concern of the Prometheus project, which is the long-term storage
     of time series.
+  id: totrans-148
   prefs: []
   type: TYPE_NORMAL
 - en: Questions
+  id: totrans-149
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
 - en: When should you consider sharding Prometheus?
+  id: totrans-150
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: What's the difference between sharding vertically and horizontally?
+  id: totrans-151
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: Is there anything you can do before opting for a sharding strategy?
+  id: totrans-152
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: What type of metrics are best suited for being federated in a hierarchical pattern?
+  id: totrans-153
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: Why might you require cross-service federation?
+  id: totrans-154
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: What protocol is used between Thanos querier and sidecar?
+  id: totrans-155
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: If a replica label is not set in a Thanos querier that is configured with sidecars
     running alongside Prometheus HA pairs, what happens to the results of queries
     that are executed there?
+  id: totrans-156
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: Further reading
+  id: totrans-157
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
 - en: '**Scaling and Federating Prometheus**: [https://www.robustperception.io/scaling-and-federating-prometheus](https://www.robustperception.io/scaling-and-federating-prometheus)'
+  id: totrans-158
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: '**Thanos components**: [https://github.com/improbable-eng/thanos/tree/master/docs/components](https://github.com/improbable-eng/thanos/tree/master/docs/components)'
+  id: totrans-159
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: '**Thanos - Prometheus at scale**: [https://improbable.io/blog/thanos-prometheus-at-scale](https://improbable.io/blog/thanos-prometheus-at-scale)'
+  id: totrans-160
   prefs:
   - PREF_UL
   type: TYPE_NORMAL

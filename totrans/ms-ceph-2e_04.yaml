@@ -1,7 +1,9 @@
 - en: BlueStore
+  id: totrans-0
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: BlueStore
 - en: In this chapter, you'll learn about BlueStore, the new object store in Ceph
     designed to replace the existing filestore. Its increased performance and enhanced
     feature set are designed to allow Ceph to continue to grow and provide a resilient
@@ -11,43 +13,65 @@
     is much better suited than Filestore for Ceph's requirements. Then by following
     a step by step tutorial you will be guided through how to upgrade a Ceph cluster
     to BlueStore.
+  id: totrans-1
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本章中，你将了解 BlueStore，这个新对象存储设计用于取代现有的 filestore。它提高的性能和增强的功能集旨在使 Ceph 能够继续发展，并为未来提供一个具有弹性和高性能的分布式存储系统。自
+    Luminous 版本以来，BlueStore 已成为推荐并默认的对象存储，在创建新的 OSD 时使用。本章将介绍 BlueStore 的工作原理，以及它为何比
+    Filestore 更适合 Ceph 的需求。然后，通过逐步教程，你将学习如何将 Ceph 集群升级到 BlueStore。
 - en: 'In this chapter, you''ll learn the following topics:'
+  id: totrans-2
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本章中，你将学习以下内容：
 - en: What is BlueStore?
+  id: totrans-3
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 什么是 BlueStore？
 - en: The limitations of filestore
+  id: totrans-4
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: Filestore 的限制
 - en: What problems BlueStore overcome
+  id: totrans-5
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: BlueStore 克服了哪些问题
 - en: The components of BlueStore and how it works
+  id: totrans-6
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: BlueStore 的组成部分及其工作原理
 - en: Introduction to `ceph-volume`
+  id: totrans-7
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`ceph-volume` 介绍'
 - en: How to deploy BlueStore OSDs
+  id: totrans-8
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 如何部署 BlueStore OSD
 - en: Approaches to upgrading live clusters from filestore to BlueStore
+  id: totrans-9
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 从 filestore 升级到 BlueStore 的方法
 - en: What is BlueStore?
+  id: totrans-10
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 什么是 BlueStore？
 - en: BlueStore is a Ceph object store that's primarily designed to address the limitations
     of filestore, which, prior to the Luminous release, was the default object store.
     Initially, a new object store named NewStore was being developed to replace filestore.
@@ -56,53 +80,79 @@
     for the actual objects. However, it quickly became apparent that using a POSIX
     filesystem introduced high overheads and restrictions, which was one of the key
     reasons for trying to move away from using filestore in the first place.
+  id: totrans-11
   prefs: []
   type: TYPE_NORMAL
+  zh: BlueStore 是一个 Ceph 对象存储，主要旨在解决 filestore 的限制问题。在 Luminous 版本发布之前，filestore 是默认的对象存储。最初，一个名为
+    NewStore 的新对象存储正在开发中，以取代 filestore。NewStore 是 RocksDB 和标准的 **可移植操作系统接口**（**POSIX**）文件系统的结合，RocksDB
+    用于存储元数据，而 POSIX 文件系统用于存储实际的对象。然而，很快就显现出，使用 POSIX 文件系统会带来高开销和限制，这也是最初想要摆脱 filestore
+    的关键原因之一。
 - en: 'Hence, BlueStore was born. Using raw block devices in combination with RocksDB,
     a number of problems that had stunted NewStore were solved. The name BlueStore
     was a reflection of the combination of the words Block and NewStore:'
+  id: totrans-12
   prefs: []
   type: TYPE_NORMAL
+  zh: 因此，BlueStore 应运而生。通过将原始块设备与 RocksDB 结合，解决了困扰 NewStore 的多个问题。BlueStore 这个名字反映了
+    Block 和 NewStore 这两个词的结合：
 - en: '*Block + NewStore = BlewStore = BlueStore*'
+  id: totrans-13
   prefs: []
   type: TYPE_NORMAL
+  zh: '*Block + NewStore = BlewStore = BlueStore*'
 - en: BlueStore is designed to remove the double write penalty associated with filestore
     and improve performance that can be obtained from the same hardware. Also, with
     the new ability to have more control over the way objects are stored on disk,
     additional features, such as checksums and compression, can be implemented.
+  id: totrans-14
   prefs: []
   type: TYPE_NORMAL
+  zh: BlueStore 旨在消除与 filestore 相关的双重写入惩罚，并提高同一硬件上可获得的性能。此外，通过对对象在磁盘上存储方式的更多控制，新的功能（如校验和和压缩）可以得以实现。
 - en: Why was it needed?
+  id: totrans-15
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 为什么需要它？
 - en: The previous object store in Ceph, filestore, has a number of limitations that
     have started to limit the scale at which Ceph can operate, as well as the features
     that it can offer. The following are some of the main reasons why BlueStore was
     needed.
+  id: totrans-16
   prefs: []
   type: TYPE_NORMAL
+  zh: Ceph 之前的对象存储 filestore 存在许多限制，这些限制已经开始限制 Ceph 能够运行的规模，以及它能够提供的功能。以下是 BlueStore
+    需要出现的一些主要原因。
 - en: Ceph's requirements
+  id: totrans-17
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: Ceph 的需求
 - en: An object in Ceph along with its data also has certain metadata associated with
     it, and it's crucial that both the data and metadata are updated atomically. If
     either of this metadata or data is updated without the other, the whole consistency
     model of Ceph is at risk. To ensure that these updates occur atomically, they
     need to be carried out in a single transaction.
+  id: totrans-18
   prefs: []
   type: TYPE_NORMAL
+  zh: 在 Ceph 中，一个对象除了其数据外，还包含一些相关的元数据，确保数据和元数据的原子性更新至关重要。如果元数据或数据单独更新，而没有同步更新，Ceph
+    的一致性模型就会面临风险。为了确保这些更新是原子性的，它们需要在一个事务中完成。
 - en: Filestore limitations
+  id: totrans-19
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: Filestore 限制
 - en: Filestore was originally designed as an object store to enable developers to
     test Ceph on their local machines. Because of its stability, it quickly became
     the standard object store and found itself in use in production clusters throughout
     the world.
+  id: totrans-20
   prefs: []
   type: TYPE_NORMAL
+  zh: Filestore最初是作为对象存储设计的，以便开发者可以在本地机器上测试Ceph。由于其稳定性，它迅速成为标准的对象存储，并且在全球的生产集群中得到广泛使用。
 - en: Initially, the thought behind filestore was that the upcoming **B-tree file
     system** (**btrfs**), which offered transaction support, would allow Ceph to offload
     the atomic requirements to btrfs. Transactions would allow an application to send
@@ -110,14 +160,18 @@
     to stable storage. Without a transaction support, if there was an interruption
     halfway through a Ceph write operation, either the data or metadata could have
     been missing or one could be out of sync with the other.
+  id: totrans-21
   prefs: []
   type: TYPE_NORMAL
+  zh: 最初，filestore的设计理念是，未来的**B树文件系统**（**btrfs**）将提供事务支持，从而允许Ceph将原子性要求委托给btrfs。事务将允许应用程序将一系列请求发送到btrfs，并且只有在所有请求都被提交到稳定存储后，才会收到确认。没有事务支持的情况下，如果Ceph写操作在中途中断，那么数据或元数据可能会丢失，或者它们之间会出现不一致。
 - en: Unfortunately, the reliance on btrfs to solve these problems turned out to be
     a false hope, and several limitations were discovered. Btrfs can still be used
     with filestore, but there are numerous known issues that can affect the stability
     of Ceph.
+  id: totrans-22
   prefs: []
   type: TYPE_NORMAL
+  zh: 不幸的是，依赖btrfs来解决这些问题最终证明是一个错误的希望，并且发现了多个限制。虽然btrfs仍然可以与filestore一起使用，但存在许多已知问题，可能会影响Ceph的稳定性。
 - en: In the end, it turned out that XFS was the best choice to use with filestore,
     but XFS had the major limitation that it didn't support transactions, meaning
     that there was no way for Ceph to guarantee atomicity of its writes. The solution
@@ -129,8 +183,10 @@
     acts like a write back cache, lowering the latency of writes to the speed of the
     SSD; however, if the filestore journal resides on the same storage device as the
     data partition, then throughput will be at least halved.
+  id: totrans-23
   prefs: []
   type: TYPE_NORMAL
+  zh: 最终，事实证明XFS是与filestore一起使用的最佳选择，但XFS有一个主要的限制，它不支持事务，这意味着Ceph无法保证其写操作的原子性。解决这个问题的方法是写前日志。所有写操作，包括数据和元数据，都会首先写入日志，该日志位于原始块设备上。一旦包含数据和元数据的文件系统确认所有数据已经安全刷新到磁盘，日志条目就可以被刷新。这一解决方案的一个有益副作用是，当使用SSD来存放旋转磁盘的日志时，它就像一个写回缓存，降低了写入的延迟，达到了SSD的速度；然而，如果filestore日志与数据分区位于同一个存储设备上，那么吞吐量至少会减半。
 - en: 'In the case of spinning-disk OSDs, this can lead to very poor performance,
     as the disk heads will constantly be moving between two areas of the disks, even
     for sequential operations. Although filestore on SSD-based OSDs doesn''t suffer
@@ -141,11 +197,15 @@
     of flash, called write endurance flash. The following diagram shows how filestore
     and its journal interacts with a block device. You can see that all data operations
     have to go through the filestore journal and the filesystems journal:'
+  id: totrans-24
   prefs: []
   type: TYPE_NORMAL
+  zh: 在旋转磁盘OSD的情况下，这可能导致非常差的性能，因为磁头会不断在磁盘的两个区域之间移动，即使是顺序操作也是如此。尽管基于SSD的OSD上的filestore几乎不会遭受相同的性能损失，但由于filestore日志的存在，它们的吞吐量仍然有效减半，因为需要写入的数据量是原来的两倍。无论是哪种情况，性能损失都是非常不希望出现的，并且在闪存驱动器的情况下，这会加速设备的磨损，要求使用更昂贵的闪存版本，称为写入耐久性闪存。下图展示了filestore及其日志如何与块设备交互。你可以看到，所有数据操作都必须通过filestore日志和文件系统日志：
 - en: '![](img/ca1b8d3f-46d9-49a9-8838-b31ab0185876.png)'
+  id: totrans-25
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/ca1b8d3f-46d9-49a9-8838-b31ab0185876.png)'
 - en: Additional challenges with filestore arose from developers trying to control
     the actions of the underlying POSIX filesystem to perform and behave in a way
     that Ceph required. A large amount of work has been done over the years by filesystem
@@ -153,45 +213,62 @@
     might submit I/O. In the case of Ceph, a lot of these optimizations interfere
     with what it's trying to instruct the filesystem to do, requiring more workarounds
     and complexity.
+  id: totrans-26
   prefs: []
   type: TYPE_NORMAL
+  zh: 在文件存储（filestore）中，开发人员试图控制底层 POSIX 文件系统的行为，以使其按照 Ceph 所需的方式执行，这带来了额外的挑战。多年来，文件系统开发人员进行了大量的工作，试图使文件系统变得智能，并预测应用程序如何提交
+    I/O 请求。对于 Ceph 来说，这些优化中的许多与它试图指示文件系统执行的操作相冲突，从而需要更多的解决方法和复杂性。
 - en: Object metadata is stored in combinations of filesystem attributes, called **extended
     attributes** (**XATTRs**), and in a **LevelDB** key–value store, which also resides
     on the OSD disk. LevelDB was chosen at the time of filestore's creation rather
     than RocksDB, as RocksDB wasn't available and LevelDB suited a lot of Ceph's requirements.
+  id: totrans-27
   prefs: []
   type: TYPE_NORMAL
+  zh: 对象元数据存储在文件系统属性的组合中，这些属性被称为**扩展属性**（**XATTRs**），并存储在**LevelDB**键值存储中，该存储也位于 OSD
+    磁盘上。由于 RocksDB 当时不可用，LevelDB 更符合 Ceph 的许多要求，因此在文件存储创建时选择了 LevelDB，而非 RocksDB。
 - en: Ceph is designed to scale to petabytes of data and store billions of objects.
     However, because of limitations around the number of files you can reasonably
     store in a directory, further workarounds to help limit this were introduced.
     Objects are stored in a hierarchy of hashed directory names; when the number of
     files in one of these folders reaches the set limit, the directory is split into
     another level and the objects are moved.
+  id: totrans-28
   prefs: []
   type: TYPE_NORMAL
+  zh: Ceph 被设计成能够扩展到 PB 级数据并存储数十亿个对象。然而，由于在一个目录中合理存储的文件数量有限，进一步的解决方法被引入以帮助限制这一点。对象存储在一个哈希目录名称的层次结构中；当这些文件夹中的文件数量达到设定的限制时，目录会被拆分为另一个级别，并且对象会被移动。
 - en: 'However, there''s a trade-off to improving the speed of object enumeration:
     when these directory splits occur, they impact performance as the objects are
     moved into the correct directories. On larger disks, the increased number of directories
     puts additional pressure on the VFS cache and can lead to additional performance
     penalties for infrequently accessed objects.'
+  id: totrans-29
   prefs: []
   type: TYPE_NORMAL
+  zh: 然而，提高对象枚举速度是有权衡的：当这些目录拆分发生时，它们会影响性能，因为对象被移动到正确的目录中。在更大的磁盘上，增加的目录数量给 VFS 缓存带来额外的压力，并可能导致访问不频繁的对象出现额外的性能损失。
 - en: As this book will cover in the chapter on performance tuning, a major performance
     bottleneck in filestore is when XFS has to start looking up inodes and directory
     entries that aren't currently cached in RAM. For scenarios where there are a large
     number of objects stored per OSD, there is currently no real solution to this
     problem, and it's quite common to for a Ceph cluster to gradually slow down as
     it fills up.
+  id: totrans-30
   prefs: []
   type: TYPE_NORMAL
+  zh: 正如本书在**性能调优**章节中将要讨论的那样，文件存储中的一个主要性能瓶颈是，当 XFS 开始查找那些当前不在 RAM 中缓存的 inode 和目录条目时。在每个
+    OSD 存储大量对象的场景下，目前还没有真正解决此问题的方法，Ceph 集群随着填充的逐渐增多而变得越来越慢是很常见的现象。
 - en: Moving away from storing objects on a POSIX filesystem is really the only way
     to solve most of these problems.
+  id: totrans-31
   prefs: []
   type: TYPE_NORMAL
+  zh: 摆脱在 POSIX 文件系统上存储对象实际上是解决大多数这些问题的唯一方法。
 - en: Why is BlueStore the solution?
+  id: totrans-32
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 为什么 BlueStore 是解决方案？
 - en: BlueStore was designed to address these limitations. Following the development
     of NewStore, it was obvious that trying to use a POSIX filesystem as the underlying
     storage layer in any approach would introduce a number of issues that were also
@@ -201,40 +278,58 @@
     of a separate Linux filesystem. By storing metadata in RocksDB and the actual
     object data directly on block devices, Ceph can leverage much better control over
     the underlying storage and at the same time provide better performance.
+  id: totrans-33
   prefs: []
   type: TYPE_NORMAL
+  zh: BlueStore 的设计旨在解决这些限制。在 NewStore 开发之后，很明显，试图将 POSIX 文件系统作为底层存储层的一种方式，会引入许多与文件存储中存在的类似问题。为了使
+    Ceph 能够实现期望的底层存储性能，它还需要对存储设备具有直接的块级访问，而不是额外的 Linux 文件系统开销。通过将元数据存储在 RocksDB 中，而将实际的对象数据直接存储在块设备上，Ceph
+    可以更好地控制底层存储，同时提供更好的性能。
 - en: How BlueStore works
+  id: totrans-34
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: BlueStore 的工作原理
 - en: 'The following diagram shows how BlueStore interacts with a block device. Unlike
     filestore, data is directly written to the block device and metadata operations
     are handled by RocksDB:'
+  id: totrans-35
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下图示显示了BlueStore如何与块设备交互。与filestore不同，数据直接写入块设备，元数据操作由RocksDB处理：
 - en: '![](img/946e9d75-d099-45a9-8452-85ca3c25db3a.png)'
+  id: totrans-36
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/946e9d75-d099-45a9-8452-85ca3c25db3a.png)'
 - en: The block device is divided between RocksDB data storage and the actual user
     data stored in Ceph. Each object is stored as a number of blobs allocated from
     the block device. RocksDB contains metadata for each object and tracks the utilization
     and allocation information for the data blobs.
+  id: totrans-37
   prefs: []
   type: TYPE_NORMAL
+  zh: 块设备被划分为RocksDB数据存储和Ceph中实际存储的用户数据。每个对象都作为若干个从块设备中分配的blob存储。RocksDB包含每个对象的元数据，并跟踪数据blob的使用情况和分配信息。
 - en: RocksDB
+  id: totrans-38
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: RocksDB
 - en: RocksDB is a high-performance key–value store that was originally forked from
     LevelDB, but, after development, Facebook went on to offer significant performance
     improvements suited for multiprocessor servers with low-latency storage devices.
     It has also had numerous feature enhancements, some of which are used in BlueStore.
+  id: totrans-39
   prefs: []
   type: TYPE_NORMAL
+  zh: RocksDB是一个高性能的键值存储系统，最初是从LevelDB分支出来的，但在开发之后，Facebook对其进行了显著的性能改进，适用于具有低延迟存储设备的多处理器服务器。它还进行了许多功能增强，其中一些在BlueStore中得到了应用。
 - en: RocksDB is used to store metadata about the stored objects, which was previously
     handled using a combination of LevelDB and XATTRs in filestore.
+  id: totrans-40
   prefs: []
   type: TYPE_NORMAL
+  zh: RocksDB用于存储关于存储对象的元数据，之前这些元数据是通过将LevelDB和XATTRs结合在filestore中处理的。
 - en: A key characteristic of RocksDB is the way in which data is written down in
     the levels of the database. It owes this characteristic to its origins in LevelDB.
     New data is written into a memory-based table with an optional transaction log
@@ -245,8 +340,10 @@
     to be 10 times the size of the previous level, which brings some interesting factors
     into play if you're trying to store the whole of the RocksDB on SSD in a hybrid
     HDD–SSD layout.
+  id: totrans-41
   prefs: []
   type: TYPE_NORMAL
+  zh: RocksDB的一个关键特点是数据在数据库各个级别中的写入方式。它得益于其源自LevelDB的特性。新数据被写入一个基于内存的表，并可选地记录在持久化存储的事务日志中，即WAL；当这个基于内存的表填满时，数据会通过称为压缩的过程移动到数据库的下一个级别。当该级别填满时，数据会再次迁移到更低级别，以此类推。所有这些级别都存储在RocksDB称之为SST文件的文件中。在Ceph中，每个级别的大小配置为前一个级别的10倍，如果你尝试在混合的HDD–SSD布局中将整个RocksDB存储在SSD上，那么这会带来一些有趣的因素。
 - en: All new data is written into the memory-based table and WAL, the memory based
     table is known as level 0. BlueStore configures level 0 as 256 MB. The default
     size multiplier between levels is a factor of ten, this means that level 1 is
@@ -260,21 +357,30 @@
     requests—there is a chance that the metadata may live in level 3 or 4, and so
     will have to be read off of a spinning disk, which would have a negative impact
     on latency and increase disk load.
+  id: totrans-42
   prefs: []
   type: TYPE_NORMAL
+  zh: 所有新数据都会写入基于内存的表和WAL，内存表被称为level 0。BlueStore将level 0配置为256 MB。各级之间的默认大小倍增因子为十，这意味着level
+    1也是256 MB，level 2为2.56 GB，level 3为25.6 GB，level 4为256 GB。对于大多数Ceph用例，每个OSD的平均元数据大小应该在20-30GB之间，热数据集通常小于此。希望level
+    0、1和2包含大部分热数据，以便写入，因此将SSD分区大小至少配置为3 GB应能确保这些级别存储在SSD上。写入性能应该良好，因为写入的元数据会直接存储到SSD上；然而，在读取元数据时——例如在客户端读取请求期间——可能会遇到元数据位于level
+    3或4的情况，这时元数据需要从旋转硬盘读取，这将对延迟产生负面影响，并增加磁盘负载。
 - en: Therefore, the obvious solution would be to somehow calculate how big you believe
     the BlueStore metadata may grow for your dataset and size the RocksDB storage
     to ensure that it can all be stored on SSD. There are two difficulties in accomplishing
     this.
+  id: totrans-43
   prefs: []
   type: TYPE_NORMAL
+  zh: 因此，显而易见的解决方案是以某种方式计算你认为BlueStore元数据在你的数据集中的增长大小，并调整RocksDB存储的大小，以确保它能够全部存储在SSD上。实现这一目标有两个难点。
 - en: Firstly, it's very difficult to precalculate the size of the metadata based
     on the size of the actual data. Depending on the client model—RBD, CephFS, or
     RGW—differing amounts of metadata will be stored. Additionally, things such as
     snapshots and whether you are using replicated- or erasure-coded pools will also
     lead to differing sizes of metadata.
+  id: totrans-44
   prefs: []
   type: TYPE_NORMAL
+  zh: 首先，根据实际数据的大小，预先计算元数据的大小是非常困难的。根据客户端模型（RBD、CephFS或RGW），将存储不同数量的元数据。此外，快照和你是否使用复制池或纠删码池也会导致元数据大小的不同。
 - en: The next challenge is sizing your flash device correctly to ensure that all
     of the metadata fits. As mentioned previously, RocksDB compacts data down through
     the various levels of the database. When BlueStore creates the files for the RocksDB,
@@ -287,8 +393,12 @@
     you would need just over 30 G; any smaller and the extra space over level 2 would
     not be used. To ensure that level 4 would fit, you would likely need over 300
     GB of flash space.
+  id: totrans-45
   prefs: []
   type: TYPE_NORMAL
+  zh: 接下来的挑战是正确配置你的闪存设备，以确保所有元数据都能适配。如前所述，RocksDB会将数据压缩到数据库的各个级别。当BlueStore为RocksDB创建文件时，它仅会将某一特定级别放到闪存设备上，前提是该级别的全部内容可以适配。因此，每个级别都有最低的大小要求，以确保该级别确实位于闪存上。例如，为了确保DB的2.56
+    GB的级别2部分能够适配闪存，你需要至少拥有一个4-5 GB的SSD分区。这是因为级别0、级别1和级别2都需要适配，并且还要有少量的开销。为了确保级别3能够完整适配，你需要稍多于30
+    GB的空间；如果空间小于此，级别2之上的额外空间将不会被使用。为了确保级别4能够适配，你可能需要超过300 GB的闪存空间。
 - en: 'Storing the WAL on a faster storage device—which can help to lower the latency
     of RocksDB operations—is recommended if you are using flash storage for the actual
     data and you need further increases in performance. If you are using spinning
@@ -296,77 +406,103 @@
     There are a number of possible storage layout configurations, where the WAL, DB,
     and data can be placed on different storage devices. The following list shows
     three examples of such configurations:'
+  id: totrans-46
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你使用的是闪存存储实际数据，并且需要进一步提高性能，建议将WAL存储在更快的存储设备上，这有助于降低RocksDB操作的延迟。如果你使用的是旋转磁盘，将WAL移到专用设备上可能不会带来显著的提升。有多种可能的存储布局配置，WAL、DB和数据可以放置在不同的存储设备上。以下是三种此类配置的示例：
 - en: WAL, DB, and data all on spinning disk or flash
+  id: totrans-47
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: WAL、DB和数据都在旋转磁盘或闪存上
 - en: WAL and DB on SSD, data on spinning disk
+  id: totrans-48
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: WAL和DB在SSD上，数据在旋转磁盘上
 - en: WAL on NVMe, DB on SSD, and data on spinning disk
+  id: totrans-49
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: WAL在NVMe上，DB在SSD上，数据在旋转磁盘上
 - en: Compression
+  id: totrans-50
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 压缩
 - en: Another handy feature introduced with BlueStore is that it enables compression
     of data at the sub-object level, blobs inside BlueStore. This means that any data
     written into Ceph, no matter the client access model, can benefit from this feature.
     Compression is enabled on a per-pool basis but is disabled by default.
+  id: totrans-51
   prefs: []
   type: TYPE_NORMAL
+  zh: BlueStore引入的另一个便捷功能是它支持在子对象级别对数据进行压缩，即BlueStore内部的blob。这意味着，无论客户端访问模型如何，写入Ceph的数据都可以受益于此功能。压缩是按池启用的，但默认是禁用的。
 - en: 'As well as the ability to enable compression per-pool, there are also a number
     of extra options to control the behavior of the compression, as shown in the following
     list:'
+  id: totrans-52
   prefs: []
   type: TYPE_NORMAL
+  zh: 除了按池启用压缩外，还有许多额外的选项可以控制压缩行为，如下所示：
 - en: '`compression_algorithm`**:** This controls which compression library is used
     to compress data. The default is snappy, a compression library written by Google.
     Although its compression ratio isn''t the best, it has very high performance,
     and unless you have specific capacity requirements, you should probably stick
     with snappy. Other options are `zlib` and `zstd`.'
+  id: totrans-53
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`compression_algorithm`**:** 这个选项控制使用哪个压缩库来压缩数据。默认是snappy，这是由Google编写的压缩库。虽然它的压缩比率不是最佳的，但它具有非常高的性能，除非你有特定的容量需求，否则最好还是使用snappy。其他选项包括`zlib`和`zstd`。'
 - en: '`compression_mode`**:** This controls the operating status of compression on
     a per-pool basis. It can be set to either `none`, `passive`, `aggressive`, or
     `force`. The `passive` setting enables the use of compression, but will only compress
     objects that are marked to be compressed from higher levels. The `aggressive`
     setting will try and compress all objects unless explicitly told not to. The `force`
     setting will always try and compress data.'
+  id: totrans-54
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`compression_mode`**:** 该设置控制每个存储池的压缩操作状态。可以设置为`none`、`passive`、`aggressive`或`force`。`passive`设置启用压缩，但仅会压缩从更高层级标记为需要压缩的对象。`aggressive`设置会尝试压缩所有对象，除非明确告知不压缩。`force`设置则始终会尝试压缩数据。'
 - en: '`compress_required_ratio`**:** By default, this is set at 87.5%. An object
     that has been compressed must have been compressed to at least below this value
     to be considered worth compressing; otherwise, the object will be stored in an
     uncompressed format.'
+  id: totrans-55
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`compress_required_ratio`**:** 默认情况下，设置为87.5%。已压缩的对象必须压缩到低于此值才被认为值得压缩；否则，该对象将以未压缩格式存储。'
 - en: Although compression does require additional CPU, snappy is very efficient,
     and the distributed nature of Ceph lends itself well to this task as the compression
     duties are spread over a large number of CPUs across the cluster. In comparison,
     a legacy storage array would have to use more of its precious, finite dual controller
     CPU's resource.
+  id: totrans-56
   prefs: []
   type: TYPE_NORMAL
+  zh: 尽管压缩确实需要额外的CPU资源，但Snappy非常高效，Ceph的分布式特性使其非常适合此任务，因为压缩任务会分摊到集群中大量的CPU上。相比之下，传统的存储阵列则必须更多地使用其宝贵的、有限的双控制器CPU资源。
 - en: An additional advantage of using compression over the reduction in space consumed
     is also I/O performance when reading or writing large blocks of data. Because
     of the data being compressed, the disks or flash devices will have less data to
     read or write, meaning faster response times. Additionally, flash devices will
     possibly see less write wear because of the reduced amount of total data written.
+  id: totrans-57
   prefs: []
   type: TYPE_NORMAL
+  zh: 使用压缩的一个额外优势是，相较于节省的存储空间，还能提高读写大块数据时的I/O性能。由于数据被压缩，磁盘或闪存设备需要读取或写入的数据量减少，这意味着响应时间更快。此外，闪存设备可能因写入数据量减少而遭遇更少的写入磨损。
 - en: Checksums
+  id: totrans-58
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 校验和
 - en: For increased protection of stored data, BlueStore calculates and stores the
     checksums of any data written. On each read request, BlueStore reads the checksum
     and compares with the data read from the device. If a mismatch is discovered,
@@ -376,12 +512,16 @@
     a long way to eliminating the risk of silent data corruption. By default, BlueStore creates
     checksums using crc32, which is highly likely to catch any silent data corruption;
     however, alternative algorithms are available, if required.
+  id: totrans-59
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了增强存储数据的保护，BlueStore会计算并存储所有写入数据的校验和。每次读取请求时，BlueStore会读取校验和并与从设备读取的数据进行比较。如果发现不匹配，BlueStore会报告读取错误并修复损坏。Ceph随后会从另一个持有该对象的OSD重新尝试读取。尽管现代硬件具有复杂的校验和和错误检测功能，但在BlueStore中引入额外的检查层，能大大降低静默数据损坏的风险。默认情况下，BlueStore使用crc32算法创建校验和，这很可能捕捉到任何静默数据损坏；不过，若有需要，也可以选择其他算法。
 - en: BlueStore cache tuning
+  id: totrans-60
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: BlueStore缓存调优
 - en: 'Unlike in filestore, where any free RAM in the OSD node is used by the page
     cache, in BlueStore, RAM has to be statically assigned to the OSD on startup.
     For spinning disk OSDs, this amount is 1 GB; flash-based SSDs have 3 GB assigned
@@ -394,13 +534,19 @@
     relatively low by default compared to what some filestore OSDs may have stored
     in the page cache; this is to prevent BlueStore having high memory consumption
     by default.'
+  id: totrans-61
   prefs: []
   type: TYPE_NORMAL
+  zh: 与filestore不同，filestore中任何OSD节点中的空闲RAM都会被用作页面缓存，而在BlueStore中，RAM必须在启动时静态分配给OSD。对于旋转磁盘OSD，分配的内存为1
+    GB；而基于闪存的SSD则分配3 GB的内存。该内存用于多个不同的内部缓存：RocksDB缓存、BlueStore元数据缓存和BlueStore数据缓存。前两个缓存负责确保在查找重要元数据时，BlueStore内部的平稳运行；默认设置已被调整为提供良好的性能，进一步增加内存会带来递减的回报。最后的BlueStore数据缓存将缓存存储在Ceph集群中的用户数据。与某些filestore
+    OSD存储在页面缓存中的数据相比，默认情况下该缓存相对较低；这是为了避免BlueStore在默认情况下产生过高的内存消耗。
 - en: If your OSD nodes have plenty of free memory after all your OSDs are running
     and storing data, then it's possible to increase the amount of memory assigned
     to each OSD and decide how it's split between the different caches.
+  id: totrans-62
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果您的OSD节点在所有OSD运行并存储数据后仍有大量空闲内存，那么可以增加分配给每个OSD的内存量，并决定如何在不同的缓存之间进行分配。
 - en: Recent versions of Ceph contain a feature in BlueStore that auto-tunes the assignment
     of memory between the different caches in BlueStore. By default, the OSD will
     aim to consume around 4 GB of memory, and by continually analyzing the memory
@@ -409,8 +555,11 @@
     and trying to pre-allocate memory with static variables is an extremely difficult
     task. Aside from potentially tweaking the target memory threshold, the rest of
     the auto-tuning is largely automatic and hidden from the Ceph administrator.
+  id: totrans-63
   prefs: []
   type: TYPE_NORMAL
+  zh: Ceph的最新版本包含了一个在BlueStore中自动调节内存分配的功能，旨在优化BlueStore中不同缓存之间的内存分配。默认情况下，OSD会尝试消耗大约4
+    GB的内存，并通过持续分析内存使用情况来调整每个缓存的分配。自动调节带来的主要改进是，不同的工作负载以不同方式使用BlueStore中的缓存，而试图通过静态变量预分配内存是一项非常困难的任务。除了可能会微调目标内存阈值外，其余的自动调节过程基本是自动化的，并且对Ceph管理员来说是隐藏的。
 - en: 'If auto-tuning is disabled, then BlueStore will fall back to its manual cache
     assignment behavior. The following section describes the various BlueStore caches
     in detail that can be controlled via the manual mode. In this mode, there are
@@ -420,46 +569,63 @@
     just change the overall amount of memory assigned to an OSD; there are a number
     of further settings to control the split between the three caches, as shown in
     the following list:'
+  id: totrans-64
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果禁用自动调节，BlueStore将退回到手动缓存分配行为。接下来的部分详细描述了可以通过手动模式控制的各种BlueStore缓存。在此模式下，有两个基于OSD的设置控制分配给每个OSD的内存，分别是`bluestore_cache_size_hdd`和`bluestore_cache_size_ssd`。顾名思义，可以调整这两个设置中的任何一个，控制分配给HDD或SSD的内存量。然而，我们不仅可以更改分配给OSD的总内存量；还有多个其他设置可以控制三个缓存之间的内存分配，如下所示：
 - en: The `bluestore_cache_kv_ratio` setting, set by default to 0.5, will allocate
     50% of the allocated memory to the RocksDB cache. This cache is used internally
     by RocksDB and is not directly managed by Ceph. It's currently believed to offer
     the best return in performance when deciding where to allocate memory.
+  id: totrans-65
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 默认情况下，`bluestore_cache_kv_ratio`设置为0.5，这意味着会将50%的内存分配给RocksDB缓存。此缓存由RocksDB内部使用，并且并不直接由Ceph管理。目前认为，这种方式在决定内存分配时能够提供最佳的性能回报。
 - en: The `bluestore_cache_meta_ratio` setting, set by default to 0.5, will allocate
     50% of the available allocated memory to caching BlueStore metadata. Note that,
     depending on the available memory and the value of `bluestore_cache_kv_min`, less
     than 50% may end up being allocated to caching metadata. The BlueStore metadata
     cache contains the raw metadata before it's stored in RocksDB.
+  id: totrans-66
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`bluestore_cache_meta_ratio` 设置，默认值为 0.5，将把 50% 的可用内存分配给缓存 BlueStore 元数据。请注意，根据可用内存和
+    `bluestore_cache_kv_min` 的值，可能会分配不到 50% 的内存用于缓存元数据。BlueStore 元数据缓存包含原始的元数据，尚未存储在
+    RocksDB 中。'
 - en: The `bluestore_cache_kv_min` setting, set by default to 512 MB, ensures that
     at least 512 MB of memory is used for the RocksDB cache. Anything over this value
     will be shared 50:50 with the BlueStore metadata cache.
+  id: totrans-67
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`bluestore_cache_kv_min` 设置默认值为 512 MB，确保至少使用 512 MB 内存作为 RocksDB 缓存。超过该值的部分将与
+    BlueStore 元数据缓存共享，比例为 50:50。'
 - en: Finally, any memory left over from the preceding two ratios will be used for
     caching actual data. By default, because of `kv` and `meta_ratios`, this will
     be 0%. Most Ceph clients will have their own local read cache, which will hopefully
     keep extremely hot data cached; however, in the case where clients are used that
     don't have their own local cache, it might be worth investigating whether adjusting
     the caching ratios to reserve a small amount of cache for data use brings improvements.
+  id: totrans-68
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后，前两个比例剩余的内存将用于缓存实际数据。默认情况下，由于 `kv` 和 `meta_ratios`，这将是 0%。大多数 Ceph 客户端会有自己的本地读取缓存，这有助于将极热的数据缓存起来；然而，在没有自己本地缓存的客户端的情况下，可能需要研究是否调整缓存比例，预留少量缓存用于数据缓存能够带来改善。
 - en: By default, the auto-tuning of BlueStore should provide the best balance of
     memory usage and provide the best performance, and it isn't recommended that you
     change to the manual method.
+  id: totrans-69
   prefs: []
   type: TYPE_NORMAL
+  zh: 默认情况下，BlueStore 的自动调优应该提供最佳的内存使用平衡并提供最佳性能，不建议您改为手动方法。
 - en: Deferred writes
+  id: totrans-70
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 延迟写入
 - en: 'Unlike in filestore, where every write is written in its entirety to both the
     journal and then finally to disk, in BlueStore, the data part of the write in
     most cases is written directly to the block device. This removes the double-write
@@ -471,21 +637,33 @@
     later flushing these entries to disk. Unlike filestore, not every write is written
     into the WAL; configuration parameters determine the I/O size cut-off as to what
     writes are deferred. The configuration parameter is shown in the following code:'
+  id: totrans-71
   prefs: []
   type: TYPE_NORMAL
+  zh: 与文件存储不同，在文件存储中，每次写入都会完整地写入日志并最终写入磁盘，而在 BlueStore 中，写入操作的数据部分在大多数情况下直接写入块设备。这消除了双重写入的惩罚，并且在纯旋转磁盘
+    OSD 上，显著提高了性能并降低了 SSD 的磨损。然而，如前所述，当旋转磁盘与 SSD 日志结合使用时，双重写入有一个积极的副作用，可以降低写入延迟。BlueStore
+    还可以使用基于闪存的存储设备通过延迟写入来降低写入延迟，首先将数据写入 RocksDB WAL，然后稍后将这些条目刷新到磁盘。与文件存储不同，并非每个写入都会写入
+    WAL；配置参数决定了延迟写入的 I/O 大小的截止值。配置参数如下所示：
 - en: '[PRE0]'
+  id: totrans-72
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE0]'
 - en: This controls the size of I/Os that will be written to the WAL first. For spinning
     disks, this defaults to 32 KB, and SSDs by default don't defer writes. If write
     latency is important and your SSD is sufficiently fast, then by increasing this
     value, you can increase the size of I/Os that you wish to defer to WAL.
+  id: totrans-73
   prefs: []
   type: TYPE_NORMAL
+  zh: 这控制了将首先写入 WAL 的 I/O 大小。对于旋转磁盘，默认为 32 KB，而 SSD 默认情况下不延迟写入。如果写入延迟很重要并且您的 SSD 足够快，那么通过增加这个值，您可以增加希望延迟到
+    WAL 的 I/O 大小。
 - en: BlueFS
+  id: totrans-74
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: BlueFS
 - en: Although the main motivation for BlueStore's development was to not use an underlying
     filesystem, BlueStore still needs a method to store RocksDB and the data on the
     OSD disk. BlueFS was developed to meet this requirement, which is an extremely
@@ -494,19 +672,28 @@
     for the slim set of operations that Ceph submits. It also removes the overhead
     of the double filesystem journal write that would be present when using a standard
     POSIX filesystem.
+  id: totrans-75
   prefs: []
   type: TYPE_NORMAL
+  zh: 尽管开发 BlueStore 的主要动机是为了避免使用底层文件系统，BlueStore 仍然需要一种方法来存储 RocksDB 和 OSD 磁盘上的数据。为满足这一需求，开发了
+    BlueFS，它是一个极其简化的文件系统，仅提供 BlueStore 所需的最基本功能。这也意味着它被设计为在 Ceph 提交的简化操作下可靠地运行。同时，它去除了使用标准
+    POSIX 文件系统时可能存在的双重文件系统日志写入开销。
 - en: Unlike with filestore, you can't simply browse the folder structure and manually
     look at the objects as BlueFS is not a native Linux filesystem; however, it's
     possible to mount a BlueFS filesystem with the ceph-objectstore-tool to enable
     exploration or to be able to manually correct errors. This will be covered further
     in the section on disaster recovery.
+  id: totrans-76
   prefs: []
   type: TYPE_NORMAL
+  zh: 与文件存储不同，由于 BlueFS 不是本地 Linux 文件系统，因此你无法简单地浏览文件夹结构并手动查看对象；然而，可以使用 `ceph-objectstore-tool`
+    挂载 BlueFS 文件系统，从而启用浏览或手动修正错误。这个内容将在灾难恢复部分进一步介绍。
 - en: ceph-volume
+  id: totrans-77
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: ceph-volume
 - en: Although not strictly part of BlueStore, the `ceph-volume` tool was released
     around the same time as BlueStore and is the recommended tool for provisioning
     Bluestore OSDs. It's a direct replacement for the `ceph-disk` tool, which had
@@ -514,41 +701,61 @@
     being correctly enumerated and starting up. The `ceph-disk` tool used `udev` to
     identify OSDs that were then mounted and activated. The `ceph-disk` tool has now
     been deprecated, and all new OSDs should be created using `ceph-volume`.
+  id: totrans-78
   prefs: []
   type: TYPE_NORMAL
+  zh: 尽管严格来说不属于 BlueStore 的一部分，`ceph-volume` 工具与 BlueStore 几乎同时发布，并且是建议用于配置 Bluestore
+    OSD 的工具。它是 `ceph-disk` 工具的直接替代，后者存在一系列关于竞争条件和 OSD 正确列举及启动可预测性的问题。`ceph-disk` 工具使用
+    `udev` 来识别 OSD，然后挂载并激活它们。`ceph-disk` 工具现在已经被弃用，所有新的 OSD 应该使用 `ceph-volume` 创建。
 - en: Although `ceph-volume` can function in a simple mode, the recommended approach
     is to use the `lvm` mode. As the name suggests, this utilizes the Linux logical
     volume manager to store information regarding the OSDs and to manage the block
     devices. Additionally, the dm-cache, which is a part of `lvm`, can be used to
     provide block-level caching underneath the OSDs.
+  id: totrans-79
   prefs: []
   type: TYPE_NORMAL
+  zh: 虽然 `ceph-volume` 可以在简单模式下运行，但推荐的方式是使用 `lvm` 模式。顾名思义，它利用 Linux 逻辑卷管理器来存储与 OSD
+    相关的信息并管理块设备。此外，作为 `lvm` 的一部分，dm-cache 可以用于在 OSD 下提供块级缓存。
 - en: The `ceph-volume` tool also has a batch mode, which aims to intelligently provision
     OSDs given a list of block devices. Care should be taken to use the `--report`
     mode to ensure that its intended action matches your expectations. Otherwise,
     it's recommended that you manually partition and create OSDs.
+  id: totrans-80
   prefs: []
   type: TYPE_NORMAL
+  zh: '`ceph-volume` 工具还具有批处理模式，旨在根据块设备列表智能地配置 OSD。应特别小心使用 `--report` 模式，以确保其预期操作与您的预期一致。否则，建议您手动分区并创建
+    OSD。'
 - en: How to use BlueStore
+  id: totrans-81
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 如何使用 BlueStore
 - en: 'To create a BlueStore OSD using `ceph-volume`, you run the following command,
     specifying the devices for the data and RocksDB storage. As previously mentioned,
     you can separate the DB and WAL parts of RocksDB if you so wish:'
+  id: totrans-82
   prefs: []
   type: TYPE_NORMAL
+  zh: 要使用 `ceph-volume` 创建 BlueStore OSD，您需要运行以下命令，并指定数据和 RocksDB 存储的设备。如前所述，您可以根据需要将
+    RocksDB 的 DB 和 WAL 部分分开：
 - en: '[PRE1]'
+  id: totrans-83
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE1]'
 - en: Shown in brackets is the encryption option. It's recommended that you encrypt
     all new OSDs unless you have a specific reason not to. Encryption with modern
     CPUs generates very little overhead, and makes the often-forgotten security measures
     around disk replacements much simpler. With the recent introduction of various
     new data-protection laws, such as GDPR in Europe, having data encrypted at rest
     is highly recommended.
+  id: totrans-84
   prefs: []
   type: TYPE_NORMAL
+  zh: 方括号中显示的是加密选项。建议对所有新创建的 OSD 进行加密，除非有特别的原因不这样做。现代 CPU 的加密操作几乎不产生额外开销，并且简化了在更换磁盘时往往被忽视的安全措施。随着诸如欧洲
+    GDPR 等新数据保护法律的出台，建议对静态数据进行加密。
 - en: 'The preceding code assumes that your data disk is `/dev/sda`. For this example,
     assume that you are using a spinning disk, and that you have a faster device,
     such as an SSD (`/dev/sdb`) and a very fast NVMe device (`/dev/sdc`). The `ceph-volume` tool
@@ -558,29 +765,44 @@
     NVMe device to store the WAL. You can create multiple OSDs sharing the same SSD
     for DB and WAL by partitioning the devices, or by using `lvm` to carve logical
     volumes out of them.'
+  id: totrans-85
   prefs: []
   type: TYPE_NORMAL
+  zh: 上述代码假设你的数据磁盘是 `/dev/sda`。假设你使用的是机械硬盘，并且有一块更快的设备，比如 SSD（`/dev/sdb`）和一块非常快速的 NVMe
+    设备（`/dev/sdc`）。`ceph-volume` 工具将在数据磁盘上创建两个分区：一个用于存储实际的 Ceph 对象，另一个小的 XFS 分区用于存储
+    OSD 的详细信息。然后，它会将 SSD 的链接放到 RocksDB 上，NVMe 设备的链接放到 WAL 上。你可以通过对设备进行分区，或使用 `lvm`
+    从中切割逻辑卷，来创建多个共享同一 SSD 的 OSD，用于 DB 和 WAL。
 - en: However, as we discovered in [Chapter 2](dd1d6803-6e40-4bfb-8150-b605bcc08d59.xhtml),
     *Deploying Ceph with Containers*, using a proper deployment tool for your Ceph
     cluster helps to reduce deployment time and ensures consistent configuration across
     the cluster. Although the Ceph Ansible modules also support deploying BlueStore
     OSDs, at the time of writing, it doesn't currently support automatically creating
     multiple DB and WAL partitions on a single device.
+  id: totrans-86
   prefs: []
   type: TYPE_NORMAL
+  zh: 然而，正如我们在[第二章](dd1d6803-6e40-4bfb-8150-b605bcc08d59.xhtml)《使用容器部署 Ceph》中发现的那样，使用适当的部署工具可以帮助减少
+    Ceph 集群的部署时间，并确保整个集群的配置一致性。虽然 Ceph Ansible 模块也支持部署 BlueStore OSD，但在撰写本文时，它目前不支持自动在单一设备上创建多个
+    DB 和 WAL 分区。
 - en: Now that you understand how to create BlueStore OSD's the next topic that is
     required to be discussed is the upgrading of an existing cluster.
+  id: totrans-87
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在你已经了解如何创建 BlueStore OSD，接下来的话题是讨论如何升级现有集群。
 - en: Strategies for upgrading an existing cluster to BlueStore
+  id: totrans-88
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 升级现有集群至 BlueStore 的策略
 - en: It's likely that some readers of this book are running existing Ceph clusters
     that are utilizing filestore. These readers might be wondering if they should
     upgrade to BlueStore, and if so, what the best method is for doing this.
+  id: totrans-89
   prefs: []
   type: TYPE_NORMAL
+  zh: 很可能有些读者正在运行使用 filestore 的现有 Ceph 集群。这些读者可能会想知道是否应该升级到 BlueStore，如果是的话，最佳的升级方法是什么。
 - en: It should be understood that while filestore is still supported, it's very much
     at the end of its life, with no further development work planned aside from any
     critical bug fixes that may be required. Therefore, it's highly recommended that
@@ -588,8 +810,12 @@
     enhancements and continue to run a supported Ceph release. The support path for
     filestore in future releases hasn't been announced, but it would be wise to aim
     to be running BlueStore OSDs by the Ceph release after Nautilus.
+  id: totrans-90
   prefs: []
   type: TYPE_NORMAL
+  zh: 应该理解，尽管 filestore 仍然得到支持，但它已经接近生命周期的尽头，除了可能需要的关键 bug 修复外，不会再有其他的开发工作。因此，强烈建议你规划将集群升级到
+    BlueStore，以便利用任何当前和未来的增强功能，并继续运行受支持的 Ceph 版本。未来版本对 filestore 的支持路径尚未公布，但最好从 Nautilus
+    版本后的 Ceph 版本开始，确保运行 BlueStore OSD。
 - en: There is no special migration path for upgrading an OSD to BlueStore; the process
     is to simply destroy the OSD, rebuild it as BlueStore, and then let Ceph recover
     the data on the newly created OSD. It's more than likely that, because of the
@@ -597,13 +823,18 @@
     altering partition sizes will require multiple OSDs to be destroyed at once. Therefore,
     it may be worth considering whether operating system rebuilds should be carried
     out at this point.
+  id: totrans-91
   prefs: []
   type: TYPE_NORMAL
+  zh: 升级 OSD 至 BlueStore 并没有特别的迁移路径；过程就是简单地销毁 OSD，重建为 BlueStore，然后让 Ceph 在新创建的 OSD
+    上恢复数据。由于 filestore 日志与 BlueStore 的 RocksDB 之间存在不同的大小要求，修改分区大小很可能需要一次销毁多个 OSD。因此，可能需要考虑是否应在此时进行操作系统重建。
 - en: 'There are two main approaches to the upgrade process that are largely determined
     by the Ceph operator''s appetite for risk and the availability of spare capacity,
     listed as follows:'
+  id: totrans-92
   prefs: []
   type: TYPE_NORMAL
+  zh: 升级过程有两种主要方法，主要取决于 Ceph 运维人员对风险的承受能力和备用容量的可用性，具体如下：
 - en: '**Degraded upgrade**:A degraded upgrade destroys the current OSDs without redistributing
     their contents across the remaining OSDs. Once the OSDs come back online as BlueStore
     OSDs, then the missing copies of data are rebuilt. Until the cluster returns to
@@ -620,9 +851,14 @@
     the cluster to re-balance once during recovery and you don''t require any additional
     space, which may mean that this is the only option for clusters that are more
     or less full.'
+  id: totrans-93
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**降级升级**：降级升级会销毁当前的 OSD，而不会将其内容重新分布到其余的 OSD 上。一旦 OSD 作为 BlueStore OSD 重新上线，丢失的数据副本将被重建。在集群恢复到完全健康状态之前，Ceph
+    集群中的一部分数据将处于降级状态，尽管会保留多个副本，但如果集群发生某种故障，它们将面临更高的风险。恢复时间将取决于需要恢复的 OSD 数量以及每个 OSD
+    上存储的数据大小。由于很可能会同时升级多个 OSD，因此预计恢复时间会比单个 OSD 升级时更长。还请注意，使用默认池设置 `size=3` 和 `min_size=2`
+    时，如果发生额外的磁盘故障，某些 PG 将只保留一个副本，而由于副本数小于 `min_size`，I/O 将被暂停，直到恢复过程中重新创建第二个副本。执行降级升级的好处是，恢复期间只需等待集群重新平衡一次，并且不需要额外的空间，这意味着对于几乎已满的集群而言，这可能是唯一的选择。'
 - en: '**Out-and-in upgrade**: If you want to guard against any possibility of data
     loss or unavailability and have sufficient space to redistribute the contents
     of the OSDs that are to be upgraded across the cluster, then an out-and-in upgrade
@@ -639,13 +875,21 @@
     than the intended OSDs. A halfway measure may be to create a small script that
     automates the zapping, partitioning, and creation steps. This can then be run
     manually on each OSD node.'
+  id: totrans-94
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**进出升级**：如果你希望防止数据丢失或不可用的任何可能性，并且有足够的空间在集群中重新分配待升级 OSD 的内容，那么推荐使用进出升级方法。通过将待升级的
+    OSD 标记为 out，Ceph 将重新平衡 PG 到其他 OSD 上。一旦这个过程完成，可以停止并销毁 OSD，而不会影响数据的持久性或可用性。当 BlueStore
+    OSD 重新引入时，PG 将重新流回，在此期间，数据副本的数量不会减少。无论哪种方法，最终都会得到完全相同的配置，因此最终选择取决于个人偏好。如果集群中有大量
+    OSD，可能需要某种自动化手段来减轻操作员的负担；然而，如果你想自动化这个过程，则在销毁 filestore OSD 步骤时需要格外小心，因为一个错误很容易擦除超出预期的
+    OSD。一个折衷方法是创建一个小脚本，自动化清除、分区和创建步骤。然后可以手动在每个 OSD 节点上运行该脚本。'
 - en: Upgrading an OSD in your test cluster
+  id: totrans-95
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 在你的测试集群中升级 OSD
 - en: For the basis of demonstrating BlueStore, we will use `ceph-volume` to non-disruptively
     manually upgrade a live Ceph cluster's OSDs from filestore to BlueStore. If you
     wish to carry out this procedure for real, you could work through the *Ansible*
@@ -653,6 +897,7 @@
     Ceph with Containers*, to deploy a cluster with filestore OSDs and then go through
     the following instructions to upgrade them. The OSDs will be upgraded following
     the degraded method where OSDs are removed while still containing data.
+  id: totrans-96
   prefs: []
   type: TYPE_NORMAL
 - en: 'Make sure that your Ceph cluster is in full health by checking with the `ceph
@@ -662,221 +907,314 @@
     data before we start. By taking advantage of the hot maintenance capability in
     Ceph, you can repeat this procedure across all of the OSDs in your cluster without
     downtime:'
+  id: totrans-97
   prefs: []
   type: TYPE_NORMAL
 - en: '![](img/209649af-637d-4d67-b4bc-167266f6bea1.png)'
+  id: totrans-98
   prefs: []
   type: TYPE_IMG
 - en: 'Now we need to stop all of the OSDs from running, unmount the disks, and then
     wipe them by going through the following steps:'
+  id: totrans-99
   prefs: []
   type: TYPE_NORMAL
 - en: 'Use the following command to stop the OSD services:'
+  id: totrans-100
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: '[PRE2]'
+  id: totrans-101
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE2]'
 - en: 'The preceding command gives the following output:'
+  id: totrans-102
   prefs: []
   type: TYPE_NORMAL
 - en: '![](img/9f1f231a-559f-4c9c-9d94-c7b87f8f7d35.png)'
+  id: totrans-103
   prefs: []
   type: TYPE_IMG
 - en: 'We can confirm that the OSDs have been stopped and that Ceph is still functioning
     using the `ceph -s` command again, as shown in the following screenshot:'
+  id: totrans-104
   prefs: []
   type: TYPE_NORMAL
 - en: '![](img/aaf5b105-8fd3-4ae0-adbe-1a80516d5358.png)'
+  id: totrans-105
   prefs: []
   type: TYPE_IMG
 - en: 'Now, unmount the XFS partitions; the errors can be ignored:'
+  id: totrans-106
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: '[PRE3]'
+  id: totrans-107
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE3]'
 - en: '![](img/3955567f-f91f-4ed6-8226-2b8d16df40d3.png)'
+  id: totrans-108
   prefs: []
   type: TYPE_IMG
 - en: 'Unmounting the filesystems will mean that the disks are no longer locked and
     we can wipe the disks using the following code:'
+  id: totrans-109
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: '[PRE4]'
+  id: totrans-110
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE4]'
 - en: '![](img/3c544ecc-0444-4bd8-9e95-cbcd8febd991.png)'
+  id: totrans-111
   prefs: []
   type: TYPE_IMG
 - en: 'Now we can also edit the partition table on the flash device to remove the
     filestore journals and recreate them as a suitable size for BlueStore''s RocksDB
     using the following code. In this example, the flash device is an NVMe:'
+  id: totrans-112
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: '[PRE5]'
+  id: totrans-113
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE5]'
 - en: '![](img/790a2dfe-e3b2-45a0-a4e5-1dc99cb2e1eb.png)'
+  id: totrans-114
   prefs: []
   type: TYPE_IMG
 - en: 'Delete each Ceph journal partition using the `d` command, as follows:'
+  id: totrans-115
   prefs: []
   type: TYPE_NORMAL
 - en: '![](img/0f3fea3b-54c9-4487-ae0a-cc152cef9f8f.png)'
+  id: totrans-116
   prefs: []
   type: TYPE_IMG
 - en: 'Now create all of the new partitions for BlueStore, as shown in the following
     screenshot:'
+  id: totrans-117
   prefs: []
   type: TYPE_NORMAL
 - en: '![](img/95fd7550-0ce1-4757-a6f2-3957f2d8cbb5.png)'
+  id: totrans-118
   prefs: []
   type: TYPE_IMG
 - en: 'Add one partition for each OSD you intend to create. When finished, your partition
     table should look something like the following:'
+  id: totrans-119
   prefs: []
   type: TYPE_NORMAL
 - en: '![](img/09c9f9a7-a858-4149-b502-42847393ede2.png)'
+  id: totrans-120
   prefs: []
   type: TYPE_IMG
 - en: 'Use the `w` command to write the new partition table to disk, as shown in the
     following screenshot. Upon doing so, you''ll be informed that the new partition
     table is not currently in use, and so we need to run `sudo partprobe` to load
     the table into the kernel:'
+  id: totrans-121
   prefs: []
   type: TYPE_NORMAL
 - en: '![](img/2b5f7d2f-b835-47cf-ad43-b091aa6ee533.png)'
+  id: totrans-122
   prefs: []
   type: TYPE_IMG
 - en: 'Go back to one of your monitors. First, confirm the OSDs we are going to remove
     and remove the OSDs using the following `purge` commands:'
+  id: totrans-123
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 回到你的监视器之一。首先，确认我们将要移除的 OSD，并使用以下`purge`命令移除 OSD：
 - en: '[PRE6]'
+  id: totrans-124
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE6]'
 - en: 'The preceding command gives the following output:'
+  id: totrans-125
   prefs: []
   type: TYPE_NORMAL
+  zh: 上述命令输出如下内容：
 - en: '![](img/460b52da-291b-493c-a81c-13eec9ea2a1e.png)'
+  id: totrans-126
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/460b52da-291b-493c-a81c-13eec9ea2a1e.png)'
 - en: 'Now, remove the logical OSD entry from the Ceph cluster—in this example, OSD
     36:'
+  id: totrans-127
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，从 Ceph 集群中移除逻辑 OSD 条目——在此示例中，移除 OSD 36：
 - en: '[PRE7]'
+  id: totrans-128
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE7]'
 - en: '![](img/bfd1a0a0-6bd9-494f-8463-80ef62c5766c.png)'
+  id: totrans-129
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/bfd1a0a0-6bd9-494f-8463-80ef62c5766c.png)'
 - en: 'Check the status of your Ceph cluster with the `ceph -s` command. You should
     now see that the OSD has been removed, as shown in the following screenshot:'
+  id: totrans-130
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 使用`ceph -s`命令检查 Ceph 集群的状态。你现在应该能看到 OSD 已被移除，如下图所示：
 - en: '![](img/bf8d6dc8-19c7-46fb-9f15-96e5afb175fa.png)'
+  id: totrans-131
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/bf8d6dc8-19c7-46fb-9f15-96e5afb175fa.png)'
 - en: Note that the number of OSDs has dropped, and that, because the OSDs have been
     removed from the CRUSH map, Ceph has now started to try and recover the missing
     data onto the remaining OSDs. It's probably a good idea not to leave Ceph in this
     state for too long to avoid unnecessary data movement.
+  id: totrans-132
   prefs: []
   type: TYPE_NORMAL
+  zh: 请注意，OSD 的数量已经减少，而且由于 OSD 已从 CRUSH 图中移除，Ceph 现在已开始尝试将丢失的数据恢复到剩余的 OSD 上。最好不要让
+    Ceph 长时间处于这种状态，以避免不必要的数据移动。
 - en: 'Now issue the `ceph-volume` command to create the `bluestore` OSD using the
     following code. In this example, we will be storing the DB on a separate flash
     device, so we need to specify that option. Also, as per this book''s recommendation,
     the OSD will be encrypted:'
+  id: totrans-133
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 现在发出`ceph-volume`命令，使用以下代码创建`bluestore` OSD。在这个示例中，我们将把数据库存储在单独的闪存设备上，因此需要指定此选项。同时，按照本书的建议，OSD
+    将进行加密：
 - en: '[PRE8]'
+  id: totrans-134
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE8]'
 - en: 'The preceding command gives a lot of output, but if successful, we will end
     with the following:'
+  id: totrans-135
   prefs: []
   type: TYPE_NORMAL
+  zh: 上述命令会输出大量信息，但如果成功，我们最终会看到如下内容：
 - en: '![](img/e7524e7d-1fc6-4ab1-820d-ab55ceedfa30.png)'
+  id: totrans-136
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/e7524e7d-1fc6-4ab1-820d-ab55ceedfa30.png)'
 - en: 'Check the status of `ceph` again with `ceph-s` to make sure that the new OSDs
     have been added and that Ceph is recovering the data onto them, as shown in the
     following screenshot:'
+  id: totrans-137
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 再次使用`ceph-s`命令检查`ceph`的状态，以确保新的 OSD 已添加并且 Ceph 正在将数据恢复到这些 OSD 上，如下图所示：
 - en: '![](img/9ac2b0ed-a22f-4d55-89d7-6e0409fee71c.png)'
+  id: totrans-138
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/9ac2b0ed-a22f-4d55-89d7-6e0409fee71c.png)'
 - en: Note that the number of misplaced objects is now almost zero because of the
     new OSDs that were placed in the same location in the CRUSH map before they were
     upgraded. Ceph now only needs to recover the data, not redistribute the data layout.
+  id: totrans-139
   prefs: []
   type: TYPE_NORMAL
+  zh: 请注意，由于新的 OSD 在升级前已经被放置在 CRUSH 图中的相同位置，现有的错位对象数量几乎为零。Ceph 现在只需要恢复数据，而不是重新分布数据布局。
 - en: If further nodes need to be upgraded, wait for the back-filling process to complete
     and for the Ceph status to return to `HEALTH_OK`. Then the work can proceed on
     the next node.
+  id: totrans-140
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果需要进一步升级节点，等待回填过程完成并且 Ceph 状态恢复为`HEALTH_OK`。然后可以继续下一个节点的工作。
 - en: As you can see, the overall procedure is very simple and is identical to the
     steps required to replace a failed disk.
+  id: totrans-141
   prefs: []
   type: TYPE_NORMAL
+  zh: 如你所见，整体过程非常简单，与替换故障磁盘所需的步骤完全相同。
 - en: Summary
+  id: totrans-142
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 总结
 - en: In this chapter, we learned about the new object store in Ceph called BlueStore.
     Hopefully, you have a better understanding of why it was needed and the limitations
     in the existing filestore design. You should also have a basic understanding of
     the inner workings of BlueStore and feel confident in how to upgrade your OSDs
     to BlueStore.
+  id: totrans-143
   prefs: []
   type: TYPE_NORMAL
+  zh: 本章我们学习了 Ceph 中的新对象存储——BlueStore。希望你能更好地理解为什么它是必须的，以及现有文件存储设计的局限性。你也应该对 BlueStore
+    的内部工作有基本了解，并对如何将 OSD 升级到 BlueStore 感到有信心。
 - en: In the next chapter we will look at how Ceph storage can be exported via commonly
     used storage protocols to enable Ceph storage to be consumed by non-Linux clients.
+  id: totrans-144
   prefs: []
   type: TYPE_NORMAL
+  zh: 在下一章中，我们将探讨如何通过常用存储协议导出 Ceph 存储，以便非 Linux 客户端可以使用 Ceph 存储。
 - en: Questions
+  id: totrans-145
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 问题
 - en: What object store is the default when creating OSDs in Luminous and newer releases?
+  id: totrans-146
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在 Luminous 及更高版本中，创建 OSD 时默认使用的对象存储是什么？
 - en: What database does BlueStore use internally?
+  id: totrans-147
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: BlueStore 内部使用的是哪种数据库？
 - en: What is the name of the process for moving data between levels in the database
     part of BlueStore?
+  id: totrans-148
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在 BlueStore 的数据库部分，数据在各个层级之间移动的过程叫什么名字？
 - en: What is the name of the method where small writes can be temporarily written
     to an SSD instead of an HDD?
+  id: totrans-149
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 将小型写入临时写入 SSD 而不是 HDD 的方法叫什么名字？
 - en: How can you mount BlueFS and browse it as a standard Linux filesystem?
+  id: totrans-150
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 如何挂载 BlueFS 并将其作为标准 Linux 文件系统浏览？
 - en: What's the default compression algorithm used in BlueStore?
+  id: totrans-151
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: BlueStore中默认使用的压缩算法是什么？
 - en: Moving up a level in the BlueStore database increases the size by what multiplier?
+  id: totrans-152
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在BlueStore数据库中上移一层会使大小增加多少倍？

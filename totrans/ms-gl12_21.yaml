@@ -1,267 +1,401 @@
 - en: Autoscaling GitLab CI Runners
+  id: totrans-0
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 自动扩展 GitLab CI Runners
 - en: In the previous chapter, we were able to scale GitLab Runners using the Kubernetes
     executor. Depending on your requirements of how many jobs should be able to run
     concurrently, the number of available Runners in a Kubernetes cluster can go up
     or down. Having a big number of runners available can be very costly. Even if
     they were to be turned off, they would still cost money. It's much better to have
     them created on demand and destroyed when they are no longer needed.
+  id: totrans-1
   prefs: []
   type: TYPE_NORMAL
+  zh: 在前一章节中，我们使用 Kubernetes 执行器扩展了 GitLab Runners。根据你对并发运行作业数量的要求，Kubernetes 集群中可用的
+    Runner 数量可以随时增减。拥有大量的 Runner 可能非常昂贵，即使它们被关闭了，仍然会产生费用。最好是按需创建 Runner，并在不再需要时销毁它们。
 - en: There is another GitLab Runner executor that can behave in this elastic way
     and dynamically add or remove Runner instances, and this is known as the Docker
     Machine executor. We will show you what this looks like from an architectural
     point of view, explain some of its settings, and provide you with some examples
     of running the Docker Machine executor with the VirtualBox driver and the Amazon
     EC2 driver.
+  id: totrans-2
   prefs: []
   type: TYPE_NORMAL
+  zh: 还有另一种 GitLab Runner 执行器，它可以以这种弹性方式动态添加或移除 Runner 实例，这就是所谓的 Docker Machine 执行器。我们将从架构的角度展示它的样子，解释一些配置，并提供使用
+    VirtualBox 驱动程序和 Amazon EC2 驱动程序运行 Docker Machine 执行器的示例。
 - en: 'In this chapter, we will cover the following topics:'
+  id: totrans-3
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本章中，我们将讨论以下主题：
 - en: Runner client architecture
+  id: totrans-4
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: Runner 客户端架构
 - en: Setting up the environment
+  id: totrans-5
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 设置环境
 - en: Configuring the GitLab Runner
+  id: totrans-6
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 配置 GitLab Runner
 - en: Technical requirements
+  id: totrans-7
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 技术要求
 - en: You can find the code file for this chapter in this book's GitHub repository
     at [https://github.com/PacktPublishing/Mastering-GitLab-12/tree/master/Chapter17](https://github.com/PacktPublishing/Mastering-GitLab-12/tree/master/Chapter17).
+  id: totrans-8
   prefs: []
   type: TYPE_NORMAL
+  zh: 你可以在本书的 GitHub 仓库中找到本章的代码文件：[https://github.com/PacktPublishing/Mastering-GitLab-12/tree/master/Chapter17](https://github.com/PacktPublishing/Mastering-GitLab-12/tree/master/Chapter17)。
 - en: 'The other requirements for this chapter are as follows:'
+  id: totrans-9
   prefs: []
   type: TYPE_NORMAL
+  zh: 本章的其他要求如下：
 - en: Docker Machine is automatically installed with the Docker software distributions
     for macOS or Windows. If you don't have it, you can find it at the following link: [https://github.com/docker/machine/releases/](https://github.com/docker/machine/releases/).
+  id: totrans-10
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: Docker Machine 会随着适用于 macOS 或 Windows 的 Docker 软件分发版本自动安装。如果你没有安装它，可以通过以下链接找到它：[https://github.com/docker/machine/releases/](https://github.com/docker/machine/releases/)。
 - en: You need a Linux bastion host with up-to-date patches.
+  id: totrans-11
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 你需要一台具有最新补丁的 Linux 路由主机。
 - en: Access to the Docker registry image is required ([https://hub.docker.com/_/registry](https://hub.docker.com/_/registry)).
+  id: totrans-12
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 需要访问 Docker 注册表镜像 ([https://hub.docker.com/_/registry](https://hub.docker.com/_/registry))。
 - en: Access to the MinIO Docker images is required ([https://hub.docker.com/r/minio/minio](https://hub.docker.com/r/minio/minio)).
+  id: totrans-13
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 需要访问 MinIO Docker 镜像 ([https://hub.docker.com/r/minio/minio](https://hub.docker.com/r/minio/minio))。
 - en: You need VirtualBox installed on the bastion host ([http://www.virtualbox.org](http://www.virtualbox.org)).
+  id: totrans-14
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 你需要在路由主机上安装 VirtualBox ([http://www.virtualbox.org](http://www.virtualbox.org))。
 - en: You need an AWS account, which will be used for scaling with the EC2 infrastructure.
+  id: totrans-15
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 你需要一个 AWS 账户，用于通过 EC2 基础设施进行扩展。
 - en: Runner client architecture
+  id: totrans-16
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: Runner 客户端架构
 - en: First, we will describe the architecture of this solution. Expanding on the
     architecture that was put forward in previous chapters, we have a GitLab instance
     with a GitLab CI that receives a request from a GitLab Runner that's running a
     dedicated host. This can be either a local virtual machine or an instance in the
     cloud. The Runner is equipped with the Docker Machine program.
+  id: totrans-17
   prefs: []
   type: TYPE_NORMAL
+  zh: 首先，我们将描述该解决方案的架构。基于前几章节提出的架构，我们有一个 GitLab 实例，GitLab CI 收到来自运行在专用主机上的 GitLab
+    Runner 的请求。这可以是本地虚拟机，也可以是云中的实例。Runner 配备了 Docker Machine 程序。
 - en: 'The Docker Machine executor type is basically a GitLab Runner that executes
     Docker Machine commands. With Docker Machine, you can create virtual hosts that
     run the Docker Engine. You can control these hosts with it and create new virtual
     machines with Docker Engine installed, which in turn can run GitLab Runner container
     instances. This is explained in the following diagram:'
+  id: totrans-18
   prefs: []
   type: TYPE_NORMAL
+  zh: Docker Machine 执行器类型本质上是一个执行 Docker Machine 命令的 GitLab Runner。通过 Docker Machine，你可以创建运行
+    Docker 引擎的虚拟主机。你可以使用它来控制这些主机，并创建安装了 Docker 引擎的新虚拟机，这些虚拟机可以运行 GitLab Runner 容器实例。以下是该过程的示意图：
 - en: '![](img/3775cd7a-9448-4495-85fc-3e9d21452cb6.png)'
+  id: totrans-19
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/3775cd7a-9448-4495-85fc-3e9d21452cb6.png)'
 - en: In the preceding diagram, you can see the **Docker Machine** component and that
     it can instantiate multiple runners. There are also two other components in the
     diagram called a **Caching server** (which can store dependencies for builds)
     and the **Docker registry proxy **(which can cache Docker images from places such
     as the Docker Hub). Both components will be explained in more detail in the *Configuring
     the Runner* section.
+  id: totrans-20
   prefs: []
   type: TYPE_NORMAL
+  zh: 在前面的图示中，你可以看到**Docker Machine**组件，并且它可以实例化多个 runner。图示中还有两个其他组件，分别是**缓存服务器**（可以存储构建的依赖项）和**Docker
+    注册表代理**（可以缓存来自 Docker Hub 等地方的 Docker 镜像）。这两个组件将在*配置 Runner*部分中详细说明。
 - en: Setting up the environment
+  id: totrans-21
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 设置环境
 - en: 'To enable a Docker Machine-based Runner, the following steps have to be performed:'
+  id: totrans-22
   prefs: []
   type: TYPE_NORMAL
+  zh: 要启用基于 Docker Machine 的 Runner，必须执行以下步骤：
 - en: Prepare a bastion host as the host where Docker will create new machines.
+  id: totrans-23
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 准备一个堡垒主机，作为 Docker 创建新机器的主机。
 - en: Deploy the GitLab Runner software on this machine.
+  id: totrans-24
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在此机器上部署 GitLab Runner 软件。
 - en: Install Docker Machine.
+  id: totrans-25
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 安装 Docker Machine。
 - en: Preparing a bastion host
+  id: totrans-26
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 准备堡垒主机
 - en: For this example, we chose my macOS-based machine. This can be a Linux virtual
     machine or your laptop—any machine that can run a recent version of the GitLab
     Runner software. The only function this host will have is executing the GitLab
     Runner software with the Docker Machine executor. It should be tightly secured
     as a bastion to withstand attacks since it can control multiple Runner instances
     through the `docker-machine` commands, and that makes it a target.
+  id: totrans-27
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这个示例中，我们选择了基于 macOS 的机器。这可以是一个 Linux 虚拟机或你的笔记本电脑—任何能够运行最新版本 GitLab Runner 软件的机器。该主机唯一的功能就是通过
+    Docker Machine 执行器执行 GitLab Runner 软件。由于它可以通过 `docker-machine` 命令控制多个 Runner 实例，因此它应该被严格安全配置，以防止攻击，它也因此成为潜在的攻击目标。
 - en: Deploying the GitLab Runner software
+  id: totrans-28
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 部署 GitLab Runner 软件
 - en: 'On macOS, we use the Homebrew package manager. To install the Runner software,
     you can execute the following command:'
+  id: totrans-29
   prefs: []
   type: TYPE_NORMAL
+  zh: 在 macOS 上，我们使用 Homebrew 包管理器。要安装 Runner 软件，可以执行以下命令：
 - en: '[PRE0]'
+  id: totrans-30
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE0]'
 - en: 'After that, you can `register` the Runner, as shown in [Chapter 15](4e94f5e4-336d-42ae-af76-477949936356.xhtml),
     *Installing and Configuring GitLab Runners*:'
+  id: totrans-31
   prefs: []
   type: TYPE_NORMAL
+  zh: 之后，你可以像 [第 15 章](4e94f5e4-336d-42ae-af76-477949936356.xhtml) 中所示那样 `register`
+    Runner，*安装和配置 GitLab Runners*：
 - en: '[PRE1]'
+  id: totrans-32
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE1]'
 - en: Choose the Docker Machine executor when you're asked for an executor in the
     registration process.
+  id: totrans-33
   prefs: []
   type: TYPE_NORMAL
+  zh: 在注册过程中，当询问执行器时，选择 Docker Machine 执行器。
 - en: After the Runner has been registered, don't start it just yet—we need to edit
     the `config.toml` configuration file that's located in `~/.gitlab-runner/config.toml` on
     macOS. We will do that in the *Configuring the Runner* section.
+  id: totrans-34
   prefs: []
   type: TYPE_NORMAL
+  zh: 在 Runner 注册后，先不要启动它—我们需要编辑位于 `~/.gitlab-runner/config.toml` 的 `config.toml`
+    配置文件，这个文件在 macOS 上可以找到。我们将在*配置 Runner*部分进行编辑。
 - en: First, though, we need to install the Docker Machine binary before we configure
     the Runner in order to start the Docker Machine executor.
+  id: totrans-35
   prefs: []
   type: TYPE_NORMAL
+  zh: 首先，我们需要安装 Docker Machine 二进制文件，然后才能配置 Runner，以启动 Docker Machine 执行器。
 - en: Installing Docker Machine
+  id: totrans-36
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 安装 Docker Machine
 - en: 'If you''ve installed Docker on macOS or on Windows, you will already have the
     binary installed. You can test the installation by using the following command:'
+  id: totrans-37
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你已经在 macOS 或 Windows 上安装了 Docker，那么你已经安装了该二进制文件。你可以通过使用以下命令来测试安装：
 - en: '[PRE2]'
+  id: totrans-38
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE2]'
 - en: 'You can create new Docker hosts with this tool. They can be created on your
     local machine or network, but also in the cloud with the help of big providers
     such as Microsoft, Amazon, and Google. Docker Machine has plugins for many systems.
     The following is a list of them:'
+  id: totrans-39
   prefs: []
   type: TYPE_NORMAL
+  zh: 你可以使用这个工具创建新的 Docker 主机。它们可以在你的本地计算机或网络上创建，也可以通过像 Microsoft、Amazon 和 Google
+    这样的云服务提供商创建。Docker Machine 为许多系统提供插件。以下是它们的列表：
 - en: All VMware products
+  id: totrans-40
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 所有 VMware 产品
 - en: Virtualbox
+  id: totrans-41
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: Virtualbox
 - en: Microsoft Hyper-V
+  id: totrans-42
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 微软 Hyper-V
 - en: Digitial Ocean
+  id: totrans-43
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: Digitial Ocean
 - en: Amazon Web Services (EC2)
+  id: totrans-44
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 亚马逊 Web 服务 (EC2)
 - en: Microsoft Azure
+  id: totrans-45
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 微软 Azure
 - en: Exoscale
+  id: totrans-46
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: Exoscale
 - en: Google Computing Engine
+  id: totrans-47
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: Google 计算引擎
 - en: Scaleway
+  id: totrans-48
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: Scaleway
 - en: IBM Softlayer
+  id: totrans-49
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: IBM Softlayer
 - en: Rackspace
+  id: totrans-50
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: Rackspace
 - en: OpenStack
+  id: totrans-51
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: OpenStack
 - en: Linode
+  id: totrans-52
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: Linode
 - en: If you are running Linux, you can download and install Docker Machine from [https://github.com/docker/machine/releases/](https://github.com/docker/machine/releases/).
+  id: totrans-53
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你运行的是 Linux，可以从 [https://github.com/docker/machine/releases/](https://github.com/docker/machine/releases/)
+    下载并安装 Docker Machine。
 - en: 'If you look at the Dockerfile of GitLab Runner on [https://hub.docker.com/r/gitlab/gitlab-runner/dockerfile](https://hub.docker.com/r/gitlab/gitlab-runner/dockerfile),
     which is used to build the default container, there is a line that says the following:'
+  id: totrans-54
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你查看 GitLab Runner 的 Dockerfile，地址是[https://hub.docker.com/r/gitlab/gitlab-runner/dockerfile](https://hub.docker.com/r/gitlab/gitlab-runner/dockerfile)，它用于构建默认容器，其中有一行内容如下：
 - en: '[PRE3]'
+  id: totrans-55
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE3]'
 - en: The Docker Machine binary is installed directly in this container image and
     is used by the GitLab Runner software. When you have verified that the Docker
     Machine binary is available, the next step is to configure the Runner.
+  id: totrans-56
   prefs: []
   type: TYPE_NORMAL
+  zh: Docker Machine 二进制文件直接安装在这个容器镜像中，并由 GitLab Runner 软件使用。当你确认 Docker Machine 二进制文件可用后，下一步是配置
+    Runner。
 - en: Configuring the Runner
+  id: totrans-57
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 配置 Runner
 - en: Now that you've installed the Runner software and Docker Machine, it's time
     to edit the Runner configuration file. On macOS, you can find the `config.toml`
     file in `~/.gitlab-runner/config.toml`. It is in your home directory because the
     Runner runs in the user space on macOS.
+  id: totrans-58
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在你已经安装了 Runner 软件和 Docker Machine，是时候编辑 Runner 配置文件了。在 macOS 上，你可以在`~/.gitlab-runner/config.toml`中找到`config.toml`文件。它位于你的主目录，因为
+    Runner 在 macOS 上以用户空间的方式运行。
 - en: Now, we will take a look at some of the configuration options you can specify
     in the `config.toml` file that are specifically for the autoscaling Runner.
+  id: totrans-59
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，我们将查看一些你可以在`config.toml`文件中指定的配置选项，这些选项专门用于自动扩展的 Runner。
 - en: Off-peak time mode configuration
+  id: totrans-60
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 非高峰时段模式配置
 - en: Most organizations don't have the need for 24/7 capacity since they don't need
     to use CI runners all of the time. The most work is done during work hours in
     a regular work week, and at the weekends, there's less of a need for software
@@ -272,410 +406,627 @@
     by putting `OffPeak` in front of it. Therefore, `IdleCount` becomes `OffpeakIdleCount`,
     `IdleTime` becomes `OffPeakIdletime`, and so on. The functionality of the algorithm
     stays the same.
+  id: totrans-61
   prefs: []
   type: TYPE_NORMAL
+  zh: 大多数组织不需要 24/7 的容量，因为他们不需要一直使用 CI 运行器。大部分工作是在常规工作周的工作时间内完成的，周末对软件构建的需求较低。在这种情况下，让机器空闲等待作业是没有意义的。通过使用`OffPeakPeriods`选项指定时间表，你可以指定这些生产力较低的时段。在这些时段，控制创建运行器容量的参数会有所不同。你可以通过在其前面加上`OffPeak`来指定它们。因此，`IdleCount`变为`OffpeakIdleCount`，`IdleTime`变为`OffPeakIdletime`，等等。算法的功能保持不变。
 - en: 'In the following schedule (which is common), you can see off-peak times on
     weekdays during the night, evening, and the entire weekend:'
+  id: totrans-62
   prefs: []
   type: TYPE_NORMAL
+  zh: 在以下时间表中（这是常见的时间表），你可以看到工作日夜间、傍晚以及整个周末的非高峰时段：
 - en: '[PRE4]'
+  id: totrans-63
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE4]'
 - en: Distributed runners caching
+  id: totrans-64
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 分布式运行器缓存
 - en: GitLab Runners have a built-in caching mechanism. It can be set on a global
     level, as well as for an individual project.
+  id: totrans-65
   prefs: []
   type: TYPE_NORMAL
+  zh: GitLab Runners 内置了缓存机制。它可以在全局级别以及单个项目级别进行设置。
 - en: Setting the cache globally
+  id: totrans-66
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 全局设置缓存
 - en: 'You can set a path in your `config.toml` configuration file so that it will
     cache every job:'
+  id: totrans-67
   prefs: []
   type: TYPE_NORMAL
+  zh: 你可以在`config.toml`配置文件中设置路径，以便它缓存每个作业：
 - en: '[PRE5]'
+  id: totrans-68
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE5]'
 - en: Setting the cache at the project level
+  id: totrans-69
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 在项目级别设置缓存
 - en: 'You can set which path is to be cached in the `.gitlab-ci.yml` file for the
     project itself:'
+  id: totrans-70
   prefs: []
   type: TYPE_NORMAL
+  zh: 你可以在项目本身的`.gitlab-ci.yml`文件中设置要缓存的路径：
 - en: '[PRE6]'
+  id: totrans-71
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE6]'
 - en: 'The preceding settings apply to the context of just a single Runner host. If
     we use autoscaling, we need a way to have this cache shared by all of the runners
     to help gain speed. We can use external storage such as an S3 bucket to act as
     a cache. We just have to add the `[runners.cache.s3]` part to the `config.toml`
     file of the runners:'
+  id: totrans-72
   prefs: []
   type: TYPE_NORMAL
+  zh: 上述设置适用于单个 Runner 主机的上下文。如果我们使用自动扩展，我们需要一种方法让所有运行器共享这个缓存，以帮助提高速度。我们可以使用外部存储，比如
+    S3 桶来充当缓存。只需在 Runner 的`config.toml`文件中添加`[runners.cache.s3]`部分：
 - en: '[PRE7]'
+  id: totrans-73
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE7]'
 - en: 'If this is your first time doing this, it will try to get the `cache.zip` file
     from the S3 storage bucket. However, if there is no file, it will complain and
     continue:'
+  id: totrans-74
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果这是你第一次这样做，它会尝试从 S3 存储桶获取`cache.zip`文件。然而，如果没有这个文件，它会报错并继续：
 - en: '[PRE8]'
+  id: totrans-75
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE8]'
 - en: 'After the build, which populates the `node_modules` directory with dependencies,
     the contents of that directory is zipped and sent to the S3 storage bucket:'
+  id: totrans-76
   prefs: []
   type: TYPE_NORMAL
+  zh: 在构建后，`node_modules`目录被依赖项填充，该目录的内容会被压缩并发送到 S3 存储桶：
 - en: '[PRE9]'
+  id: totrans-77
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE9]'
 - en: 'If we retry the job, we will find that there''s now a `cache.zip` file in S3,
     and it will be used instead of downloading all of those node dependencies again:'
+  id: totrans-78
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果我们重试该任务，我们会发现现在 S3 中有一个 `cache.zip` 文件，它将被用来替代重新下载所有节点依赖：
 - en: '[PRE10]'
+  id: totrans-79
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE10]'
 - en: Distributed container registry mirroring
+  id: totrans-80
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 分布式容器注册表镜像
 - en: 'Another situation that can slow down building considerably is that the runners
     continuously download Docker containers from the internet. It is a much better
     idea to create a proxy for that. In `runners.machine`, you can specify which `engine-registry-mirror`
     should be used. If this is used on your local network, this saves a lot of traffic.
     Here, you see the section as I used it in our example project:'
+  id: totrans-81
   prefs: []
   type: TYPE_NORMAL
+  zh: 另一个可能会显著拖慢构建速度的情况是 Runner 持续从互联网下载 Docker 容器。创建一个代理来处理这一问题会是一个更好的选择。在 `runners.machine`
+    中，你可以指定应该使用哪个 `engine-registry-mirror`。如果在本地网络中使用，这将节省大量的流量。以下是我在示例项目中使用该功能时的配置：
 - en: '[PRE11]'
+  id: totrans-82
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE11]'
 - en: In the most basic way, the Docker Machine executor uses `docker-machine` to
     spawn new instances of the GitLab Runner container.
+  id: totrans-83
   prefs: []
   type: TYPE_NORMAL
+  zh: 最基本的方式是，Docker Machine 执行器使用 `docker-machine` 来生成新的 GitLab Runner 容器实例。
 - en: You can combine this with other features, such as shared caching and using a
     dedicate container registry to facilitate large amounts of instances.
+  id: totrans-84
   prefs: []
   type: TYPE_NORMAL
+  zh: 你可以将此与其他功能结合使用，比如共享缓存和使用专用的容器注册表，以便管理大量实例。
 - en: If you enable these settings for your runner, you need to deploy a caching server
     and a registry mirroring service, which we will show you in the next section.
+  id: totrans-85
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你为 Runner 启用了这些设置，你需要部署一个缓存服务器和一个注册表镜像服务，我们将在下一节中展示。
 - en: Installing and running a proxy container registry and a caching server
+  id: totrans-86
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 安装并运行代理容器注册表和缓存服务器
 - en: 'The two extra machines are necessary to help with performance when your plan
     is to deploy an entire elastic fleet of GitLab Runners. If you have more than
     five runners that can operate simultaneously, you will already gain an advantage
     when running a registry proxy and a caching server. An extra feature you get is
     that a bit of high availability is introduced in your architecture: you are able
     to do builds when your internet connection is flaky or offline.'
+  id: totrans-87
   prefs: []
   type: TYPE_NORMAL
+  zh: 这两台额外的机器在你计划部署一个完整的弹性 GitLab Runner 集群时是必要的。如果你有超过五个可以同时运行的 Runner，运行一个注册表代理和缓存服务器将带来明显的优势。你还会得到一个额外的特性，即在架构中引入了一定的高可用性：当你的互联网连接不稳定或离线时，仍然可以进行构建。
 - en: For a proxy container registry, you need to have a proxy that implements the Docker
     Registry HTTP API V2, which we will install in the next section.
+  id: totrans-88
   prefs: []
   type: TYPE_NORMAL
+  zh: 对于一个代理容器注册表，你需要有一个实现 Docker Registry HTTP API V2 的代理，我们将在下一节中安装它。
 - en: Proxy container registry
+  id: totrans-89
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 代理容器注册表
 - en: 'There is a convenient Docker container readily available to fulfill this role.
     You can start this Docker container immediately by using the following code:'
+  id: totrans-90
   prefs: []
   type: TYPE_NORMAL
+  zh: 有一个方便的 Docker 容器可以立即完成此任务。你可以通过以下代码立即启动该 Docker 容器：
 - en: '[PRE12]'
+  id: totrans-91
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE12]'
 - en: 'If you create such a registry proxy and check the log file when the runners
     start a job, you will find that the proxy serves the Runner by fetching and caching
     images:'
+  id: totrans-92
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你创建了这样的注册表代理并检查 Runner 开始执行任务时的日志文件，你会发现代理通过获取和缓存镜像来服务 Runner：
 - en: '[PRE13]'
+  id: totrans-93
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE13]'
 - en: There isn't much to configure, but you can find more information here: [https://hub.docker.com/_/registry](https://hub.docker.com/_/registry).
+  id: totrans-94
   prefs: []
   type: TYPE_NORMAL
+  zh: 配置项不多，但你可以在这里找到更多信息：[https://hub.docker.com/_/registry](https://hub.docker.com/_/registry)。
 - en: Caching server
+  id: totrans-95
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 缓存服务器
 - en: There are two options for creating a caching server. You can either get an S3
     bucket in Amazon or another cloud provider or run an object storage service yourself
     such as MinIO, which can be found at [https://min.io](https://min.io).
+  id: totrans-96
   prefs: []
   type: TYPE_NORMAL
+  zh: 创建缓存服务器有两种选择。你可以选择在 Amazon 或其他云服务商获取一个 S3 桶，或者自行运行一个对象存储服务，例如 MinIO，详情请见[https://min.io](https://min.io)。
 - en: Creating an S3 bucket in Amazon Web Services
+  id: totrans-97
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 在 Amazon Web Services 中创建 S3 桶
 - en: 'Log in to the Amazon Web Services console and find the S3 dashboard via Services
     | S3\. Click on Create bucket:'
+  id: totrans-98
   prefs: []
   type: TYPE_NORMAL
+  zh: 登录到 Amazon Web Services 控制台，通过 Services | S3 找到 S3 仪表盘。点击创建桶（Create bucket）：
 - en: '![](img/c07dc11e-b1f5-484d-ba44-923b4af697eb.png)'
+  id: totrans-99
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/c07dc11e-b1f5-484d-ba44-923b4af697eb.png)'
 - en: 'We have named it `joustie-gitlab-runner-cache` and left the rest as the default:'
+  id: totrans-100
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们将其命名为 `joustie-gitlab-runner-cache`，其余设置保持默认：
 - en: '![](img/18cb12bc-c41e-4dd1-adb3-7a5137854437.png)'
+  id: totrans-101
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/18cb12bc-c41e-4dd1-adb3-7a5137854437.png)'
 - en: Creating your own MinIO server
+  id: totrans-102
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 创建你自己的 MinIO 服务器
 - en: This is also conveniently available as a Docker image. It is recommended to
     run this on a dedicated host because the storage that's involved can grow quite
     large, and you don't want this service to take down any other service that is
     running on that host.
+  id: totrans-103
   prefs: []
   type: TYPE_NORMAL
+  zh: 这也可以方便地作为 Docker 镜像使用。建议在专用主机上运行此服务，因为涉及的存储可能会变得相当庞大，而你不希望此服务影响到主机上运行的其他服务。
 - en: 'Run the container with the following command:'
+  id: totrans-104
   prefs: []
   type: TYPE_NORMAL
+  zh: 使用以下命令运行容器：
 - en: '[PRE14]'
+  id: totrans-105
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE14]'
 - en: Take note of the `/s3` volume that is mounted in the container, which will serve
     as the directory that stores the cached objects.
+  id: totrans-106
   prefs: []
   type: TYPE_NORMAL
+  zh: 请注意容器中挂载的 `/s3` 卷，该目录将用作存储缓存对象的目录。
 - en: 'The output of the preceding command will appear after some time:'
+  id: totrans-107
   prefs: []
   type: TYPE_NORMAL
+  zh: 上述命令的输出将在一段时间后出现：
 - en: '[PRE15]'
+  id: totrans-108
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE15]'
 - en: The container image will be downloaded.
+  id: totrans-109
   prefs: []
   type: TYPE_NORMAL
+  zh: 容器镜像将被下载。
 - en: 'After that, the MinIO container will start and report the location it uses,
     as well as `AccesKey` and `SecretKey`, which are to be used by the runners:'
+  id: totrans-110
   prefs: []
   type: TYPE_NORMAL
+  zh: 之后，MinIO 容器将启动，并报告它使用的位置，以及 `AccesKey` 和 `SecretKey`，这些将被 Runner 使用：
 - en: '[PRE16]'
+  id: totrans-111
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE16]'
 - en: We will demonstrate the usage of the cache by building a Node.js example project.
     It contains a `node_modules` directory, which we specify as a cached location
     in the `.gitlab-ci.yml` file.
+  id: totrans-112
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们将通过构建一个 Node.js 示例项目来演示缓存的使用。该项目包含一个 `node_modules` 目录，我们在 `.gitlab-ci.yml`
+    文件中指定该目录为缓存位置。
 - en: 'When you build the Node.js project using a GitLab Runner, it will report its
     use of the cache in the Runner job log file:'
+  id: totrans-113
   prefs: []
   type: TYPE_NORMAL
+  zh: 当你使用 GitLab Runner 构建 Node.js 项目时，它会在 Runner 作业日志文件中报告其使用的缓存情况：
 - en: '[PRE17]'
+  id: totrans-114
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE17]'
 - en: 'When we looked on the dedicated machine where the MinIO container was running,
     we found the following directory structure when we typed in the `tree` command
     in `/s3` (this is the directory that''s used by the MinIO Docker container to
     store objects):'
+  id: totrans-115
   prefs: []
   type: TYPE_NORMAL
+  zh: 当我们查看运行 MinIO 容器的专用机器时，我们在 `/s3` 目录中输入 `tree` 命令时，发现了以下目录结构（这是 MinIO Docker
+    容器用来存储对象的目录）：
 - en: '[PRE18]'
+  id: totrans-116
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE18]'
 - en: We ran the GitLab Runner job again, which found `cache.zip` in the MinIO bucket.
+  id: totrans-117
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们再次运行了 GitLab Runner 作业，它在 MinIO 存储桶中找到了 `cache.zip`。
 - en: This was an example of using a single runner. However, you may want to use these
     options to scale your Runner instances. Let's look at this in the next section.
+  id: totrans-118
   prefs: []
   type: TYPE_NORMAL
+  zh: 这是使用单一 Runner 的示例。不过，你可能希望使用这些选项来扩展 Runner 实例。我们将在下一部分中讨论这个问题。
 - en: Scaling your runners
+  id: totrans-119
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 扩展你的 Runner
 - en: In the previous section, we configured the software and prepared our environment
     so that we could scale up and down the number of runners while also providing
     some shared services like a registry proxy and a caching server. Now, let's look
     at two examples. We will run jobs on a Runner that's been configured to use VirtualBox
     and one that's been configured to use Amazon Web Services. VirtualBox is the open
     source virtualization solution from Oracle and can be found at [https://www.virtualbox.org/](https://www.virtualbox.org/).
+  id: totrans-120
   prefs: []
   type: TYPE_NORMAL
+  zh: 在上一节中，我们配置了软件并准备了环境，以便能够扩展 Runner 数量，同时还提供了一些共享服务，如注册表代理和缓存服务器。现在，让我们看两个示例。我们将分别在配置为使用
+    VirtualBox 和配置为使用亚马逊 Web 服务的 Runner 上运行作业。VirtualBox 是 Oracle 提供的开源虚拟化解决方案，可以在
+    [https://www.virtualbox.org/](https://www.virtualbox.org/) 找到。
 - en: Almost all of the Runner configuration files (the `config.toml` file) can be
     identical; we only change the machine driver part. Let's start with the VirtualBox
     option.
+  id: totrans-121
   prefs: []
   type: TYPE_NORMAL
+  zh: 几乎所有的 Runner 配置文件（`config.toml` 文件）都是相同的；我们只需更改机器驱动部分。我们从 VirtualBox 选项开始。
 - en: Using Docker Machines with a local VirtualBox instance
+  id: totrans-122
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 使用本地 VirtualBox 实例的 Docker 机器
 - en: 'We start with the local `gitLab-runner` service with the `config` file for
     VirtualBox:'
+  id: totrans-123
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们从本地的 `gitLab-runner` 服务开始，使用 VirtualBox 的 `config` 文件：
 - en: '[PRE19]'
+  id: totrans-124
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE19]'
 - en: 'After a few seconds, we will see that VirtualBox spins up a number of virtual
     machines:'
+  id: totrans-125
   prefs: []
   type: TYPE_NORMAL
+  zh: 几秒钟后，我们将看到 VirtualBox 启动了多个虚拟机：
 - en: '![](img/daf1c152-8dfd-42bd-b88b-caa67f7d22fe.png)'
+  id: totrans-126
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/daf1c152-8dfd-42bd-b88b-caa67f7d22fe.png)'
 - en: 'When we started a build of the event manager project in [Chapter 10](1eceee2e-41d6-41cc-95eb-3d225f25f3fa.xhtml),
     *Create Your Product, Verify, and Package it*, we saw that it needs more runners
     (five parallel jobs) to run the pipeline. Therefore, we will start more machines:'
+  id: totrans-127
   prefs: []
   type: TYPE_NORMAL
+  zh: 当我们在 [第10章](1eceee2e-41d6-41cc-95eb-3d225f25f3fa.xhtml) 中开始构建事件管理器项目时，*创建你的产品，验证并打包它*，我们发现它需要更多的
+    Runner（五个并行作业）来运行管道。因此，我们将启动更多的机器：
 - en: '![](img/3e8fdca2-9509-4534-a302-adb39c6f12c6.png)'
+  id: totrans-128
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/3e8fdca2-9509-4534-a302-adb39c6f12c6.png)'
 - en: 'When the build has finished, after `IdleTime` has gone by, the number of machines
     will be reduced:'
+  id: totrans-129
   prefs: []
   type: TYPE_NORMAL
+  zh: 当构建完成后，在 `IdleTime` 过后，机器数量将减少：
 - en: '![](img/b15110be-a3ce-4c39-a857-d2457f5f17cb.png)'
+  id: totrans-130
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/b15110be-a3ce-4c39-a857-d2457f5f17cb.png)'
 - en: The VirtualBox driver is an excellent choice if you already have some servers
     with VirtualBox installed.
+  id: totrans-131
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你已经在某些服务器上安装了 VirtualBox，那么 VirtualBox 驱动程序是一个很好的选择。
 - en: Using docker machines that have been created on Amazon Web Services (EC2)
+  id: totrans-132
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 使用在亚马逊 Web 服务（EC2）上创建的 Docker 机器
 - en: If you change the machine driver from VirtualBox to Amazon EC2 and restart the
     runners, Docker Machine will spin up runners in Amazon if you have your credentials
     saved in your home directory or inserted in your shell environment. If not, then
     you will need to save them in the `config.toml` file.
+  id: totrans-133
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你将机器驱动程序从 VirtualBox 更改为 Amazon EC2 并重新启动 Runner，Docker Machine 将在 Amazon
+    上启动 Runner，前提是你的凭证已保存在主目录中或已插入到你的 shell 环境中。如果没有，你需要将其保存在 `config.toml` 文件中。
 - en: 'After some time, the runners will appear in the EC2 web interface:'
+  id: totrans-134
   prefs: []
   type: TYPE_NORMAL
+  zh: 一段时间后，Runner 将出现在 EC2 Web 界面中：
 - en: '![](img/eb8d180d-96ea-4ea7-9b4f-dceb79b5ecf2.png)'
+  id: totrans-135
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/eb8d180d-96ea-4ea7-9b4f-dceb79b5ecf2.png)'
 - en: 'When those runners are started, you can change your Docker context to the one
     in Amazon so that you can run Docker commands and control those machines:'
+  id: totrans-136
   prefs: []
   type: TYPE_NORMAL
+  zh: 当这些 Runner 启动时，你可以将 Docker 上下文切换到 Amazon 上的实例，这样你就可以运行 Docker 命令并控制这些机器：
 - en: '[PRE20]'
+  id: totrans-137
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE20]'
 - en: 'When you access the logs of the Runner on your bastion host, you will see that
     it will scale down the number of machines to `IdleCount`:'
+  id: totrans-138
   prefs: []
   type: TYPE_NORMAL
+  zh: 当你访问堡垒主机上的 Runner 日志时，你会看到它会将机器数量缩减到 `IdleCount`：
 - en: '[PRE21]'
+  id: totrans-139
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE21]'
 - en: 'If we start the same job from earlier (event manager project), we will see
     that many jobs are queued following the start of the build pipeline:'
+  id: totrans-140
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果我们从之前的任务（事件管理项目）开始，我们会看到许多任务在构建管道启动后进入队列：
 - en: '![](img/02f62556-6b64-4240-902c-3976150881b2.png)'
+  id: totrans-141
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/02f62556-6b64-4240-902c-3976150881b2.png)'
 - en: 'The `docker-machine ls` command will show us that many EC2 instances are started
     on AWS by the autoscaling GitLab Runner:'
+  id: totrans-142
   prefs: []
   type: TYPE_NORMAL
+  zh: '`docker-machine ls` 命令将显示由自动扩展的 GitLab Runner 在 AWS 上启动的多个 EC2 实例：'
 - en: '[PRE22]'
+  id: totrans-143
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE22]'
 - en: 'You can also view new Runner instances in the AWS web console:'
+  id: totrans-144
   prefs: []
   type: TYPE_NORMAL
+  zh: 你还可以在 AWS Web 控制台中查看新的 Runner 实例：
 - en: '![](img/bafb055f-28c8-4d73-986b-3c58622efce5.png)'
+  id: totrans-145
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/bafb055f-28c8-4d73-986b-3c58622efce5.png)'
 - en: 'After successfully completing some of the jobs in the pipeline, the Runner
     will scale back down again:'
+  id: totrans-146
   prefs: []
   type: TYPE_NORMAL
+  zh: 在成功完成管道中的一些任务后，Runner 将再次缩减：
 - en: '![](img/5fc5c3d4-fc5c-48b5-bda9-7d36ab44b19d.png)'
+  id: totrans-147
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/5fc5c3d4-fc5c-48b5-bda9-7d36ab44b19d.png)'
 - en: As you can see, it's quite simple to change the Docker Machine driver in the
     Runner configuration file and get the same behavior. The Runner scaled up virtual
     machines in VirtualBox are used to run Docker containers, as well as Amazon Web
     Services.
+  id: totrans-148
   prefs: []
   type: TYPE_NORMAL
+  zh: 如你所见，在 Runner 配置文件中更改 Docker Machine 驱动程序并获得相同的行为非常简单。Runner 在 VirtualBox 中扩展的虚拟机用于运行
+    Docker 容器，同时也可以在亚马逊 Web 服务上运行。
 - en: Summary
+  id: totrans-149
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 概要
 - en: In this chapter, we explained the autoscaling feature of GitLab Runners. Like
     in Kubernetes, it gives you the option of creating Runner instances on demand
     and scaling back in times of less need. Under the hood, it uses Docker Machine
     to manage these replicas. There are several drivers available that instantly allow
     runners to be created on a big list of platforms.
+  id: totrans-150
   prefs: []
   type: TYPE_NORMAL
+  zh: 本章中，我们解释了 GitLab Runners 的自动扩展功能。与 Kubernetes 类似，它为你提供了按需创建 Runner 实例并在需求较少时缩减的选项。在幕后，它使用
+    Docker Machine 来管理这些副本。提供了几种驱动程序，可以立即在许多平台上创建 Runner 实例。
 - en: In the next chapter, we will take a look at the options for monitoring all of
     these instances.
+  id: totrans-151
   prefs: []
   type: TYPE_NORMAL
+  zh: 在下一章，我们将查看监控这些实例的选项。
 - en: Questions
+  id: totrans-152
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 问题
 - en: What Docker feature is used by the `docker-machine` executor?
+  id: totrans-153
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: '`docker-machine` 执行器使用了什么 Docker 功能？'
 - en: What additional servers are recommended when you use autoscaling?
+  id: totrans-154
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在使用自动扩展时，推荐使用哪些额外的服务器？
 - en: In what file is the runner's distributed cache saved?
+  id: totrans-155
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: Runner 的分布式缓存保存在什么文件中？
 - en: What is the name of the object storage that was used in this chapter?
+  id: totrans-156
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 本章中使用的对象存储的名称是什么？
 - en: What is the name of the configuration file of a GitLab Runner?
+  id: totrans-157
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: GitLab Runner 的配置文件名是什么？
 - en: What is the name of the Docker image that's used as a registry cache?
+  id: totrans-158
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 作为注册表缓存使用的 Docker 镜像名称是什么？
 - en: Further reading
+  id: totrans-159
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 进一步阅读
 - en: '*Getting Started with Containerization*, by *Gabriel N. Schenker*, *Hideto
     Saito*, *Hui-Chuan Chloe Lee*, and *Ke-Jou Carol Hsu*: [https://www.packtpub.com/in/virtualization-and-cloud/getting-started-containerization](https://www.packtpub.com/in/virtualization-and-cloud/getting-started-containerization)'
+  id: totrans-160
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '*容器化入门*，作者：*Gabriel N. Schenker*、*Hideto Saito*、*Hui-Chuan Chloe Lee* 和 *Ke-Jou
+    Carol Hsu*：[https://www.packtpub.com/in/virtualization-and-cloud/getting-started-containerization](https://www.packtpub.com/in/virtualization-and-cloud/getting-started-containerization)'
 - en: '*Mastering Docker – Third Edition*, by *Russ McKendrick* and *Scott Gallagher*: [https://www.packtpub.com/in/virtualization-and-cloud/mastering-docker-third-edition](https://www.packtpub.com/in/virtualization-and-cloud/mastering-docker-third-edition)'
+  id: totrans-161
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '*Docker 高手进阶（第三版）*，作者：*Russ McKendrick* 和 *Scott Gallagher*：[https://www.packtpub.com/in/virtualization-and-cloud/mastering-docker-third-edition](https://www.packtpub.com/in/virtualization-and-cloud/mastering-docker-third-edition)'
 - en: '*Getting Started with Oracle VM VirtualBox*, by *Pradyumna Dash*: [https://www.packtpub.com/in/virtualization-and-cloud/getting-started-oracle-vm-virtualbox](https://www.packtpub.com/in/virtualization-and-cloud/getting-started-oracle-vm-virtualbox)'
+  id: totrans-162
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '*Oracle VM VirtualBox 入门*，作者：*Pradyumna Dash*：[https://www.packtpub.com/in/virtualization-and-cloud/getting-started-oracle-vm-virtualbox](https://www.packtpub.com/in/virtualization-and-cloud/getting-started-oracle-vm-virtualbox)'
 - en: '*Hands-On AWS System Administration*, by *Glauber Gallego*, *Daniel Stori*,
     and *Satyajit Das*: [https://www.packtpub.com/in/virtualization-and-cloud/hands-aws-system-administration](https://www.packtpub.com/in/virtualization-and-cloud/hands-aws-system-administration)'
+  id: totrans-163
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '*动手实践 AWS 系统管理*，作者：*Glauber Gallego*、*Daniel Stori* 和 *Satyajit Das*：[https://www.packtpub.com/in/virtualization-and-cloud/hands-aws-system-administration](https://www.packtpub.com/in/virtualization-and-cloud/hands-aws-system-administration)'

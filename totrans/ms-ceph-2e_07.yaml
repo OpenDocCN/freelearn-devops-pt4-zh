@@ -1,7 +1,9 @@
 - en: RADOS Pools and Client Access
+  id: totrans-0
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: RADOS池和客户端访问
 - en: 'Ceph provides a variety of different pool types and configurations. It also
     supports several different data-storage types to offer storage to clients. This
     chapter will look at the differences between replicated and erasure-coded pools,
@@ -10,20 +12,28 @@
     object, and CephFS. Finally, we will finish with a look at how to take snapshots
     of the different types of storage methods. The following topics are covered in
     this chapter:'
+  id: totrans-1
   prefs: []
   type: TYPE_NORMAL
+  zh: Ceph提供了多种不同的池类型和配置。它还支持几种不同的数据存储类型，为客户端提供存储。本章将探讨复制和消除码池之间的区别，并示例创建和维护两者的方法。然后我们将介绍如何为RADOS块设备（**RBD**）、对象和CephFS使用这些池。最后，我们将看看如何对不同类型的存储方法进行快照。本章涵盖以下主题：
 - en: Pools
+  id: totrans-2
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 池
 - en: Ceph storage types
+  id: totrans-3
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: Ceph存储类型
 - en: Pools
+  id: totrans-4
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 池
 - en: RADOS pools are the core part of a Ceph cluster. Creating a RADOS pool is what
     drives the creation and distribution of the placement groups, which themselves
     are the autonomous part of Ceph. Two types of pools can be created, replicated,
@@ -31,12 +41,16 @@
     RADOS pools can then be used to provide different storage solutions to clients
     via RBS, CephFS, and RGW, or they can be used to enable tiered performance overlaying
     other RADOS pools.
+  id: totrans-5
   prefs: []
   type: TYPE_NORMAL
+  zh: RADOS池是Ceph集群的核心部分。创建RADOS池驱动了放置组的创建和分布，它们本身是Ceph的自治部分。可以创建两种类型的池，即复制和消除码，提供不同的可用容量、耐用性和性能。然后，RADOS池可以用于通过RBS、CephFS和RGW为客户端提供不同的存储解决方案，或者用于启用层次化性能覆盖其他RADOS池。
 - en: Replicated pools
+  id: totrans-6
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 复制池
 - en: 'Replicated RADOS pools are the default pool type in Ceph; data is received
     by the primary OSD from the client and then replicated to the remaining OSDs.
     The logic behind the replication is fairly simple and requires minimal processing
@@ -51,16 +65,20 @@
     the section, *Erasure-code pools*, for smaller I/Os, the simpler replication strategy
     actually results in lower total required operations—there is always a fixed 3x
     write penalty, no matter the I/O size.'
+  id: totrans-7
   prefs: []
   type: TYPE_NORMAL
+  zh: 在Ceph中，复制的RADOS池是默认的池类型；数据从客户端接收到主要的OSD，然后复制到其余的OSD。复制的逻辑相对简单，只需最少的处理来计算和在OSD之间复制数据。然而，由于数据完全复制，写入惩罚较大，因为数据必须多次写入各个OSD。默认情况下，Ceph将使用3倍的复制因子，因此所有数据将被写入三次；这并不考虑可能存在于Ceph堆栈下游的任何其他写入放大。这种写入惩罚有两个主要缺点：显然会给Ceph集群增加更多的I/O负载，因为需要写入更多数据，在SSD的情况下，这些额外的写入将更快地磨损闪存单元。然而，正如我们将在*消除码池*部分看到的那样，对于较小的I/O，更简单的复制策略实际上导致所需的总操作更少——无论I/O的大小如何，总是存在固定的3倍写入惩罚。
 - en: It should also be noted that although all replicas of an object are written
     to during a client write operation, when an object is read, only the primary OSD
     holding a copy of the object is involved. A client also only sends the write operation
     to the primary OSD, which then sends the operation to the remaining replicas.
     There are a number of reasons for this behavior, but they largely center around
     ensuring the consistency of reads.
+  id: totrans-8
   prefs: []
   type: TYPE_NORMAL
+  zh: 还应该注意，尽管在客户端写入操作期间将对象的所有副本都写入，但在读取对象时，只涉及保存对象副本的主要OSD。客户端也仅将写操作发送到主要OSD，然后主要OSD将操作发送到其余副本。这种行为有多种原因，但主要是为了确保读取的一致性。
 - en: As mentioned, the default replication size is 3, with a required minimum size
     of two replicas to accept client I/O. Decreasing either of these values is not
     recommended, and increasing them will likely have minimal effects on increasing
@@ -73,22 +91,32 @@
     it would be recommended to look at erasure coding at this point. With the introduction
     of NVMes, which due to their faster performance reduce rebuild times, using a
     replica size of 2 can still offer reasonable data durability.
+  id: totrans-9
   prefs: []
   type: TYPE_NORMAL
+  zh: 如上所述，默认的复制大小为3，需要至少两个副本以接受客户端I/O。不推荐减少这些值，增加它们可能对增加数据耐久性几乎没有影响，因为丢失所有共享相同PG的三个OSD的机会极其罕见。由于Ceph将优先恢复副本最少的PG，这进一步减少了数据丢失的风险，因此，将副本数量增加到四个只有在提高数据可用性时才有益，其中两个共享相同PG的OSD可以丢失并允许Ceph继续为客户端I/O提供服务。但是，由于四个副本的存储开销，建议此时考虑使用纠删码。随着NVMes的引入，由于其更快的性能可以减少重建时间，使用副本大小为2仍然可以提供合理的数据耐久性。
 - en: 'To create a replicated pool, issue a command, such as the one in the following
     example:'
+  id: totrans-10
   prefs: []
   type: TYPE_NORMAL
+  zh: 要创建一个复制池，请发出如下示例中的命令：
 - en: '[PRE0]'
+  id: totrans-11
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE0]'
 - en: This would create a replicated pool with `128` placement groups, called `MyPool`.
+  id: totrans-12
   prefs: []
   type: TYPE_NORMAL
+  zh: 这将创建一个包含`128`个放置组的复制池，称为`MyPool`。
 - en: Erasure code pools
+  id: totrans-13
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 纠删码池
 - en: Ceph's default replication level provides excellent protection against data
     loss by storing three copies of your data on different OSDs. However, storing
     three copies of data vastly increases both the purchase cost of the hardware and
@@ -96,18 +124,24 @@
     copies also means that for every client write, the backend storage must write
     three times the amount of data. In some scenarios, either of these drawbacks may
     mean that Ceph is not a viable option.
+  id: totrans-14
   prefs: []
   type: TYPE_NORMAL
+  zh: Ceph的默认复制级别通过在不同的OSD上存储数据的三个副本，提供了极好的数据丢失保护。然而，存储数据的三个副本大大增加了硬件的购买成本以及相关的运营成本，如电力和冷却。此外，存储副本也意味着对于每个客户端写入，后端存储必须写入三倍的数据量。在某些情况下，这些缺点可能意味着Ceph不是一个可行的选择。
 - en: Erasure codes are designed to offer a solution. Much like how RAID 5 and 6 offer
     increased usable storage capacity over RAID 1, erasure coding allows Ceph to provide
     more usable storage from the same raw capacity. However, also like the parity-based
     RAID levels, erasure coding brings its own set of disadvantages.
+  id: totrans-15
   prefs: []
   type: TYPE_NORMAL
+  zh: 纠删码旨在提供解决方案。就像RAID 5和6相对于RAID 1提供了更高的可用存储容量一样，纠删码允许Ceph从相同的原始容量提供更多的可用存储。然而，就像基于奇偶校验的RAID级别一样，纠删码也带来了自己的一系列缺点。
 - en: What is erasure coding?
+  id: totrans-16
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 什么是纠删码？
 - en: '**Erasure coding** allows Ceph to achieve either greater usable storage capacity
     or increase resilience to disk failure for the same number of disks, versus the
     standard replica method. Erasure coding achieves this by splitting up the object
@@ -117,34 +151,46 @@
     to as *K* and *M* chunks, where *K* refers to the number of data shards and *M* refers
     to the number of erasure code shards. As in RAID, these can often be expressed
     in the form *K+M,* or *4+2*, for example.'
+  id: totrans-17
   prefs: []
   type: TYPE_NORMAL
+  zh: '**纠删码**允许Ceph通过将对象分割为若干部分，然后计算一种类型的**循环冗余校验**（**CRC**），即纠删码，然后将结果存储在一个或多个额外的部分中，实现更大的可用存储容量或在相同数量的磁盘故障时增加的弹性，相对于标准的复制方法。纠删码通过在单独的OSD上存储这些部分来实现这一点。这些部分被称为*K*和*M*块，其中*K*指的是数据碎片的数量，*M*指的是纠删码碎片的数量。与RAID一样，这些通常可以表示为*K+M*，或者例如*4+2*。'
 - en: In the event of an OSD failure that contains an object's shard, which is one
     of the calculated erasure codes, data is read from the remaining OSDs that store
     data with no impact. However, in the event of an OSD failure that contains the
     data shards of an object, Ceph can use the erasure codes to mathematically recreate
     the data from a combination of the remaining data and erasure code shards.
+  id: totrans-18
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果包含对象碎片的OSD发生故障，该碎片是计算擦除码之一，则数据将从存储数据没有影响的其余OSD中读取。然而，如果包含对象数据碎片的OSD发生故障，Ceph可以使用擦除码从剩余数据和擦除码碎片的组合中数学上重新创建数据。
 - en: K+M
+  id: totrans-19
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: K+M
 - en: The more erasure code shards you have, the more OSD failures you can tolerate
     and still successfully read data. Likewise, the ratio of *K* to *M* shards each
     object is split into has a direct effect on the percentage of raw storage that
     is required for each object.
+  id: totrans-20
   prefs: []
   type: TYPE_NORMAL
+  zh: 拥有更多的擦除码碎片（*erasure code shards*），可以容忍更多的OSD故障，并且仍然可以成功读取数据。同样，对象分割为*K*和*M*碎片的比率直接影响每个对象所需的原始存储百分比。
 - en: A *3+1* configuration will give you 75% usable capacity but only allows for
     a single OSD failure, and so would not be recommended. In comparison, a three-way
     replica pool only gives you 33% usable capacity.
+  id: totrans-21
   prefs: []
   type: TYPE_NORMAL
+  zh: '*3+1*配置将为您提供75%的可用容量，但仅允许单个OSD故障，因此不建议使用。相比之下，三倍复制池只能提供33%的可用容量。'
 - en: '*4+2* configurations would give you 66% usable capacity and allows for two
     OSD failures. This is probably a good configuration for most people to use.'
+  id: totrans-22
   prefs: []
   type: TYPE_NORMAL
+  zh: '*4+2*配置将为您提供66%的可用容量，并允许两个OSD故障。这可能是大多数人使用的良好配置。'
 - en: At the other end of the scale, *18+2* would give you 90% usable capacity and
     still allow for two OSD failures. On the surface, this sounds like an ideal option,
     but the greater total number of shards comes at a cost. A greater number of total
@@ -155,8 +201,11 @@
     in MBps with larger I/O sizes, but bandwidth drastically tails off at smaller
     I/O sizes. These smaller shards will generate a large amount of small I/O and
     cause an additional load on some clusters.
+  id: totrans-23
   prefs: []
   type: TYPE_NORMAL
+  zh: 另一方面，*18+2*将为您提供90%的可用容量，并且仍然允许两个OSD故障。表面上，这听起来是一个理想的选择，但更多的碎片总数会带来成本。更多的碎片总数会对性能产生负面影响，并增加CPU需求。同样大小的4
+    MB对象在复制池中将作为整个单一对象存储，现在将被分割成20个200 KB的块，这些块必须被跟踪并写入20个不同的OSD。旋转磁盘将展示更快的带宽，以MBps为单位，使用更大的I/O大小进行测量，但在更小的I/O大小下，带宽急剧下降。这些更小的碎片将生成大量的小型I/O，并对一些集群增加额外负载。
 - en: 'Also, it''s important not to forget that these shards need to be spread across
     different hosts according to the CRUSH map rules: no shard belonging to the same
     object can be stored on the same host as another shard from the same object. Some
@@ -164,8 +213,10 @@
     If a CRUSH rule cannot be satisfied, the PGs will not become active, and any I/O
     destined for these PGs will be halted, so it''s important to understand the impact
     on a cluster''s health of making CRUSH modifications.'
+  id: totrans-24
   prefs: []
   type: TYPE_NORMAL
+  zh: 另外，重要的是不要忘记这些碎片需要根据CRUSH映射规则分布在不同的主机上：属于同一对象的任何碎片不能存储在同一主机上的另一个碎片上。某些集群可能没有足够数量的主机来满足此要求。如果无法满足CRUSH规则，PGs将无法变为活动状态，并且任何发送到这些PG的I/O将被停止，因此了解对集群健康的影响对于进行CRUSH修改至关重要。
 - en: Reading back from these high-chunk pools is also a problem. Unlike in a replica
     pool, where Ceph can read just the requested data from any offset in an object,
     in an erasure pool, all shards from all OSDs have to be read before the read request
@@ -176,27 +227,37 @@
     gain compared to a replica pool, from the result of splitting an object into shards.
     As the data is effectively striped over a number of OSDs, each OSD has to write
     less data, and there are no secondary and tertiary replicas to write.
+  id: totrans-25
   prefs: []
   type: TYPE_NORMAL
+  zh: 从这些大块池中读取数据也是一个问题。与副本池不同，在副本池中，Ceph可以从对象中的任何偏移位置读取请求的数据，而在擦除池中，必须读取来自所有OSD的所有分片，才能满足读取请求。在*18+2*的示例中，这可能大幅增加所需的磁盘读取操作数量，平均延迟也会因此增加。这种行为是一个副作用，通常只会在使用大量分片的池中导致性能影响。在某些情况下，*4+2*配置相比副本池能获得性能提升，这是因为对象被分割成多个分片。由于数据实际上被条带化存储在多个OSD上，每个OSD需要写入的数据更少，而且没有二级和三级副本需要写入。
 - en: 'Erasure coding can also be used to improve durability rather than to maximize
     available storage space. Take, for example, a *4+4* pool: it has a storage efficiency
     of 50%, so it''s better than a 3x replica pool, yet it can sustain up to four
     OSD losses without data loss.'
+  id: totrans-26
   prefs: []
   type: TYPE_NORMAL
+  zh: 擦除编码也可以用来提高耐久性，而不仅仅是最大化可用存储空间。例如，一个*4+4*池：它的存储效率为50%，所以它比3x副本池更好，但它可以在没有数据丢失的情况下承受最多四个OSD的损失。
 - en: How does erasure coding work in Ceph?
+  id: totrans-27
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 擦除编码在Ceph中是如何工作的？
 - en: 'As with replication, Ceph has a concept of a primary OSD, which also exists when
     using erasure-coded pools. The primary OSD has the responsibility of communicating
     with the client, calculating the erasure shards, and sending them out to the remaining
     OSDs in the PG set. This is illustrated in the following diagram:'
+  id: totrans-28
   prefs: []
   type: TYPE_NORMAL
+  zh: 与复制一样，Ceph也有主OSD的概念，这在使用擦除编码池时也存在。主OSD负责与客户端进行通信，计算擦除分片，并将其发送到PG集合中的其余OSD。下图说明了这一点：
 - en: '![](img/b1032823-151a-4466-bde2-59b24bea067e.png)'
+  id: totrans-29
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/b1032823-151a-4466-bde2-59b24bea067e.png)'
 - en: 'If an OSD in the set is down, the primary OSD can use the remaining data and
     erasure shards to reconstruct the data, before sending it back to the client.
     During read operations, the primary OSD requests all OSDs in the PG set to send
@@ -206,101 +267,143 @@
     the data from erasure shards if they return quicker than data shards. This can
     help to lower average latency at the cost of a slightly higher CPU usage. The
     following diagram shows how Ceph reads from an erasure-coded pool:'
+  id: totrans-30
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果集合中的某个OSD宕机，主OSD可以使用剩余的数据和擦除分片来重建数据，然后将其发送回客户端。在读操作期间，主OSD会请求PG集合中的所有OSD发送它们的分片。主OSD使用数据分片中的数据来构建请求的数据，而擦除分片则会被丢弃。擦除池可以启用快速读取选项，允许主OSD从擦除分片中重建数据，如果它们比数据分片返回得更快。这可以帮助降低平均延迟，但会稍微增加CPU使用率。下图展示了Ceph如何从擦除编码池读取数据：
 - en: '![](img/97d94d63-67ce-4fc9-b7b1-bb08b63ad9fb.png)'
+  id: totrans-31
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/97d94d63-67ce-4fc9-b7b1-bb08b63ad9fb.png)'
 - en: 'The following diagram shows how Ceph reads from an erasure pool when one of
     the data shards is unavailable. Data is reconstructed by reversing the erasure
     algorithm, using the remaining data and erasure shards:'
+  id: totrans-32
   prefs: []
   type: TYPE_NORMAL
+  zh: 下图展示了当数据分片不可用时，Ceph如何从擦除池中读取数据。数据通过反向擦除算法进行重建，使用剩余的数据和擦除分片：
 - en: '![](img/d5c21792-0be1-42df-9b94-b32ed1e635bc.png)'
+  id: totrans-33
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/d5c21792-0be1-42df-9b94-b32ed1e635bc.png)'
 - en: Algorithms and profiles
+  id: totrans-34
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 算法和配置文件
 - en: There are a number of different erasure plugins you can use to create your erasure-coded
     pool.
+  id: totrans-35
   prefs: []
   type: TYPE_NORMAL
+  zh: 你可以使用多种不同的**擦除**插件来创建你的擦除编码池。
 - en: Jerasure
+  id: totrans-36
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: Jerasure
 - en: The default erasure plugin in Ceph is the jerasure plugin, which is a highly-optimized open
     source erasure-coding library. The library has a number of different techniques
     that can be used to calculate the erasure codes. The default is Reed-Solomon, and
     this provides good performance on modern processors, which can accelerate the
     instructions that the technique uses.
+  id: totrans-37
   prefs: []
   type: TYPE_NORMAL
+  zh: Ceph中的默认擦除插件是**jerasure**插件，它是一个高度优化的开源擦除编码库。该库有多种不同的技术可用于计算擦除码。默认使用的是**Reed-Solomon**，这在现代处理器上提供了良好的性能，因为该技术可以加速使用的指令。
 - en: 'There are also a number of other jerasure techniques that can be used, which
     all have a fixed number of *M* shards. If you are intending on only having two *M* shards,
     they can be a good candidate, as their fixed size means that optimizations are
     possible, lending to increased performance. Each optimized technique, aside from
     only supporting two erasure shards, also tends to have certain requirements around
     the total number of shards. Here is a brief description of each optimized technique:'
+  id: totrans-38
   prefs: []
   type: TYPE_NORMAL
+  zh: 还有许多其他的 jerasure 技术可以使用，它们都有固定数量的 *M* 分片。如果你只打算使用两个 *M* 分片，它们是很好的候选者，因为它们的固定大小意味着可以进行优化，从而提升性能。每种优化技术除了只支持两个纠删分片外，通常还对总分片数量有一定要求。以下是每种优化技术的简要描述：
 - en: '`reed_sol_van`: The default technique, complete flexibility on number of *k+m*
     shards, also the slowest.'
+  id: totrans-39
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`reed_sol_van`: 默认技术，支持 *k+m* 分片数量的完全灵活性，但也是最慢的。'
 - en: '`reed_sol_r6_op`: Optimized version of default technique for use cases where
     *m=2*. Although it is much faster than the unoptimized version, it''s not as fast
     as other versions. However, the number of *k* shards is flexible.'
+  id: totrans-40
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`reed_sol_r6_op`: 默认技术的优化版，适用于 *m=2* 的使用场景。尽管它比未优化版本快，但不如其他版本快。然而，*k* 分片的数量是灵活的。'
 - en: '`cauchy_orig`: Better than the default, but it''s better to use `cauchy_good`.'
+  id: totrans-41
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`cauchy_orig`: 优于默认技术，但最好使用 `cauchy_good`。'
 - en: '`cauchy_good`: Middle-of-the-road performance while maintaining full flexibility
     of the shard configuration.'
+  id: totrans-42
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`cauchy_good`: 在保持分片配置完全灵活性的同时，表现适中。'
 - en: '`liberation`: Total number of shards must be equal to a prime number and *m=2*,
     so *3+2*, *5+2*, or *9+2* are all good candidates, excellent performance.'
+  id: totrans-43
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`liberation`: 总分片数量必须为质数且 *m=2*，因此 *3+2*、*5+2* 或 *9+2* 都是不错的候选者，性能极佳。'
 - en: '`liber8tion`: Total number of shards must be equal to *8* and *m=2*, only *6+2*
     is possible, but excellent performance.'
+  id: totrans-44
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`liber8tion`: 总分片数量必须为 *8* 且 *m=2*，仅 *6+2* 可用，但性能极佳。'
 - en: '`blaum_roth`: Total number of shards must be one less than a prime number and
     *m=2*, so the ideal is *4+2*, excellent performance.'
+  id: totrans-45
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`blaum_roth`: 总分片数量必须比质数少一个且 *m=2*，因此理想的配置是 *4+2*，性能极佳。'
 - en: As always, benchmarks should be conducted before storing any production data
     on an erasure-coded pool to identify which technique best suits your workload.
+  id: totrans-46
   prefs: []
   type: TYPE_NORMAL
+  zh: 一如既往，应该在将任何生产数据存储到纠删码池之前进行基准测试，以识别最适合你工作负载的技术。
 - en: In general, the jerasure profile should be preferred in most cases, unless another
     profile has a major advantage, as it offers well-balanced performance and is well-tested.
+  id: totrans-47
   prefs: []
   type: TYPE_NORMAL
+  zh: 通常情况下，除非其他配置有明显优势，否则应优先使用 jerasure 配置，因为它提供了均衡的性能，并经过充分测试。
 - en: ISA
+  id: totrans-48
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: ISA
 - en: The ISA library is designed to work with Intel processors and offers enhanced
     performance. It supports both the Reed-Solomon and Cauchy techniques.
+  id: totrans-49
   prefs: []
   type: TYPE_NORMAL
+  zh: ISA 库设计用于支持英特尔处理器，并提供增强的性能。它支持 Reed-Solomon 和 Cauchy 技术。
 - en: LRC
+  id: totrans-50
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: LRC
 - en: One of the disadvantages of using erasure coding in a distributed storage system is
     that recovery can be very intensive on networking between hosts. As each shard
     is stored on a separate host, recovery operations require multiple hosts to participate
@@ -310,18 +413,26 @@
     This allows recovery operations to remain local to the node where an OSD has failed
     and remove the need for nodes to receive data from all other remaining shard-holding
     nodes.
+  id: totrans-51
   prefs: []
   type: TYPE_NORMAL
+  zh: 在分布式存储系统中使用纠删码的一个缺点是，恢复操作可能会对主机间的网络造成很大压力。由于每个分片存储在不同的主机上，恢复操作需要多个主机参与。当 CRUSH
+    拓扑跨越多个机架时，这会对机架间的网络链路造成压力。**本地可修复纠删码** (**LRC**) 插件增加了一个额外的奇偶校验分片，这个分片是本地存储在每个
+    OSD 节点的。这使得恢复操作可以保持在 OSD 故障的节点本地进行，而无需其他节点从所有剩余分片持有节点接收数据。
 - en: However, the addition of these local recovery codes does impact the amount of
     usable storage for a given number of disks. In the event of multiple disk failures,
     the LRC plugin has to resort to using global recovery, as would happen with the
     jerasure plugin.
+  id: totrans-52
   prefs: []
   type: TYPE_NORMAL
+  zh: 然而，添加这些本地恢复码确实会影响给定磁盘数量的可用存储量。在发生多磁盘故障时，LRC 插件必须转而使用全局恢复，就像 jerasure 插件一样。
 - en: SHEC
+  id: totrans-53
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: SHEC
 - en: The SHEC profile is designed with similar goals to the LRC plugin, in that it
     reduces the networking requirements during recovery. However, instead of creating
     extra parity shards on each node, SHEC shingles the shards across OSDs in an overlapping
@@ -329,12 +440,16 @@
     resembles shingled tiles on a roof of a house. By overlapping the parity shards
     across OSDs, the SHEC plugin reduces recovery resource requirements for both single
     and multiple disk failures.
+  id: totrans-54
   prefs: []
   type: TYPE_NORMAL
+  zh: SHEC配置文件与LRC插件的目标类似，都是为了减少恢复过程中网络带宽的需求。然而，SHEC并不像LRC那样在每个节点上创建额外的奇偶校验碎片，而是通过重叠的方式将碎片分布在多个OSD中。插件名称中的*shingle*部分代表了数据分布方式，类似于房屋屋顶上的瓦片重叠。通过在OSD之间重叠奇偶校验碎片，SHEC插件减少了单盘和多盘故障恢复时的资源需求。
 - en: Overwrite support in erasure-coded pools
+  id: totrans-55
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 擦除编码池的覆盖写支持
 - en: Although erasure-coded pool support has been in Ceph for several releases now,
     before the arrival of BlueStore in the Luminous release, it had not supported
     partial writes. This limitation meant that erasure pools could not directly be
@@ -344,8 +459,10 @@
     replicated pools, enabling the use of erasure-coded pools directly with RBD and
     CephFS workloads. This dramatically lowers the cost of storage capacity for these
     use cases.
+  id: totrans-56
   prefs: []
   type: TYPE_NORMAL
+  zh: 尽管擦除编码池的支持已经在Ceph的多个版本中推出，但在Luminous版本引入BlueStore之前，Ceph并不支持部分写入。这个限制意味着擦除池无法直接用于RBD和CephFS工作负载。随着Luminous版本中BlueStore的引入，为部分写入支持的实现奠定了基础。引入部分写入支持后，擦除池能够支持的I/O类型几乎与复制池相匹配，从而使擦除编码池可以直接用于RBD和CephFS工作负载。这大大降低了这些用例的存储容量成本。
 - en: For full-stripe writes, which occur either for new objects or when the entire
     object is rewritten, the write penalty is greatly reduced. A client writing a
     4 MB object to a 4+2 erasure-coded pool would only have to write 6 MB of data,
@@ -358,14 +475,18 @@
     number of OSDs starts to outweigh the benefit of reducing the amount of data to
     be written, particularly on spinning disks whose latency does not have a linear
     relationship to the I/O size.
+  id: totrans-57
   prefs: []
   type: TYPE_NORMAL
+  zh: 对于完全条带写入，这种情况发生在新对象或者整个对象被重写时，写入惩罚大大减少。一个客户端将一个4MB的对象写入一个4+2擦除编码池时，只需要写入6MB的数据，其中4MB是数据块，2MB是擦除编码块。与在复制池中写入12MB数据相比，这大大减少了数据量。然而，需要注意的是，每个擦除条带的块会被写入到不同的OSD中。对于较小的擦除配置文件，例如*4+2*，这通常会显著提升旋转磁盘和SSD的性能，因为每个OSD写入的数据量较少。然而，对于较大的擦除条带，随着需要写入的OSD数量不断增加，这种增加的开销开始抵消减少写入数据量的好处，尤其是在旋转磁盘上，因为其延迟与I/O大小并不成线性关系。
 - en: Ceph's userspace clients, such as `librbd` and `libcephfs`, are clever enough
     to try to batch together smaller I/Os and submit a full stripe write if possible;
     this can help when the application residing previously is submitting sequential
     I/O but not aligned to the 4 MB object boundaries.
+  id: totrans-58
   prefs: []
   type: TYPE_NORMAL
+  zh: Ceph的用户空间客户端，如`librbd`和`libcephfs`，足够智能，能够将较小的I/O操作批量合并，并在可能的情况下提交一个完整的条带写入；当应用程序之前提交的是顺序I/O操作，但未对齐到4MB对象边界时，这可以提供帮助。
 - en: Partial write support allows overwrites to be done to an object; this introduces
     a number of complexities, as, when a partial write is done, the erasure chunks
     also require updating to match the new object contents. This is very similar to
@@ -380,176 +501,277 @@
     For a *4+2* erasure-coded pool, a small 4 KB write could end up submitting 12
     I/Os to the disks in the cluster, not taking into account any additional Ceph
     overheads.
+  id: totrans-59
   prefs: []
   type: TYPE_NORMAL
+  zh: 部分写入支持允许对对象进行覆盖写入；这会引入一些复杂性，因为当进行部分写入时，擦除块也需要更新，以匹配新的对象内容。这与RAID 5和RAID 6面临的挑战非常相似，尽管需要在多个OSD之间协调这一过程，并保持一致性，增加了复杂性。当进行部分写入时，Ceph首先从磁盘读取整个现有对象，然后必须在内存中合并新的写入，计算新的擦除编码块，并将所有内容写回磁盘。因此，不仅涉及读写操作，而且每个操作可能会涉及多个磁盘，形成擦除条带。正如你所看到的，一个I/O操作最终可能会比复制池的写入惩罚高出几倍。对于一个*4+2*擦除编码池，一个小的4
+    KB写入可能会将12个I/O提交到集群中的磁盘，而不考虑任何额外的Ceph开销。
 - en: Creating an erasure-coded pool
+  id: totrans-60
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 创建擦除编码池
 - en: Let's bring our test cluster up again and switch into super-user mode in Linux,
     so we don't have to keep prepending `sudo` to our commands.
+  id: totrans-61
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们再次启动测试集群并切换到Linux的超级用户模式，这样就不需要在每个命令前面加上`sudo`了。
 - en: Erasure-coded pools are controlled by the use of erasure profiles; these control how
     many shards each object is broken up into including the split between data and
     erasure shards. The profiles also include configuration to determine what erasure
     code plugin is used to calculate the hashes.
+  id: totrans-62
   prefs: []
   type: TYPE_NORMAL
+  zh: 擦除编码池通过使用擦除配置文件来控制；这些配置文件控制每个对象被分割成多少个碎片，包括数据碎片和擦除碎片之间的分配。配置文件还包括确定使用哪个擦除编码插件来计算哈希值的配置。
 - en: 'The following plugins are available to use:'
+  id: totrans-63
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下插件可供使用：
 - en: Jerasure
+  id: totrans-64
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: Jerasure
 - en: ISA
+  id: totrans-65
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: ISA
 - en: LRC
+  id: totrans-66
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: LRC
 - en: '**Shingled Erasure Coding** (**SHEC**)'
+  id: totrans-67
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**叠加擦除编码**（**SHEC**）'
 - en: 'To see a list of the erasure profiles, run the following command:'
+  id: totrans-68
   prefs: []
   type: TYPE_NORMAL
+  zh: 要查看擦除配置文件列表，请运行以下命令：
 - en: '[PRE1]'
+  id: totrans-69
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE1]'
 - en: 'You can see there is a `default` profile in the fresh installation of Ceph:'
+  id: totrans-70
   prefs: []
   type: TYPE_NORMAL
+  zh: 你可以看到，在Ceph的全新安装中存在一个`default`配置文件：
 - en: '![](img/04266842-af2a-4313-839b-15d8cf69ac32.png)'
+  id: totrans-71
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/04266842-af2a-4313-839b-15d8cf69ac32.png)'
 - en: 'Let''s see what configuration options it contains, using the following command:'
+  id: totrans-72
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们使用以下命令查看它包含的配置选项：
 - en: '[PRE2]'
+  id: totrans-73
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE2]'
 - en: 'The `default` profile specifies that it will use the jerasure plugin with the
     Reed-Solomon error-correcting codes and will split objects into `2` data shards
     and `1` erasure shard:'
+  id: totrans-74
   prefs: []
   type: TYPE_NORMAL
+  zh: '`default`配置文件指定将使用jerasure插件和Reed-Solomon错误纠正码，并将对象分割为`2`个数据碎片和`1`个擦除碎片：'
 - en: '![](img/d3cf99f8-389a-44a6-908d-f48074281008.png)'
+  id: totrans-75
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/d3cf99f8-389a-44a6-908d-f48074281008.png)'
 - en: 'This is almost perfect for our test cluster; however, for the purpose of this
     exercise, we will create a new profile, using the following commands:'
+  id: totrans-76
   prefs: []
   type: TYPE_NORMAL
+  zh: 这对于我们的测试集群几乎是完美的；然而，为了完成这次练习，我们将使用以下命令创建一个新配置文件：
 - en: '[PRE3]'
+  id: totrans-77
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE3]'
 - en: 'You can see our new `example_profile` has been created:'
+  id: totrans-78
   prefs: []
   type: TYPE_NORMAL
+  zh: 你可以看到我们的新`example_profile`已经创建：
 - en: '![](img/d829a26e-70ca-436d-a2d1-8fe412d219b0.png)'
+  id: totrans-79
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/d829a26e-70ca-436d-a2d1-8fe412d219b0.png)'
 - en: 'Now, let''s create our erasure-coded pool with this profile:'
+  id: totrans-80
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，让我们使用此配置文件创建擦除编码池：
 - en: '[PRE4]'
+  id: totrans-81
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE4]'
 - en: 'The preceding command gives the following output:'
+  id: totrans-82
   prefs: []
   type: TYPE_NORMAL
+  zh: 前面的命令给出了以下输出：
 - en: '![](img/53812e80-e75b-4db6-a858-41fa2525fec5.png)'
+  id: totrans-83
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/53812e80-e75b-4db6-a858-41fa2525fec5.png)'
 - en: The preceding command instructs Ceph to create a new pool called `ecpool` with `128` PGs.
     It should be an erasure-coded pool and should use the `example_profile` we previously
     created.
+  id: totrans-84
   prefs: []
   type: TYPE_NORMAL
+  zh: 前面的命令指示Ceph创建一个名为`ecpool`的新池，并使用`128`个PG。它应该是一个擦除编码池，并且应该使用我们之前创建的`example_profile`。
 - en: 'Let''s create an object with a small text string inside it and then prove the
     data has been stored by reading it back:'
+  id: totrans-85
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们创建一个包含小文本字符串的对象，然后通过读取它来证明数据已经被存储：
 - en: '[PRE5]'
+  id: totrans-86
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE5]'
 - en: 'That proves that the erasure-coded pool is working, but it''s hardly the most
     exciting of discoveries:'
+  id: totrans-87
   prefs: []
   type: TYPE_NORMAL
+  zh: 这证明了擦除编码池正在正常工作，但这并不是最令人激动的发现：
 - en: '![](img/f808d9cd-9a8c-4487-ab88-5ed84d88be1d.png)'
+  id: totrans-88
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/f808d9cd-9a8c-4487-ab88-5ed84d88be1d.png)'
 - en: Let's check whether we can see what's happening at a lower level.
+  id: totrans-89
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们检查一下是否能够看到更低层级发生的事情。
 - en: 'First, find out what PG is holding the object we just created:'
+  id: totrans-90
   prefs: []
   type: TYPE_NORMAL
+  zh: 首先，找出存储我们刚创建的对象的 PG：
 - en: '[PRE6]'
+  id: totrans-91
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE6]'
 - en: 'The result of the preceding command tells us that the object is stored in PG `3.40` on
     OSDs `1`, `2`, and `0` in this example Ceph cluster. That''s pretty obvious, as
     we only have three OSDs, but in larger clusters, that is a very useful piece of
     information:'
+  id: totrans-92
   prefs: []
   type: TYPE_NORMAL
+  zh: 前面的命令结果告诉我们，在这个示例 Ceph 集群中，PG `3.40` 对象被存储在 OSDs `1`、`2` 和 `0` 中。这是显而易见的，因为我们只有三个
+    OSD，但在更大的集群中，这是一个非常有用的信息：
 - en: '![](img/5c8c544c-1120-43d9-85a3-85989b886ea4.png)'
+  id: totrans-93
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/5c8c544c-1120-43d9-85a3-85989b886ea4.png)'
 - en: The PGs will likely be different on your test cluster, so make sure the PG folder
     structure matches the output of the preceding `ceph osd map` command.
+  id: totrans-94
   prefs: []
   type: TYPE_NORMAL
+  zh: PG 在你的测试集群中可能不同，因此请确保 PG 文件夹结构与前面 `ceph osd map` 命令的输出匹配。
 - en: If you are using BlueStore, the file structure of the OSD is no longer viewable
     by default. However, you can use the following command on a stopped OSD to mount
     the BlueStore OSD as a Linux filesystem.
+  id: totrans-95
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你使用的是 BlueStore，默认情况下 OSD 的文件结构无法查看。然而，你可以在停止的 OSD 上使用以下命令，将 BlueStore OSD
+    挂载为 Linux 文件系统。
 - en: 'We can now look at the folder structure of the OSDs and see how the object
     has been split using the following commands:'
+  id: totrans-96
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们现在可以查看 OSD 的文件夹结构，使用以下命令查看对象是如何被拆分的：
 - en: '[PRE7]'
+  id: totrans-97
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE7]'
 - en: 'The following examples are shown using filestore; if using BlueStore, replace
     the OSD path with the contents of the `/mnt` mount point from the preceding command:'
+  id: totrans-98
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下示例使用的是 filestore；如果使用的是 BlueStore，请用前面命令中 `/mnt` 挂载点的内容替换 OSD 路径：
 - en: '[PRE8]'
+  id: totrans-99
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE8]'
 - en: 'The preceding command gives the following output:'
+  id: totrans-100
   prefs: []
   type: TYPE_NORMAL
+  zh: 前面的命令给出了以下输出：
 - en: '![](img/e5e200a4-b91d-4e5e-a3ae-0e1a2f8da532.png)'
+  id: totrans-101
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/e5e200a4-b91d-4e5e-a3ae-0e1a2f8da532.png)'
 - en: '[PRE9]'
+  id: totrans-102
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE9]'
 - en: 'The preceding command gives the following output:'
+  id: totrans-103
   prefs: []
   type: TYPE_NORMAL
+  zh: 前面的命令给出了以下输出：
 - en: '![](img/8fee619e-8c24-4c96-b76e-ebf2efa9cc68.png)'
+  id: totrans-104
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/8fee619e-8c24-4c96-b76e-ebf2efa9cc68.png)'
 - en: '[PRE10]'
+  id: totrans-105
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE10]'
 - en: 'The preceding command gives the following output:'
+  id: totrans-106
   prefs: []
   type: TYPE_NORMAL
+  zh: 前面的命令给出了以下输出：
 - en: '![](img/87dd434f-0b55-418c-ba3f-02886db550bd.png)'
+  id: totrans-107
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/87dd434f-0b55-418c-ba3f-02886db550bd.png)'
 - en: Notice how the PG directory names have been appended to the shard number and
     that replicated pools just have the PG number as their directory name. If you
     examine the contents of the object files, you will see our text string that we
@@ -558,22 +780,32 @@
     the erasure shard; hence, it will contain the same as the first. You can repeat
     this example with a new object that contains larger amounts of text to see how
     Ceph splits the text into the shards and calculates the erasure code.
+  id: totrans-108
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意，PG 目录名已附加到分片编号上，并且复制池的目录名仅包含 PG 编号。如果你检查对象文件的内容，你会看到我们在创建对象时输入的文本字符串。然而，由于文本字符串的大小较小，Ceph
+    用空字符填充了第二个分片和擦除分片；因此，它们的内容与第一个分片相同。你可以用一个包含更多文本的新对象重复这个示例，看看 Ceph 是如何将文本拆分成分片并计算擦除码的。
 - en: Troubleshooting the 2147483647 error
+  id: totrans-109
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 排查 2147483647 错误
 - en: 'This small section is included within the erasure-coding, rather than in [Chapter
     11](bf50389d-8256-4cbf-ae32-01a494ab4189.xhtml), *Troubleshooting*, of this book,
     as it''s commonly seen with erasure-coded pools and so is very relevant to this
     chapter. An example of this error is shown in the following screenshot, when running
     the `ceph health detail` command:'
+  id: totrans-110
   prefs: []
   type: TYPE_NORMAL
+  zh: 本小节包含在擦除编码中，而不是本书的[第 11 章](bf50389d-8256-4cbf-ae32-01a494ab4189.xhtml) *故障排除*
+    部分，因为它通常出现在擦除编码池中，因此与本章非常相关。以下屏幕截图显示了运行 `ceph health detail` 命令时出现的错误示例：
 - en: '![](img/6fbcd7e7-fa12-465d-a4fe-49c8dc76d430.png)'
+  id: totrans-111
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/6fbcd7e7-fa12-465d-a4fe-49c8dc76d430.png)'
 - en: If you see `2147483647` listed as one of the OSDs for an erasure-coded pool,
     this normally means that CRUSH was unable to find a sufficient number of OSDs
     to complete the PG peering process. This is normally due to the number of K+M
@@ -588,71 +820,110 @@
     hosts to the number of erasure shards, CRUSH may run out of attempts before it
     can suitably find the correct OSD mappings for all the shards. Newer versions
     of Ceph have mostly fixed these problems by increasing the CRUSH tuneable, `choose_total_tries`.
+  id: totrans-112
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你看到`2147483647`作为擦除编码池的一个 OSD，通常意味着 CRUSH 无法找到足够的 OSD 来完成 PG 对等过程。这通常是由于 K+M
+    碎片数大于 CRUSH 拓扑中主机数量。然而，在某些情况下，即使主机数量等于或大于碎片数量，这个错误仍然可能发生。在这种情况下，了解 CRUSH 如何选择
+    OSD 作为数据放置的候选项非常重要。当 CRUSH 用于查找 PG 的候选 OSD 时，它会应用 CRUSH 映射以找到 CRUSH 拓扑中的合适位置。如果结果与之前选定的
+    OSD 相同，Ceph 会通过向 CRUSH 算法传入略有不同的值来重新生成另一个映射。在某些情况下，如果主机数量与擦除碎片数量相似，CRUSH 可能会在找到正确的
+    OSD 映射之前耗尽尝试次数。较新的 Ceph 版本已经通过增加 CRUSH 可调参数`choose_total_tries`大多数解决了这些问题。
 - en: Reproducing the problem
+  id: totrans-113
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 复现问题
 - en: To aid our understanding of the problem in more detail, the following steps
     will demonstrate how to create an `erasure-code-profile` that will require more
     shards than our three-node cluster can support.
+  id: totrans-114
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了更详细地帮助我们理解问题，接下来的步骤将展示如何创建一个需要比我们三节点集群支持更多碎片的`erasure-code-profile`。
 - en: 'Like earlier in the chapter, create a new erasure profile but modify the K/M
     parameters to be `k=3` and `m=1`:'
+  id: totrans-115
   prefs: []
   type: TYPE_NORMAL
+  zh: 如同本章早些时候所做的那样，创建一个新的擦除配置文件，但将 K/M 参数修改为`k=3`和`m=1`：
 - en: '[PRE11]'
+  id: totrans-116
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE11]'
 - en: 'Now create a pool with it:'
+  id: totrans-117
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在创建一个池：
 - en: '[PRE12]'
+  id: totrans-118
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE12]'
 - en: 'If we look at the output from `ceph -s`, we will see that the PGs for this
     new pool are stuck in the creating state:'
+  id: totrans-119
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果我们查看`ceph -s`的输出，我们将看到该新池的 PG 卡在创建状态：
 - en: '![](img/b122237f-d54b-43f4-9ea8-42b4f99ce063.png)'
+  id: totrans-120
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/b122237f-d54b-43f4-9ea8-42b4f99ce063.png)'
 - en: 'The output of `ceph health detail` shows the reason, and we see the `2147483647` error:'
+  id: totrans-121
   prefs: []
   type: TYPE_NORMAL
+  zh: '`ceph health detail`的输出显示了原因，并且我们看到`2147483647`错误：'
 - en: '![](img/058ca850-483c-48c4-8095-5a8c589faa9c.png)'
+  id: totrans-122
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/058ca850-483c-48c4-8095-5a8c589faa9c.png)'
 - en: If you encounter this error and it is a result of your erasure profile being
     larger than your number of hosts or racks, depending on how you have designed
     your CRUSH map, then the only real solution is to either drop the number of shards
     or increase the number of hosts.
+  id: totrans-123
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你遇到此错误，并且它是由于你的擦除配置文件大于你的主机或机架数量而导致的，根据你设计的 CRUSH 映射，唯一的解决办法是减少碎片数量或增加主机数量。
 - en: 'To create an erasure-coded pool, issue a command, as shown in the following
     example:'
+  id: totrans-124
   prefs: []
   type: TYPE_NORMAL
+  zh: 要创建一个擦除编码池，请发出如下命令：
 - en: '[PRE13]'
+  id: totrans-125
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE13]'
 - en: This would create an erasure-coded pool with 128 placement groups, called `MyECPool`,
     using the erasure-coding profile, called `MyECProfile`.
+  id: totrans-126
   prefs: []
   type: TYPE_NORMAL
+  zh: 这将创建一个具有 128 个放置组的擦除编码池，名为`MyECPool`，并使用名为`MyECProfile`的擦除编码配置文件。
 - en: Although partial writes bring erasure-coded pools to near parity with replicated
     pools in terms of supported features, they still cannot store all the required
     data for RBDs. Therefore, when creating an RBD, you must place the RBD header
     object on a replicated RADOS pool and then specify that the data objects for that
     RBD should be stored in the erasure-coded pool.
+  id: totrans-127
   prefs: []
   type: TYPE_NORMAL
+  zh: 尽管部分写入使擦除编码池在支持的功能方面几乎与复制池相媲美，但它们仍然无法存储所有 RBD 所需的数据。因此，在创建 RBD 时，必须将 RBD 头对象放置在一个复制的
+    RADOS 池中，然后指定该 RBD 的数据对象应存储在擦除编码池中。
 - en: Scrubbing
+  id: totrans-128
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 清理
 - en: To protect against bit-rot, Ceph periodically runs a process called scrubbing
     to verify the data stored across the OSDs. The scrubbing process works at the
     PG level and compares the contents of each of the PGs across all of the participating
@@ -660,49 +931,74 @@
     an object copy that differs to the others or is even missing the object, the PG
     is marked as inconsistent. Inconsistent PGs can be repaired by instructing Ceph
     to repair the PG; this is covered in further detail in [Chapter 11](bf50389d-8256-4cbf-ae32-01a494ab4189.xhtml), *Troubleshooting*.
+  id: totrans-129
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了防止位腐化，Ceph 定期运行名为 scrubbing 的过程，以验证存储在 OSD 上的数据。scrubbing 过程在 PG 级别进行，比对所有参与的
+    OSD 上每个 PG 的内容，检查每个 OSD 是否具有相同的内容。如果发现某个 OSD 上的对象副本与其他 OSD 不同，甚至缺少该对象，PG 会被标记为不一致。可以通过指示
+    Ceph 修复 PG 来修复不一致的 PG；这一过程将在[第 11 章](bf50389d-8256-4cbf-ae32-01a494ab4189.xhtml)中详细讲解，*故障排除*。
 - en: 'There are two types of scrubbing: normal and deep. Normal scrubbing simply
     checks for the existence of the object and that its metadata is correct; deep
     scrubbing is when the actual data is compared. Deep scrubbing tends to be much
     more I/O-intensive than normal scrubbing.'
+  id: totrans-130
   prefs: []
   type: TYPE_NORMAL
+  zh: Scrubbing 有两种类型：正常和深度。正常 scrubbing 仅检查对象是否存在及其元数据是否正确；深度 scrubbing 是指对实际数据进行比较。深度
+    scrubbing 通常比正常 scrubbing 更加 I/O 密集。
 - en: Although BlueStore now supports checksums, the need for scrubbing is not completely
     redundant. BlueStore only compares the checksums against the data being actively
     read, and so for cold data that is very rarely written, data loss or corruption
     could occur and only the scrubbing process would detect this.
+  id: totrans-131
   prefs: []
   type: TYPE_NORMAL
+  zh: 尽管 BlueStore 现在支持校验和，但 scrubbing 的需求并没有完全消失。BlueStore 仅比较正在主动读取的数据的校验和，因此对于很少写入的冷数据，可能会发生数据丢失或损坏，只有
+    scrubbing 过程才能检测到这一点。
 - en: There are a number of scrubbing tuning options that are covered later in [Chapter
     9](5c0bf2de-c75e-4aa7-b3d9-8a1e038e3735.xhtml), *Tuning Ceph*; they influence
     the scheduling of when scrubbing takes place and the impact on client I/O.
+  id: totrans-132
   prefs: []
   type: TYPE_NORMAL
+  zh: 有一些 scrubbing 调优选项将在[第 9 章](5c0bf2de-c75e-4aa7-b3d9-8a1e038e3735.xhtml)中讲解，*调优
+    Ceph*；它们会影响 scrubbing 过程的调度时机以及对客户端 I/O 的影响。
 - en: Ceph storage types
+  id: totrans-133
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: Ceph 存储类型
 - en: Although Ceph provides basic object storage via the RADOS layer, on its own
     this is not very handy, as the scope of applications that could consume RADOS
     storage directly is extremely limited. Therefore, Ceph builds on the base RADOS
     capabilities and provides higher-level storage types that can be more easily consumed
     by clients.
+  id: totrans-134
   prefs: []
   type: TYPE_NORMAL
+  zh: 尽管 Ceph 通过 RADOS 层提供基本的对象存储，但单独使用它并不方便，因为直接使用 RADOS 存储的应用场景极为有限。因此，Ceph 在基础
+    RADOS 能力的基础上构建，并提供更高级的存储类型，使客户端更容易使用。
 - en: RBD
+  id: totrans-135
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: RBD
 - en: RBD for short, is how Ceph storage can be presented as standard Linux block
     devices. RBDs are composed of a number of objects, 4 MB by default, which are
     concatenated together. A 4 GB RBD would contain a 1,000 objects by default.
+  id: totrans-136
   prefs: []
   type: TYPE_NORMAL
+  zh: RBD 简称，是 Ceph 存储可以呈现为标准 Linux 块设备的方式。RBD 由多个对象组成，默认每个对象为 4 MB，这些对象被串联在一起。一个
+    4 GB 的 RBD 默认包含 1,000 个对象。
 - en: Thin provisioning
+  id: totrans-137
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 精简配置
 - en: Due to the way RADOS works, RBDs are thin provisioned;  that is to say, the
     underlying objects are only provisioned once data is written to the logical block
     address that corresponds to that object. There are no safeguards around this;
@@ -714,12 +1010,19 @@
     them. However care should be taken to monitor the growth of data on the Ceph cluster;
     if the underlying usable capacity is filled, the Ceph cluster will effectively
     go offline until space is freed.
+  id: totrans-138
   prefs: []
   type: TYPE_NORMAL
+  zh: 由于 RADOS 的工作方式，RBD 是精简配置的；也就是说，底层对象仅在数据写入对应的逻辑块地址时才会被配置。对此没有任何保护措施；Ceph 会允许你在
+    1 TB 磁盘上配置一个 1 PB 的块设备，只要你从未在上面存放超过 1 TB 的数据，一切都将按预期工作。如果正确使用，精简配置可以大大增加 Ceph
+    集群的可用容量，因为虚拟机（通常是 RBD 的主要使用场景之一）可能包含大量的空白空间。然而，应该小心监控 Ceph 集群中数据的增长；如果底层的可用容量已满，Ceph
+    集群将实际上离线，直到腾出空间。
 - en: Snapshots and clones
+  id: totrans-139
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 快照和克隆
 - en: RBDs support having snapshots taken of them. Snapshots are a read-only copy
     of the RBD image that persists its state from the point in time in which it was
     taken. Multiple snapshots can be taken to retain the RBDs history through time,
@@ -735,14 +1038,23 @@
     that require extra I/O during writes—as the copy-on-write process creates clones
     of the objects, additional cluster space is consumed—care should be taken to monitor
     space consumption when snapshots are in use.
+  id: totrans-140
   prefs: []
   type: TYPE_NORMAL
+  zh: RBD 支持对其进行快照操作。快照是 RBD 镜像的只读副本，能够保留其在拍摄时刻的状态。如果需要，可以拍摄多个快照以保存 RBD 随时间变化的历史。拍摄
+    RBD 快照的过程非常迅速，且不会对读取源 RBD 的性能产生影响。然而，当写入操作首次影响源 RBD 时，快照会为我们克隆对象的现有内容，之后的进一步 I/O
+    将不会产生额外的影响。这个过程被称为**写时复制（copy-on-write）**，它是存储产品中执行快照的标准方式。需要注意的是，在 BlueStore
+    中这一过程的加速效果显著，因为不像 filestore 中那样需要完整复制对象，尽管仍然需要小心确保那些经历大量写 I/O 的 RBD 不会长时间保留打开的快照。同时，需要注意那些在写入过程中会消耗额外
+    I/O 的快照——由于写时复制过程会创建对象的克隆，因此会消耗额外的集群空间——在使用快照时，需注意监控空间的使用情况。
 - en: During the removal of a snapshot, the PGs containing snapshot objects enter
     a snaptrim state. In this state, the objects that had been cloned as part of the
     copy-on-write process are removed. Again, on BlueStore, this process has much
     less impact on the cluster load.
+  id: totrans-141
   prefs: []
   type: TYPE_NORMAL
+  zh: 在删除快照的过程中，包含快照对象的 PG 会进入一个快照修剪状态。在此状态下，作为写时复制过程一部分被克隆的对象将被移除。同样，在 BlueStore
+    中，这一过程对集群负载的影响更小。
 - en: RBDs also support snapshot layering; this is a process where a writable clone
     is made of an existing snapshot, which is itself a snapshot of an existing RBD.
     This process is typically used to create cloned VMs of master images; an initial
@@ -753,110 +1065,175 @@
     they are identical to the source, they can simply be referenced by the clone.
     Once the cloned RBD starts getting data written to it, each object that is modified
     is then written out as a new object that belongs to the clone.
+  id: totrans-142
   prefs: []
   type: TYPE_NORMAL
+  zh: RBD 还支持快照分层；这是一种从现有快照创建可写克隆的过程，而该快照本身是现有 RBD 的快照。这个过程通常用于创建主镜像的克隆虚拟机（VM）；首先为虚拟机创建一个初始
+    RBD，并安装操作系统。然后，在主镜像的生命周期中不断拍摄快照，以捕捉变化。这些快照将作为克隆新虚拟机的基础。当最初克隆 RBD 快照时，RBD 中的对象非克隆部分不需要重复创建，因为它们与源对象相同，只需由克隆引用即可。一旦克隆的
+    RBD 开始写入数据，每个被修改的对象将被写入为属于该克隆的新对象。
 - en: This process of object referencing means that a large number of VMs that share
     the same OS template will likely consume less space than if each VM was individually
     deployed to fresh RBDs. In some cases, it may be desired to force a full clone
     where all the RBDs objects are duplicated; this process in Ceph is called flattening
     a clone.
+  id: totrans-143
   prefs: []
   type: TYPE_NORMAL
+  zh: 这种对象引用的过程意味着，许多共享相同操作系统模板的虚拟机，可能会比每个虚拟机单独部署到新的 RBD 时消耗更少的空间。在某些情况下，可能希望强制进行完全克隆，即复制所有
+    RBD 对象；在 Ceph 中，这个过程被称为克隆扁平化（flattening a clone）。
 - en: 'First, create a snapshot, called `snap1`, of a RBD image, called `test`, in
     the default RBD pool:'
+  id: totrans-144
   prefs: []
   type: TYPE_NORMAL
+  zh: 首先，在默认 RBD 池中为一个名为 `test` 的 RBD 镜像创建一个名为 `snap1` 的快照：
 - en: '[PRE14]'
+  id: totrans-145
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE14]'
 - en: 'Confirm that the snapshot has been created by viewing all snapshots of the
     RBD:'
+  id: totrans-146
   prefs: []
   type: TYPE_NORMAL
+  zh: 通过查看 RBD 的所有快照，确认快照已经创建：
 - en: '[PRE15]'
+  id: totrans-147
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE15]'
 - en: '![](img/09816dc7-d16f-4ac6-a7a4-9895670f13c5.png)'
+  id: totrans-148
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/09816dc7-d16f-4ac6-a7a4-9895670f13c5.png)'
 - en: 'For the snapshot to be cloned, it needs to be protected. As the clones are
     dependent on the snapshot, any modification to the snapshot would likely cause
     corruption in the clones:'
+  id: totrans-149
   prefs: []
   type: TYPE_NORMAL
+  zh: 对于要克隆的快照，需要对其进行保护。由于克隆依赖于快照，任何对快照的修改可能会导致克隆损坏：
 - en: '[PRE16]'
+  id: totrans-150
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE16]'
 - en: 'View the info of the snapshot; it can be seen that the snapshot is now protected:'
+  id: totrans-151
   prefs: []
   type: TYPE_NORMAL
+  zh: 查看快照信息；可以看到该快照现在已经被保护：
 - en: '[PRE17]'
+  id: totrans-152
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE17]'
 - en: '![](img/fd766cb7-32f3-42c5-a839-2003e0ab1409.png)'
+  id: totrans-153
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/fd766cb7-32f3-42c5-a839-2003e0ab1409.png)'
 - en: 'Now a clone of the snapshot can be taken:'
+  id: totrans-154
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在可以创建快照的克隆：
 - en: '[PRE18]'
+  id: totrans-155
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE18]'
 - en: 'You can confirm the relationship of the clone to the snapshot by viewing the
     `rbd info` of the clone:'
+  id: totrans-156
   prefs: []
   type: TYPE_NORMAL
+  zh: 你可以通过查看克隆的`rbd info`来确认克隆与快照的关系：
 - en: '[PRE19]'
+  id: totrans-157
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE19]'
 - en: '![](img/8a95445c-e8f1-4297-85ca-14a928663d78.png)'
+  id: totrans-158
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/8a95445c-e8f1-4297-85ca-14a928663d78.png)'
 - en: 'Or you can do so by viewing the list of children of the snapshot:'
+  id: totrans-159
   prefs: []
   type: TYPE_NORMAL
+  zh: 或者你可以通过查看快照的子项列表来执行此操作：
 - en: '[PRE20]'
+  id: totrans-160
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE20]'
 - en: '![](img/de66919a-b6fa-4e4e-a60e-18e58c14a65e.png)'
+  id: totrans-161
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/de66919a-b6fa-4e4e-a60e-18e58c14a65e.png)'
 - en: 'Now flatten the clone; this will make it a completely independent RBD image
     no longer dependent on the snapshot:'
+  id: totrans-162
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在展开克隆；这将使其成为一个完全独立的RBD镜像，不再依赖于快照：
 - en: '[PRE21]'
+  id: totrans-163
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE21]'
 - en: '![](img/9711ece6-7bc2-4121-98cd-ac953ebcd144.png)'
+  id: totrans-164
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/9711ece6-7bc2-4121-98cd-ac953ebcd144.png)'
 - en: 'Confirm that the clone is now no longer attached to the snapshot; note the
     parent field is now missing:'
+  id: totrans-165
   prefs: []
   type: TYPE_NORMAL
+  zh: 确认克隆现在不再附加到快照；请注意，父字段现在已缺失：
 - en: '[PRE22]'
+  id: totrans-166
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE22]'
 - en: '![](img/0250c040-ec7c-40c8-8741-308abd4c247d.png)'
+  id: totrans-167
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/0250c040-ec7c-40c8-8741-308abd4c247d.png)'
 - en: 'Unprotect the snapshot:'
+  id: totrans-168
   prefs: []
   type: TYPE_NORMAL
+  zh: 取消快照保护：
 - en: '[PRE23]'
+  id: totrans-169
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE23]'
 - en: 'And finally delete it:'
+  id: totrans-170
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后删除它：
 - en: '[PRE24]'
+  id: totrans-171
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE24]'
 - en: Object maps
+  id: totrans-172
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 对象映射
 - en: As RBDs support thin provisioning and are composed of a large number of 4 MB
     objects, tasks such as determining what space the RBD is consuming, or cloning
     the RBD, would involve a large number of read requests to determine whether a
@@ -865,24 +1242,32 @@
     and so greatly speed up the process of calculating which objects exist. The object
     map is stored as an object itself in the RADOS pool and should not be manipulated
     directly.
+  id: totrans-173
   prefs: []
   type: TYPE_NORMAL
+  zh: 由于RBD支持薄配置，并由大量4MB的对象组成，确定RBD消耗了多少空间，或克隆RBD等任务，将涉及大量的读取请求，以确定RBD中某个对象是否存在。为了解决这个问题，RBD支持对象映射；这些映射指示了RBD中哪些逻辑块已被分配，因此大大加速了计算哪些对象存在的过程。对象映射作为一个对象存储在RADOS池中，不应直接操作。
 - en: Exclusive locking
+  id: totrans-174
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 独占锁定
 - en: To try to prevent corruption from two clients writing to the same RBD at the
     same time, exclusive locking allows the client to acquire a lock to disallow any
     other client from writing to the RBD. It's important to note that clients can
     always request the lock to be transferred to themselves and so the lock is only
     to protect the RBD device itself; a non-clustered filesystem will still likely
     be corrupted if two clients try to mount it, regardless of the exclusive locking.
+  id: totrans-175
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了防止两个客户端同时写入同一个RBD，独占锁定允许客户端获取锁，以禁止其他客户端写入RBD。需要注意的是，客户端始终可以请求将锁转移给自己，因此该锁只是用来保护RBD设备本身；如果两个客户端尝试挂载非集群化的文件系统，它仍然很可能会被损坏，无论是否启用了独占锁定。
 - en: CephFS
+  id: totrans-176
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: CephFS
 - en: CephFS is a POSIX-compatible filesystem that sits on top of RADOS pools. Being
     POSIX-compliment means that it should be able to function as a drop-in replacement
     for any other Linux filesystem and still function as expected. There is both a
@@ -893,20 +1278,27 @@
     filesystem can also be exported via NFS or Samba to non-Linux-based clients, both
     software have direct support for talking to CephFS. This subject will be covered
     in more detail in the next chapter.
+  id: totrans-177
   prefs: []
   type: TYPE_NORMAL
+  zh: CephFS是一个POSIX兼容的文件系统，建立在RADOS池之上。POSIX兼容意味着它应该能够作为任何其他Linux文件系统的替代品正常运行，并保持预期功能。CephFS提供了内核和用户空间客户端，允许在运行的Linux系统上挂载该文件系统。虽然内核客户端通常速度更快，但它在支持功能方面往往滞后于用户空间客户端，并且通常需要你运行最新的内核才能利用某些功能和修复。CephFS文件系统也可以通过NFS或Samba导出给非Linux客户端，这两款软件直接支持与CephFS的通信。下一章将详细介绍这一主题。
 - en: CephFS stores each file as one or more RADOS objects. If an object is larger
     than 4 MB, it will be striped across multiple objects. This striping behavior
     can be controlled by the use of XATTRs, which can be associated with both files
     and directories, and can control the object size, stripe width, and stripe count.
     The default striping policy effectively concatenates multiple 4 MB objects together,
     but by modifying the stripe count and width, a RAID 0 style striping can be achieved.
+  id: totrans-178
   prefs: []
   type: TYPE_NORMAL
+  zh: CephFS将每个文件存储为一个或多个RADOS对象。如果一个对象大于4 MB，它将被切分到多个对象中。这种切分行为可以通过使用XATTRs来控制，XATTRs可以与文件和目录相关联，并控制对象大小、条带宽度和条带数量。默认的切分策略实际上将多个4
+    MB的对象连接在一起，但通过修改条带数量和宽度，可以实现RAID 0风格的切分。
 - en: MDSes and their states
+  id: totrans-179
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: MDS及其状态
 - en: CephFS requires an additional component to coordinate client access and metadata;
     this component is called the **Metadata** **Server**, or **MDS** for short. Although
     the MDS is used to serve metadata requests to and from the client, the actual
@@ -915,14 +1307,19 @@
     although smaller I/O-intensive operations can start to be limited by the MDS performance.
     The MDS currently runs as a single-threaded process and so it is recommended that
     the MDS is run on hardware with the highest-clocked CPU as possible.
+  id: totrans-180
   prefs: []
   type: TYPE_NORMAL
+  zh: CephFS需要一个额外的组件来协调客户端访问和元数据；这个组件被称为**元数据** **服务器**，简称**MDS**。虽然MDS用于处理客户端的元数据请求，但实际的数据读取和写入仍然直接通过OSD进行。这种方法最小化了MDS对文件系统性能的影响，特别是对于大量数据传输，尽管较小的I/O密集型操作可能会受到MDS性能的限制。目前MDS以单线程进程运行，因此建议将MDS运行在具有最高时钟频率的硬件上。
 - en: The MDS has a local cache for storing hot portions of the CephFS metadata to
     reduce the amount of I/O going to the metadata pool; this cache is stored in local
     memory for performance and can be controlled by adjusting the MDS cache memory-limit
     configurationoption, which defaults to 1 GB.
+  id: totrans-181
   prefs: []
   type: TYPE_NORMAL
+  zh: MDS有一个本地缓存，用于存储CephFS元数据的热点部分，以减少访问元数据池的I/O量；该缓存存储在本地内存中以提高性能，并可以通过调整MDS缓存内存限制配置选项来控制，默认值为1
+    GB。
 - en: CephFS utilizes a journal stored in RADOS mainly for consistency reasons. The
     journal stores the stream of metadata updates from clients and then flushes them
     into the CephFS metadata store. If an MDS is terminated, the MDS that takes over
@@ -934,57 +1331,78 @@
     If you have multiple active MDSes, whereas a pure standby MDS can be a standby
     for any active MDS, standby-replay MDSes have to be assigned to a specific MDS
     rank.
+  id: totrans-182
   prefs: []
   type: TYPE_NORMAL
+  zh: CephFS利用存储在RADOS中的日志，主要是出于一致性考虑。该日志存储来自客户端的元数据更新流，然后将其刷新到CephFS元数据存储中。如果MDS终止，接管活动角色的MDS可以回放存储在日志中的元数据事件。回放日志的过程是MDS变为活动状态的关键部分，因此该过程会阻塞，直到完成。通过使用一个备用回放MDS，持续回放日志并准备在较短时间内接管主活动角色，可以加速该过程。如果有多个活动MDS，纯备用MDS可以作为任何活动MDS的备用，而备用回放MDS必须分配给特定的MDS等级。
 - en: 'As well as the active and replaying states, an MDS can also be in several other
     states; the ones you are likely to see in the ceph status are listed for reference
     for when operating a Ceph cluster with a CephFS filesystem. The states are split
     into two parts: the part on the left side of the colon shows whether the MDS is
     up or down. The part on the right side of the colon represents the current operational
     state:'
+  id: totrans-183
   prefs: []
   type: TYPE_NORMAL
+  zh: 除了活动和回放状态外，MDS还可以处于其他几个状态；在操作Ceph集群并使用CephFS文件系统时，您可能会在ceph状态中看到的状态列出如下，供参考。状态分为两部分：冒号左侧的部分表示MDS是处于up还是down状态。冒号右侧的部分表示当前的操作状态：
 - en: '`up:active`: This is the normal desired state, as long as one MDS is in this
     state, clients can access the CephFS filesystem.'
+  id: totrans-184
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`up:active`：这是正常期望的状态，只要一个MDS处于该状态，客户端就可以访问CephFS文件系统。'
 - en: '`up:standby`: This can be a normal state as long as one MDS is `up:active`.
     In this state, an MDS is online but not playing any active part in the CephFS
     infrastructure. It will come online and replay the CephFS journal in the event
     that the active MDS goes online.'
+  id: totrans-185
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`up:standby`：只要有一个 MDS 处于 `up:active` 状态，这可以是一个正常状态。在此状态下，MDS 处于在线状态，但不参与 CephFS
+    基础设施的任何活动。当活动 MDS 上线时，备用 MDS 会上线并回放 CephFS 日志。'
 - en: '`up:standby_replay`: Like the `up:standby` state, an MDS in this state is available
     to become active in the event of an active MDS going offline. However, a `standby_replay`
     MDS is continuously replaying the journal of MDS it has been configured to follow,
     meaning the failover time is greatly reduced. It should be noted that while a
     standby MDS can replace any active MDS, a `standby_replay` MDS can only replace
     the one it has been configured to follow.'
+  id: totrans-186
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`up:standby_replay`：与 `up:standby` 状态类似，处于此状态的 MDS 在活动 MDS 下线时可用以变为活动状态。然而，`standby_replay`
+    MDS 会持续回放其被配置为跟随的 MDS 的日志，这意味着故障转移时间大大减少。需要注意的是，虽然备用 MDS 可以替代任何活动 MDS，但 `standby_replay`
+    MDS 只能替代它被配置为跟随的 MDS。'
 - en: '`up:replay`: In this state, an MDS has begun taking over the active role and
     is currently replaying the metadata stored in the CephFS journal.'
+  id: totrans-187
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`up:replay`：在此状态下，MDS 已开始接管活动角色，并且正在回放存储在 CephFS 日志中的元数据。'
 - en: '`up:reconnect`: If there were active client sessions active when the active
     MDS went online, the recovering MDS will try to re-establish client connections
     in this state until the client timeout is hit.'
+  id: totrans-188
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`up:reconnect`：如果在活动 MDS 上线时有客户端会话处于活动状态，恢复中的 MDS 将在此状态下尝试重新建立客户端连接，直到客户端超时为止。'
 - en: Although there are other states an MDS can be in, it is likely that during normal
     operations they will not be seen and so have not been included here. Please consult
     the official Ceph documentation for more details on all available states.
+  id: totrans-189
   prefs: []
   type: TYPE_NORMAL
+  zh: 虽然 MDS 可以处于其他状态，但在正常操作过程中这些状态不太可能被看到，因此未在此包含。有关所有可用状态的详细信息，请参考官方 Ceph 文档。
 - en: Creating a CephFS filesystem
+  id: totrans-190
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 创建 CephFS 文件系统
 - en: 'To create a CephFS filesystem, two RADOS pools are required: one to store the
     metadata and another to store the actual data objects. Although technically any
     existing RADOS pools can be used, it''s highly recommended that dedicated pools
@@ -994,131 +1412,183 @@
     should be provisioned much like an RBD pool and the number of PGs calculated to
     match the number of OSDs in the cluster and the share of data that the CephFS
     filesystem will store.'
+  id: totrans-191
   prefs: []
   type: TYPE_NORMAL
+  zh: 要创建一个 CephFS 文件系统，需要两个 RADOS 池：一个用于存储元数据，另一个用于存储实际的数据对象。尽管技术上可以使用任何现有的 RADOS
+    池，但强烈建议创建专用池。与数据池相比，元数据池通常只包含较小比例的数据，因此在配置此池时，所需的 PG 数量通常可以设置在 64 到 128 范围内。数据池的配置应类似于
+    RBD 池，PG 的数量需要根据集群中的 OSD 数量和 CephFS 文件系统将要存储的数据量来计算。
 - en: At least one MDS will also need to be deployed, but it is recommended that,
     for any production deployment, at least two MDSes are deployed with one running
     as a standby or standby-replay.
+  id: totrans-192
   prefs: []
   type: TYPE_NORMAL
+  zh: 至少需要部署一个 MDS，但建议在任何生产环境部署中，至少部署两个 MDS，其中一个作为备用或备用回放运行。
 - en: 'Edit the `/etc/ansible/hosts` file and add the server that will hold the mds
     role. The following example is using the `mon2` VM from the test lab in [Chapter
     2](dd1d6803-6e40-4bfb-8150-b605bcc08d59.xhtml), *Deploying Ceph with Containers*:'
+  id: totrans-193
   prefs: []
   type: TYPE_NORMAL
+  zh: 编辑 `/etc/ansible/hosts` 文件，并添加将承载 mds 角色的服务器。以下示例使用了来自 [第 2 章](dd1d6803-6e40-4bfb-8150-b605bcc08d59.xhtml)
+    的 `mon2` 虚拟机，*使用容器部署 Ceph*：
 - en: '![](img/d106caf0-a351-43bd-9e28-cfe260bbbd5f.png)'
+  id: totrans-194
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/d106caf0-a351-43bd-9e28-cfe260bbbd5f.png)'
 - en: 'Now run the Ansible playbook again and it will deploy the `mds`:'
+  id: totrans-195
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在重新运行 Ansible playbook，它将部署 `mds`：
 - en: '![](img/dac4ad29-1645-4124-b9a0-c124bf6a8fe1.png)'
+  id: totrans-196
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/dac4ad29-1645-4124-b9a0-c124bf6a8fe1.png)'
 - en: 'Once the playbook has finished running, check that the `mds` is up and running;
     this can be viewed via the `ceph-s` output:'
+  id: totrans-197
   prefs: []
   type: TYPE_NORMAL
+  zh: 一旦 playbook 运行完成，检查 `mds` 是否正常运行；可以通过 `ceph-s` 输出查看：
 - en: '![](img/8d112c02-1355-4cb9-8a5e-a9a42fe7b5df.png)'
+  id: totrans-198
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/8d112c02-1355-4cb9-8a5e-a9a42fe7b5df.png)'
 - en: 'Ansible should have provisioned data pools and metadata pools as part of the
     deployment process; this can be confirmed by running the following command from
     one of the monitor nodes:'
+  id: totrans-199
   prefs: []
   type: TYPE_NORMAL
+  zh: Ansible 应该在部署过程中已配置数据池和元数据池；可以通过在其中一个监视节点上运行以下命令来确认：
 - en: '[PRE25]'
+  id: totrans-200
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE25]'
 - en: '![](img/803785b4-7cc2-4033-9b9b-bb9940a5037b.png)'
+  id: totrans-201
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/803785b4-7cc2-4033-9b9b-bb9940a5037b.png)'
 - en: From the preceding screenshot, we can see that pools 6 and 7 have been created
     for CephFS. If the pools have not been created, follow the steps at the start
     of this chapter on how to create RADOS pools. While the data pools may be created
     as erasure-coded pools, the metadata pool must be of the replicated type.
+  id: totrans-202
   prefs: []
   type: TYPE_NORMAL
 - en: 'The final step in creating a CephFS filesystem is to instruct Ceph to use the
     two created RADOS pools to build the filesystem. However, as in the previous steps,
     the Ansible deployment should have handled this. We can confirm by running the
     following command:'
+  id: totrans-203
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE26]'
+  id: totrans-204
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE26]'
 - en: 'It will show the following if the CephFS filesystem has been created and is
     ready for service:'
+  id: totrans-205
   prefs: []
   type: TYPE_NORMAL
 - en: '![](img/5fd5e8f1-28fd-496a-aace-4296852540ce.png)'
+  id: totrans-206
   prefs: []
   type: TYPE_IMG
 - en: 'If the CephFS filesystem was not created, use the following command to create
     it:'
+  id: totrans-207
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE27]'
+  id: totrans-208
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE27]'
 - en: 'Now that the CephFS filesystem is active, it can be mounted to a client and
     used like any other Linux filesystem. When mounting a CephFS fileystem, the `cephx`
     user key needs to be passed via the mount command. This can be retrieved from
     the keyrings stored in the `/etc/ceph/` directory. In the following example, we
     will use the admin keyring; in production scenarios, it is recommended that a
     specific `cephx` user is created:'
+  id: totrans-209
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE28]'
+  id: totrans-210
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE28]'
 - en: '![](img/25b59cfe-f61a-475c-bf3c-64501f059b2d.png)'
+  id: totrans-211
   prefs: []
   type: TYPE_IMG
 - en: 'The hashed key is what is required to mount the CephFS filesystem:'
+  id: totrans-212
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE29]'
+  id: totrans-213
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE29]'
 - en: In this example, only a single monitor was specified; in production settings,
     it is recommended to supply all three monitor address in a comma-separated format
     to ensure failover.
+  id: totrans-214
   prefs: []
   type: TYPE_NORMAL
 - en: 'Here is confirmation that the filesystem is mounted:'
+  id: totrans-215
   prefs: []
   type: TYPE_NORMAL
 - en: '![](img/48e8b038-cf30-4601-a695-ab8df9fca54e.png)'
+  id: totrans-216
   prefs: []
   type: TYPE_IMG
 - en: How is data stored in CephFS?
+  id: totrans-217
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
 - en: To understand better how CephFS maps a POSIX-compatible filesystem over the
     top of an object store, we can look more closely at how Ceph maps file inodes
     to objects.
+  id: totrans-218
   prefs: []
   type: TYPE_NORMAL
 - en: 'First, let''s look at a file called `test`, which is stored on a CephFS filesystem
     mounted under `/mnt/tmp`. The following command uses the familiar Unix `ls` command,
     but with some extra parameters to show more details, including the file inode
     number:'
+  id: totrans-219
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE30]'
+  id: totrans-220
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE30]'
 - en: 'The following screenshot is the output of the preceding command:'
+  id: totrans-221
   prefs: []
   type: TYPE_NORMAL
 - en: '![](img/cde14e6f-4e3f-4199-99e0-5927e18c382b.png)'
+  id: totrans-222
   prefs: []
   type: TYPE_IMG
 - en: The output shows that the file is 1 G in size and that the inode number is the
     long number at the far left.
+  id: totrans-223
   prefs: []
   type: TYPE_NORMAL
 - en: 'Next, by listing the objects stored in the CephFS data pool and greping for
@@ -1126,38 +1596,51 @@
     for that file. Before we can proceed; however, we need to convert the inode number
     that is stored in decimal into hex, as that is how CephFS stores the inode numbers
     as object names:'
+  id: totrans-224
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE31]'
+  id: totrans-225
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE31]'
 - en: 'The following screenshot is the output of the preceding command:'
+  id: totrans-226
   prefs: []
   type: TYPE_NORMAL
 - en: '![](img/db179865-0b16-46bf-bad7-173f7bb54c00.png)'
+  id: totrans-227
   prefs: []
   type: TYPE_IMG
 - en: 'Now we can find the object in the pool; note that this may take a long time
     on a CephFS pool with lots of data, as it will be listing every object in the
     background:'
+  id: totrans-228
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE32]'
+  id: totrans-229
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE32]'
 - en: '![](img/f1fdc352-b0c2-4c43-a853-7bb66f1bac50.png)'
+  id: totrans-230
   prefs: []
   type: TYPE_IMG
 - en: Note that 256 objects were found. By default, CephFS breaks larger files up
     into 4 MB objects, 256 of which would equal the size of the 1 G file.
+  id: totrans-231
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意，发现了256个对象。默认情况下，CephFS将较大的文件分解为4 MB的对象，256个对象的总大小等于1 GB文件的大小。
 - en: The actual objects store the exact same data as the files viewable in the CephFS
     filesystem. If a text file is saved on a CephFS filesystem, its contents could
     be read by matching the underlying object to the inode number and using the `rados`
     command to download the object.
+  id: totrans-232
   prefs: []
   type: TYPE_NORMAL
+  zh: 实际对象存储的与在CephFS文件系统中可见的文件完全相同的数据。如果一个文本文件保存在CephFS文件系统中，它的内容可以通过将底层对象与inode编号匹配，并使用`rados`命令下载该对象来读取。
 - en: The `cephfs_metadata` pool stores all the metadata for the files stored on the
     CephFS filesystem; this includes values such as modified time, permissions, file
     names, and file locations in the directory tree. Without this metadata, the data
@@ -1168,26 +1651,35 @@
     any other RADOS pool in your Ceph cluster. There are some advanced recovery steps
     that may assist in metadata loss, which are covered in [Chapter 12](953d93b9-5cc3-4ca2-abea-24b7dc802c37.xhtml),
     *Disaster Recovery*.
+  id: totrans-233
   prefs: []
   type: TYPE_NORMAL
+  zh: '`cephfs_metadata`池存储了CephFS文件系统中所有文件的元数据；这些数据包括修改时间、权限、文件名以及文件在目录树中的位置等值。如果没有这些元数据，存储在数据池中的数据对象实际上只是随机命名的对象；数据仍然存在，但对人工操作员来说几乎没有意义。因此，CephFS元数据的丢失并不会导致实际数据丢失，但仍然会使数据变得或多或少无法读取。因此，应像保护其他RADOS池一样保护元数据池。对于元数据丢失，有一些高级恢复步骤可能会有所帮助，具体内容可以参见[第12章](953d93b9-5cc3-4ca2-abea-24b7dc802c37.xhtml)，*灾难恢复*。'
 - en: File layouts
+  id: totrans-234
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 文件布局
 - en: CephFS allows you to alter the way files are stored across the underlying objects
     by using settings that are known as file layouts. File layouts allow you to control
     the stripe size and width and also which RADOS pool the data objects will reside
     in. The file layouts are stored as extended attributes on files and directories.
     A new file or directory will inherit its parent's file layouts settings; however,
     further changes to a parent directory's layout will not affect existing files.
+  id: totrans-235
   prefs: []
   type: TYPE_NORMAL
+  zh: CephFS允许你通过使用称为文件布局的设置来改变文件在底层对象中的存储方式。文件布局允许你控制条带大小和宽度，并且还可以指定数据对象所在的RADOS池。文件布局作为扩展属性存储在文件和目录上。新的文件或目录将继承其父目录的文件布局设置；然而，对父目录布局的进一步更改不会影响已存在的文件。
 - en: Adjusting the file striping will normally be done for performance reasons to
     increase the parallelism of reading larger files as a section of data will end
     up being spread across more OSDs. By default, there is no striping and a large
     file stored in CephFS will simply span across multiple objects of 4 MB in size.
+  id: totrans-236
   prefs: []
   type: TYPE_NORMAL
+  zh: 调整文件条带化通常是出于性能原因，以增加读取大文件时的并行性，因为数据的某个部分将被分布到更多的OSD中。默认情况下，不使用条带化，存储在CephFS中的大文件将仅跨越多个4
+    MB大小的对象。
 - en: File layouts can also be used to alter which data pool the objects for a file
     are stored in. This may be useful to allow different directories to be used for
     hot and cold data, where the hot files may reside on a 3x SSD pool and the cold
@@ -1195,53 +1687,78 @@
     is possibly having a sub directory called `Archive/`, where users can copy files
     that are no longer expected to be in daily use. Any file copied into this directory
     would be stored on the erasure-coded pool.
+  id: totrans-237
   prefs: []
   type: TYPE_NORMAL
+  zh: 文件布局还可以用来改变文件对象存储在哪个数据池中。这对于允许不同目录存储热数据和冷数据可能非常有用，其中热文件可能存储在一个3倍冗余的SSD池中，而冷文件存储在由旋转磁盘支持的纠删码池中。一个很好的例子是可能有一个名为`Archive/`的子目录，用户可以将不再预计日常使用的文件复制到该目录。复制到该目录中的任何文件都会存储在纠删码池中。
 - en: 'File layouts can be viewed and edited by using the `setfattr` and `getfattr` tools:'
+  id: totrans-238
   prefs: []
   type: TYPE_NORMAL
+  zh: 可以使用`setfattr`和`getfattr`工具查看和编辑文件布局：
 - en: '[PRE33]'
+  id: totrans-239
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE33]'
 - en: '![](img/8fac0a4a-84c6-4797-b871-f5a09db3e044.png)'
+  id: totrans-240
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/8fac0a4a-84c6-4797-b871-f5a09db3e044.png)'
 - en: It can be seen that the default file layout is storing the data objects for
     the test file in the `cephfs_data` pool. It can also be seen that the file is
     split into 4 MB objects and, due to the `stripe_unit` also being 4 MB and `stripe_count`
     being equal to 1, that no striping is being used.
+  id: totrans-241
   prefs: []
   type: TYPE_NORMAL
+  zh: 可以看出，默认的文件布局是将测试文件的数据对象存储在`cephfs_data`池中。还可以看到，该文件被分割成4 MB的对象，并且由于`stripe_unit`也是4
+    MB，且`stripe_count`等于1，因此没有使用条带化。
 - en: Snapshots
+  id: totrans-242
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 快照
 - en: CephFS also supports snapshots down to a per-directory level; the snapshot doesn't
     need to include the whole CephFS filesystem. Each directory on a CephFS filesystem
     contains a hidden `.snap` directory; when a new sub directory is created inside,
     a snapshot is effectively taken and the view inside this new sub directory will
     represent the state of the original directory at the point when the snapshot was
     taken.
+  id: totrans-243
   prefs: []
   type: TYPE_NORMAL
+  zh: CephFS 还支持到每个目录级别的快照；快照不需要包含整个 CephFS 文件系统。每个 CephFS 文件系统上的目录都包含一个隐藏的 `.snap`
+    目录；当在其中创建一个新的子目录时，实际上会创建一个快照，且该子目录中的视图将表示在快照创建时原目录的状态。
 - en: Multiple snapshots can be taken and browsed independently from each other, enabling
     the snapshots to be used as part of a short-term archiving scheme. One such use
     when CephFS is exported via Samba is to use the snapshot functionality to be exposed
     through the Windows Explorer previous versions tab.
+  id: totrans-244
   prefs: []
   type: TYPE_NORMAL
+  zh: 可以拍摄多个快照，并可以相互独立浏览，这使得快照能够作为短期归档方案的一部分来使用。当通过 Samba 导出 CephFS 时，其中一个使用方式是通过
+    Windows Explorer 的“先前版本”标签页来暴露快照功能。
 - en: 'In the following example, a test file is created, a snapshot taken, and then
     the file is modified. By examining the contents of the live and the file in the
     snapshot, we can see how CephFS snapshots present themselves:'
+  id: totrans-245
   prefs: []
   type: TYPE_NORMAL
+  zh: 在以下示例中，首先创建了一个测试文件，拍摄了快照，然后修改了该文件。通过检查实时文件和快照中的文件内容，我们可以看到 CephFS 快照的呈现方式：
 - en: '![](img/e5bee441-3b39-43e1-add0-e2942ce6c65a.png)'
+  id: totrans-246
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/e5bee441-3b39-43e1-add0-e2942ce6c65a.png)'
 - en: Multi-MDS
+  id: totrans-247
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 多 MDS
 - en: A new feature of CephFS is the support for multiple active MDSes. Previously,
     it was only recommended to have a single active MDS with one or more standby,
     which for smaller CephFS deployments was more than adequate. However, in larger
@@ -1250,16 +1767,23 @@
     active MDSes are purely for increased performance and do not provide any failover
     or high availability themselves; therefore, sufficient standby MDSes should always
     be provisioned.
+  id: totrans-248
   prefs: []
   type: TYPE_NORMAL
+  zh: CephFS 的新功能是支持多个活跃的 MDS。以前，建议只有一个活跃的 MDS 和一个或多个备用 MDS，这对于较小的 CephFS 部署来说足够了。然而，在较大的部署中，单个
+    MDS 可能开始成为限制，尤其是由于 MDS 的单线程限制。需要注意的是，多个活跃的 MDS 仅用于提高性能，并不提供任何故障转移或高可用性；因此，始终应配置足够的备用
+    MDS。
 - en: When multiple active MDSes are present, the CephFS filesystem is split across
     each MDS so that the metadata requests are hopefully not all being handled by
     a single MDS anymore. This splitting process is done at a per-directory level
     and is dynamically adjusted based on the metadata request load. This splitting
     process involves the creation of new CephFS ranks; each rank requires a working
     MDS to allow it to become active.
+  id: totrans-249
   prefs: []
   type: TYPE_NORMAL
+  zh: 当多个活动的 MDS 存在时，CephFS 文件系统会被分配到每个 MDS 上，这样元数据请求就不会全部由单个 MDS 来处理。这个分配过程是在每个目录级别进行的，并且会根据元数据请求负载动态调整。这个分配过程涉及到创建新的
+    CephFS 排名；每个排名需要一个工作中的 MDS 才能使其激活。
 - en: 'In the following example, three active MDS servers are in use in the Ceph cluster.
     The primary MDS running rank 0 always hosts the CephFS root. The second MDS is
     serving metadata for the vertically-striped pattern directories, as their metadata
@@ -1268,32 +1792,47 @@
     of the directory containing Cat Gifs; this directory experiences an extremely
     high metadata request load and so has a separate rank and MDS assigned all to
     itself, as shown by the horizontal pattern:'
+  id: totrans-250
   prefs: []
   type: TYPE_NORMAL
+  zh: 在以下示例中，Ceph 集群中使用了三个活跃的 MDS 服务器。主 MDS 运行排名 0，始终托管 CephFS 根目录。第二个 MDS 为垂直条纹模式的目录提供元数据服务，因为它们的元数据负载相当高。所有其他目录的元数据仍由主
+    MDS 提供服务，因为它们几乎没有活动，唯一的例外是包含猫咪 GIF 的目录；该目录的元数据请求负载极高，因此有一个单独的排名和 MDS 分配给它，如水平模式所示：
 - en: '![](img/18fb1e0f-6860-43c1-99eb-109cd0c5d358.png)'
+  id: totrans-251
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/18fb1e0f-6860-43c1-99eb-109cd0c5d358.png)'
 - en: RGW
+  id: totrans-252
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: RGW
 - en: The **RADOS Gateway** (**RGW**) presents the Ceph native object store via a
     S3 or swift-compatible interface, which are the two most popular object APIs for
     accessing object storage, with S3 being the dominant one, mainly due to the success
     of Amazon's AWS S3\. This section of the book will primarily focus on S3.
+  id: totrans-253
   prefs: []
   type: TYPE_NORMAL
+  zh: '**RADOS 网关** (**RGW**) 通过 S3 或 Swift 兼容接口呈现 Ceph 原生的对象存储，这是两种最流行的对象 API 用于访问对象存储，S3
+    因为亚马逊 AWS S3 的成功而成为主流。本书的这一部分将主要关注 S3。'
 - en: RGW has recently been renamed to Ceph Object Gateway although both the previous
     names are still widely used.
+  id: totrans-254
   prefs: []
   type: TYPE_NORMAL
+  zh: RGW 最近已更名为 Ceph 对象网关，尽管之前的名称仍然广泛使用。
 - en: The radosgw component of Ceph is responsible for turning S3 and swift API requests
     into RADOS requests. Although it can be installed alongside other components,
     for performance reasons, it's recommended to be installed on a separate server.
     The radosgw components are completely stateless and so lend themselves well to
     being placed behind a load balancer to allow for horizontal scaling.
+  id: totrans-255
   prefs: []
   type: TYPE_NORMAL
+  zh: Ceph 的 radosgw 组件负责将 S3 和 swift API 请求转换为 RADOS 请求。尽管它可以与其他组件一起安装，但出于性能考虑，建议将其安装在单独的服务器上。radosgw
+    组件完全无状态，因此非常适合放置在负载均衡器后面，从而实现横向扩展。
 - en: Aside from storing user data, the RGW also requires a number of additional RADOS
     pools to store additional metadata. With the exception of the index pool, most
     of these pools are very lightly utilized and so can be created with a small amount
@@ -1304,8 +1843,12 @@
     for spinning disks. Quite often, clients are remote and the latency of WAN connections
     offsets a lot of the gains to be had from SSDs. It should be noted that only the
     data pool should be placed on erasure-coded pools.
+  id: totrans-256
   prefs: []
   type: TYPE_NORMAL
+  zh: 除了存储用户数据外，RGW 还需要一些额外的 RADOS 池来存储附加的元数据。除了索引池之外，这些池大多数使用非常少，因此可以使用较少的 PG（大约
+    64 通常就足够了）来创建。索引池有助于列出桶的内容，因此强烈建议将索引池放置在 SSD 上。数据池可以存放在旋转硬盘或 SSD 上，具体取决于存储的对象类型，尽管对象存储通常与旋转硬盘匹配得很好。由于客户端通常是远程的，WAN
+    连接的延迟会抵消 SSD 带来的许多优势。需要注意的是，只有数据池应当放置在擦除编码池上。
 - en: Handily, RGW will create the required pools the first time it tries to access
     them, reducing the complexity of installation somewhat. However, pools are created
     with their default settings, and it may be that you wish to create an erasure-coded
@@ -1314,71 +1857,111 @@
     created as an erasure pool. As long as the name matches the intended pool name
     for the RGW zone, RGW will use this pool on first access, instead of trying to
     create a new one.
+  id: totrans-257
   prefs: []
   type: TYPE_NORMAL
+  zh: 幸运的是，RGW 在第一次尝试访问所需池时会自动创建它们，从而简化了一些安装过程。然而，池是以默认设置创建的，可能您希望为数据对象存储创建一个擦除编码池。只要
+    RGW 服务未进行任何访问，数据池在创建后不应存在，因此可以手动创建为擦除池。只要名称与 RGW 区域的预期池名称匹配，RGW 将在第一次访问时使用该池，而不是尝试创建新的池。
 - en: Deploying RGW
+  id: totrans-258
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 部署 RGW
 - en: We will use the Ansible lab deployed in [Chapter 2](dd1d6803-6e40-4bfb-8150-b605bcc08d59.xhtml), *Deploying
     Ceph with Containers*, to deploy a RGW.
+  id: totrans-259
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们将使用在[第 2 章](dd1d6803-6e40-4bfb-8150-b605bcc08d59.xhtml)中部署的 Ansible 实验环境，*通过容器部署
+    Ceph*，来部署 RGW。
 - en: 'First, edit the `/etc/ansible/hosts` file and add the `rgws` role to the `mon3`
     VM:'
+  id: totrans-260
   prefs: []
   type: TYPE_NORMAL
+  zh: 首先，编辑 `/etc/ansible/hosts` 文件，并将 `rgws` 角色添加到 `mon3` 虚拟机：
 - en: '![](img/9cddfdbb-6e1d-4cce-a20a-653d11e99d4c.png)'
+  id: totrans-261
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/9cddfdbb-6e1d-4cce-a20a-653d11e99d4c.png)'
 - en: 'We also need to update the `/etc/ansible/group_vars/ceph` file to add the `radosgw_address`
     variable; it will be set to `[::]`, which means bind to all IPv4 and IPv6 interfaces:'
+  id: totrans-262
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们还需要更新 `/etc/ansible/group_vars/ceph` 文件，添加 `radosgw_address` 变量；它将设置为 `[::]`，意味着绑定到所有
+    IPv4 和 IPv6 接口：
 - en: '![](img/cd34c35f-5784-47c3-bee1-16359030f8db.png)'
+  id: totrans-263
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/cd34c35f-5784-47c3-bee1-16359030f8db.png)'
 - en: 'Now run the Ansible playbook again:'
+  id: totrans-264
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在再次运行 Ansible 剧本：
 - en: '[PRE34]'
+  id: totrans-265
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE34]'
 - en: 'After running, you should see it has successfully deployed the `RGW` component:'
+  id: totrans-266
   prefs: []
   type: TYPE_NORMAL
+  zh: 执行后，您应该能看到它已成功部署 `RGW` 组件：
 - en: '![](img/19f2f834-c7ed-42e8-aed6-87bb5aff3ae6.png)'
+  id: totrans-267
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/19f2f834-c7ed-42e8-aed6-87bb5aff3ae6.png)'
 - en: 'Viewing the Ceph status from a monitor node, we can check that the `RGW` service
     has registered with the Ceph cluster and is operational:'
+  id: totrans-268
   prefs: []
   type: TYPE_NORMAL
+  zh: 从监视节点查看 Ceph 状态时，我们可以检查 `RGW` 服务是否已在 Ceph 集群中注册并正常运行：
 - en: '![](img/2ec09db0-549e-4fa2-a135-d552b668b8ab.png)'
+  id: totrans-269
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/2ec09db0-549e-4fa2-a135-d552b668b8ab.png)'
 - en: 'Now that the RGW is active, a user account is required to interact with the
     S3 API, and this can be created using the `radosgw-admin` tool shown as follows:'
+  id: totrans-270
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在 RGW 已经激活，用户帐户是与 S3 API 交互所必需的，可以使用以下所示的 `radosgw-admin` 工具来创建：
 - en: '[PRE35]'
+  id: totrans-271
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE35]'
 - en: '![](img/66873c73-6500-431a-a675-ee5b4f6055bd.png)'
+  id: totrans-272
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/66873c73-6500-431a-a675-ee5b4f6055bd.png)'
 - en: Note the output from the command, particularly the `access_key` and `secret_key`,
     these are used with S3 clients to authenticate with the RGW.
+  id: totrans-273
   prefs: []
   type: TYPE_NORMAL
 - en: 'To upload objects to our S3-capable Ceph cluster, we first need to create an
     S3 bucket. We will use the `s3cmd` tool to do this, which is shown as follows:'
+  id: totrans-274
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE36]'
+  id: totrans-275
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE36]'
 - en: '![](img/33d77ab5-bdbb-4ba0-beac-ba6696e241ef.png)'
+  id: totrans-276
   prefs: []
   type: TYPE_IMG
 - en: 'Now that `s3cmd` is installed, it needs to be configured to point at our RGW
@@ -1386,50 +1969,67 @@
     initial configuration. During the configuration wizard, it will prompt for the
     access key and secret that was generated when the user account was created, which
     is shown as follows:'
+  id: totrans-277
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE37]'
+  id: totrans-278
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE37]'
 - en: '![](img/ce6a0468-5a10-4339-babd-f3be7af994ef.png)'
+  id: totrans-279
   prefs: []
   type: TYPE_IMG
 - en: 'The generated configuration will be pointing to Amazon''s S3 service; the generated
     configuration file needs to be edited and a few options modified. Edit the `.s3cfg`
     file in your Linux user''s home directory and make the following changes:'
+  id: totrans-280
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE38]'
+  id: totrans-281
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE38]'
 - en: 'Comment out the `bucket_location` variable:'
+  id: totrans-282
   prefs: []
   type: TYPE_NORMAL
 - en: '![](img/a99c45d8-cdd4-4811-85ce-a2437a31c6f3.png)'
+  id: totrans-283
   prefs: []
   type: TYPE_IMG
 - en: 'Change the `host_base` and `host_buckets` to match the address of the RGW:'
+  id: totrans-284
   prefs: []
   type: TYPE_NORMAL
 - en: '![](img/99bf9dae-fdd0-4fe1-9150-a29b313452de.png)'
+  id: totrans-285
   prefs: []
   type: TYPE_IMG
 - en: 'Save the file and quit back to the shell; `s3cmd` can now be used to manipulate
     your `s3` storage. The following example will create a `test` bucket where objects
     can be uploaded:'
+  id: totrans-286
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE39]'
+  id: totrans-287
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE39]'
 - en: '![](img/c6579b14-567d-4e53-87e8-0bb8eb7f6485.png)'
+  id: totrans-288
   prefs: []
   type: TYPE_IMG
 - en: You now have a fully functional S3-compatible storage platform ready to explore
     the world of object storage.
+  id: totrans-289
   prefs: []
   type: TYPE_NORMAL
 - en: Summary
+  id: totrans-290
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
@@ -1438,51 +2038,63 @@
     now be capable of making the best decision when it comes to deciding between replicated
     and erasure pools. You also have a more in-depth understanding of how erasure-coded
     pools function, which will aid planning and operations.
+  id: totrans-291
   prefs: []
   type: TYPE_NORMAL
 - en: You should now feel confident in deploying Ceph clusters to provide block, file,
     and object storage, and be able to demonstrate regular administrative tasks.
+  id: totrans-292
   prefs: []
   type: TYPE_NORMAL
 - en: In the next chapter, we will learn about librados and how to use it to make
     custom applications that talk directly to Ceph.
+  id: totrans-293
   prefs: []
   type: TYPE_NORMAL
 - en: Questions
+  id: totrans-294
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
 - en: Name two different erasure-coding techniques.
+  id: totrans-295
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: What is the process called when an erasure-coded pool does a partial write to
     an object?
+  id: totrans-296
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: Why might you choose an erasure-coded profile with two parity shards?
+  id: totrans-297
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: What is the process called to turn a cloned snapshot into a full-fat RBD image?
+  id: totrans-298
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: What Ceph daemon is required to run a CephFS filesystem?
+  id: totrans-299
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: Why might you choose to run multiple active metadata servers over a single one
     in a CephFS filesystem?
+  id: totrans-300
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: What Ceph daemon is required to run a RGW?
+  id: totrans-301
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: What two APIs is Ceph's RGW capable of supporting?
+  id: totrans-302
   prefs:
   - PREF_OL
   type: TYPE_NORMAL

@@ -1494,17 +1494,20 @@
   id: totrans-204
   prefs: []
   type: TYPE_NORMAL
+  zh: 在内核 4.4 及以上版本中，你可以将 `readahead` 值设置得更高，从而在一秒钟内体验到数百 MB 的读取性能。
 - en: Tuning CephFS
   id: totrans-205
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 调优 CephFS
 - en: There are two main performance characteristics that determine CephFS performance—the
     speed of metadata access and the speed of data access, although in the majority
     of cases, both of these contribute to access requests.
   id: totrans-206
   prefs: []
   type: TYPE_NORMAL
+  zh: 有两个主要的性能特征决定了 CephFS 的性能——元数据访问速度和数据访问速度，尽管在大多数情况下，这两者都对访问请求有所贡献。
 - en: It is important to understand that in CephFS, once the metadata has been retrieved
     for a file, reads to the actual file data do not require any further metadata
     operations until the file is closed by the client. Similarly, when writing files,
@@ -1514,6 +1517,8 @@
   id: totrans-207
   prefs: []
   type: TYPE_NORMAL
+  zh: 需要理解的是，在 CephFS 中，一旦文件的元数据被检索，实际文件数据的读取就不再需要任何进一步的元数据操作，直到文件被客户端关闭。同样，当写入文件时，只有当脏数据被客户端刷新时，元数据才会被更新。因此，对于大型的顺序缓冲
+    IO，元数据操作可能只占总集群 IO的一小部分。
 - en: Similarly, for CephFS filesystems that are dealing with a large number of clients
     constantly opening and closing lots of smaller files, metadata operations will
     have a much bigger role to play in determining overall performance. Additionally,
@@ -1522,12 +1527,14 @@
   id: totrans-208
   prefs: []
   type: TYPE_NORMAL
+  zh: 类似地，对于那些处理大量客户端不断打开和关闭多个小文件的 CephFS 文件系统，元数据操作在确定整体性能方面将起到更大的作用。此外，元数据还用于提供与文件系统相关的客户端信息，例如提供目录列表。
 - en: Dealing with CephFS's data pool performance should be handled like any other
     Ceph performance requirements that were covered in this chapter, so for the purpose
     of this section, metadata performance will be the focus.
   id: totrans-209
   prefs: []
   type: TYPE_NORMAL
+  zh: 处理 CephFS 数据池性能时，应像本章中涵盖的其他 Ceph 性能需求一样进行处理，因此本节的重点将放在元数据性能上。
 - en: 'Metadata performance is determined by two factors: the speed of reading/writing
     metadata via the RADOS metadata pool, and the speed at which the MDS can handle
     client requests. First, make sure that the metadata pool is residing on flash
@@ -1538,6 +1545,8 @@
   id: totrans-210
   prefs: []
   type: TYPE_NORMAL
+  zh: 元数据性能由两个因素决定：通过 RADOS 元数据池读取/写入元数据的速度，以及 MDS 处理客户端请求的速度。首先，确保元数据池存储在闪存上，因为这将把元数据请求的延迟至少减少一个数量级，如果不是更多的话。然而，正如本章
+    *延迟* 部分所讨论的那样，分布式网络存储平台引入的延迟也可能影响元数据性能。
 - en: To work around some of this latency, the MDS has the concept of a local cache
     to serve hot metadata requests from. By default, an MDS reserves 1 GB of RAM to
     use as a cache and, generally speaking, the more ram you can allocate, the better.
@@ -1548,6 +1557,9 @@
   id: totrans-211
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了规避一些延迟，MDS 引入了本地缓存的概念，用来处理热点元数据请求。默认情况下，MDS 会保留 1 GB 的 RAM 用作缓存，通常来说，你分配的
+    RAM 越多越好。该预留量由 `mds_cache_memory_limit` 变量控制。通过增加 MDS 可用作缓存的内存量，可以减少需要访问 RADOS
+    池的请求数量，同时 RAM 的本地性也会降低元数据访问延迟。
 - en: There will come a point when adding additional RAM brings very little benefit.
     This may either be due to the cache being sufficiently sized that the majority
     of requests are being served from cache, or that the number of requests the actual
@@ -1555,6 +1567,7 @@
   id: totrans-212
   prefs: []
   type: TYPE_NORMAL
+  zh: 当增加额外的 RAM 带来的好处变得很小时，可能是因为缓存的大小已经足够，绝大多数请求都来自缓存，或者是实际的 MDS 已经达到了它可以处理的请求数量。
 - en: Regarding the later point, the MDS process is single-threaded and so there will
     come a point where the number of metadata requests is causing an MDS to consume
     100% of a single CPU core and no additional caching or SSDs will help. The current
@@ -1746,6 +1759,8 @@
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 它不考虑不同 OSD 上的不同池。例如，如果你有一个 SSD 层和一个 HDD 层，`reweight-by-utilization` 命令仍然会试图跨所有
+    OSD 平衡数据。如果你的 SSD 层没有像 HDD 层那样满，命令将无法按预期工作。如果你希望平衡仅限于单个桶中的 OSD，可以查看 CERN 创建的该命令的脚本版本。
 - en: It is possible to reweight the cluster to the point that CRUSH is unable to
     determine placement for some PGs. If recovery halts and one or more PGs are left
     in a remapped state, this is likely what happened. Simply increase or reset the
@@ -1754,11 +1769,13 @@
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 可以重新调整集群权重，直到 CRUSH 无法为某些 PG 确定位置。如果恢复停止，并且一个或多个 PG 留在重新映射状态下，这很可能就是发生的情况。只需增加或重置权重值即可解决问题。
 - en: Once you are confident with the operation of the command, it is possible to
     schedule it via `cron` so that your cluster is kept in a more balanced state automatically.
   id: totrans-238
   prefs: []
   type: TYPE_NORMAL
+  zh: 一旦你确认了命令的操作，便可以通过 `cron` 来调度它，这样集群就能自动保持更平衡的状态。
 - en: Since the Luminous release, a new manager module has been included, called **Ceph
     balancer**. This new module works continuously in the background to optimize PG
     distribution and ensure that the maximum amount of capacity is available on your
@@ -1766,6 +1783,8 @@
   id: totrans-239
   prefs: []
   type: TYPE_NORMAL
+  zh: 自 Luminous 版本发布以来，新增了一个管理模块，叫做 **Ceph balancer**。这个新模块会在后台持续工作，优化 PG 分布，并确保
+    Ceph 集群的最大容量可用。
 - en: The Ceph balancer module can use one of two methods to balance data distribution.
     The first is crush-compat; this method uses an additional weight field to adjust
     the weights of each OSD. The main benefit of crush-compat is that it's backward-compatible
@@ -1776,10 +1795,14 @@
   id: totrans-240
   prefs: []
   type: TYPE_NORMAL
+  zh: Ceph balancer 模块可以使用两种方法来平衡数据分布。第一种是 crush-compat；这种方法使用额外的权重字段来调整每个 OSD 的权重。crush-compat
+    的主要优点是它与旧版客户端兼容。另一种方法叫做 upmap；upmap 能比 crush-compat 实现更精细的 PG 映射，因为它利用 OSD 映射中的新功能来影响
+    PG 映射。缺点是，由于这些新功能，Ceph 客户端需要运行 Luminous 或更新版本。
 - en: 'To enable ceph balancer, simply run these two commands:'
   id: totrans-241
   prefs: []
   type: TYPE_NORMAL
+  zh: 要启用 ceph balancer，只需运行这两个命令：
 - en: '[PRE21]'
   id: totrans-242
   prefs: []
@@ -1791,11 +1814,13 @@
   id: totrans-243
   prefs: []
   type: TYPE_NORMAL
+  zh: 你将看到 Ceph 开始回填，因为 PG 被重新映射到新的 OSD，以平衡空间利用率；这将持续进行，直到 Ceph balancer 将 OSD 利用率的偏差降低。
 - en: Summary
   id: totrans-244
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 总结
 - en: You should now have extensive knowledge on how to tune a Ceph cluster to maximize
     performance and achieve lower latency. Through the use of benchmarks, you should
     now be able to perform before and after tests to confirm whether your tunings
@@ -1805,6 +1830,8 @@
   id: totrans-245
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在你应该已经掌握了如何调优 Ceph 集群，以最大化性能并实现更低的延迟。通过使用基准测试，你应该能够进行前后对比测试，确认调优是否达到了预期效果。值得回顾官方
+    Ceph 文档，以更好地理解其他可能对集群有益的配置选项。
 - en: You have also learned about some of the key factors that effect Ceph performance
     and how to tune them, such as CPU clock speed and sleep states. Ensuring that
     the infrastructure your Ceph cluster is running on is running at peak performance
@@ -1812,38 +1839,47 @@
   id: totrans-246
   prefs: []
   type: TYPE_NORMAL
+  zh: 你还学习了影响 Ceph 性能的一些关键因素，以及如何调整它们，例如 CPU 时钟速度和睡眠状态。确保 Ceph 集群运行的基础设施处于最佳性能状态，将确保
+    Ceph 发挥其最佳性能。
 - en: In the next chapter we will discuss tiering and how it can be used to increase
     performance by combining different disk technologies together.
   id: totrans-247
   prefs: []
   type: TYPE_NORMAL
+  zh: 在下一章，我们将讨论分层技术及其如何通过将不同的磁盘技术结合起来，提高性能。
 - en: Questions
   id: totrans-248
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 问题
 - en: Is PG distribution uniform by default?
   id: totrans-249
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 默认情况下，PG 分布是否均匀？
 - en: Why is a full stripe write on an EC pool preferred?
   id: totrans-250
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 为什么在 EC 池上偏好进行全条带写操作？
 - en: For low latency, what type of CPU should be preferred?
   id: totrans-251
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 对于低延迟，应该选择哪种类型的 CPU？
 - en: What three factors largely impact latency?
   id: totrans-252
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 哪三个因素主要影响延迟？
 - en: What automated tool can be used to balance space utilization in your cluster?
   id: totrans-253
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 可以使用什么自动化工具来平衡集群中的空间利用率？

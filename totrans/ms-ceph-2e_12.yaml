@@ -1,7 +1,9 @@
 - en: Tiering with Ceph
+  id: totrans-0
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: Ceph 的分层
 - en: The tiering functionality in Ceph allows you to overlay one RADOS pool over
     another and let Ceph intelligently promote and evict objects between them. In
     most configurations, the top-level pool will be comprised of fast storage devices
@@ -10,61 +12,86 @@
     SCSI** (**SAS**) disks. If the working set of your data is of a comparatively
     small percentage, then this allows you to use Ceph to provide high capacity storage
     but still maintain a good level of performance of frequently accessed data.
+  id: totrans-1
   prefs: []
   type: TYPE_NORMAL
+  zh: Ceph 中的分层功能允许你将一个 RADOS 池覆盖到另一个 RADOS 池上，并让 Ceph 智能地在它们之间提升和驱逐对象。在大多数配置中，顶层池将由快速存储设备组成，如**固态硬盘**（**SSDs**），而基础池则由较慢的存储设备组成，如**串行
+    ATA**（**SATA**）或**串行附加 SCSI**（**SAS**）硬盘。如果你的数据工作集的比例相对较小，这允许你使用 Ceph 提供高容量存储，同时仍能保持对频繁访问数据的良好性能。
 - en: 'In this chapter, we will cover the following topics:'
+  id: totrans-2
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本章中，我们将讨论以下主题：
 - en: How Ceph's tiering functionality works
+  id: totrans-3
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: Ceph 的分层功能如何工作
 - en: What good use cases for tiering are
+  id: totrans-4
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 分层的良好应用场景是什么
 - en: How to configure two pools into a tier
+  id: totrans-5
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 如何将两个池配置为一个分层
 - en: Various tuning options available for tiering
+  id: totrans-6
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 可用于分层的各种调整选项
 - en: It's recommended that you should be running at least the Jewel release of Ceph
     if you wish to use the tiering functionality. Previous releases were lacking a
     lot of features that made tiering usable.
+  id: totrans-7
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你希望使用分层功能，建议至少运行 Ceph 的 Jewel 版本。以前的版本缺乏许多使分层可用的特性。
 - en: Tiering versus caching
+  id: totrans-8
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 分层与缓存的区别
 - en: Although often described as **cache tiering**, it's better to think of the functionality
     in Ceph as a tiering technology rather than a cache. It's important that you take
     this into consideration before reading any further, as it's vital to understand
     the difference between the two.
+  id: totrans-9
   prefs: []
   type: TYPE_NORMAL
+  zh: 虽然通常将其描述为**缓存分层**，但更好的理解方式是将 Ceph 中的功能视为一种分层技术，而非缓存。在继续阅读之前，理解两者之间的差异非常重要。
 - en: A cache is typically designed to accelerate access to a set of data unless it's
     a writeback cache; it will not hold the only copy of the data, and normally there
     is little overhead to promoting data to cache. The cache tends to operate over
     a shorter time frame and quite often everything that is accessed is promoted into
     the cache.
+  id: totrans-10
   prefs: []
   type: TYPE_NORMAL
+  zh: 缓存通常旨在加速对一组数据的访问，除非它是一个写回缓存；它不会持有数据的唯一副本，通常将数据提升到缓存的开销较小。缓存通常在较短的时间框架内操作，并且经常会将所有访问的数据提升到缓存中。
 - en: A tiering solution is also designed to accelerate access to a set of data; however,
     its promotion strategy normally works over a longer period of time and is more
     selective about what data is promoted, mainly due to the promotion action having
     a small impact on overall storage performance. Also, it is quite common with tiering
     technologies that only a single tier may hold the valid state of the data, and
     so all tiers in the system need equal protection against data loss.
+  id: totrans-11
   prefs: []
   type: TYPE_NORMAL
+  zh: 分层解决方案也旨在加速对一组数据的访问；然而，它的提升策略通常在更长的时间内工作，并且在选择提升哪些数据时更加谨慎，这主要是因为提升操作对整体存储性能的影响较小。此外，在分层技术中，通常只有一个分层可能持有数据的有效状态，因此系统中的所有分层都需要得到平等的保护，以防数据丢失。
 - en: How Ceph's tiering functionality works
+  id: totrans-12
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: Ceph 的分层功能如何工作
 - en: Once you have configured a RADOS pool to be an overlay of another RADOS pool,
     Ceph's tiering functionality works on the basic principal that if an object does
     not exist in the top-level tier, then it must exist in the base tier. All object
@@ -74,15 +101,20 @@
     the request back through the top tier to the client. It's important to note that
     the tiering functionality is transparent to clients, and there is no specific
     client configuration needed.
+  id: totrans-13
   prefs: []
   type: TYPE_NORMAL
+  zh: 一旦你配置了一个 RADOS 池作为另一个 RADOS 池的覆盖，Ceph 的分层功能基于以下基本原理工作：如果一个对象不存在于顶层分层中，则它必须存在于基础分层中。所有来自客户端的对象请求都会发送到顶层分层；如果
+    OSD 没有请求的对象，则根据分层模式，它可能会将读取或写入请求代理到基础分层，或强制进行提升。然后，基础分层通过顶层分层将请求代理回客户端。需要注意的是，分层功能对客户端是透明的，不需要特定的客户端配置。
 - en: There are three main actions in tiering that move objects between tiers. **Promotions**
     copy objects from the base tier up to the top tier. If tiering is configured in
     writeback mode, the **flushing** action is used to update the contents of the
     base tier object from the top tier. Finally, when the top-tier pool reaches capacity,
     objects are evicted by the **eviction** action.
+  id: totrans-14
   prefs: []
   type: TYPE_NORMAL
+  zh: 在分层中有三种主要操作将对象在各个层级之间移动。**提升**操作将对象从基础层复制到顶层。如果分层配置为写回模式，则使用**刷新**操作来更新基础层对象的内容。最后，当顶层池达到容量时，对象会通过**逐出**操作被逐出。
 - en: In order to be able to make decisions on what objects to move between the two
     tiers, Ceph uses HitSets to track access to objects. A **HitSet** is a collection
     of all object access requests and is consulted to determine if an object has had
@@ -93,108 +125,149 @@
     there is no concept of storing the number of accesses to an object in a single
     HitSet. If an object appears in a number of the most recent HitSets and is in
     the base pool, then it will be promoted.
+  id: totrans-15
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了能够做出在两个层级之间移动对象的决策，Ceph使用HitSets来追踪对象的访问。**HitSet**是所有对象访问请求的集合，查询它可以判断一个对象自从该HitSet创建以来是否有读或写请求。HitSets使用**Bloom过滤器**来统计性地追踪对象访问，而不是存储每个对象的每次访问，这样会产生巨大的开销。Bloom过滤器只存储二进制状态，一个对象只能被标记为已访问或未访问，并且没有存储单个HitSet中对象访问次数的概念。如果一个对象出现在多个最近的HitSets中，并且位于基础池中，那么它将被提升。
 - en: Likewise, objects that no longer appear in recent HitSets will become candidates
     for flushing or eviction if the top tier comes under pressure. The number of HitSets
     and how often a new one gets created can be configured, along with the required
     number of recent HitSets a write or read I/O must appear in, in order for a promotion
     to take place. The size of the top-level tier can also be configured and is disconnected
     from the available capacity of the RADOS pool it sits on.
+  id: totrans-16
   prefs: []
   type: TYPE_NORMAL
+  zh: 同样，如果对象不再出现在最近的HitSets中，当顶层受到压力时，它们将成为刷新或逐出的候选对象。可以配置HitSets的数量以及每个新HitSet创建的频率，此外，还可以配置写入或读取I/O必须出现在多少个最近的HitSets中，才能触发提升操作。顶层的大小也可以配置，并且与其所在RADOS池的可用容量无关。
 - en: There are a number of configuration and tuning options that define how Ceph
     reacts to the generated HitSets and the thresholds at which promotions, flushes,
     and evictions occur. These will be covered in more detail later in the chapter.
+  id: totrans-17
   prefs: []
   type: TYPE_NORMAL
+  zh: 有许多配置和调优选项定义了Ceph如何处理生成的HitSets，以及在什么阈值下会发生提升、刷新和逐出操作。后续章节会更详细地介绍这些内容。
 - en: What is a bloom filter?
+  id: totrans-18
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 什么是Bloom过滤器？
 - en: A bloom filter is used in Ceph to provide an efficient way of tracking whether
     an object is a member of a HitSet without having to individually store the access
     status of each object. It is probabilistic in nature, and although it can return
     **false positives**, it will never return a **false negative**. This means that
     when querying a bloom filter, it may report that an item is present when it is
     not, but it will never report that an item is not present when it is.
+  id: totrans-19
   prefs: []
   type: TYPE_NORMAL
+  zh: Bloom过滤器在Ceph中用于提供一种高效的方式来追踪一个对象是否是HitSet的成员，而无需单独存储每个对象的访问状态。它本质上是概率性的，尽管它可能会返回**假阳性**，但绝不会返回**假阴性**。这意味着在查询Bloom过滤器时，它可能报告某个项存在，尽管它并不存在，但它绝不会报告某个项不存在，尽管它实际上存在。
 - en: Ceph's use of bloom filters allows it to efficiently track the access to millions
     of objects without the overhead of storing every single access. In the event of
     a false positive, it could mean that an object is incorrectly promoted; however,
     the probability of this happening combined with the minimal impact is of little
     concern.
+  id: totrans-20
   prefs: []
   type: TYPE_NORMAL
+  zh: Ceph使用Bloom过滤器可以高效地追踪数百万个对象的访问，而无需存储每个访问的开销。如果发生假阳性，这可能意味着某个对象被错误地提升；然而，这种情况发生的概率以及其带来的影响微乎其微，因此不需要过多担忧。
 - en: Tiering modes
+  id: totrans-21
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 分层模式
 - en: There are a number of tiering modes that determine the precise actions of how
     Ceph reacts to the contents of the HitSets. However, in most cases, the writeback
     mode will be used. The available modes for use in tiering are **writeback**, **forward**,
     **read-forward**, **proxy**, and **read-proxy**. The following sections provide
     brief descriptions of the available modes and how they act.
+  id: totrans-22
   prefs: []
   type: TYPE_NORMAL
+  zh: 有多种分层模式可以决定 Ceph 对 HitSets 内容的具体反应。然而，在大多数情况下，回写模式将被使用。可用于分层的模式有 **回写**、**转发**、**读取转发**、**代理**
+    和 **读取代理**。以下章节简要描述了这些模式及其行为。
 - en: Writeback
+  id: totrans-23
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 回写
 - en: In writeback mode, data is promoted to the top-level tier by both reads and
     writes depending on how frequently accessed the object is. Objects in the top-level
     tier can be modified, and dirty objects will be flushed to the pool at a later
     date. If an object needs to be read or written to in the bottom tier and the bottom
     pool supports it, then Ceph will try and directly proxy the operation that has
     a minimal impact on latency.
+  id: totrans-24
   prefs: []
   type: TYPE_NORMAL
+  zh: 在回写模式下，数据通过读取和写入被提升到顶层，根据对象的访问频率决定。顶层的对象可以被修改，脏数据将在稍后的时间被刷新到池中。如果对象需要在底层读取或写入，并且底层池支持该操作，Ceph
+    将尽量直接代理此操作，以最小化延迟影响。
 - en: Forward
+  id: totrans-25
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 转发
 - en: The forward mode simply forwards all requests from the top tier to the base
     tier without doing any promotions. It should be noted that a forward causes the
     OSD to tell the client to resend the request to the correct OSD and so has a greater
     impact on latency than just simply proxying it.
+  id: totrans-26
   prefs: []
   type: TYPE_NORMAL
+  zh: 转发模式只是将所有请求从顶层转发到基础层，而不进行任何提升。需要注意的是，转发操作会导致 OSD 告诉客户端将请求重新发送到正确的 OSD，因此它对延迟的影响比单纯的代理操作要大。
 - en: Read-forward
+  id: totrans-27
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 读取转发
 - en: Read-forward mode forces a promotion on every write and, like the forward mode
     earlier, redirects the client for all reads to the base pool. This can be useful
     if you wish to only use the top-tier pool for write acceleration. Using write-intensive
     SSDs overlayed over read-intensive SSDs is one such example.
+  id: totrans-28
   prefs: []
   type: TYPE_NORMAL
+  zh: 读取转发模式强制每次写入时都进行提升，像前面提到的转发模式一样，将所有读取请求重定向到基础池。如果你希望仅使用顶层池进行写入加速，这种模式会非常有用。使用以写入为主的
+    SSD 覆盖以读取为主的 SSD 就是一个典型的例子。
 - en: Proxy
+  id: totrans-29
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 代理
 - en: This is similar to forward mode, except it proxies all reads and writes without
     promoting anything. By proxying the request, OSD itself retrieves data from the
     base-tier OSD and then passes it back to the client. This reduces the overhead
     compared with using forwarding.
+  id: totrans-30
   prefs: []
   type: TYPE_NORMAL
+  zh: 这类似于转发模式，不同之处在于它代理所有的读取和写入，而不进行任何提升。通过代理请求，OSD 本身从基础层 OSD 获取数据，然后将其传递回客户端。与使用转发相比，这减少了开销。
 - en: Read-proxy
+  id: totrans-31
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 读取代理
 - en: Similar to read-forward mode, except that it proxies reads and always promotes write requests.
     It should be noted that the writeback and read-proxy modes are the only modes
     that receive rigorous testing, and so care should be taken when using the other
     modes. Also, there is probably little gain from using the other modes, and they
     will likely be phased out in future releases.
+  id: totrans-32
   prefs: []
   type: TYPE_NORMAL
+  zh: 类似于读取转发模式，不同之处在于它代理读取请求，并始终提升写入请求。需要注意的是，回写模式和读取代理模式是唯一经过严格测试的模式，因此在使用其他模式时需要谨慎。同时，使用其他模式可能收效甚微，并且它们可能会在未来的版本中逐步淘汰。
 - en: Uses cases
+  id: totrans-33
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 使用案例
 - en: As mentioned at the start of the chapter, the tiering functionality should be
     thought of as tiering and not a cache. The reason behind this statement is that
     the act of promotions has a detrimental effect to cluster performance when compared
@@ -203,8 +276,11 @@
     two main reasons. First, the promotion happens in the I/O path; the entire object
     to be promoted needs to be read from the base tier and then written into the top
     tier before the I/O is returned to the client.
+  id: totrans-34
   prefs: []
   type: TYPE_NORMAL
+  zh: 正如本章开头所提到的，分层功能应被视为分层，而非缓存。之所以这样说，是因为与大多数缓存解决方案相比，提升操作会对集群性能产生不利影响，后者通常在启用非缓存工作负载时不会降低性能。提升操作对性能的影响主要由两个原因引起。首先，提升发生在
+    I/O 路径中；整个待提升的对象需要从基础层读取，然后再写入顶层，最终才将 I/O 返回给客户端。
 - en: Second, this promotion action will likely also cause a flush and an eviction,
     which causes even more reads and writes to both tiers. If both tiers are using
     3x replication, this starts to cause a large amount of write amplification for
@@ -213,162 +289,243 @@
     the two tiers. This increased I/O will cause an increase in latency; for this
     reason, promotions should be considered expensive, and tuning should be done to
     minimize them.
+  id: totrans-35
   prefs: []
   type: TYPE_NORMAL
+  zh: 其次，这个提升动作可能还会导致刷新和驱逐，从而导致两个层之间更多的读取和写入。如果两个层都使用 3 倍复制，这甚至可能仅仅因为一次提升就造成大量写放大。在最坏的情况下，一次
+    4 KB 的访问导致提升，可能会在两个层之间造成 8 MB 的读取 I/O 和 24 MB 的写入 I/O。这种增加的 I/O 会导致延迟增加；因此，提升应该被视为昂贵操作，并应进行调优以尽量减少提升的发生。
 - en: With that in mind, Ceph tiering should only be used where the hot or active
     part of the data will fit into the top tier. Workloads that are uniformly random
     will likely see no benefit and in many cases may actually cause performance degradation,
     either due to no suitable objects being available to promote, or too many promotions
     occurring.
+  id: totrans-36
   prefs: []
   type: TYPE_NORMAL
+  zh: 考虑到这一点，Ceph 分层应仅在热数据或活动数据能够适应顶部层时使用。均匀随机的工作负载可能不会看到任何好处，并且在许多情况下可能会导致性能下降，因为没有合适的对象可供提升，或者提升过多。
 - en: Most workloads that involve providing storage for generic virtual machines tend
     to be good candidates as normally only a small percentage of a VM tends to be
     accessed.
+  id: totrans-37
   prefs: []
   type: TYPE_NORMAL
+  zh: 大多数涉及为通用虚拟机提供存储的工作负载通常是不错的选择，因为通常只有小部分虚拟机会被访问。
 - en: '**Online transaction processing** (**OLTP**) databases will normally show improvements
     when used with either caching or tiering as their hot set of data is relatively
     small and data patterns are reasonably consistent. However, reporting or batch
     processing databases are generally not a good fit as they can quite often require
     a large range of the data to be accessed without any prior warm-up period.'
+  id: totrans-38
   prefs: []
   type: TYPE_NORMAL
+  zh: '**在线事务处理**（**OLTP**）数据库通常在使用缓存或分层时会有所改进，因为它们的热数据集相对较小，数据模式相对一致。然而，报表或批处理数据库通常不适合，因为它们经常需要访问大范围的数据，而且通常没有预热期。'
 - en: '**RADOS Block Devices** (**RBD**) workloads that involve random access with
     no specific pattern or workloads that involve large read or write streaming should
     be avoided and will likely suffer from the addition of a cache tier.'
+  id: totrans-39
   prefs: []
   type: TYPE_NORMAL
+  zh: '**RADOS 块设备**（**RBD**）工作负载涉及无特定模式的随机访问或涉及大量读取或写入流的工作负载应避免使用，并且可能会因为增加缓存层而遭受性能下降。'
 - en: Creating tiers in Ceph
+  id: totrans-40
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 在 Ceph 中创建分层
 - en: To test Ceph's tiering functionality, two RADOS pools are required. If you are
     running these examples on a laptop or desktop hardware, although spinning disk-based
     OSDs can be used to create the pools, SSDs are highly recommended if there is
     any intention to read and write data. If you have multiple disk types available
     in your testing hardware, then the base tier can exist on spinning disks and the
     top tier can be placed on SSDs.
+  id: totrans-41
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了测试 Ceph 的分层功能，需要两个 RADOS 池。如果您在笔记本电脑或桌面硬件上运行这些示例，尽管可以使用基于旋转磁盘的 OSD 来创建池，但如果有任何读取和写入数据的需求，强烈建议使用
+    SSD。如果测试硬件中有多种磁盘类型可用，则可以将基础层放在旋转磁盘上，并将顶部层放置在 SSD 上。
 - en: 'Let''s create tiers using the following commands, all of which make use of
     the Ceph `tier` command:'
+  id: totrans-42
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们使用以下命令来创建分层，所有这些命令都使用了 Ceph 的 `tier` 命令：
 - en: 'Create two RADOS pools:'
+  id: totrans-43
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 创建两个 RADOS 池：
 - en: '[PRE0]'
+  id: totrans-44
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE0]'
 - en: 'The preceding commands give the following output:'
+  id: totrans-45
   prefs: []
   type: TYPE_NORMAL
+  zh: 前面的命令会产生以下输出：
 - en: '![](img/a28e7a8a-2573-4569-bfed-8ea064b27822.png)'
+  id: totrans-46
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/a28e7a8a-2573-4569-bfed-8ea064b27822.png)'
 - en: 'Create a tier consisting of the two pools:'
+  id: totrans-47
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 创建一个由两个池组成的层：
 - en: '[PRE1]'
+  id: totrans-48
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE1]'
 - en: 'The preceding command gives the following output:'
+  id: totrans-49
   prefs: []
   type: TYPE_NORMAL
+  zh: 前面的命令会产生以下输出：
 - en: '![](img/6dd83d8d-71c8-4f5c-9c98-cbc4219d81bf.png)'
+  id: totrans-50
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/6dd83d8d-71c8-4f5c-9c98-cbc4219d81bf.png)'
 - en: 'Configure the cache mode:'
+  id: totrans-51
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 配置缓存模式：
 - en: '[PRE2]'
+  id: totrans-52
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE2]'
 - en: 'The preceding command gives the following output:'
+  id: totrans-53
   prefs: []
   type: TYPE_NORMAL
+  zh: 前面的命令会产生以下输出：
 - en: '![](img/ed30c5e0-ed65-4f1c-965e-6368589bdc7b.png)'
+  id: totrans-54
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/ed30c5e0-ed65-4f1c-965e-6368589bdc7b.png)'
 - en: 'Make the top tier and overlay of the base tier:'
+  id: totrans-55
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 将顶部层和基础层叠加：
 - en: '[PRE3]'
+  id: totrans-56
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE3]'
 - en: 'The preceding command gives the following output:'
+  id: totrans-57
   prefs: []
   type: TYPE_NORMAL
+  zh: 前面的命令会产生以下输出：
 - en: '![](img/1c62b889-c89a-4558-bb40-6228844e8421.png)'
+  id: totrans-58
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/1c62b889-c89a-4558-bb40-6228844e8421.png)'
 - en: 'Now that the tiering is configured, we need to set some simple values to make
     sure that the tiering agent can function. Without these, the tiering mechanism
     will not work properly. Note that these commands are just setting variables on
     the pool:'
+  id: totrans-59
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 现在分层已配置好，我们需要设置一些简单的值，以确保分层代理能够正常工作。如果没有这些设置，分层机制将无法正常工作。请注意，这些命令只是设置池上的变量：
 - en: '[PRE4]'
+  id: totrans-60
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE4]'
 - en: 'The preceding commands give the following output:'
+  id: totrans-61
   prefs: []
   type: TYPE_NORMAL
+  zh: 上述命令将产生以下输出：
 - en: '![](img/7b88c542-59b5-4dde-9d03-b37d8f916c42.png)'
+  id: totrans-62
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/7b88c542-59b5-4dde-9d03-b37d8f916c42.png)'
 - en: The previously mentioned commands are simply telling Ceph that the HitSets should
     be created using the bloom filter. It should create a new HitSet every 60 seconds
     and that it should keep ten of them before discarding the oldest one. Finally,
     the top tier pool should hold no more than 100 MB; if it reaches this limit, I/O
     operations will block. More detailed explanations of these settings will follow
     in the next section.
+  id: totrans-63
   prefs: []
   type: TYPE_NORMAL
+  zh: 之前提到的命令只是告诉 Ceph，HitSets 应该使用布隆过滤器创建。它应该每 60 秒创建一个新的 HitSet，并且应该保留其中的十个，丢弃最旧的一个。最后，顶层池的大小不应超过
+    100 MB；如果达到此限制，I/O 操作将被阻塞。关于这些设置的更详细解释将在下一节中给出。
 - en: 'Next, we need to configure the various options that control how Ceph flushes
     and evicts objects from the top to the base tier:'
+  id: totrans-64
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 接下来，我们需要配置各种选项，控制 Ceph 如何从顶层到基础层刷新和驱逐对象：
 - en: '[PRE5]'
+  id: totrans-65
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE5]'
 - en: 'The preceding commands give the following output:'
+  id: totrans-66
   prefs: []
   type: TYPE_NORMAL
+  zh: 上述命令将产生以下输出：
 - en: '![](img/0210c367-4aa2-4eaa-afef-871d43f5c9f9.png)'
+  id: totrans-67
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/0210c367-4aa2-4eaa-afef-871d43f5c9f9.png)'
 - en: The earlier example tells Ceph that it should start flushing dirty objects in
     the top tier down to the base tier when the top tier is 40% full. And that objects
     should be evicted from the top tier when the top tier is 80% full.
+  id: totrans-68
   prefs: []
   type: TYPE_NORMAL
+  zh: 之前的示例告诉 Ceph，当顶层满 40% 时，它应该开始将脏对象从顶层刷新到基础层。当顶层满 80% 时，应该从顶层驱逐对象。
 - en: 'And, finally, the last two commands instruct Ceph that any object should have
     been in the top tier for at least 60 seconds before it can be considered for flushing
     or eviction:'
+  id: totrans-69
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 最后，最后两个命令指示 Ceph，任何对象必须在顶层至少停留 60 秒，才能考虑进行刷新或驱逐：
 - en: '[PRE6]'
+  id: totrans-70
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE6]'
 - en: 'The preceding commands give the following output:'
+  id: totrans-71
   prefs: []
   type: TYPE_NORMAL
+  zh: 上述命令将产生以下输出：
 - en: '![](img/96271ea1-1525-487b-907e-ace642790104.png)'
+  id: totrans-72
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/96271ea1-1525-487b-907e-ace642790104.png)'
 - en: Tuning tiering
+  id: totrans-73
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 调优分层
 - en: Unlike the majority of Ceph's features, which by default perform well for a
     large number of workloads, Ceph's tiering functionality requires careful configuration
     of its various parameters to ensure good performance. You should also have a basic
@@ -376,23 +533,33 @@
     data has a small percentage of hot data. Workloads that are uniformly random or
     involve lots of sequential access patterns will either show no improvement or
     in some cases may actually be slower.
+  id: totrans-74
   prefs: []
   type: TYPE_NORMAL
+  zh: 与 Ceph 大多数功能不同，Ceph 的分层功能需要仔细配置其各个参数，以确保良好的性能。你还应该对工作负载的 I/O 特性有一个基本的了解；只有当数据中有一小部分热数据时，分层才能发挥良好的作用。均匀随机访问或大量顺序访问模式的工作负载要么没有改进，要么在某些情况下可能会变得更慢。
 - en: Flushing and eviction
+  id: totrans-75
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 刷新与驱逐
 - en: The main tuning options that should be looked at first are the ones that define
     the size limit to the top tier, when it should flush and when it should evict.
+  id: totrans-76
   prefs: []
   type: TYPE_NORMAL
+  zh: 首先应该查看的主要调优选项是定义顶层大小限制、何时刷新以及何时驱逐的选项。
 - en: 'The following two configuration options configure the maximum size of the data
     to be stored in the top-tier pool:'
+  id: totrans-77
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下两个配置选项配置顶层池中存储数据的最大大小：
 - en: '[PRE7]'
+  id: totrans-78
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE7]'
 - en: The size is either specified in bytes or the number of objects and does not
     have to be the same size as the actual pool – but it cannot be larger. The size
     is also based on the available capacity after replication of the RADOS pool, so
@@ -402,24 +569,35 @@
     this limit is not reached. It's also important that this value is set, as without
     it, no flushing or evictions will occur and the pool will simply fill up OSDs
     to their full limit and then block I/O.
+  id: totrans-79
   prefs: []
   type: TYPE_NORMAL
+  zh: 大小可以用字节数或对象数来指定，且不必与实际池的大小相同，但不能大于实际池的大小。大小也是基于 RADOS 池在复制后的可用容量，因此对于一个 3 副本池来说，这将是原始容量的三分之一。如果该池中的字节数或对象数超过此限制，I/O
+    将被阻塞；因此，必须考虑后续的其他配置选项，以确保不会达到此限制。设置该值也非常重要，因为如果没有此值，刷新或驱逐操作将不会发生，池将会填满 OSD 并阻塞
+    I/O。
 - en: The reason that this setting exists instead of Ceph just using the size of the
     underlying capacity of the disks in the RADOS pool is that by specifying the size,
     you could have multiple top-level tier pools on the same set of disks if you desire.
+  id: totrans-80
   prefs: []
   type: TYPE_NORMAL
+  zh: 这个设置存在的原因，而不是让 Ceph 直接使用 RADOS 池中磁盘的底层容量，是因为通过指定大小，你可以在同一组磁盘上拥有多个顶层池。
 - en: 'As you have learned earlier, `target_max_bytes` sets the maximum size of the
     tiered data on the pool and if this limit is reached, I/O will block. In order
     to make sure that the RADOS pool does not reach this limit, `cache_target_full_ratio`
     instructs Ceph to try and keep the pool at a percentage of `target_max_bytes`
     by evicting objects when this target is breached. Unlike promotions and flushes,
     evictions are fairly low-cost operations:'
+  id: totrans-81
   prefs: []
   type: TYPE_NORMAL
+  zh: 如你之前所学，`target_max_bytes` 设置了池中分层数据的最大大小，如果达到此限制，I/O 将被阻塞。为了确保 RADOS 池不会达到此限制，`cache_target_full_ratio`
+    指示 Ceph 尝试通过在超过此目标时驱逐对象来保持池的大小在 `target_max_bytes` 的某一百分比以内。与晋升和刷新操作不同，驱逐是相对低成本的操作：
 - en: '[PRE8]'
+  id: totrans-82
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE8]'
 - en: 'The value is specified as a value between `0` and `1` and works like a percentage.
     It should be noted that although `target_max_bytes` and `cache_target_full_ratio`
     are set against the pool, internally Ceph uses these values to calculate per PG
@@ -428,11 +606,17 @@
     results. For this reason, it is recommended not to set `cache_target_full_ratio`
     to high and leave some headroom; a value of 0.8 normally works well. We have the
     following code:'
+  id: totrans-83
   prefs: []
   type: TYPE_NORMAL
+  zh: 该值指定为介于 `0` 和 `1` 之间的数值，类似于百分比。需要注意的是，虽然 `target_max_bytes` 和 `cache_target_full_ratio`
+    是针对池设置的，但 Ceph 在内部是使用这些值来计算每个 PG 的限制的。这可能意味着在某些情况下，某些 PG 会比其他 PG 先达到计算出的最大限制，并有时会导致意外结果。由于这个原因，建议不要将
+    `cache_target_full_ratio` 设置得太高，并保留一些余量；通常情况下，0.8 的值效果良好。我们有以下代码：
 - en: '[PRE9]'
+  id: totrans-84
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE9]'
 - en: These two configuration options control when Ceph flushes dirty objects from
     the top tier to the base tier if the tiering has been configured in writeback
     mode. An object is considered dirty if it has been modified while being in the
@@ -444,21 +628,29 @@
     than what they can be evicted at. As flushing is an expensive operation compared
     with eviction, this means that if required, large amounts of objects can be evicted
     quickly if needed.
+  id: totrans-85
   prefs: []
   type: TYPE_NORMAL
+  zh: 这两个配置选项控制了在分层存储已配置为写回模式时，Ceph 将脏对象从顶层刷新到基础层的时机。如果一个对象在顶层被修改，它被视为脏对象；在基础层修改的对象不会被标记为脏。刷新操作涉及将对象从顶层复制到基础层；由于这是一次完整的对象写入，基础层可以是一个擦除编码池。该行为是异步的，除了增加
+    RADOS 池的 I/O 负载外，并不会直接影响客户端的 I/O。对象通常以低于驱逐速度的速度被刷新。由于刷新操作相较于驱逐是一个昂贵的操作，这意味着如果需要，可以快速驱逐大量对象。
 - en: The two ratios control what speed of flushing OSD allows, by restricting the
     number of parallel flushing threads that are allowed to run at once. These can
     be controlled by the `osd_agent_max_ops` and `osd_agent_max_high_ops` OSD configuration
     options, respectively. By default, these are set to `2` and `4` parallel threads.
+  id: totrans-86
   prefs: []
   type: TYPE_NORMAL
+  zh: 这两个比率控制 OSD 允许的刷新速度，通过限制允许同时运行的并行刷新线程数量来实现。这些可以通过分别设置 `osd_agent_max_ops` 和
+    `osd_agent_max_high_ops` OSD 配置选项来控制。默认情况下，这些设置为 2 和 4 个并行线程。
 - en: In theory, the percentage of dirty objects should hover around the low dirty
     ratio during normal cluster usage. This will mean that objects are flushed with
     a low parallelism of flushing to minimize the impact on cluster latency. As normal
     bursts of writes hit the cluster, the number of dirty objects may rise, but over
     time, these writes are flushed down to the base tier.
+  id: totrans-87
   prefs: []
   type: TYPE_NORMAL
+  zh: 理论上，脏对象的百分比应该在正常集群使用期间保持在较低的脏比率附近。这意味着对象以较低的并行刷新度被刷新，以最小化对集群延迟的影响。随着正常的写入突发流量到达集群，脏对象的数量可能会增加，但随着时间的推移，这些写入会被刷新到基础层。
 - en: 'However, if there are periods of sustained writes that outstrip the low speed
     flushing''s capability, then the number of dirty objects will start to rise. Hopefully,
     this period of high write I/O will not go on for long enough to fill the tier
@@ -468,50 +660,70 @@
     able to stop the number of dirty objects from increasing any further. Once the
     write traffic reduces, the number of dirty objects will be brought back down the
     low ratio again. This sequence of events is illustrated in the following graph:'
+  id: totrans-88
   prefs: []
   type: TYPE_NORMAL
+  zh: 然而，如果出现持续的写入超出了低速刷新能力的情况，那么脏对象的数量将开始上升。希望这种高写入 I/O 的持续时间不会长到足以让顶层被脏对象填满，因此它将逐渐减少到低阈值。然而，如果脏对象数量继续增加并达到高比率，那么刷新并行度将会增加，并且希望能够阻止脏对象数量进一步增加。一旦写入流量减少，脏对象数量将再次降回低比率。以下图表展示了这一过程：
 - en: '![](img/a1a64af5-f178-4d24-849c-3cce5d111b00.png)'
+  id: totrans-89
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/a1a64af5-f178-4d24-849c-3cce5d111b00.png)'
 - en: The two dirty ratios should have sufficient difference between them that normal
     bursts of writes can be absorbed, without the high ratio kicking in. The high
     ratio should be thought of as an emergency limit. A good value to start with is
     0.4 for the low ratio and 0.6 for the high ratio.
+  id: totrans-90
   prefs: []
   type: TYPE_NORMAL
+  zh: 这两个脏比率应该有足够的差异，以便正常的写入突发流量能够被吸收，而不会触发较高的脏比率。高脏比率应当视为紧急限制。一个好的起始值是将低比率设置为 0.4，将高比率设置为
+    0.6。
 - en: The `osd_agent_max_ops` configuration settings should be adjusted so that in
     normal operating conditions, the number of dirty objects hovers around or just
     over the low dirty ratio. It's not easy to recommend a value for these settings
     as they will largely depend on the ratio of the size and performance of the top
     tier to the base tier. However, start with setting `osd_agent_max_ops` to `1`
     and increase as necessary, and set `osd_agent_max_high_ops` to at least double.
+  id: totrans-91
   prefs: []
   type: TYPE_NORMAL
+  zh: '`osd_agent_max_ops` 配置设置应该进行调整，使得在正常操作条件下，脏对象的数量保持在低脏比率附近或略高。由于这些设置会在很大程度上依赖于顶层和基础层的大小与性能比率，因此不容易推荐一个具体值。不过，可以从将`osd_agent_max_ops`设置为`1`并根据需要增加的方式开始，并将`osd_agent_max_high_ops`设置为至少是双倍。'
 - en: If you see status messages in the Ceph status screen indicating that high-speed
     flushing is occurring, then you will want to increase `osd_agent_max_ops`. If
     you ever see the top tier getting full and blocking I/O, then you either need
     to consider lowering the `cache_target_dirty_high_ratio` variable or increasing
     the `osd_agent_max_high_ops` setting to stop the tier filling up with dirty objects.
+  id: totrans-92
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你在 Ceph 状态页面看到指示正在发生高速刷新状态信息，那么你需要增加`osd_agent_max_ops`。如果你看到顶层存储满了并且阻塞了 I/O，那么你要么考虑降低`cache_target_dirty_high_ratio`变量，要么增加`osd_agent_max_high_ops`设置，以防止顶层被脏对象填满。
 - en: Promotions
+  id: totrans-93
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 提升
 - en: 'The next tuning options that should be looked at are the ones that define the
     HitSets and the required recency to trigger a promotion:'
+  id: totrans-94
   prefs: []
   type: TYPE_NORMAL
+  zh: 接下来需要调整的选项是定义 HitSets 以及触发提升所需的时效性：
 - en: '[PRE10]'
+  id: totrans-95
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE10]'
 - en: The `hitset_count` setting controls how many HitSets can exist before the oldest
     one starts getting trimmed. The `hitset_period` setting controls how often a HitSet
     should be created. If you are testing tiering in a laboratory environment, it
     should be noted that I/O to the PG needs to be occurring in order for a HitSet
     to be created; on an idle cluster, no HitSets will be created or trimmed.
+  id: totrans-96
   prefs: []
   type: TYPE_NORMAL
+  zh: '`hitset_count` 设置控制最多可以存在多少个 HitSets 在最旧的一个开始被修剪之前。`hitset_period` 设置控制多久创建一个
+    HitSet。如果在实验室环境中测试分层存储，需要注意的是必须对 PG 进行 I/O 操作才能创建 HitSet；在空闲集群上，不会创建或修剪任何 HitSets。'
 - en: Having the correct number and controlling how often HitSets are created is key
     to being able to reliably control when objects get promoted. Remember that HitSets
     only contain data about whether an object has been accessed or not; they don't
@@ -520,18 +732,27 @@
     of the HitSets. For example, if `hitset_period` is two minutes, an RBD object
     containing the disk block where a log file is updated once a minute would be in
     all the same HitSets as an object getting access 100 times a second.
+  id: totrans-97
   prefs: []
   type: TYPE_NORMAL
+  zh: 保证正确的数量并控制创建 HitSets 的频率是可靠地控制对象晋升时间的关键。请记住，HitSets 只包含对象是否已访问的数据；它们不包含对象被访问的次数计数。如果
+    `hitset_period` 太长，即使访问较少的对象也会出现在大多数 HitSets 中。例如，如果 `hitset_period` 是两分钟，那么包含日志文件更新磁盘块的
+    RBD 对象每分钟更新一次，将与每秒访问 100 次的对象出现在完全相同的 HitSets 中。
 - en: 'Conversely, if the period is too low, then even hot objects may fail to appear
     in enough HitSets to make them candidates for promotion and your top tier will
     likely not be fully used. By finding the correct HitSet period, you should be
     able to capture the right view of your I/O that a suitable sized proportion of
     hot objects are candidates for promotion:'
+  id: totrans-98
   prefs: []
   type: TYPE_NORMAL
+  zh: 相反，如果周期太低，即使热对象也可能不会出现在足够多的 HitSets 中，以使它们成为推广的候选对象，并且您的顶层可能不会被充分使用。通过找到正确的
+    HitSet 周期，您应该能够捕获适当比例的热对象候选对象的正确视图：
 - en: '[PRE11]'
+  id: totrans-99
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE11]'
 - en: These two settings define how many of the last recent HitSets an object must
     appear in to be promoted. Due to the effect of probability, the relationship between
     semi-hot objects and recency setting is not linear. Once the recency settings
@@ -543,12 +764,19 @@
     setting, then it will never promote. This can be used for example to make sure
     that a write I/O will never cause an object to be promoted, by setting the write
     recency higher than the `hitset_count` setting.
+  id: totrans-100
   prefs: []
   type: TYPE_NORMAL
+  zh: 这两个设置定义了对象必须出现在最近 HitSets 中的数量，以便晋升。由于概率的影响，半热对象和最近性设置之间的关系不是线性的。一旦设置的最近性超过约
+    3 或 4，可以晋升的对象数量呈对数方式下降。应当注意，尽管可以根据读或写单独作出晋升决策，但它们都引用相同的 HitSet 数据，无法确定访问是读取还是写入。作为一个方便的功能，如果将最近性设置得比
+    `hitset_count` 设置更高，则永远不会晋升。例如，可以确保写入 I/O 绝不会导致对象晋升，方法是将写入最近性设置得高于 `hitset_count`
+    设置。
 - en: Promotion throttling
+  id: totrans-101
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 推广节流
 - en: 'As has been covered earlier, promotions are very expensive operations in tiering
     and care should be taken to make sure that they only happen when necessary. A
     large part of this is done by carefully tuning the HitSet and recency settings.
@@ -556,47 +784,68 @@
     that restricts the number of promotions to a certain speed. This limit can either
     be specified as number of bytes or objects per second via two OSD configuration
     options:'
+  id: totrans-102
   prefs: []
   type: TYPE_NORMAL
+  zh: 正如之前所述，推广在分层中是非常昂贵的操作，必须小心确保仅在必要时进行。这在很大程度上是通过精心调整 HitSet 和最近性设置来完成的。然而，为了限制推广的影响，还有一个额外的节流器限制推广速度的数量。此限制可以通过两个
+    OSD 配置选项指定为每秒字节或对象的数量：
 - en: '[PRE12]'
+  id: totrans-103
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE12]'
 - en: The default limits are 4 MBps or five objects a second. While these figures
     may sound low, especially when compared with the performance of the latest SSDs,
     their primary goal is to minimize the impact of promotions on latency. Careful
     tuning should be done to find a good balance on your cluster. It should be noted
     that this value is configured per OSD, and so the total promotion speed will be
     a sum across all OSDs.
+  id: totrans-104
   prefs: []
   type: TYPE_NORMAL
+  zh: 默认限制是 4 MBps 或每秒五个对象。虽然与最新 SSD 的性能相比，这些数字可能听起来很低，但它们的主要目的是最小化提升对延迟的影响。应该进行仔细调优，以便找到集群的良好平衡。需要注意的是，这个值是按
+    OSD 配置的，因此总的提升速度将是所有 OSD 的和。
 - en: 'Finally, the following configuration options allow tuning of the selection
     process for flushing objects:'
+  id: totrans-105
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后，以下配置选项允许调优对象刷新选择过程：
 - en: '[PRE13]'
+  id: totrans-106
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE13]'
 - en: 'This controls how may HitSets are queried in order to determine object temperature,
     where the the temperature of an object reflects how often it is accessed. A cold
     object is rarely accessed, while hot objects being accessed far more frequently
     are candidates for eviction. Setting this to a similar figure as the recency settings
     is recommended. We have the following code:'
+  id: totrans-107
   prefs: []
   type: TYPE_NORMAL
+  zh: 这控制了查询多少个 HitSets 以确定对象的温度，其中对象的温度反映了它被访问的频率。冷对象很少被访问，而热对象则被更频繁地访问，是驱逐的候选者。建议将其设置为与最近性设置类似的值。我们有以下代码：
 - en: '[PRE14]'
+  id: totrans-108
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE14]'
 - en: 'This works in combination with the `hit_set_grade_search_last_n` setting and
     decays the HitSet results the older they become. Objects that have been accessed
     more frequently than others have a hotter rating and will make sure that objects
     that are more frequently accessed are not incorrectly flushed. It should be noted
     that the `min_flush` and `evict_age` settings may override the temperature of
     an object when it comes to being flushed or evicted:'
+  id: totrans-109
   prefs: []
   type: TYPE_NORMAL
+  zh: 这与 `hit_set_grade_search_last_n` 设置配合使用，并随着时间推移，逐渐衰减 HitSet 结果。那些比其他对象更频繁被访问的对象会有更高的温度评级，并确保那些频繁被访问的对象不会被错误地刷新。需要注意的是，在刷新或驱逐对象时，`min_flush`
+    和 `evict_age` 设置可能会覆盖对象的温度：
 - en: '[PRE15]'
+  id: totrans-110
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE15]'
 - en: The `cache_min_evict_age` and `cache_min_flush_age` settings simply define how
     long an object must have not been modified for before it is allowed to be flushed
     or evicted. These can be used to stop objects that are only just below the threshold
@@ -604,18 +853,25 @@
     Setting them between 10 and 30 minutes is probably a good approach, although care
     needs to be taken that the top tier does not fill up in the case where there are
     no eligible objects to be flushed or evicted.
+  id: totrans-111
   prefs: []
   type: TYPE_NORMAL
+  zh: '`cache_min_evict_age` 和 `cache_min_flush_age` 设置简单地定义了一个对象在被允许刷新或驱逐之前，必须有多长时间没有被修改。这些设置可以用来阻止那些仅仅低于阈值的对象，在不断在不同层级之间移动的循环中卡住。将它们设置为
+    10 到 30 分钟之间可能是一个不错的做法，尽管需要注意的是，如果没有符合条件的对象可以被刷新或驱逐，顶层可能会填满。'
 - en: Monitoring parameters
+  id: totrans-112
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 监控参数
 - en: In order to monitor the performance and characteristics of a cache tier in a
     Ceph cluster, there are a number of performance counters you can monitor. We will
     assume for the moment that you are already collecting the Ceph performance counters
     from the admin socket as discussed in the next chapter.
+  id: totrans-113
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了监控 Ceph 集群中缓存层的性能和特性，有一些性能计数器可以进行监控。我们暂时假设你已经从管理员插座收集了 Ceph 性能计数器，正如下一章所讨论的那样。
 - en: The most important thing to remember when looking at the performance counters
     is that once you configure a tier in Ceph, all client requests go through the
     top-level tier. Therefore, only read and write operation counters on OSDs that
@@ -625,54 +881,82 @@
     These proxy operation counters are also calculated on the top-level OSDs, and
     so to monitor the throughput of a Ceph cluster with tiering, only the top-level
     OSDs need to be included in the calculations.
+  id: totrans-114
   prefs: []
   type: TYPE_NORMAL
+  zh: 在查看性能计数器时，最重要的事情是记住，一旦你在 Ceph 中配置了一个层级，所有客户端请求都会通过顶级层。因此，只有在组成顶级层的 OSD 上的读写操作计数器才会显示任何请求，前提是底层的
+    OSD 没有用于其他池。要了解底层处理的请求数量，有代理操作计数器，它会显示这个数字。这些代理操作计数器也会在顶层 OSD 上计算，因此要监控带有分层的 Ceph
+    集群的吞吐量，只需要将顶层 OSD 包括在计算中。
 - en: 'The following counters can be used to monitor tiering in Ceph; all are to be
     monitored on the top-level OSDs:'
+  id: totrans-115
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下计数器可用于监控 Ceph 中的分层；所有计数器需在顶层 OSD 上进行监控：
 - en: '| **Counter** | **Description** |'
+  id: totrans-116
   prefs: []
   type: TYPE_TB
+  zh: '| **计数器** | **描述** |'
 - en: '| `op_r` | Read operations handled by the OSD |'
+  id: totrans-117
   prefs: []
   type: TYPE_TB
+  zh: '| `op_r` | OSD 处理的读取操作 |'
 - en: '| `op_w` | Write operations handled by the OSD |'
+  id: totrans-118
   prefs: []
   type: TYPE_TB
+  zh: '| `op_w` | OSD 处理的写操作 |'
 - en: '| `tier_proxy_read` | Read operations that were proxied to the base tier |'
+  id: totrans-119
   prefs: []
   type: TYPE_TB
+  zh: '| `tier_proxy_read` | 被代理到基础层的读取操作 |'
 - en: '| `tier_proxy_write` | Write operations that were proxied to the base tier
     |'
+  id: totrans-120
   prefs: []
   type: TYPE_TB
+  zh: '| `tier_proxy_write` | 被代理到基础层的写操作 |'
 - en: '| `tier_promote` | The number of promotions from base to the top-level tier
     |'
+  id: totrans-121
   prefs: []
   type: TYPE_TB
+  zh: '| `tier_promote` | 从基础层提升到顶层的次数 |'
 - en: '| `tier_try_flush` | The number of flushes from the top level to the base tier
     |'
+  id: totrans-122
   prefs: []
   type: TYPE_TB
+  zh: '| `tier_try_flush` | 从顶层到基础层的刷新次数 |'
 - en: '| `tier_evict` | The number of evictions from the top level to the base tier
     |'
+  id: totrans-123
   prefs: []
   type: TYPE_TB
+  zh: '| `tier_evict` | 从顶层到基础层的驱逐次数 |'
 - en: Alternative caching mechanisms
+  id: totrans-124
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 替代缓存机制
 - en: The native RADOS tiering functionality provides numerous benefits around flexibility
     and allows management by the same Ceph toolset. However, it cannot be denied that
     for pure performance, RADOS tiering lags behind other caching technologies that
     typically function at the block-device level.
+  id: totrans-125
   prefs: []
   type: TYPE_NORMAL
+  zh: 原生的 RADOS 分层功能提供了多种灵活性优势，并且可以使用相同的 Ceph 工具集进行管理。然而，不可否认的是，在纯粹的性能方面，RADOS 分层比其他通常在块设备级别运行的缓存技术落后。
 - en: Bcache is a block device cache in the Linux kernel that can use a SSD to cache
     a slower block device such as a spinning disk.
+  id: totrans-126
   prefs: []
   type: TYPE_NORMAL
+  zh: Bcache 是 Linux 内核中的一个块设备缓存，可以使用 SSD 来缓存较慢的块设备，例如旋转磁盘。
 - en: '**Bcache** is one example of a popular way of increasing the performance of
     Ceph with SSDs. Unlike RADOS tiering, where you can choose which pool you wish
     to cache, with bcache the entire OSD is cached. This method of caching brings
@@ -686,15 +970,24 @@
     at the size of the object stored in the pool, which is 4 MB by default for RBD
     workloads. Bcache caches data in much smaller blocks; this allows it to make better
     use of available SSD space and also suffer less from promotion overheads.'
+  id: totrans-127
   prefs: []
   type: TYPE_NORMAL
+  zh: '**Bcache** 是通过 SSD 提升 Ceph 性能的流行方法之一。与 RADOS 分层不同，RADOS 分层允许选择缓存哪个池，而 bcache
+    则是缓存整个 OSD。此种缓存方法在性能方面带来了一些优势。首先，由于 SSD 缓存，OSD 本身的延迟响应更加一致。Filestore 会在每个 Ceph
+    请求中增加大量的随机 I/O，无论 Ceph 请求是随机还是顺序的。Bcache 可以吸收这些随机 I/O，并允许旋转磁盘执行更多的顺序 I/O。这在高负载时期非常有用，因为在这些时候，正常的旋转磁盘
+    OSD 会开始出现较高的延迟。其次，RADOS 分层是在池中存储的对象大小上运行的，默认情况下，对于 RBD 工作负载来说是 4 MB。Bcache 缓存的数据块更小，这使得它能够更好地利用可用的
+    SSD 空间，并且在提升开销方面也较少。'
 - en: The SSD capacity assigned to bcache will also be used as a read cache for hot
     data; this will improve read performance as well as writes. Since bcache will
     only be using this capacity for read caching, it will only store one copy of the
     data and so will have three times more read cache capacity than compared with
     using the same SSD in a RADOS-tiered pool.
+  id: totrans-128
   prefs: []
   type: TYPE_NORMAL
+  zh: 分配给 bcache 的 SSD 容量也将作为热数据的读取缓存；这将提高读取性能以及写入性能。由于 bcache 仅将该容量用于读取缓存，它只会存储数据的一份副本，因此与在
+    RADOS 层级池中使用相同 SSD 相比，读取缓存容量将大三倍。
 - en: However, there are a number of disadvantages to using bcache that make using
     RADOS cache pools still look attractive. As mentioned earlier, bcache will cache
     the entire OSD. In some cases where multiple pools may reside on the same OSDs,
@@ -704,8 +997,12 @@
     scenario, introducing bcache would be very disruptive. With RADOS tiering, you
     can simply add additional SSDs or specifically designed SSD nodes to add or expand
     the top tier as and when needed.
+  id: totrans-129
   prefs: []
   type: TYPE_NORMAL
+  zh: 然而，使用 bcache 存在一些缺点，这使得使用 RADOS 缓存池仍然具有吸引力。如前所述，bcache 会缓存整个 OSD。在某些情况下，如果多个池可能位于相同的
+    OSD 上，这种行为可能是不可取的。另外，一旦 bcache 配置了 SSD 和 HDD，如果未来需要扩展缓存容量，就变得更加困难。如果你的集群目前没有任何形式的缓存，这种情况尤其如此；在这种情况下，引入
+    bcache 会非常具有破坏性。使用 RADOS 分层时，你可以根据需要简单地添加额外的 SSD 或专门设计的 SSD 节点，以增加或扩展顶部层。
 - en: dm-cache is another Linux block caching solution that is built into Linux's
     **Logical Volume Manager** (**LVM**). Although its caching algorithms are not
     quite as advanced as bcache's, the fact that it is very easy to enable in LVM,
@@ -713,16 +1010,23 @@
     OSD's. BlueStore OSD's are now created using ceph-volume, which creates logical
     volumes on top of block devices, thus only requiring a few steps to enable caching
     of an existing OSD.
+  id: totrans-130
   prefs: []
   type: TYPE_NORMAL
+  zh: dm-cache 是另一种 Linux 块缓存解决方案，内置于 Linux 的 **逻辑卷管理器**（**LVM**）中。尽管其缓存算法不如 bcache
+    的先进，但由于它在 LVM 中非常容易启用，即使在卷创建后也可以启用，因此它非常适合与 BlueStore OSD 一起使用。现在，BlueStore OSD
+    是通过 ceph-volume 创建的，ceph-volume 在块设备上创建逻辑卷，从而仅需几步即可启用现有 OSD 的缓存。
 - en: Another approach is to place the spinning disk OSDs behind a RAID controller
     with a battery-backed writeback cache. The RAID controller performs a similar
     role to bcache and absorbs a lot of the random write I/O relating to the OSD's
     extra metadata. Both latency and sequential write performance will increase as
     a result. Read performance is unlikely to increase, however, due to the relatively
     small size of the RAID controllers cache.
+  id: totrans-131
   prefs: []
   type: TYPE_NORMAL
+  zh: 另一种方法是将旋转磁盘 OSD 放置在带有电池支持写回缓存的 RAID 控制器后面。RAID 控制器执行类似于 bcache 的角色，吸收大量与 OSD
+    的额外元数据相关的随机写入 I/O。由此，延迟和顺序写入性能都会提升。然而，读取性能可能不会提升，因为 RAID 控制器缓存的大小相对较小。
 - en: By using a RAID controller with filestore OSDs, the OSDs journal can also be
     placed directly on the disk instead of using a separate SSD. By doing this, journal
     writes are absorbed by the RAID controllers cache and will improve the random
@@ -733,22 +1037,33 @@
     For best performance, a separate SSD or NVMe should be used for the filestore
     journal, although attention should be paid to the cost of using both a RAID controller
     with sufficient performance and cache, in addition to the cost of the SSDs.
+  id: totrans-132
   prefs: []
   type: TYPE_NORMAL
+  zh: 通过使用带有 filestore OSD 的 RAID 控制器，OSD 的日志可以直接放置在磁盘上，而不是使用单独的 SSD。这样，日志写入会被 RAID
+    控制器的缓存吸收，从而提高日志的随机性能，因为大多数时候，日志内容可能会存放在控制器的缓存中。然而，需要小心的是，如果传入的写入流量超过了控制器缓存的容量，日志内容将开始被刷新到磁盘，从而导致性能下降。为了获得最佳性能，应使用单独的
+    SSD 或 NVMe 来存储 filestore 日志，但也要考虑使用具有足够性能和缓存的 RAID 控制器的成本，以及 SSD 的成本。
 - en: With BlueStore OSDs, a writeback cache on a RAID controller greatly benefits
     write latency; however, BlueStore's metadata is still required to be stored on
     flash media for good performance. Thus, separate SSDs are still highly recommended
     when using writeback RAID controllers.
+  id: totrans-133
   prefs: []
   type: TYPE_NORMAL
+  zh: 对于 BlueStore OSD，RAID 控制器上的写回缓存大大有利于写入延迟；然而，BlueStore 的元数据仍然需要存储在闪存介质上，以保证良好的性能。因此，在使用写回
+    RAID 控制器时，仍然强烈建议使用单独的 SSD。
 - en: Both methods have their merits and should be considered before implementing
     caching in your cluster.
+  id: totrans-134
   prefs: []
   type: TYPE_NORMAL
+  zh: 这两种方法各有优缺点，在集群中实现缓存之前，应考虑它们。
 - en: Summary
+  id: totrans-135
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 总结
 - en: In this chapter, we have covered the theory behind Ceph's RADOS tiering functionality
     and looked at the configuration and tuning operations available to make it work
     best for your workload. It should not be forgotten that the most important aspect
@@ -756,34 +1071,51 @@
     is cache-friendly. By following the examples in this chapter, you should also
     now understand the required steps to implement tiered pools and how to apply the
     configuration options.
+  id: totrans-136
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本章中，我们已经介绍了 Ceph 的 RADOS 层次化功能背后的理论，并讨论了配置和调优操作，以使其最好地适应你的工作负载。必须记住，最重要的方面是了解你的工作负载，并确信其
+    I/O 模式和分布是适合缓存的。通过本章中的示例，你现在也应该理解实施层次化池所需的步骤，以及如何应用配置选项。
 - en: In the next chapter, we will see what problems occur in maintaining a healthy Ceph
     cluster and how can we handle them.
+  id: totrans-137
   prefs: []
   type: TYPE_NORMAL
+  zh: 在下一章中，我们将讨论在维护一个健康的 Ceph 集群时会出现哪些问题，以及我们如何处理它们。
 - en: Questions
+  id: totrans-138
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 问题
 - en: Name two reasons you might want to use tiering technologies.
+  id: totrans-139
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 列出使用层次化技术的两个理由。
 - en: Name a tiering technology that exists outside of Ceph.
+  id: totrans-140
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 列举一个 Ceph 之外的层次化技术。
 - en: What method does RADOS tiering use to track hit requests?
+  id: totrans-141
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: RADOS 层次化使用什么方法来跟踪命中请求？
 - en: What pool variable controls the amount of recent hits before a read request
     promotes an object?
+  id: totrans-142
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 哪个池变量控制在读取请求提升对象之前的最近命中次数？
 - en: What is a good use case for RADOS tiering?
+  id: totrans-143
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: RADOS 层次化的一个良好使用场景是什么？

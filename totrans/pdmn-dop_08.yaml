@@ -1,715 +1,1059 @@
 - en: '*Chapter 6*: Meet Buildah – Building Containers from Scratch'
+  id: totrans-0
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: '*第 6 章*：认识 Buildah – 从零构建容器'
 - en: The great appeal of containers is that they allow us to package applications
     inside immutable images that can be deployed on systems and run seamlessly. In
     this chapter, we will learn how to create images using different techniques and
     tools. This includes learning how an image build works under the hood and how
     to create images from scratch.
+  id: totrans-1
   prefs: []
   type: TYPE_NORMAL
+  zh: 容器的巨大吸引力在于，它们允许我们将应用程序打包到不可变的镜像中，这些镜像可以在系统上部署并无缝运行。在本章中，我们将学习如何使用不同的技术和工具创建镜像。这包括了解镜像构建的底层原理以及如何从零开始创建镜像。
 - en: 'In this chapter, we''re going to cover the following main topics:'
+  id: totrans-2
   prefs: []
   type: TYPE_NORMAL
+  zh: 本章将涵盖以下主要主题：
 - en: Basic image building with Podman
+  id: totrans-3
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 使用 Podman 构建基本镜像
 - en: Meet Buildah, Podman's companion tool for builds
+  id: totrans-4
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 认识 Buildah，Podman 的构建伴侣工具
 - en: Preparing our environment
+  id: totrans-5
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 准备我们的环境
 - en: Choosing our build strategy
+  id: totrans-6
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 选择我们的构建策略
 - en: Building images from scratch
+  id: totrans-7
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 从零开始构建镜像
 - en: Building images from a Dockerfile
+  id: totrans-8
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 从 Dockerfile 构建镜像
 - en: Technical requirements
+  id: totrans-9
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 技术要求
 - en: Before proceeding with this chapter, a machine with a working Podman installation
     is required. As stated in [*Chapter 3*](B17908_03_epub.xhtml#_idTextAnchor068),
     *Running the First Container*, all the examples in the book are executed on a
     Fedora 34 system or later but can be reproduced on the reader's choice of OS.
+  id: totrans-10
   prefs: []
   type: TYPE_NORMAL
+  zh: 在继续本章之前，需要一台已安装 Podman 的工作机器。正如在[*第 3 章*](B17908_03_epub.xhtml#_idTextAnchor068)中所述，*运行第一个容器*，书中的所有示例都是在
+    Fedora 34 或更高版本的系统上执行的，但可以在读者选择的操作系统上重现。
 - en: A good understanding of the topics covered in [*Chapter 4*](B17908_04_epub.xhtml#_idTextAnchor083),
     *Managing Running Containers*, is useful to easily grasp concepts regarding **Open
     Container Initiative** (**OCI**) images.
+  id: totrans-11
   prefs: []
   type: TYPE_NORMAL
+  zh: 理解[*第 4 章*](B17908_04_epub.xhtml#_idTextAnchor083)中涉及的内容，*管理运行中的容器*，对轻松理解与 **开放容器倡议**（**OCI**）镜像相关的概念非常有帮助。
 - en: Basic image building with Podman
+  id: totrans-12
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 使用 Podman 构建基本镜像
 - en: A container's OCI image is a set of immutable layers stacked together with a
     copy-on-write logic. When an image is built, all the layers are created in a precise
     order and then pushed to the container registry, which stores our layers as tar-based
     archives along with additional image metadata.
+  id: totrans-13
   prefs: []
   type: TYPE_NORMAL
+  zh: 容器的 OCI 镜像是一组不可变的层，按复制写入逻辑堆叠在一起。当镜像构建时，所有层会按照精确的顺序创建，然后推送到容器注册表，容器注册表以 tar 格式存储我们的层及附加的镜像元数据。
 - en: As we learned in the *OCI Images* section of [*Chapter 2*](B17908_02_epub.xhtml#_idTextAnchor044),
     *Comparing Podman and Docker*, these manifests are necessary to correctly reassemble
     the image layers (the image manifest and the image index) and to pass runtime
     configurations to the container engine (the image configuration).
+  id: totrans-14
   prefs: []
   type: TYPE_NORMAL
+  zh: 正如我们在[*第 2 章*](B17908_02_epub.xhtml#_idTextAnchor044)的*OCI 镜像*部分中学到的，*比较 Podman
+    和 Docker*，这些清单对于正确地重新组合镜像层（镜像清单和镜像索引）以及将运行时配置传递给容器引擎（镜像配置）是必要的。
 - en: Before proceeding with the basic examples of image builds with Podman, we need
     to understand how image builds generally work to grasp the simple but very smart
     key concepts that lay beneath.
+  id: totrans-15
   prefs: []
   type: TYPE_NORMAL
+  zh: 在继续学习使用 Podman 构建镜像的基本示例之前，我们需要了解镜像构建的一般工作原理，以便理解其背后那些简单但非常聪明的关键概念。
 - en: Builds under the hood
+  id: totrans-16
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 构建背后的原理
 - en: Container images can be built in different ways, but the most common approach,
     probably one of the keys to the huge success of containers, is based on Dockerfiles.
+  id: totrans-17
   prefs: []
   type: TYPE_NORMAL
+  zh: 容器镜像可以通过不同的方式构建，但最常见的方法，可能也是容器巨大成功的关键之一，是基于 Dockerfile。
 - en: A **Dockerfile**, as the name suggests, is the main configuration file for Docker
     builds and is a plain list of actions to be executed in the build process.
+  id: totrans-18
   prefs: []
   type: TYPE_NORMAL
+  zh: '**Dockerfile**，顾名思义，是 Docker 构建的主要配置文件，它是构建过程中需要执行的操作的普通列表。'
 - en: Over time, Dockerfiles became a standard in OCI image builds and today are adopted
     in many use cases.
+  id: totrans-19
   prefs: []
   type: TYPE_NORMAL
+  zh: 随着时间的推移，Dockerfile 成为了 OCI 镜像构建的标准，并且今天在许多使用场景中得到了采用。
 - en: Important Note
+  id: totrans-20
   prefs: []
   type: TYPE_NORMAL
+  zh: 重要提示
 - en: To standardize and remove the association with the brand, Containerfiles were
     also introduced; they have the very same syntax as Dockerfiles and are supported
     natively by Podman. In this book, we will use the two terms *Dockerfile* and *Containerfile*
     interchangeably.
+  id: totrans-21
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了标准化并去除与品牌的关联，Containerfile 也被引入了；它们与 Dockerfile 具有完全相同的语法，并且 Podman 原生支持。在本书中，我们将交替使用
+    *Dockerfile* 和 *Containerfile* 这两个术语。
 - en: 'We will learn in detail Dockerfiles'' syntax in the next subsection. For now,
     let''s just focus on a concept – a Dockerfile is a set of build instructions that
     the build tool executes sequentially. Let''s look at this example:'
+  id: totrans-22
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们将在下一小节详细学习 Dockerfile 的语法。现在，先聚焦于一个概念——Dockerfile 是一组构建指令，构建工具将按顺序执行这些指令。我们来看这个例子：
 - en: '[PRE0]'
+  id: totrans-23
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE0]'
 - en: 'This basic example of a Dockerfile holds only four instructions:'
+  id: totrans-24
   prefs: []
   type: TYPE_NORMAL
+  zh: 这个基本的 Dockerfile 示例只有四个指令：
 - en: The `FROM` instruction, which defines the base image that will be used
+  id: totrans-25
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`FROM` 指令，定义将要使用的基础镜像'
 - en: The `RUN` instruction, which executes some actions during the build (in this
     example, installing packages with the `dnf` package manager)
+  id: totrans-26
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`RUN` 指令，在构建过程中执行一些操作（在此示例中，使用 `dnf` 包管理器安装软件包）'
 - en: The `COPY` instruction, which copies files or directories from the build working
     directory to the image
+  id: totrans-27
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`COPY` 指令，用于将文件或目录从构建工作目录复制到镜像中'
 - en: The `CMD` instruction, which defines the command to be executed when the container
     starts
+  id: totrans-28
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`CMD` 指令，定义容器启动时要执行的命令'
 - en: When the `RUN` and the `COPY` actions of the example are executed, new layers
     that hold the changes are cached in intermediate layers, represented by temporary
     containers. This is a native feature in Docker that has the advantage of reusing
     cached layers on further builds when no changes are requested on a specific layer.
     All the intermediate containers will produce read-only layers merged by the overlay
     graph driver.
+  id: totrans-29
   prefs: []
   type: TYPE_NORMAL
+  zh: 当执行示例中的 `RUN` 和 `COPY` 操作时，会有新的层来缓存变更，这些变更被缓存到中间层，并通过临时容器表示。这是 Docker 中的一个原生特性，它的优点是当特定层没有请求变更时，可以在后续构建中重用缓存层。所有中间容器都会生成只读层，并通过叠加图驱动合并。
 - en: Users don't need to manually manage the cached layers – the engine automatically
     implements the necessary actions by creating the temporary containers, executing
     the actions defined by the Dockerfile instructions, and then committing. By repeating
     the same logic for all the necessary instructions, Podman creates a new image
     with additional layers on top of the ones of the base image.
+  id: totrans-30
   prefs: []
   type: TYPE_NORMAL
+  zh: 用户无需手动管理缓存层——引擎会通过创建临时容器、执行 Dockerfile 指令定义的操作，然后提交的方式自动实现必要的操作。通过对所有必要指令重复相同的逻辑，Podman
+    在基础镜像的层上创建一个包含额外层的新镜像。
 - en: It is possible to squash the image layers into a single one to avoid a negative
     impact on the overlay's performances. Podman offers the same features and lets
     you choose between caching intermediate layers or not.
+  id: totrans-31
   prefs: []
   type: TYPE_NORMAL
+  zh: 可以将镜像层压缩成单一层，以避免对叠加层性能的负面影响。Podman 提供相同的功能，并允许用户选择是否缓存中间层。
 - en: Not all Dockerfile instructions change the filesystem, and only the ones that
     do it will create a new image layer; all the other instructions, such as the `CMD`
     instruction in the preceding example, produce an empty layer with metadata only
     and no changes in the overlay filesystem.
+  id: totrans-32
   prefs: []
   type: TYPE_NORMAL
+  zh: 并非所有 Dockerfile 指令都会改变文件系统，只有那些会改变文件系统的指令才会创建新的镜像层；所有其他指令，比如前面示例中的 `CMD` 指令，仅会生成一个包含元数据的空层，不会对叠加文件系统造成变化。
 - en: In general, the only instructions that create new layers by effectively changing
     the filesystem are the `RUN`, `COPY`, and `ADD` instructions. All the other instructions
     in a Dockerfile or Containerfile just create temporary intermediate images and
     do not impact the final image filesystem.
+  id: totrans-33
   prefs: []
   type: TYPE_NORMAL
+  zh: 通常，唯一通过有效更改文件系统来创建新层的指令是 `RUN`、`COPY` 和 `ADD` 指令。Dockerfile 或 Containerfile
+    中的其他所有指令仅创建临时中间镜像，并不会影响最终镜像的文件系统。
 - en: This is also a good reason to keep the number of Dockerfile `RUN`, `COPY`, and
     `ADD` instructions limited, since having images cluttered with too many layers
     is not a good pattern and impacts the graph driver performances.
+  id: totrans-34
   prefs: []
   type: TYPE_NORMAL
+  zh: 这也是限制 Dockerfile 中 `RUN`、`COPY` 和 `ADD` 指令数量的一个好理由，因为镜像中包含过多层是不好的模式，并且会影响图驱动的性能。
 - en: 'We can inspect an image''s history and the actions that have been applied to
     every layer. The following example shows an excerpt of the output from the `podman
     inspect` command, with the target image being a potential one created from the
     previous sample Dockerfile:'
+  id: totrans-35
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们可以检查镜像的历史以及对每个层应用的操作。以下示例展示了 `podman inspect` 命令的输出摘录，目标镜像是从之前的 Dockerfile
+    示例创建的潜在镜像：
 - en: '[PRE1]'
+  id: totrans-36
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE1]'
 - en: Looking at the last three items of the image history, we can note the exact
     instructions defined in the Dockerfile, including the last CMD instruction that
     does not create any new layer but instead metadata that will persist in the image
     config.
+  id: totrans-37
   prefs: []
   type: TYPE_NORMAL
+  zh: 查看镜像历史的最后三项，我们可以注意到Dockerfile中定义的确切指令，包括最后一个CMD指令，该指令不会创建新层，而是创建持久存在于镜像配置中的元数据。
 - en: With this deeper awareness of the image build logic in mind, let's now explore
     the most common Dockerfile instructions before proceeding with the Podman build
     examples.
+  id: totrans-38
   prefs: []
   type: TYPE_NORMAL
+  zh: 以这种更深入了解镜像构建逻辑的角度来看，让我们在继续Podman构建示例之前，先探索一下最常用的Dockerfile指令。
 - en: Dockerfile and Containerfile instructions
+  id: totrans-39
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: Dockerfile和Containerfile指令
 - en: As stated before, Dockerfiles and Containerfiles share the same syntax. The
     instruction in those files should be seen as (and truly are) commands passed to
     the container engine or build tool. This subsection provides an overview of the
     most frequently used instructions.
+  id: totrans-40
   prefs: []
   type: TYPE_NORMAL
+  zh: 如前所述，Dockerfile和Containerfile共享相同的语法。那些文件中的指令应该被视为（并且确实是）传递给容器引擎或构建工具的命令。本小节提供了最常用指令的概述。
 - en: 'All Dockerfile/Containerfile instructions follow the same pattern:'
+  id: totrans-41
   prefs: []
   type: TYPE_NORMAL
+  zh: 所有Dockerfile/Containerfile指令遵循相同的模式：
 - en: '[PRE2]'
+  id: totrans-42
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE2]'
 - en: 'The following list provides a non-exhaustive list of the most common instructions:'
+  id: totrans-43
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下列表提供了最常用指令的非详尽列表：
 - en: '`FROM <image>[:<tag>]` syntax to identify the correct image to use.'
+  id: totrans-44
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`FROM <image>[:<tag>]`语法，用于确定正确的镜像来使用。'
 - en: '`RUN <command>` syntax. The invoked binary or script must exist in the base
     image or a previous layer.'
+  id: totrans-45
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`RUN <command>`语法。调用的二进制文件或脚本必须存在于基础镜像或先前的层中。'
 - en: As stated before, the `RUN` instruction creates a new image layer; therefore,
     it is a frequent practice to concatenate commands into the same `RUN` instruction
     to avoid cluttering too many layers.
+  id: totrans-46
   prefs: []
   type: TYPE_NORMAL
+  zh: 如前所述，`RUN`指令会创建一个新的镜像层；因此，常见做法是将多个命令连接到同一个`RUN`指令中，以避免创建太多层。
 - en: 'This example compacts three commands inside the same `RUN` instruction:'
+  id: totrans-47
   prefs: []
   type: TYPE_NORMAL
+  zh: 这个示例将三个命令压缩到同一个`RUN`指令中：
 - en: '[PRE3]'
+  id: totrans-48
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE3]'
 - en: '`COPY <src>… <dest>` syntax, and it has a very useful option that lets us define
     the destination user and group instead of manually changing ownership later –
     `--chown=<user>:<group>`.'
+  id: totrans-49
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`COPY <src>… <dest>`语法，并且它有一个非常有用的选项，允许我们定义目标用户和组，而不是稍后手动更改所有权——`--chown=<user>:<group>`。'
 - en: '`ADD <src>… <dest>` syntax. This instruction also supports the automatic extraction
     of tar files from a source directly into the target path.'
+  id: totrans-50
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`ADD <src>… <dest>`语法。此指令还支持从源自动提取tar文件并直接写入目标路径。'
 - en: '`podman run <image> <arguments>`) or from the `CMD` instruction.'
+  id: totrans-51
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`podman run <image> <arguments>`）或来自`CMD`指令。'
 - en: 'An `ENTRYPOINT` image cannot be overridden by command-line arguments. The supported
     forms are the following:'
+  id: totrans-52
   prefs: []
   type: TYPE_NORMAL
+  zh: 一个`ENTRYPOINT`镜像不能被命令行参数覆盖。支持的格式如下：
 - en: '`ENTRYPOINT ["command", "param1", "paramN"]` (also known as the *exec* form)'
+  id: totrans-53
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`ENTRYPOINT ["command", "param1", "paramN"]`（也称为*exec*格式）'
 - en: '`ENTRYPOINT command param1 paramN` (the *shell* form)'
+  id: totrans-54
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`ENTRYPOINT command param1 paramN`（*shell*格式）'
 - en: If not set, its default value is `bash -c`. When set to the default value, commands
     are passed as an argument to the `bash` process. For example, if a `ps aux` command
     is passed as an argument at runtime or in a CMD instruction, the container will
     execute `bash -c "ps aux"`.
+  id: totrans-55
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果未设置，默认值为`bash -c`。当设置为默认值时，命令作为参数传递给`bash`进程。例如，如果在运行时或在CMD指令中传递`ps aux`命令，容器将执行`bash
+    -c "ps aux"`。
 - en: A frequent practice is to replace the default `ENTRYPOINT` command with a custom
     **script** that behaves in the same way and offers more granular control of the
     runtime execution.
+  id: totrans-56
   prefs: []
   type: TYPE_NORMAL
+  zh: 一个常见做法是用一个自定义的**脚本**替换默认的`ENTRYPOINT`命令，该脚本具有相同的行为，并且提供更细粒度的运行时控制。
 - en: '`ENTRYPOINT` instruction. It can be a full command or a set of plain arguments
     to be passed to a custom script or binary set as `ENTRYPOINT`. It supported forms
     are the following:'
+  id: totrans-57
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`ENTRYPOINT`指令。它可以是完整的命令或一组传递给自定义脚本或二进制文件的纯参数，设置为`ENTRYPOINT`。它支持的格式如下：'
 - en: '`CMD ["command", "param1", "paramN"]` (the *exec* form)'
+  id: totrans-58
   prefs:
   - PREF_IND
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`CMD ["command", "param1", "paramN"]`（*exec*格式）'
 - en: '`CMD ["param1, "paramN"]` (the *parameter* form, used to pass arguments to
     a custom `ENTRYPOINT`)'
+  id: totrans-59
   prefs:
   - PREF_IND
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`CMD ["param1", "paramN"]`（*parameter*格式，用于将参数传递给自定义的`ENTRYPOINT`）'
 - en: '`CMD command param1 paramN` (the *shell* form)'
+  id: totrans-60
   prefs:
   - PREF_IND
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`CMD command param1 paramN`（*shell*格式）'
 - en: '`LABEL <key1>=<value1> … <keyN>=<valueN>` syntax.'
+  id: totrans-61
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`LABEL <key1>=<value1> … <keyN>=<valueN>`语法。'
 - en: '`EXPOSE <port>/<protocol>` format.'
+  id: totrans-62
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`EXPOSE <port>/<protocol>`格式。'
 - en: '`ENV <key1>=<value1>… <keyN>=<valueN>` format.'
+  id: totrans-63
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`ENV <key1>=<value1>… <keyN>=<valueN>`格式。'
 - en: Environment variables can also be set inside a `RUN` instruction with a scope
     limited to the instruction itself.
+  id: totrans-64
   prefs: []
   type: TYPE_NORMAL
+  zh: 环境变量也可以在 `RUN` 指令中设置，其作用范围仅限于该指令本身。
 - en: '`VOLUME ["/path/to/dir"]`'
+  id: totrans-65
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`VOLUME ["/path/to/dir"]`'
 - en: '`VOLUME /path/to/dir`'
+  id: totrans-66
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`VOLUME /path/to/dir`'
 - en: See also the *Attaching host storage to a container* section in [*Chapter 5*](B17908_05_epub.xhtml#_idTextAnchor101),
     *Implementing Storage for the Containers' Data*, for more details about volumes.
+  id: totrans-67
   prefs: []
   type: TYPE_NORMAL
+  zh: 另请参阅 [*第 5 章*](B17908_05_epub.xhtml#_idTextAnchor101) 中的 *将主机存储附加到容器* 部分，了解有关卷的更多详细信息。
 - en: '`RUN`, `CMD`, and `ENTRYPOINT` instructions. The `GID` value is not mandatory.'
+  id: totrans-68
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`RUN`、`CMD` 和 `ENTRYPOINT` 指令。`GID` 值不是必须的。'
 - en: 'The supported formats are the following:'
+  id: totrans-69
   prefs: []
   type: TYPE_NORMAL
+  zh: 支持的格式如下：
 - en: '`USER <username>:[<groupname>]`'
+  id: totrans-70
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`USER <username>:[<groupname>]`'
 - en: '`USER <UID>:[<GID>]`'
+  id: totrans-71
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`USER <UID>:[<GID>]`'
 - en: '`WORKDIR /path/to/workdir` format.'
+  id: totrans-72
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`WORKDIR /path/to/workdir` 格式。'
 - en: '`FROM` instruction. Its purpose is to allow the execution of some final command
     on a child container image.'
+  id: totrans-73
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`FROM` 指令。其目的是允许在子容器镜像上执行某些最终命令。'
 - en: 'The supported formats are the following:'
+  id: totrans-74
   prefs: []
   type: TYPE_NORMAL
+  zh: 支持的格式如下：
 - en: '`ONBUILD ADD . /opt/app`'
+  id: totrans-75
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`ONBUILD ADD . /opt/app`'
 - en: '`ONBUILD RUN /opt/bin/custom-build /opt/app/src`'
+  id: totrans-76
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`ONBUILD RUN /opt/bin/custom-build /opt/app/src`'
 - en: Now that we have learned the most common instructions, let's dive into our first
     build examples with Podman.
+  id: totrans-77
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在我们已经学习了最常见的指令，接下来让我们深入了解第一个使用 Podman 构建的示例。
 - en: Running builds with Podman
+  id: totrans-78
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 使用 Podman 运行构建
 - en: Good news – Podman provides the same build commands and syntax as Docker. If
     you are switching from Docker, there will be no learning curve to start building
     your images with it. Under the hood, there is a notable advantage in choosing
     Podman as a build tool – Podman can build containers in rootless mode, using a
     fork/exec model.
+  id: totrans-79
   prefs: []
   type: TYPE_NORMAL
+  zh: 好消息——Podman 提供了与 Docker 相同的构建命令和语法。如果你从 Docker 切换过来，使用 Podman 构建镜像不会有学习曲线。从技术层面上讲，选择
+    Podman 作为构建工具有一个显著优势——Podman 可以在无根模式下构建容器，使用的是 fork/exec 模型。
 - en: This is a step forward compared to Docker builds, where communication with the
     daemon listening on the Unix socket is necessary to run the build.
+  id: totrans-80
   prefs: []
   type: TYPE_NORMAL
+  zh: 这是与 Docker 构建相比的一步进展，后者需要与监听 Unix 套接字的守护进程进行通信才能运行构建。
 - en: 'Let''s start by running a simple build based on the `httpd` Dockerfile illustrated
     in the first *Builds under the hood subsection*. We will use the following `podman
     build` command:'
+  id: totrans-81
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们从基于第一个 *构建过程概述* 子部分中说明的 `httpd` Dockerfile 运行一个简单的构建开始。我们将使用以下 `podman build`
+    命令：
 - en: '[PRE4]'
+  id: totrans-82
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE4]'
 - en: In the preceding example, the output of the `dnf install` command was omitted
     for the sake of clarity and space.
+  id: totrans-83
   prefs: []
   type: TYPE_NORMAL
+  zh: 在前面的示例中，为了清晰和节省空间，省略了 `dnf install` 命令的输出。
 - en: The command runs the instructions sequentially and persists the intermediate
     layers until the final image is committed and tagged. The build steps are numbered
     (`1/4` to `4/4`) and some of them (`RUN` and `COPY` here) produce non-empty layers,
     forming part of the image lowerDirs.
+  id: totrans-84
   prefs: []
   type: TYPE_NORMAL
+  zh: 命令按顺序执行指令，并在最终镜像提交和标记之前保留中间层。构建步骤被编号（`1/4`到`4/4`），其中一些步骤（如`RUN`和`COPY`）会产生非空的层，成为镜像的
+    lowerDirs 部分。
 - en: The first `FROM` instruction defines the base image, which is pulled automatically
     if not present in the host.
+  id: totrans-85
   prefs: []
   type: TYPE_NORMAL
+  zh: 第一条 `FROM` 指令定义了基础镜像，如果主机上不存在，系统会自动拉取该镜像。
 - en: The second instruction is `RUN`, which executes the `dnf` command to install
     the httpd package and clean up the system upon completion. Under the hood, this
     line is executed as `"bash –c 'dnf install -y httpd && dnf clean all –y'"`.
+  id: totrans-86
   prefs: []
   type: TYPE_NORMAL
+  zh: 第二条指令是`RUN`，它执行`dnf`命令以安装httpd软件包，并在完成后清理系统。实际执行时，这一行会作为`"bash -c 'dnf install
+    -y httpd && dnf clean all -y'"`执行。
 - en: The third `COPY` instruction simply copies the `index.html` file in the default
     httpd document root.
+  id: totrans-87
   prefs: []
   type: TYPE_NORMAL
+  zh: 第三条 `COPY` 指令只是将 `index.html` 文件复制到默认的 httpd 文档根目录。
 - en: 'Finally, the fourth step defines the default container `CMD` instruction. Since
     no `ENTRYPOINT` instructions were set, this will translate into the following
     command:'
+  id: totrans-88
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后，第四步定义了默认的容器 `CMD` 指令。由于没有设置 `ENTRYPOINT` 指令，这将转换为以下命令：
 - en: '`"bash -c ''/usr/sbin/httpd -DFOREGROUND''"`'
+  id: totrans-89
   prefs: []
   type: TYPE_NORMAL
+  zh: '`"bash -c ''/usr/sbin/httpd -DFOREGROUND''"`'
 - en: 'The next example is a custom Dockerfile/Containerfile where a custom web server
     is built:'
+  id: totrans-90
   prefs: []
   type: TYPE_NORMAL
+  zh: 下一个示例是一个自定义的 Dockerfile/Containerfile，用于构建一个自定义的 Web 服务器：
 - en: '[PRE5]'
+  id: totrans-91
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE5]'
 - en: 'This example was designed for the purpose of this book to illustrate some peculiar
     elements:'
+  id: totrans-92
   prefs: []
   type: TYPE_NORMAL
+  zh: 这个示例是为了本书的目的设计的，用来说明一些特殊的元素：
 - en: Packages installed with a package manager should be kept at a minimum. After
     installing the `httpd` package, necessary to run the web server, the cache is
     cleaned to save layer space.
+  id: totrans-93
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 使用包管理器安装的软件包应保持在最小范围。安装完运行 Web 服务器所需的`httpd`软件包后，清理缓存以节省层空间。
 - en: Multiple commands can be grouped together in a single `RUN` instruction. However,
     we don't want to continue the build if a single command fails. To provide a failsafe
     shell execution, the `set -euo pipefail` command was prepended. Also, to improve
     readability, the single commands were split into more lines using the `\` character,
     which can work as a line break or escape character.
+  id: totrans-94
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 多个命令可以在单一的 `RUN` 指令中组合在一起。然而，如果其中一个命令失败，我们不希望继续构建。为了提供容错的 shell 执行，`set -euo
+    pipefail` 命令被预先添加。此外，为了提高可读性，单个命令被使用 `\` 字符拆分成更多行，` \` 可以作为换行符或转义字符。
 - en: To avoid running the isolated processes as the root user, a series of workarounds
     were implemented in order to have the httpd process running as the generic `1001`
     user. Those workarounds included updating files permissions and group ownership
     on specific directories that are expected to be accessed by non-root users. This
     is a security best practice that reduces the attack surface of the container.
+  id: totrans-95
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 为了避免以 root 用户身份运行隔离的进程，实施了一系列变通方法，使得 httpd 进程以通用的 `1001` 用户身份运行。这些变通方法包括更新特定目录的文件权限和组所有权，预计这些目录将被非
+    root 用户访问。这是一项安全最佳实践，能减少容器的攻击面。
 - en: A common pattern in containers is the redirections of application logs to the
     container's `stdout` and `stderr`. The common httpd log streams have been modified
     for this purpose using regular expressions against the `/etc/httpd/conf/httpd.conf`
     file.
+  id: totrans-96
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 容器中的一个常见模式是将应用程序日志重定向到容器的 `stdout` 和 `stderr`。为了这个目的，常见的 httpd 日志流已经通过对 `/etc/httpd/conf/httpd.conf`
+    文件的正则表达式进行了修改。
 - en: The web server ports are declared as exposed with the `EXPOSE` instruction.
+  id: totrans-97
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: Web 服务器端口通过 `EXPOSE` 指令声明为暴露端口。
 - en: The `CMD` instruction is a simple `httpd` command without any other argument.
     This was done to illustrate how the `ENTRYPOINT` can interact with the CMD arguments.
+  id: totrans-98
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`CMD` 指令是一个简单的 `httpd` 命令，没有其他参数。这是为了说明 `ENTRYPOINT` 如何与 `CMD` 参数交互。'
 - en: 'The container `ENTRYPOINT` instruction is modified with a custom script that
     brings more flexibility to the way the `CMD` instruction is managed. The `entrypoint.sh`
     file tests whether the container is executed as root and checks the first `CMD`
     argument – if the argument is `httpd`, it executes the `httpd -DFOREGROUND` command;
     otherwise, it lets you execute any other command (a shell, for example). The following
     code is the content of the `entrypoint.sh` script:'
+  id: totrans-99
   prefs: []
   type: TYPE_NORMAL
+  zh: 容器的 `ENTRYPOINT` 指令通过一个自定义脚本进行了修改，该脚本为 `CMD` 指令的管理方式带来了更多灵活性。`entrypoint.sh`
+    文件会测试容器是否以 root 用户身份执行，并检查第一个 `CMD` 参数——如果参数是 `httpd`，则执行 `httpd -DFOREGROUND`
+    命令；否则，它允许你执行任何其他命令（例如一个 shell）。以下代码是 `entrypoint.sh` 脚本的内容：
 - en: '[PRE6]'
+  id: totrans-100
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE6]'
 - en: 'Let''s now build the image with the `podman build` command:'
+  id: totrans-101
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，让我们使用 `podman build` 命令来构建镜像：
 - en: '[PRE7]'
+  id: totrans-102
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE7]'
 - en: 'The newly built image will be available in the local host cache:'
+  id: totrans-103
   prefs: []
   type: TYPE_NORMAL
+  zh: 新构建的镜像将可用在本地主机的缓存中：
 - en: '[PRE8]'
+  id: totrans-104
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE8]'
 - en: 'After building, we can `v1.0` tag and the latest tag:'
+  id: totrans-105
   prefs: []
   type: TYPE_NORMAL
+  zh: 构建完成后，我们可以使用 `v1.0` 标签和最新标签：
 - en: '[PRE9]'
+  id: totrans-106
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE9]'
 - en: After tagging, the image will be ready to be pushed to the remote registry.
     We will cover the interaction with registries in greater detail in [*Chapter 9*](B17908_09_epub.xhtml#_idTextAnchor167),
     *Pushing Images to a Container Registry*.
+  id: totrans-107
   prefs: []
   type: TYPE_NORMAL
+  zh: 在标记之后，镜像将准备好推送到远程注册表。我们将在[*第9章*](B17908_09_epub.xhtml#_idTextAnchor167)中更详细地讨论与注册表的交互，*推送镜像到容器注册表*。
 - en: 'The example image will be composed of five layers, including the base Fedora
     image layer. We can verify the number of layers by running the `podman inspect`
     command against the new image:'
+  id: totrans-108
   prefs: []
   type: TYPE_NORMAL
+  zh: 示例镜像将由五个层组成，包括基础 Fedora 镜像层。我们可以通过运行 `podman inspect` 命令检查新镜像的层数：
 - en: '[PRE10]'
+  id: totrans-109
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE10]'
 - en: 'It is possible to squash the current build layers into a single layer using
     the `--layers=false` option. The resulting image will have only two layers – the
     base Fedora layer and the squashed one. The following example rebuilds the image
     without caching the intermediate layers:'
+  id: totrans-110
   prefs: []
   type: TYPE_NORMAL
+  zh: 可以使用 `--layers=false` 选项将当前的构建层压缩为单一层。生成的镜像将只有两个层——基础 Fedora 层和压缩后的层。以下示例重新构建镜像，不缓存中间层：
 - en: '[PRE11]'
+  id: totrans-111
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE11]'
 - en: 'Let''s inspect the output image again:'
+  id: totrans-112
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，让我们再次检查输出镜像：
 - en: '[PRE12]'
+  id: totrans-113
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE12]'
 - en: This time, the final image has the two expected layers only.
+  id: totrans-114
   prefs: []
   type: TYPE_NORMAL
+  zh: 这一次，最终镜像只包含了两个预期的层。
 - en: Reducing the number of layers can be useful to keep the image minimal in terms
     of overlays. The downside of this approach is that we will have to rebuild the
     whole image for every configuration change without taking advantage of cached
     layers.
+  id: totrans-115
   prefs: []
   type: TYPE_NORMAL
+  zh: 减少层数有助于保持镜像在叠加层方面的简洁。该方法的缺点是，每次配置更改时，我们必须重新构建整个镜像，无法利用缓存的层。
 - en: 'In terms of isolation, Podman can safely build images in rootless mode. Indeed,
     this is considered a value since there should be no need to run builds with a
     privileged user such as root. If rootful builds are necessary, they are fully
     functional and supported. The following example runs a build as the root user:'
+  id: totrans-116
   prefs: []
   type: TYPE_NORMAL
+  zh: 在隔离方面，Podman 可以安全地在无根模式下构建镜像。实际上，这是一个非常重要的特性，因为构建时无需以具有特权的用户（如 root）身份运行。如果必须使用
+    root 用户进行构建，也是完全可行并得到支持的。以下示例以 root 用户身份运行构建：
 - en: '[PRE13]'
+  id: totrans-117
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE13]'
 - en: The resulting image will be available only in the system image cache and its
     layers stored under `/var/lib/containers/storage/`.
+  id: totrans-118
   prefs: []
   type: TYPE_NORMAL
+  zh: 生成的镜像将仅保存在系统镜像缓存中，其层次结构将存储在 `/var/lib/containers/storage/` 目录下。
 - en: The flexible nature of Podman builds is strongly related to its companion tool,
     **Buildah**, a specialized tool to build OCI images that provides greater flexibility
     in builds. In the next section, we will describe Buildah's features and how it
     manages image builds.
+  id: totrans-119
   prefs: []
   type: TYPE_NORMAL
+  zh: Podman 构建的灵活性与其配套工具**Buildah**密切相关，Buildah 是一个专门用于构建 OCI 镜像的工具，提供了更大的构建灵活性。在下一节中，我们将介绍
+    Buildah 的特性以及它如何管理镜像构建。
 - en: Meet Buildah, Podman's companion tool for builds
+  id: totrans-120
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 认识 Buildah，Podman 的构建配套工具
 - en: Podman does an excellent job in plain builds with Dockerfiles/Containerfiles
     and helps teams to preserve their previously implemented build pipelines without
     the need for new investments.
+  id: totrans-121
   prefs: []
   type: TYPE_NORMAL
+  zh: Podman 在使用 Dockerfile/Containerfile 进行常规构建时表现出色，并帮助团队保留之前实现的构建管道，而无需进行新的投资。
 - en: However, when it comes to more specialized build tasks, or when users need more
     control on the build workflow, with the option of including scripting logic, the
     Dockerfile/Containerfile approach shows its limitations. Communities struggled
     to find alternative building approaches that can overcome the rigid, workflow-based
     logic of Dockerfiles/Containerfiles.
+  id: totrans-122
   prefs: []
   type: TYPE_NORMAL
+  zh: 然而，当涉及到更专业的构建任务时，或者用户需要更多的构建流程控制并可以包含脚本逻辑时，Dockerfile/Containerfile 方法会暴露其局限性。社区一直在努力寻找能够克服
+    Dockerfile/Containerfile 固定工作流逻辑的替代构建方法。
 - en: The same community that develops Podman brought to life the Buildah (pronounced
     *build-ah*) project, a tool to manage OCI builds with support for multiple building
     strategies. Images created with Buildah are fully portable and compatible with
     Docker, and all engines are compliant with the OCI image and runtime specs.
+  id: totrans-123
   prefs: []
   type: TYPE_NORMAL
+  zh: 开发 Podman 的同一个社区推出了 Buildah（发音为*build-ah*）项目，这是一个支持多种构建策略的 OCI 构建管理工具。使用 Buildah
+    创建的镜像完全可移植并与 Docker 兼容，所有引擎都符合 OCI 镜像和运行时规范。
 - en: 'Buildah is an open source project released under the Apache 2.0 license. Sources
     are available on GitHub at the following URL: [https://github.com/containers/buildah](https://github.com/containers/buildah).'
+  id: totrans-124
   prefs: []
   type: TYPE_NORMAL
+  zh: Buildah 是一个开源项目，遵循 Apache 2.0 许可证发布。源代码可以在 GitHub 上找到，网址为：[https://github.com/containers/buildah](https://github.com/containers/buildah)。
 - en: Buildah is complementary to Podman, which borrows its build logic by vendoring
     its libraries to implement basic build functionalities against Dockerfiles and
     Containerfiles. The final Podman binary, which is compiled in Go as a statically
     linked single file, embeds Buildah packages to manage the build steps.
+  id: totrans-125
   prefs: []
   type: TYPE_NORMAL
+  zh: Buildah 是 Podman 的补充工具，借用了其构建逻辑，通过将其库嵌入到 Podman 中，实现在 Dockerfile 和 Containerfile
+    上的基本构建功能。最终编译的 Podman 二进制文件是一个静态链接的 Go 单文件，其中嵌入了 Buildah 包来管理构建步骤。
 - en: Buildah uses the *containers/image* project ([https://github.com/containers/image](https://github.com/containers/image))
     to manage an image's life cycle and its interaction with registries, and the *containers/storage*
     project ([https://github.com/containers/storage](https://github.com/containers/storage))
     to manage images and containers' filesystem layers.
+  id: totrans-126
   prefs: []
   type: TYPE_NORMAL
+  zh: Buildah 使用 *containers/image* 项目（[https://github.com/containers/image](https://github.com/containers/image)）来管理镜像的生命周期及其与注册表的交互，并使用
+    *containers/storage* 项目（[https://github.com/containers/storage](https://github.com/containers/storage)）来管理镜像和容器的文件系统层。
 - en: The advanced build strategy of Buildah is based on the parallel support for
     traditional Dockerfile/Containerfile-based builds, and for builds driven by native
     Buildah commands that replicate the Dockerfile instructions.
+  id: totrans-127
   prefs: []
   type: TYPE_NORMAL
+  zh: Buildah 的高级构建策略基于对传统 Dockerfile/Containerfile 构建和由原生 Buildah 命令驱动的构建的并行支持，这些命令能够复制
+    Dockerfile 指令。
 - en: By replicating Dockerfile instructions in standard commands, Buildah becomes
     a scriptable tool that can be interpolated with custom logic and native shell
     constructs such as conditionals, loops, or environment variables. For example,
     the `RUN` instruction in a Dockerfile can be replaced with a `buildah run` command.
+  id: totrans-128
   prefs: []
   type: TYPE_NORMAL
+  zh: 通过在标准命令中复制 Dockerfile 指令，Buildah 成为一个可编写脚本的工具，能够与自定义逻辑和原生 shell 构造（如条件语句、循环或环境变量）进行插值。例如，Dockerfile
+    中的 `RUN` 指令可以用 `buildah run` 命令替代。
 - en: If teams need to preserve the build logic implemented in previous Dockerfiles,
     Buildah offers the `buildah build` (or its alias, `buildah bud`) command, which
     builds the image reading from the provided Dockerfile/Containerfile.
+  id: totrans-129
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果团队需要保留之前 Dockerfile 中实现的构建逻辑，Buildah 提供了 `buildah build`（或其别名 `buildah bud`）命令，该命令通过读取提供的
+    Dockerfile/Containerfile 来构建镜像。
 - en: Buildah can smoothly run in rootless mode to build images; this is a valuable,
     highly demanded feature from a security point of view. No Unix sockets are necessary
     to run a build. At the beginning of this chapter, we explained how builds are
     always based on containers; Buildah is not exempt from this behavior, and all
     its builds are executed inside working containers, starting on top of the base
     image.
+  id: totrans-130
   prefs: []
   type: TYPE_NORMAL
+  zh: Buildah 可以平稳地以无 root 模式运行以构建镜像；从安全角度来看，这是一个宝贵且需求量大的特性。构建过程中不需要 Unix 套接字。在本章开头，我们解释了构建始终基于容器；Buildah
+    也不例外，所有构建都在工作容器内执行，从基础镜像开始。
 - en: 'The following list provides a non-exhaustive description of the most frequently
     used commands in Buildah:'
+  id: totrans-131
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下列表提供了 Buildah 中最常用命令的非详尽描述：
 - en: '`buildah from [options] <image>` syntax. An example of this command is `$ buildah
     from fedora`.'
+  id: totrans-132
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`buildah from [options] <image>` 语法。该命令的示例是 `$ buildah from fedora`。'
 - en: '`RUN` instruction of a Dockerfile; it runs a command inside a working container.
     This command accepts the `buildah run [options] [--] <container> <command>` syntax.
     The `--` (double dash) option is necessary to separate potential options from
     the effective container command. An example of this command is `buildah run <containerID>
     -- dnf install -y nginx`.'
+  id: totrans-133
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: Dockerfile 的 `RUN` 指令；它在工作容器内运行命令。此命令接受 `buildah run [options] [--] <container>
+    <command>` 语法。`--`（双破折号）选项用于将潜在的选项与实际的容器命令分开。该命令的示例是 `buildah run <containerID>
+    -- dnf install -y nginx`。
 - en: '`buildah config [options] <container>` format. The options available for this
     command are associated with the various Dockerfile instructions that do not modify
     filesystem layers but set some container metadata – for instance, the setup of
     the `entrypoint` container. An example of this command is `buildah config --entrypoint/entrypoint.sh
     <containerID>`.'
+  id: totrans-134
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`buildah config [options] <container>` 格式。此命令的选项与不修改文件系统层但设置容器元数据的各种 Dockerfile
+    指令相关，例如设置 `entrypoint` 容器。该命令的示例是 `buildah config --entrypoint/entrypoint.sh <containerID>`。'
 - en: '`ADD` instruction of the Dockerfile; it adds files, directories, and even URLs
     to the container. It supports the `buildah add [options] <container> <src> [[src
     …] <dst>` syntax and allows you to copy multiple files in one single command.
     An example of this command is `buildah add <containerID> index.php /var/www.html`.'
+  id: totrans-135
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: Dockerfile 的 `ADD` 指令；它将文件、目录甚至 URL 添加到容器中。它支持 `buildah add [options] <container>
+    <src> [[src …] <dst>` 语法，并允许在一个命令中复制多个文件。该命令的示例是 `buildah add <containerID> index.php
+    /var/www.html`。
 - en: '`COPY` instruction; it adds files, URLs, and directories to the container.
     It supports the `buildah copy [options] <container> <src> [[src …] <dst>` syntax.
     An example of this command is `buildah copy <containerID> entrypoint.sh /`.'
+  id: totrans-136
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`COPY` 指令；它将文件、URL 和目录添加到容器中。它支持 `buildah copy [options] <container> <src>
+    [[src …] <dst>` 语法。该命令的示例是 `buildah copy <containerID> entrypoint.sh /`。'
 - en: '`buildah copy [options] <container> <image_name>` syntax. The container image
     created from this command can be later tagged and pushed to a registry. An example
     of this command is `buildah commit <containerID> <myhttpd>`.'
+  id: totrans-137
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`buildah copy [options] <container> <image_name>` 语法。通过此命令创建的容器镜像可以后续标记并推送到镜像仓库。该命令的示例是
+    `buildah commit <containerID> <myhttpd>`。'
 - en: '`buildah build [options] [context]` syntax and the `buildah bud` command alias.
     An example of this command is `buildah build –t <imageName> .`.'
+  id: totrans-138
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`buildah build [options] [context]` 语法及 `buildah bud` 命令别名。该命令的示例是 `buildah
+    build –t <imageName> .`。'
 - en: '`buildah ls` and `buildah ps`. The supported syntax is `buildah containers
     [options]`. An example of this command is `buildah containers`.'
+  id: totrans-139
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`buildah ls` 和 `buildah ps`。支持的语法是 `buildah containers [options]`。该命令的示例是 `buildah
+    containers`。'
 - en: '`buildah delete` command is equivalent. The supported syntax is `buildah rm
     <container>`. This command has only one option, the `–all, -a` option, to remove
     all the working containers. An example of this command is `buildah rm <containerID>`.'
+  id: totrans-140
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`buildah delete` 命令是等效的。支持的语法是 `buildah rm <container>`。此命令只有一个选项，即 `–all,
+    -a` 选项，用于移除所有工作容器。此命令的示例如 `buildah rm <containerID>`。'
 - en: '`buildah mount [containerID … ]`. When no argument is passed, the command only
     shows the currently mounted containers. An example of this command is `buildahmount<containerID>`.'
+  id: totrans-141
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`buildah mount [containerID … ]`。当没有传递任何参数时，命令仅显示当前已挂载的容器。此命令的示例如 `buildahmount<containerID>`。'
 - en: '`buildah images [options] [image]`. Custom output formats such as JSON are
     available. An example of this command is `buildah images --json`.'
+  id: totrans-142
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`buildah images [options] [image]`。支持像 JSON 这样的自定义输出格式。此命令的示例如 `buildah images
+    --json`。'
 - en: '`buildah tag <name> <new-name>` format. An example of this command is `buildah
     tag myapp quay.io/packt/myapp:latest`.'
+  id: totrans-143
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`buildah tag <name> <new-name>` 格式。此命令的示例如 `buildah tag myapp quay.io/packt/myapp:latest`。'
 - en: '`buildah push [options] <image> [destination]`. Examples of this command include
     `buildah push quay.io/packt/myapp:latest`, `buildah push <imageID> docker://<URL>/repository:tag`,
     and `buildah push <imageID> oci:</path/to/dir>:image:tag`.'
+  id: totrans-144
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`buildah push [options] <image> [destination]`。此命令的示例包括 `buildah push quay.io/packt/myapp:latest`，`buildah
+    push <imageID> docker://<URL>/repository:tag`，以及 `buildah push <imageID> oci:</path/to/dir>:image:tag`。'
 - en: '`buildah pull [options] <image>`. Examples of this command include `buildah
     pull <imageName>`, `buildah pull docker://<URL>/repository:tag`, and `buildah
     pull dir:</path/to/dir>`.'
+  id: totrans-145
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`buildah pull [options] <image>`。此命令的示例包括 `buildah pull <imageName>`，`buildah
+    pull docker://<URL>/repository:tag`，以及 `buildah pull dir:</path/to/dir>`。'
 - en: All the commands described previously have their corresponding `man` page, with
     the `man buildah-<command>` pattern. For example, to read documentation details
     about the `buildah run` command, just type `man buildah-run` on the terminal.
+  id: totrans-146
   prefs: []
   type: TYPE_NORMAL
+  zh: 所有之前描述的命令都有相应的 `man` 页面，遵循 `man buildah-<command>` 的模式。例如，要查看 `buildah run`
+    命令的文档细节，只需在终端输入 `man buildah-run`。
 - en: 'The next example shows basic Buildah capabilities. A Fedora base image is customized
     to run an httpd process:'
+  id: totrans-147
   prefs: []
   type: TYPE_NORMAL
+  zh: 下一个示例展示了基本的 Buildah 功能。一个 Fedora 基础镜像被定制以运行 httpd 进程：
 - en: '[PRE14]'
+  id: totrans-148
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE14]'
 - en: The preceding commands will produce an OCI-compliant, portable image with the
     same features of an image built from a Dockerfile, all in a few lines that can
     be included in a simple script.
+  id: totrans-149
   prefs: []
   type: TYPE_NORMAL
+  zh: 上述命令将生成一个符合 OCI 标准、可移植的镜像，具有从 Dockerfile 构建的镜像的相同功能，所有这些都可以在几行代码中实现，可以包含在一个简单的脚本中。
 - en: 'We will now focus on the first command:'
+  id: totrans-150
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在我们将重点关注第一个命令：
 - en: '[PRE15]'
+  id: totrans-151
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE15]'
 - en: The `buildah from` command pulls a Fedora image from one of the allowed registries
     and spins up a working container from it, returning the container name. Instead
     of simply having it printed on standard output, we will capture the name with
@@ -717,355 +1061,520 @@
     holds the name of the generated container, to the subsequent commands. Therefore,
     the build commands will be executed inside this working container. This is quite
     a common pattern and is especially useful to automate Buildah commands in scripts.
+  id: totrans-152
   prefs: []
   type: TYPE_NORMAL
+  zh: '`buildah from` 命令从允许的注册表之一拉取一个 Fedora 镜像，并从中创建一个工作容器，返回容器的名称。我们将不只是将它打印在标准输出上，而是使用
+    shell 扩展语法捕获名称。从现在起，我们可以将 `$container` 变量传递给后续的命令，`$container` 保存着生成的容器名称。因此，构建命令将在此工作容器内执行。这是一种相当常见的模式，特别适合在脚本中自动化
+    Buildah 命令。'
 - en: Important Note
+  id: totrans-153
   prefs: []
   type: TYPE_NORMAL
+  zh: 重要说明
 - en: There is a subtle difference between the concept of container in Buildah and
     Podman. Both adopt the same technology to create containers, but Buildah containers
     are short-lived entities that are created to be modified and committed, while
     Podman containers are supposed to run long-living workloads.
+  id: totrans-154
   prefs: []
   type: TYPE_NORMAL
+  zh: 在 Buildah 和 Podman 中，容器的概念之间存在细微的差异。两者都采用相同的技术来创建容器，但 Buildah 容器是短生命周期的实体，旨在被修改并提交，而
+    Podman 容器则应该运行长期的工作负载。
 - en: The flexible and embeddable nature of this approach is remarkable – Buildah
     commands can be included anywhere, and users can choose between a fully automated
     build process and a more interactive one.
+  id: totrans-155
   prefs: []
   type: TYPE_NORMAL
+  zh: 这种方法的灵活性和可嵌入性是非常显著的——Buildah 命令可以包含在任何地方，用户可以选择完全自动化的构建过程，也可以选择更具互动性的构建过程。
 - en: For example, Buildah can be easily integrated with **Ansible**, the open source
     automation engine, to provide automated builds using native connection plugins
     that enable communication with working containers.
+  id: totrans-156
   prefs: []
   type: TYPE_NORMAL
+  zh: 例如，Buildah 可以轻松地与 **Ansible**（开源自动化引擎）集成，利用原生连接插件自动化构建，插件可以与工作容器进行通信。
 - en: You can choose to include Buildah inside a CI pipeline (such as **Jenkins**,
     **Tekton**, or **GitLab CI/CD**) to gain full control of the build and integration
     tasks.
+  id: totrans-157
   prefs: []
   type: TYPE_NORMAL
+  zh: 你可以选择将 Buildah 纳入 CI 流水线（如 **Jenkins**、**Tekton** 或 **GitLab CI/CD**），以便完全控制构建和集成任务。
 - en: Buildah is also included in larger projects of the cloud-native community, such
     as the **Shipwright** project ([https://github.com/shipwright-io/build](https://github.com/shipwright-io/build)).
+  id: totrans-158
   prefs: []
   type: TYPE_NORMAL
+  zh: Buildah 也包含在云原生社区的大型项目中，例如 **Shipwright** 项目 ([https://github.com/shipwright-io/build](https://github.com/shipwright-io/build))。
 - en: Shipwright is an extensible build framework for Kubernetes that provides the
     flexibility of customizing image builds using custom resource definitions and
     different build tools. Buildah is one of the available solutions that you can
     choose when designing your build processes with it.
+  id: totrans-159
   prefs: []
   type: TYPE_NORMAL
+  zh: Shipwright 是一个可扩展的 Kubernetes 构建框架，提供了通过自定义资源定义和不同构建工具自定义镜像构建的灵活性。Buildah 是设计构建过程时可以选择的解决方案之一。
 - en: We will see more detailed and richer examples in the next subsections. Now that
     we have seen an overview of Buildah's capabilities and use cases, let's dive into
     the installation and environment preparation steps.
+  id: totrans-160
   prefs: []
   type: TYPE_NORMAL
+  zh: 在接下来的子章节中，我们将看到更详细、更丰富的示例。现在我们已经了解了 Buildah 的功能和使用场景概述，让我们深入了解安装和环境准备步骤。
 - en: Preparing our environment
+  id: totrans-161
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 准备我们的环境
 - en: 'Buildah is available on different distributions and can be installed using
     the respective package managers. This section provides a non-exhaustive list of
     installation examples on the major distributions. For the sake of clarity, it
     is important to reiterate that the book lab environments were all based on Fedora
     34:'
+  id: totrans-162
   prefs: []
   type: TYPE_NORMAL
+  zh: Buildah 可以在不同的发行版上使用，并且可以通过相应的包管理器进行安装。本节提供了一些主要发行版的安装示例，并非详尽无遗。为了清晰起见，需要重申的是，本书实验环境均基于
+    Fedora 34：
 - en: '`dnf` command:'
+  id: totrans-163
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`dnf` 命令：'
 - en: '[PRE16]'
+  id: totrans-164
   prefs:
   - PREF_IND
   type: TYPE_PRE
+  zh: '[PRE16]'
 - en: '`apt-get` commands:'
+  id: totrans-165
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`apt-get` 命令：'
 - en: '[PRE17]'
+  id: totrans-166
   prefs:
   - PREF_IND
   type: TYPE_PRE
+  zh: '[PRE17]'
 - en: '`yum` command:'
+  id: totrans-167
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`yum` 命令：'
 - en: '[PRE18]'
+  id: totrans-168
   prefs:
   - PREF_IND
   type: TYPE_PRE
+  zh: '[PRE18]'
 - en: '`yum module` commands:'
+  id: totrans-169
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`yum module` 命令：'
 - en: '[PRE19]'
+  id: totrans-170
   prefs:
   - PREF_IND
   type: TYPE_PRE
+  zh: '[PRE19]'
 - en: '`rhel-7-server-extras-rpms` repository and install with `yum`:'
+  id: totrans-171
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`rhel-7-server-extras-rpms` 仓库并使用 `yum` 安装：'
 - en: '[PRE20]'
+  id: totrans-172
   prefs:
   - PREF_IND
   type: TYPE_PRE
+  zh: '[PRE20]'
 - en: '`pacman` command:'
+  id: totrans-173
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`pacman` 命令：'
 - en: '[PRE21]'
+  id: totrans-174
   prefs:
   - PREF_IND
   type: TYPE_PRE
+  zh: '[PRE21]'
 - en: '`apt-get` commands:'
+  id: totrans-175
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`apt-get` 命令：'
 - en: '[PRE22]'
+  id: totrans-176
   prefs:
   - PREF_IND
   type: TYPE_PRE
+  zh: '[PRE22]'
 - en: '`emerge` command:'
+  id: totrans-177
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`emerge` 命令：'
 - en: '[PRE23]'
+  id: totrans-178
   prefs:
   - PREF_IND
   type: TYPE_PRE
+  zh: '[PRE23]'
 - en: '**Build from source**: Buildah can also be built from the source. For the purpose
     of this book, we will keep the focus on simple deployment methods, but if you''re
     curious, you will find the following guide useful to try out your own builds:
     [https://github.com/containers/buildah/blob/main/install.md#building-from-scratch](https://github.com/containers/buildah/blob/main/install.md#building-from-scratch).'
+  id: totrans-179
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**从源代码构建**：Buildah 也可以从源代码构建。为了本书的目的，我们将专注于简单的部署方法，但如果你有兴趣，下面的指南将对你尝试自己的构建有帮助：[https://github.com/containers/buildah/blob/main/install.md#building-from-scratch](https://github.com/containers/buildah/blob/main/install.md#building-from-scratch)。'
 - en: Finally, Buildah can be deployed as a container, and builds can be executed
     inside it with a nested approach. This process will be covered in greater detail
     in [*Chapter 7*](B17908_07_epub.xhtml#_idTextAnchor134), *Integrating with Existing
     Application Build Processes*.
+  id: totrans-180
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后，Buildah 可以作为容器部署，构建任务可以在其中使用嵌套方式执行。这个过程将在 [*第7章*](B17908_07_epub.xhtml#_idTextAnchor134)，*与现有应用构建流程集成*
+    中详细讲解。
 - en: After installing Buildah to our host, we can move on to verifying our installation.
+  id: totrans-181
   prefs: []
   type: TYPE_NORMAL
+  zh: 安装 Buildah 到我们的主机后，我们可以继续验证安装情况。
 - en: Verifying the installation
+  id: totrans-182
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 验证安装
 - en: After installing Buildah, we can now run some basic test commands to verify
     the installation.
+  id: totrans-183
   prefs: []
   type: TYPE_NORMAL
+  zh: 安装 Buildah 后，我们现在可以运行一些基本的测试命令来验证安装情况。
 - en: 'To see all the available images in the host local store, use the following
     commands:'
+  id: totrans-184
   prefs: []
   type: TYPE_NORMAL
+  zh: 要查看主机本地存储中所有可用的镜像，可以使用以下命令：
 - en: '[PRE24]'
+  id: totrans-185
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE24]'
 - en: The image list will be the same as the one printed by the `podman images` command
     since they share the same local store.
+  id: totrans-186
   prefs: []
   type: TYPE_NORMAL
+  zh: 镜像列表将与通过 `podman images` 命令打印的列表相同，因为它们共享相同的本地存储。
 - en: Also note that the two commands are executed as an unprivileged user and as
     root, pointing respectively to the user rootless local store and the system-wide
     local store.
+  id: totrans-187
   prefs: []
   type: TYPE_NORMAL
+  zh: 还需注意，两个命令分别作为非特权用户和 root 用户执行，分别指向用户的无特权本地存储和系统范围的本地存储。
 - en: We can run a simple test build to verify the installation. This is a good chance
     to test a basic build script whose only purpose is to verify whether Buildah is
     able to fully run a complete build.
+  id: totrans-188
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们可以运行一个简单的测试构建来验证安装情况。这是一个很好的机会来测试一个基本的构建脚本，其唯一目的是验证 Buildah 是否能够完全运行完整的构建。
 - en: 'For the purpose of this book (and for fun), we have created the following simple
     test script that creates a minimal Python 3 image:'
+  id: totrans-189
   prefs: []
   type: TYPE_NORMAL
+  zh: 本书的目的（以及为了好玩），我们创建了以下简单的测试脚本，用来创建一个最小的 Python 3 镜像：
 - en: '[PRE25]'
+  id: totrans-190
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE25]'
 - en: The same test script can be executed by a non-privileged user and by root.
+  id: totrans-191
   prefs: []
   type: TYPE_NORMAL
+  zh: 同一个测试脚本可以由非特权用户和 root 用户执行。
 - en: 'We can verify the newly built image by running a simple container that executes
     a Python shell:'
+  id: totrans-192
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们可以通过运行一个简单的容器来验证新构建的镜像，该容器执行一个 Python shell：
 - en: '[PRE26]'
+  id: totrans-193
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE26]'
 - en: After successfully testing our new Buildah installation, let's inspect the main
     configuration files used by Buildah.
+  id: totrans-194
   prefs: []
   type: TYPE_NORMAL
+  zh: 在成功测试我们的新 Buildah 安装后，让我们检查 Buildah 使用的主要配置文件。
 - en: Buildah configuration files
+  id: totrans-195
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: Buildah 配置文件
 - en: The main Buildah configuration files are the same ones used by Podman. They
     can be leveraged to customize the behavior of the working containers executed
     in builds.
+  id: totrans-196
   prefs: []
   type: TYPE_NORMAL
+  zh: 主要的 Buildah 配置文件与 Podman 使用的配置文件相同。它们可以被利用来自定义在构建过程中执行的工作容器的行为。
 - en: On Fedora, these config files are installed by the `containers-common` package,
     and we already covered them in the *Prepare your environment* section in [*Chapter
     3*](B17908_03_epub.xhtml#_idTextAnchor068), *Running the First Container*.
+  id: totrans-197
   prefs: []
   type: TYPE_NORMAL
+  zh: 在 Fedora 上，这些配置文件是通过 `containers-common` 包安装的，我们已经在*准备你的环境*部分中涵盖了它们，见[ *第 3
+    章*](B17908_03_epub.xhtml#_idTextAnchor068)，*运行第一个容器*。
 - en: 'The main config files used by Buildah are as follows:'
+  id: totrans-198
   prefs: []
   type: TYPE_NORMAL
+  zh: Buildah 使用的主要配置文件如下：
 - en: '`/usr/share/containers/mounts.conf`: This config file defines the files and
     directories that are automatically mounted inside a Buildah working container.'
+  id: totrans-199
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`/usr/share/containers/mounts.conf`：此配置文件定义了在 Buildah 工作容器内自动挂载的文件和目录。'
 - en: '`/etc/containers/registries.conf`: This config file has the role of managing
     registries allowed to be accessed for image searches, pulls, and pushes.'
+  id: totrans-200
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`/etc/containers/registries.conf`：此配置文件的作用是管理可以访问的镜像仓库，用于镜像的搜索、拉取和推送。'
 - en: '`/usr/share/containers/policy.json`: This JSON config file defines image signature
     verification behavior.'
+  id: totrans-201
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`/usr/share/containers/policy.json`：此 JSON 配置文件定义了镜像签名验证行为。'
 - en: '`/usr/share/containers/seccomp.json`: This JSON config file defines the allowed
     and prohibited syscalls to a containerized process.'
+  id: totrans-202
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`/usr/share/containers/seccomp.json`：此 JSON 配置文件定义了容器化进程允许和禁止的系统调用。'
 - en: In this section, we have learned how to prepare the host environment to run
     Buildah. In the next section, we are going to identify the possible build strategies
     that can be implemented with Buildah.
+  id: totrans-203
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本节中，我们了解了如何准备主机环境来运行 Buildah。在下一节中，我们将识别可以通过 Buildah 实现的可能构建策略。
 - en: Choosing our build strategy
+  id: totrans-204
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 选择我们的构建策略
 - en: 'There are basically three types of build strategies that we can use with Buildah:'
+  id: totrans-205
   prefs: []
   type: TYPE_NORMAL
+  zh: 基本上，我们可以使用 Buildah 的三种构建策略：
 - en: Building a container image starting from an existing base image
+  id: totrans-206
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 从现有基础镜像开始构建容器镜像
 - en: Building a container image starting from scratch
+  id: totrans-207
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 从零开始构建容器镜像
 - en: Building a container image starting from a Dockerfile
+  id: totrans-208
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 从 Dockerfile 开始构建容器镜像
 - en: We have already provided an example of the build strategy from an existing base
     image in the *Meet Buildah, Podman's companion* section. Since this strategy is
     pretty similar from a workflow point of view to building from scratch, we will
     focus our practical examples on the last one, which provides great flexibility
     to create a small footprint and secure images.
+  id: totrans-209
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们已经在*遇见 Buildah，Podman 的伴侣*部分提供了一个从现有基础镜像构建策略的示例。由于从工作流的角度来看，这种策略与从零开始构建非常相似，因此我们将重点展示最后一种策略，它提供了极大的灵活性来创建小体积且安全的镜像。
 - en: Before going through the various technical details in the next section, let's
     start exploring all these strategies at a high level.
+  id: totrans-210
   prefs: []
   type: TYPE_NORMAL
+  zh: 在下一节中深入了解各种技术细节之前，让我们从高层次开始探索所有这些策略。
 - en: Even though we can find a lot of prebuilt container images available on the
     most popular public container registries, sometimes we might not be able to find
     a particular configuration, setup, or bundle of tools and services for our containers;
     that is why container image creation becomes a really important step that we need
     to practice.
+  id: totrans-211
   prefs: []
   type: TYPE_NORMAL
+  zh: 尽管我们可以在最流行的公共容器仓库中找到许多预构建的容器镜像，有时我们可能找不到特定的配置、设置或工具和服务组合用于我们的容器；这就是为什么容器镜像创建成为我们需要实践的一个非常重要的步骤。
 - en: Also, security constraints often require us to implement images with reduced
     attack surfaces, and therefore, DevOps teams must know how to customize every
     step of the build process to achieve this result.
+  id: totrans-212
   prefs: []
   type: TYPE_NORMAL
+  zh: 此外，安全约束通常要求我们实现具有减少攻击面特性的镜像，因此，DevOps 团队必须知道如何自定义构建过程中的每一步，以实现这一结果。
 - en: With this awareness in mind, let's start with the first build strategy.
+  id: totrans-213
   prefs: []
   type: TYPE_NORMAL
+  zh: 牢记这些知识后，我们开始介绍第一种构建策略。
 - en: Building a container image starting from an existing base image
+  id: totrans-214
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 从现有基础镜像开始构建容器镜像
 - en: Let's imagine finding a well-done prebuilt container image for our favorite
     application server that our company is widely using. All the configurations for
     this container image are okay, and we can attach storage to the right mount points
     to persist the data and so on, but sooner or later, we may realize that some particular
     tools that we use for troubleshooting are missing in the container image, or that
     some libraries are missing that should be included!
+  id: totrans-215
   prefs: []
   type: TYPE_NORMAL
+  zh: 假设我们找到一个非常出色的预构建容器镜像，用于我们公司广泛使用的某个应用服务器。这个容器镜像的所有配置都很合适，我们可以将存储附加到正确的挂载点以持久化数据等等，但迟早我们会意识到，容器镜像中缺少我们用于故障排除的某些特定工具，或者缺少某些应该包含的库！
 - en: In another scenario, we could be happy with the prebuilt image but still need
     to add custom contents to it – for example, the customer application.
+  id: totrans-216
   prefs: []
   type: TYPE_NORMAL
+  zh: 在另一种场景中，我们可能对预构建的镜像感到满意，但仍然需要向其中添加自定义内容——例如，客户的应用程序。
 - en: What would be the solution in those cases?
+  id: totrans-217
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这些情况下，解决方案会是什么呢？
 - en: In this first use case, we can extend the existing container image, adding stuff
     and editing the existing files to suit our purposes. In the previous basic examples,
     Fedora and Alpine images were customized to serve different purposes. Those images
     were generic OS filesystems with no specific purpose, but the same concept can
     be applied to a more complex image.
+  id: totrans-218
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这个第一个用例中，我们可以扩展现有的容器镜像，添加内容并编辑现有的文件以满足我们的目的。在前面的基本示例中，Fedora 和 Alpine 镜像被定制化以满足不同的需求。这些镜像是通用的操作系统文件系统，没有特定的用途，但同样的概念也可以应用于更复杂的镜像。
 - en: In the second use case, we can customize an image – for example, the default
     library Httpd. We can install PHP modules and then add our application's PHP files,
     producing a new image with our custom contents already built in.
+  id: totrans-219
   prefs: []
   type: TYPE_NORMAL
+  zh: 在第二个用例中，我们可以定制一个镜像——例如，默认库 Httpd。我们可以安装 PHP 模块，然后添加我们应用程序的 PHP 文件，生成一个包含我们自定义内容的新镜像。
 - en: We will see in the next sections how we can extend an existing container image.
+  id: totrans-220
   prefs: []
   type: TYPE_NORMAL
+  zh: 接下来的章节中，我们将看到如何扩展现有的容器镜像。
 - en: Let's move on to the second strategy.
+  id: totrans-221
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们继续讨论第二种策略。
 - en: Building a container image starting from scratch
+  id: totrans-222
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 从零开始构建容器镜像
 - en: The previous strategy would be enough for many common situations, where we can
     find a prebuilt image to start working with, but sometimes it may be that the
     particular use case, application, or service that we want to containerize is not
     so common or widely used.
+  id: totrans-223
   prefs: []
   type: TYPE_NORMAL
+  zh: 前面的策略对于许多常见情况已经足够，在这些情况下我们可以找到一个预构建的镜像来开始工作，但有时我们希望容器化的特定用例、应用或服务可能并不常见或广泛使用。
 - en: Imagine having a custom legacy application that requires some old libraries
     and tools that are no longer included on the latest Linux distribution or that
     may have been replaced by more recent ones. In this scenario, you might need to
     start from an empty container image and add piece by piece all the necessary stuff
     for your legacy application.
+  id: totrans-224
   prefs: []
   type: TYPE_NORMAL
+  zh: 想象一下有一个自定义的遗留应用程序，需要一些旧的库和工具，而这些库和工具在最新的 Linux 发行版中已经不再包含，或者可能已被更新的版本所替代。在这种情况下，您可能需要从一个空的容器镜像开始，并一点点地添加所有必要的内容，以便运行您的遗留应用程序。
 - en: We have learned in this chapter that, actually, we will always start from a
     sort of initial container image, so this strategy and the previous one are pretty
     much the same.
+  id: totrans-225
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们在这一章中学到，实际上，我们总是会从某种初始容器镜像开始，所以这个策略和前面的那个基本是相同的。
 - en: Let's move on to the third and final strategy.
+  id: totrans-226
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们继续讨论第三种也是最后一种策略。
 - en: Building a container image starting from a Dockerfile
+  id: totrans-227
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 从 Dockerfile 开始构建容器镜像
 - en: In [*Chapter 1*](B17908_01_epub.xhtml#_idTextAnchor015), *Introduction to Container
     Technology*, we talked about container technology history and how Docker gained
     momentum in that context. Podman was born as an alternative evolution project
     of the great concepts that Docker helped to develop until now. One of the great
     innovations that Docker created in its own project history is, for sure, the Dockerfile.
+  id: totrans-228
   prefs: []
   type: TYPE_NORMAL
+  zh: 在[*第1章*](B17908_01_epub.xhtml#_idTextAnchor015)《容器技术简介》中，我们讨论了容器技术的历史以及 Docker
+    如何在那个背景下获得动力。Podman 作为 Docker 帮助开发的伟大概念的替代进化项目诞生了。Docker 在其项目历史中所创造的伟大创新之一，毫无疑问，就是
+    Dockerfile。
 - en: Looking into this strategy at a high level, we can affirm that even when using
     a Dockerfile, we will arrive at one of the previous build strategies. The reality
     is not far away from the latest assumption we made, because Buildah under the
     hood will parse the Dockerfile, and it will build the container that we briefly
     introduced for previous build strategies.
+  id: totrans-229
   prefs: []
   type: TYPE_NORMAL
+  zh: 从高层次来看，使用这种策略时，我们可以肯定，即使使用 Dockerfile，我们最终也会采用之前提到的某种构建策略。实际上，情况与我们之前的假设不谋而合，因为
+    Buildah 在后台会解析 Dockerfile，并构建我们之前简单介绍的容器，符合之前构建策略的要求。
 - en: So, in summary, are there any differences or advantages we need to consider
     when choosing our default build strategy? Obviously, there is no ultimate answer
     to this question. First of all, we should always look into the container communities,
@@ -1073,343 +1582,513 @@
     other hand, we can always fall back on the *build from scratch* process. Last
     but not least, we can consider Dockerfile for easily distributing and sharing
     our build steps with our development group or the wider container communities.
+  id: totrans-230
   prefs: []
   type: TYPE_NORMAL
+  zh: 总结一下，当选择默认的构建策略时，我们需要考虑是否有任何差异或优势？显然，这个问题没有最终答案。首先，我们应该始终查看容器社区，寻找一些可能帮助我们*构建*过程的预构建镜像；另一方面，我们总是可以回退到*从头构建*的过程。最后但同样重要的是，我们可以考虑使用
+    Dockerfile 来轻松地分发和共享我们的构建步骤，给我们的开发团队或更广泛的容器社区。
 - en: This ends up our quick high-level introduction; we can now move on to the practical
     examples!
+  id: totrans-231
   prefs: []
   type: TYPE_NORMAL
+  zh: 这就结束了我们快速的高层次介绍；现在我们可以继续实际的示例！
 - en: Building images from scratch
+  id: totrans-232
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 从头构建镜像
 - en: Before going into the details of this section and learning how to build a container
     image from scratch, let's make some tests to verify that the installed Buildah
     is working properly.
+  id: totrans-233
   prefs: []
   type: TYPE_NORMAL
+  zh: 在进入本节的详细内容并学习如何从头构建容器镜像之前，让我们先做一些测试，以验证安装的 Buildah 是否正常工作。
 - en: 'First of all, let''s check whether our Buildah image cache is empty:'
+  id: totrans-234
   prefs: []
   type: TYPE_NORMAL
+  zh: 首先，让我们检查我们的 Buildah 镜像缓存是否为空：
 - en: '[PRE27]'
+  id: totrans-235
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE27]'
 - en: Important Note
+  id: totrans-236
   prefs: []
   type: TYPE_NORMAL
+  zh: 重要提示
 - en: Podman and Buildah share the same container storage; for this reason, if you
     previously ran any other example shown in this chapter or book, you will find
     that your container storage cache is not that empty!
+  id: totrans-237
   prefs: []
   type: TYPE_NORMAL
+  zh: Podman 和 Buildah 共享相同的容器存储；因此，如果你之前运行过本章或本书中的其他示例，你会发现你的容器存储缓存并不是那么空！
 - en: 'As we learned in the previous section, we can leverage the fact that Buildah
     will output the name of the just-created working container to easily store it
     in an environment variable and use it once needed. Let''s create a brand-new container
     from scratch:'
+  id: totrans-238
   prefs: []
   type: TYPE_NORMAL
+  zh: 正如我们在上一节中学到的，我们可以利用 Buildah 会输出刚创建的工作容器的名称这一事实，将其轻松存储在环境变量中，并在需要时使用它。让我们从头创建一个全新的容器：
 - en: '[PRE28]'
+  id: totrans-239
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE28]'
 - en: As you can see, we used the special `from scratch` keywords that are telling
     Buildah to create an empty container with no data inside it. If we run the `buildah
     images` command, we will note that this special image is not listed.
+  id: totrans-240
   prefs: []
   type: TYPE_NORMAL
+  zh: 如你所见，我们使用了特殊的`from scratch`关键字，它告诉 Buildah 创建一个没有任何数据的空容器。如果我们运行`buildah images`命令，我们会注意到这个特殊镜像没有被列出。
 - en: 'Let''s check whether the container really is empty:'
+  id: totrans-241
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们检查容器是否真的为空：
 - en: '[PRE29]'
+  id: totrans-242
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE29]'
 - en: No executable was found in our empty container – what a surprise! The reason
     is that the working container has been created on an empty filesystem.
+  id: totrans-243
   prefs: []
   type: TYPE_NORMAL
+  zh: 在我们的空容器中没有找到可执行文件——真是一个惊喜！原因是工作容器是基于一个空的文件系统创建的。
 - en: Let's see how we can easily fill this empty container. In the following example,
     we will interact directly with the underlying storage, using the package manager
     of our host system to install the binaries and the libraries needed for running
     a `bash` shell in our container image.
+  id: totrans-244
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们看看如何轻松填充这个空容器。在以下示例中，我们将直接与底层存储交互，使用主机系统的包管理器安装运行`bash` shell 所需的二进制文件和库，以构建我们的容器镜像。
 - en: 'First of all, let''s instruct Buildah to mount the container storage and check
     where it resides:'
+  id: totrans-245
   prefs: []
   type: TYPE_NORMAL
+  zh: 首先，让我们指示 Buildah 挂载容器存储，并检查它的位置：
 - en: '[PRE30]'
+  id: totrans-246
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE30]'
 - en: Good to Know
+  id: totrans-247
   prefs: []
   type: TYPE_NORMAL
+  zh: 了解一下
 - en: If you start the build in rootless mode, Buildah will run the mount in a different
     namespace, and for this reason, the mounted volume might not be accessible from
     the host when using a driver different than vfs.
+  id: totrans-248
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你在无根模式下开始构建，Buildah 会在不同的命名空间中运行挂载，因此，使用除 vfs 以外的驱动程序时，挂载的卷可能无法从主机访问。
 - en: 'Great! Now that we have found it, we can leverage the host package manager
     to install all the needed packages in this `root` folder, which will be the `root`
     path of our container image:'
+  id: totrans-249
   prefs: []
   type: TYPE_NORMAL
+  zh: 太好了！现在我们已经找到了它，我们可以利用主机的包管理器将所有需要的包安装到这个`root`文件夹中，这将是我们容器镜像的`root`路径：
 - en: '[PRE31]'
+  id: totrans-250
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE31]'
 - en: Important Note
+  id: totrans-251
   prefs: []
   type: TYPE_NORMAL
+  zh: 重要提示
 - en: If you are running the previous command on a Fedora release different than version
     34, (for example, version 35), then you need to import the GPG public keys of
     Fedora 34 or use the `--nogpgcheck` option.
+  id: totrans-252
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你在不同于版本34的 Fedora 版本上运行之前的命令（例如，版本35），则需要导入 Fedora 34 的 GPG 公钥，或使用 `--nogpgcheck`
+    选项。
 - en: First of all, we will save the very long directory path in an environment variable
     and then execute the `dnf` package manager, passing the just-obtained directory
     path as the install root directory, setting the release version of our Fedora
     OS, specifying the packages that we want to install (`bash` and `coreutils`),
     and finally, disabling weak dependency, accepting all the changes to the system.
+  id: totrans-253
   prefs: []
   type: TYPE_NORMAL
+  zh: 首先，我们将把非常长的目录路径保存在环境变量中，然后执行 `dnf` 包管理器，将刚刚获取的目录路径作为安装根目录，设置我们 Fedora 操作系统的发布版本，指定我们要安装的包（`bash`
+    和 `coreutils`），最后禁用弱依赖，接受所有对系统的更改。
 - en: 'The command should end up with a `Complete!` statement; once done, let''s try
     again with the same command that we saw failing earlier in this section:'
+  id: totrans-254
   prefs: []
   type: TYPE_NORMAL
+  zh: 命令应该以 `Complete!` 语句结束；完成后，让我们再次尝试之前在本节中看到的失败命令：
 - en: '[PRE32]'
+  id: totrans-255
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE32]'
 - en: 'It worked! We just installed a Bash shell in our empty container. Let''s see
     now how to finish our image creation with some other configuration steps. First
     of all, we need to add to our final container image a command to be run once it
     is up and running. For this reason, we will create a Bash script file with some
     basic commands:'
+  id: totrans-256
   prefs: []
   type: TYPE_NORMAL
+  zh: 成功了！我们刚刚在空容器中安装了一个 Bash shell。现在，让我们看看如何通过其他配置步骤完成镜像创建。首先，我们需要向最终的容器镜像中添加一个命令，一旦容器启动并运行时就会执行。因此，我们将创建一个
+    Bash 脚本文件，其中包含一些基本命令：
 - en: '[PRE33]'
+  id: totrans-257
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE33]'
 - en: 'We have created a Bash script file that prints the Fedora release of the container
     and the system date. The file must have execute permissions before being copied:'
+  id: totrans-258
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们创建了一个 Bash 脚本文件，打印容器的 Fedora 版本和系统日期。该文件在复制之前必须具有执行权限：
 - en: '[PRE34]'
+  id: totrans-259
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE34]'
 - en: 'Now that we have filled up our underlying container storage with all the needed
     base packages, we can unmount the `working-container` storage and use the `buildah
     copy` command to inject files from the host to the container:'
+  id: totrans-260
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，我们已经为基础容器存储填充了所有需要的基础包，我们可以卸载 `working-container` 存储并使用 `buildah copy` 命令将文件从主机注入到容器中：
 - en: '[PRE35]'
+  id: totrans-261
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE35]'
 - en: The `buildah copy` command gives us the ability to work with the underlying
     storage without worrying about mounting it or handling it under the hood.
+  id: totrans-262
   prefs: []
   type: TYPE_NORMAL
+  zh: '`buildah copy` 命令使我们能够在不担心挂载它或在后台处理它的情况下，直接操作底层存储。'
 - en: 'We are now ready to complete our container image by adding some metadata to
     it:'
+  id: totrans-263
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在我们准备通过向容器镜像中添加一些元数据来完成它：
 - en: '[PRE36]'
+  id: totrans-264
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE36]'
 - en: We started with the `cmd` option, and after that, we added some descriptive
     metadata. We can finally commit our `working-container` into an image!
+  id: totrans-265
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们从 `cmd` 选项开始，之后添加了一些描述性元数据。现在我们终于可以将 `working-container` 提交为镜像了！
 - en: '[PRE37]'
+  id: totrans-266
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE37]'
 - en: 'Let''s clean up the environment and check the available container images into
     the host:'
+  id: totrans-267
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们清理环境并检查主机中可用的容器镜像：
 - en: '[PRE38]'
+  id: totrans-268
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE38]'
 - en: 'We can now inspect the details of the just-created container image:'
+  id: totrans-269
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们现在可以检查刚刚创建的容器镜像的详细信息：
 - en: '[PRE39]'
+  id: totrans-270
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE39]'
 - en: As we can see from the previous output, the container image has a lot of metadata
     that can tell us many details. Some of them we set through the previous commands,
     such as the `created_by`, `name`, and `Cmd` tags; the other tags are populated
     automatically by Buildah.
+  id: totrans-271
   prefs: []
   type: TYPE_NORMAL
+  zh: 从之前的输出中可以看出，容器镜像有很多元数据，可以告诉我们许多细节。我们通过之前的命令设置了其中的一些，例如 `created_by`、`name` 和
+    `Cmd` 标签；其他标签则由 Buildah 自动填充。
 - en: Finally, let's run our brand-new container image with Podman!
+  id: totrans-272
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后，让我们用 Podman 运行我们全新的容器镜像！
 - en: '[PRE40]'
+  id: totrans-273
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE40]'
 - en: This ends our journey in creating a container image from scratch. As we saw,
     this is not a typical method for creating a container image; in many scenarios
     and for various use cases, it can be enough to start with an OS base image, such
     as `from fedora` or `from alpine`, and then add the required packages, using the
     respective package managers available in those images.
+  id: totrans-274
   prefs: []
   type: TYPE_NORMAL
+  zh: 这结束了我们从零开始创建容器镜像的过程。正如我们所看到的，这不是创建容器镜像的典型方法；在许多场景和各种用例中，从一个操作系统基础镜像（例如 `from
+    fedora` 或 `from alpine`）开始，然后添加所需的包，使用这些镜像中可用的包管理器就足够了。
 - en: Good to Know
+  id: totrans-275
   prefs: []
   type: TYPE_NORMAL
+  zh: 需要了解
 - en: Some Linux distributions also provide base container images in a **minimal**
     flavor (for example, **fedora-minimal**) that reduce the number of packages installed,
     as well as the size of the target container image. For more information, refer
     to [https://www.docker.com/](https://www.docker.com/) and [https://quay.io/](https://quay.io/)!
+  id: totrans-276
   prefs: []
   type: TYPE_NORMAL
+  zh: 一些 Linux 发行版还提供 **最小化** 版本的基础容器镜像（例如 **fedora-minimal**），它们减少了安装的包的数量以及目标容器镜像的大小。有关更多信息，请参考
+    [https://www.docker.com/](https://www.docker.com/) 和 [https://quay.io/](https://quay.io/)！
 - en: Let's now inspect how to build images from Dockerfiles with Buildah.
+  id: totrans-277
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在让我们检查如何使用 Buildah 从 Dockerfile 构建镜像。
 - en: Building images from a Dockerfile
+  id: totrans-278
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 从 Dockerfile 构建镜像
 - en: As we described earlier in this chapter, the Dockerfile can be an easy option
     to create and share the build steps for creating a container image, and for this
     reason, it is really easy to find a lot of source Dockerfiles on the net.
+  id: totrans-279
   prefs: []
   type: TYPE_NORMAL
+  zh: 如我们在本章前面描述的那样，Dockerfile 可以是创建和共享容器镜像构建步骤的简便选项，因此在互联网上很容易找到许多源 Dockerfile。
 - en: 'The first step of this activity is to build a simple Dockerfile to work with.
     Let''s create a Dockerfile for creating a containerized web server:'
+  id: totrans-280
   prefs: []
   type: TYPE_NORMAL
+  zh: 这项活动的第一步是构建一个简单的 Dockerfile 来使用。让我们创建一个 Dockerfile 来创建一个容器化的 Web 服务器：
 - en: '[PRE41]'
+  id: totrans-281
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE41]'
 - en: Looking at the previous output, we first created a new directory, and inside,
     we created a text file named `Dockerfile`. After that, we inserted the various
     keywords and steps commonly used in the definition of a brand-new Dockerfile;
     every step and keyword has a dedicated description comment on top, so the file
     should be easy to read.
+  id: totrans-282
   prefs: []
   type: TYPE_NORMAL
+  zh: 从前面的输出来看，我们首先创建了一个新目录，并在其中创建了一个名为 `Dockerfile` 的文本文件。然后，我们插入了在定义全新 Dockerfile
+    时常用的各种关键字和步骤；每个步骤和关键字上方都有专门的描述注释，因此该文件应该容易阅读。
 - en: 'Just to recap, these are the steps contained in our brand-new Dockerfile:'
+  id: totrans-283
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们回顾一下，这些是我们全新 Dockerfile 中包含的步骤：
 - en: Start from the latest Fedora container base image.
+  id: totrans-284
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 从最新的 Fedora 容器基础镜像开始。
 - en: Update all the packages for the container base image.
+  id: totrans-285
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 更新容器基础镜像中的所有包。
 - en: Install the `httpd` package.
+  id: totrans-286
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 安装 `httpd` 包。
 - en: Expose HTTP port `80`.
+  id: totrans-287
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 暴露 HTTP 端口 `80`。
 - en: Set the default command to run once the container is started.
+  id: totrans-288
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 设置容器启动后要运行的默认命令。
 - en: As seen previously in this chapter, Buildah provides a dedicated `buildah build`
     command to start a build from a Dockerfile.
+  id: totrans-289
   prefs: []
   type: TYPE_NORMAL
+  zh: 如本章前面所述，Buildah 提供了一个专用的 `buildah build` 命令来从 Dockerfile 开始构建。
 - en: 'Let''s see how it works:'
+  id: totrans-290
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们看看它是如何工作的：
 - en: '[PRE42]'
+  id: totrans-291
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE42]'
 - en: 'As we can see from the previous output, we pass the following options to the
     `buildah build` command:'
+  id: totrans-292
   prefs: []
   type: TYPE_NORMAL
+  zh: 从之前的输出中我们可以看到，我们将以下选项传递给 `buildah build` 命令：
 - en: '`-f`: To define the name of the Dockerfile. The default filename is `Dockerfile`,
     so in our case, we can omit this option because we named the file as the default
     one.'
+  id: totrans-293
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`-f`：定义 Dockerfile 的名称。默认的文件名是 `Dockerfile`，所以在我们的例子中，我们可以省略此选项，因为我们将文件命名为默认名称。'
 - en: '`-t`: To define the name and the tag of the image we are building. In our case,
     we are only defining the name. The image will be tagged `latest` by default.'
+  id: totrans-294
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`-t`：定义我们正在构建的镜像的名称和标签。在我们的例子中，我们只定义了名称。镜像将默认被标记为`latest`。'
 - en: Finally, as the last option, we need to set the directory where Buildah needs
     to work and search for the Dockerfile. In our case, we are passing the current
     `.` directory.
+  id: totrans-295
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 最后，作为最后一个选项，我们需要设置 Buildah 工作的目录并查找 Dockerfile。在我们的例子中，我们传递了当前的 `.` 目录。
 - en: Of course, these are not the only options that Buildah gives us to configure
     the build; we will see some of them later in this section.
+  id: totrans-296
   prefs: []
   type: TYPE_NORMAL
+  zh: 当然，这些并不是 Buildah 给我们配置构建的唯一选项；稍后我们将在本节中看到其中的一些选项。
 - en: Coming back to the command we just executed, as we can see from the output,
     all the steps defined in the Dockerfile have been executed in the exact written
     order and printed with a given fractional number to show the intermediate steps
     against the total number. In total, six steps were executed.
+  id: totrans-297
   prefs: []
   type: TYPE_NORMAL
+  zh: 回到我们刚刚执行的命令，从输出中可以看到，Dockerfile 中定义的所有步骤都按书写的顺序执行，并且以一个给定的分数编号打印，显示中间步骤与总步骤的比例。总共执行了六个步骤。
 - en: 'We can check the result of our command by listing the images with the `buildah
     images` command:'
+  id: totrans-298
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们可以通过使用 `buildah images` 命令列出镜像，来检查命令的执行结果：
 - en: '[PRE43]'
+  id: totrans-299
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE43]'
 - en: 'As we can see, our container image has just been created with the `latest`
     tag; let''s try to run it:'
+  id: totrans-300
   prefs: []
   type: TYPE_NORMAL
+  zh: 如我们所见，我们的容器镜像已经使用 `latest` 标签创建；让我们尝试运行它：
 - en: '[PRE44]'
+  id: totrans-301
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE44]'
 - en: Looking at the output, we just ran our container in detached mode; after that,
     we inspected the logs to find out the IP address that we need to pass as an argument
     for the `curl` test command.
+  id: totrans-302
   prefs: []
   type: TYPE_NORMAL
+  zh: 从输出中可以看到，我们刚刚以分离模式运行了容器；之后，我们检查了日志，以找出需要作为`curl`测试命令参数传递的IP地址。
 - en: 'We just run the container as the root user on our workstation, and the container
     just received an internal IP address on Podman''s container network interface.
     We can check that the IP address is part of that network by running the following
     commands:'
+  id: totrans-303
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们刚刚以root用户在工作站上运行了容器，容器在Podman的容器网络接口上分配了一个内部IP地址。我们可以通过运行以下命令来检查该IP地址是否属于该网络：
 - en: '[PRE45]'
+  id: totrans-304
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE45]'
 - en: As we can see, the container's IP address was taken from the network reported
     in the previous `10.88.0.1/16` output.
+  id: totrans-305
   prefs: []
   type: TYPE_NORMAL
+  zh: 如我们所见，容器的IP地址来自前面`10.88.0.1/16`输出中的网络。
 - en: As we anticipated, the `buildah build` command has a lot of other options that
     can be useful while developing and creating brand-new container images. Let's
     explore one of them that is worth mentioning – `--layers`.
+  id: totrans-306
   prefs: []
   type: TYPE_NORMAL
+  zh: 如我们所预期，`buildah build`命令有许多其他选项，在开发和创建全新容器镜像时可能非常有用。让我们来探讨其中一个值得一提的选项——`--layers`。
 - en: We already learned how to use this option with Podman earlier in this chapter.
     Starting from version 1.2 of Buildah, the development team added this great option
     that gives us the ability to enable or disable the layers' caching mechanism.
     The default configuration sets the `--layers` option to *false*, which means that
     Buildah will not keep intermediate layers, resulting in a build that squashes
     all the changes in a single layer.
+  id: totrans-307
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们已经在本章之前学习了如何与Podman一起使用这个选项。从Buildah的1.2版本开始，开发团队添加了这个非常棒的选项，使我们能够启用或禁用层的缓存机制。默认配置将`--layers`选项设置为*false*，这意味着Buildah不会保留中间层，导致构建将所有更改合并为单一层。
 - en: It is also possible to set the management of the layers with an environment
     variable – for example, to enable layer caching, run `export BUILDAH_LAYERS=true`.
+  id: totrans-308
   prefs: []
   type: TYPE_NORMAL
+  zh: 也可以通过环境变量来设置层的管理——例如，要启用层缓存，可以运行`export BUILDAH_LAYERS=true`。
 - en: Obviously, the downside of this option is that the retained layers actually
     use storage space on the system host, but on the other hand, we can save computational
     power if we need to rebuild a given image, changing only the latest layers and
     without rebuilding the whole image!
+  id: totrans-309
   prefs: []
   type: TYPE_NORMAL
+  zh: 显然，这种选项的缺点是保留的层实际上会占用系统主机的存储空间，但另一方面，如果我们需要重新构建某个镜像，只更改最新的层而不重建整个镜像，我们就可以节省计算能力！
 - en: Summary
+  id: totrans-310
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 总结
 - en: In this chapter, we explored a fundamental topic of container management – their
     creation. This step is mandatory if we want to customize, keep updated, and manage
     our container infrastructure correctly. We learned that Podman is often partnered
@@ -1418,25 +2097,37 @@
     of them with it (storage included!). Finally, we went through the different strategies
     that Buildah offers us to build new container images, and one of them is actually
     inherited by the Docker ecosystem – the Dockerfile.
+  id: totrans-311
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本章中，我们探讨了容器管理的一个基本主题——它们的创建。如果我们希望定制、保持更新并正确管理容器基础设施，这一步是必须的。我们了解到，Podman通常与另一个名为Buildah的工具搭配使用，Buildah可以帮助我们进行容器镜像构建的过程。这个工具有很多选项，像Podman一样，并且与Podman共享许多选项（包括存储！）。最后，我们介绍了Buildah提供的构建新容器镜像的不同策略，其中一个实际上是Docker生态系统继承的——Dockerfile。
 - en: This chapter is only an introduction to the topic of container image building;
     we will discover more advanced techniques in the next chapter!
+  id: totrans-312
   prefs: []
   type: TYPE_NORMAL
+  zh: 本章仅是容器镜像构建主题的介绍；我们将在下一章中探索更高级的技术！
 - en: Further reading
+  id: totrans-313
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 深入阅读
 - en: 'Buildah project tutorials: [https://github.com/containers/buildah/tree/main/docs/tutorials](https://github.com/containers/buildah/tree/main/docs/tutorials)'
+  id: totrans-314
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: Buildah项目教程：[https://github.com/containers/buildah/tree/main/docs/tutorials](https://github.com/containers/buildah/tree/main/docs/tutorials)
 - en: 'How to use Podman inside of a container: [https://www.redhat.com/sysadmin/podman-inside-container](https://www.redhat.com/sysadmin/podman-inside-container)'
+  id: totrans-315
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 如何在容器内使用Podman：[https://www.redhat.com/sysadmin/podman-inside-container](https://www.redhat.com/sysadmin/podman-inside-container)
 - en: 'How to build tiny container images: [https://www.redhat.com/sysadmin/tiny-containers](https://www.redhat.com/sysadmin/tiny-containers)'
+  id: totrans-316
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 如何构建小型容器镜像：[https://www.redhat.com/sysadmin/tiny-containers](https://www.redhat.com/sysadmin/tiny-containers)

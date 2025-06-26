@@ -1,0 +1,280 @@
+<html><head></head><body>
+        <section>
+
+                            <header class="header-title chapter-title">
+                    Building Dynamic Environments with Terraform
+                </header>
+            
+            <article>
+                
+<p class="mce-root">In the previous chapter, we learned how to use Terraform's language concepts to provision an infrastructure efficiently with Terraform. One of the advantages of <strong>Infrastructure as Code</strong> (<strong>IaC</strong>) is that it allows you to provision infrastructure on a large scale much faster than manual provisioning.</p>
+<p>When writing IaC, it is also important to apply the development and clean code principles that developers have already acquired over the years.</p>
+<p>One of these principles is <strong>Don't Repeat Yourself</strong> (<strong>DRY</strong>), which means not duplicating the code (<a href="https://thevaluable.dev/dry-principle-cost-benefit-example/">https://thevaluable.dev/dry-principle-cost-benefit-example/</a>). In this chapter, we will learn how to use expressions from the Terraform language, such as count, maps, collections, and dynamic. We will learn that these notions will allow us to write simple Terraform configuration to provide an infrastructure with multiple resources without having to duplicate code.</p>
+<p>In this chapter, we will cover the following recipes:</p>
+<ul>
+<li style="font-weight: 400">
+<p>Provisioning multiple resources with the count property</p>
+</li>
+<li style="font-weight: 400">
+<p>Using a table of key-value variables with maps</p>
+</li>
+<li style="font-weight: 400">
+<p>Looping over object collections</p>
+</li>
+<li style="font-weight: 400">
+<p>Generating multiple blocks with dynamic expressions</p>
+</li>
+</ul>
+<h1 id="uuid-ca9b3ceb-1a39-4852-bbe7-928c73625e09">Technical requirements</h1>
+<p>This chapter does not have any technical prerequisites. However, it is advisable to have already read the previous chapter. </p>
+<p>The source code of this chapter is available at <a href="https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP03">https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP03</a>.<a href="https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP03"/></p>
+<p>Check out the following video to see the Code in Action: <a href="https://bit.ly/2R5GSBN">https://bit.ly/2R5GSBN</a></p>
+<h1 id="uuid-7b62bb81-58b9-4c3d-b155-ab6c48884b9e">Provisioning multiple resources with the count property</h1>
+<p>In corporate scenarios, there is a need to provide infrastructure and to take into account the so-called horizontal scalability, that is, <em>N</em> identical resources <span>that will reduce the load on individual resources (such as compute instances) and the application as a whole</span>.</p>
+<p class="mce-root">The challenge we will have to face is as follows:</p>
+<ul>
+<li class="mce-root">
+<p>Writing Terraform configuration that does not require duplicate code for each instance of identical resources to be provisioned</p>
+</li>
+<li class="mce-root">
+<p>Being able to rapidly increase or reduce the number of instances of these resources</p>
+</li>
+</ul>
+<p class="mce-root">We will see in this recipe how Terraform makes it possible to provision <em>N</em> instances of resources quickly and without the duplication of code.</p>
+<h2 id="uuid-22a82eb6-4b2c-4d64-8a7d-28ed5d640779">Getting ready</h2>
+<p>To begin, we will use a Terraform configuration that allows us to provision one Azure App Service, which is in a <kbd>main.tf</kbd> file and of which the following is an extract:</p>
+<div>
+<pre><span>resource</span><span> </span><span>"azurerm_app_service"</span><span> </span><span>"app"</span><span> </span><span>{<br/></span><span>  name                = </span><span>"</span><span>${var</span><span>.</span><span>app_name}</span><span>-</span><span>${var</span><span>.</span><span>environement}</span><span>"<br/></span><span>  location            = azurerm_resource_group.rg-app.location<br/></span><span>  resource_group_name = azurerm_resource_group.rg-app.name<br/></span><span>  app_service_plan_id = azurerm_app_service_plan.plan-app.id<br/></span><span>}</span></pre></div>
+<p class="mce-root">The purpose of this recipe is to apply and modify this Terraform configuration to provision <em>N</em> Azure App Service instances identical to the one already described in the base code, with just a slight difference in the names, which use an incremental index number starting at <kbd>1</kbd>.</p>
+<p>The source <span>code </span>of this recipe is available at <a href="https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP03/count">https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP03/count</a>.<a href="https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP03/count"/></p>
+<h2 id="uuid-a5e5d145-b9d9-4716-b32a-986c6ebbff17">How to do it…</h2>
+<p>To create multiple identical resources, perform the following steps:</p>
+<ol>
+<li>In the <kbd>variables.tf</kbd> file, we add the following variable:</li>
+</ol>
+<pre style="padding-left: 60px" class="mce-root">variable "nb_webapp" {<br/>    description = "Number of App Service to create"<br/>}</pre>
+<ol start="2">
+<li class="mce-root">In the <kbd>terraform.tfvars</kbd> file, we give a value for this new variable as follows:</li>
+</ol>
+<div>
+<pre style="padding-left: 60px"><span>nb_webapp = </span><span>2</span></pre></div>
+<ol start="3">
+<li class="mce-root">In the <kbd>main.tf</kbd> file, we modify the resource code of <kbd>azurerm_app_service</kbd> in the following way:</li>
+</ol>
+<pre style="padding-left: 60px" class="mce-root">resource "azurerm_app_service" "app" {<br/>  <strong>count = var.nb_webapp</strong><br/>  name = "${var.app_name}-${var.environement}-<strong>${count.index+1}</strong>"<br/>  location = azurerm_resource_group.rg-app.location<br/>  resource_group_name = azurerm_resource_group.rg-app.name<br/>  app_service_plan_id = azurerm_app_service_plan.plan-app.id<br/>}</pre>
+<ol start="4">
+<li class="mce-root">(Optional:) In a new <kbd>outputs.tf</kbd> file, we add the output values with the following code:</li>
+</ol>
+<pre style="padding-left: 60px" class="mce-root">output "app_service_names"{<br/> value = azurerm_app_service.app[*].name<br/>}</pre>
+<h2 id="uuid-e9164f14-9e99-4481-9d53-4f0e6e921c01">How it works…</h2>
+<p>In <em>step 1</em>, we add an <kbd>nb_webapp</kbd> variable, which will contain the number of Azure App Service instances to write, which we then instantiate in <em>step 2</em> in the <kbd>terraform.tfvars</kbd> file.</p>
+<p class="mce-root">Then in <em>step 3</em>, in the <kbd>azurerm_app_service</kbd> <span>resource,</span> we add the Terraform <kbd>count</kbd> property (which is available for all resources and data Terraform blocks) and takes as a value the <kbd>nb_webapp</kbd> <span>variable </span>created previously.</p>
+<p class="mce-root">Moreover, in the <kbd>name</kbd> of the <kbd>azurerm_app_service</kbd><span> resource,</span> we add the suffix with the current index of the count that we increment by 1 (starting from 1, and not from 0, <span>to reflect the fact that count indexes start with zero</span>) with the Terraform instruction <kbd>count.index + 1</kbd>.</p>
+<p class="mce-root">Finally, and optionally, in <em>step 4</em>, we add an output that will contain the names of the App Service instances that have been provisioned.</p>
+<p class="mce-root">When executing the <kbd>terraform plan</kbd> command of this recipe with the <kbd>nb_webapp</kbd> <span>variable </span>equal to <kbd>2</kbd>, we can see that the two App Service instances have been provisioned.</p>
+<p>The following screenshots show an extract of this <kbd>terraform plan</kbd> command, with the first image displaying the preview changes for the first App Service:</p>
+<p class="mce-root CDPAlignCenter CDPAlign"><img src="assets/3e294bf5-8210-46ac-ba62-6042164a7576.png" style="width:29.67em;height:15.75em;"/></p>
+<p>This following screenshot, which is the continuation of the <kbd>terraform plan</kbd> command, displays the preview changes of the second App Service instance:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/0a4c99f5-a475-4074-a113-42a4eb585787.png" style="width:28.67em;height:13.17em;"/></p>
+<p class="mce-root">And when the changes are applied, the output is displayed:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/e0fdc725-947e-4b8c-852e-33305e2b1ccd.png" style="width:34.25em;height:10.83em;"/></p>
+<p>As you can see in the output, we have a list containing the names of the two generated App Service instances.</p>
+<h2 id="uuid-3cebdcf5-8bbe-49a4-a9d3-bce67dd126d5">There's more…</h2>
+<p>As we discussed in the <em>Manipulating variables</em> recipe in the previous chapter, we can also use the <kbd>-var</kbd> option of the <kbd>terraform plan</kbd> and <kbd>apply</kbd> commands to very easily increase or decrease the number of instances of this resource without having to modify the Terraform configuration.</p>
+<p>In our case, for example, we could use the following <kbd>plan</kbd> and <kbd>apply</kbd> command:</p>
+<pre class="mce-root">terraform plan -var "nb_webapp=5"</pre>
+<p class="mce-root">However, with this option, we lose the benefits of IaC, which is the fact of writing everything in code and thus having a history of changes made to the infrastructure.</p>
+<p class="mce-root">Moreover, it should be noted that lowering the <kbd>nb_webapp</kbd> value removes the last resources from the index, and it is not possible to remove resources that are in the middle of the index, which has been improved with the <kbd>for_each</kbd> <span>expression </span>that we will see in the <em>Looping over object collections</em> recipe in this chapter.</p>
+<p class="mce-root">In addition, thanks to the <kbd>count</kbd> property we have just seen and the condition expressions we have studied in the <em>Writing conditional operations</em> recipe of <a href="3099c9ac-8c38-4e7d-8146-411fac26a2b7.xhtml">Chapter 2</a><em>, Writing Terraform Configuration</em>, we can make the provisioning of resources optional in a dynamic way, as shown in the following code snippet:</p>
+<div>
+<pre><span>resource</span><span> </span><span>"azurerm_application_insights"</span><span> </span><span>"appinsight-app"</span><span> </span><span>{<br/></span>  count = use_appinsight == true ? 1 : 0<br/>  ....<br/>}</pre></div>
+<p class="mce-root">In this code, we have indicated to Terraform that if the <kbd>use_appinsight</kbd> <span>variable </span>is <kbd>true</kbd>, then the count property is <kbd>1</kbd>, which will allow us to provision one Azure Application Insights resource. In the opposite case, where the <kbd>use_appinsight</kbd> <span>variable </span>is <kbd>false</kbd>, the <kbd>count</kbd> property is <kbd>0</kbd> and in this case, Terraform does not provide an Application Insight <span>resource instance</span>.</p>
+<p class="mce-root">And so Terraform configuration can be put in a generic way for all environments or all applications and make their provisioning dynamic and conditional according to variables.</p>
+<div class="mce-root packt_infobox">This technique, also called <strong>feature flags</strong>, is applied in the development world, but we see here that we can also apply it to IaC.</div>
+<p><span>As we have seen in this recipe, the <kbd>count</kbd> property allows you to quickly provision several resources that are identical in their characteristics.</span></p>
+<p><span>We will study in the <em>Looping over object collections</em> recipe of this chapter how to provision several resources of the same nature, but with different properties.</span></p>
+<h2 id="uuid-b912780b-765d-48d0-a096-baf37f9f25c7">See also</h2>
+<p>For more information on the <kbd>count</kbd> property, refer to the documentation at <a href="https://www.terraform.io/docs/configuration/resources.html#count-multiple-resource-instances-by-count">https://www.terraform.io/docs/configuration/resources.html#count-multiple-resource-instances-by-count</a>.<a href="https://www.terraform.io/docs/configuration/resources.html#count-multiple-resource-instances-by-count"/></p>
+<h1 id="uuid-4c84e371-975b-4815-b4e4-c33ced436a7e">Using a table of key-value variables with maps</h1>
+<p>So far in this book, we have studied sample code using standard variable types (string, numeric, or Boolean). However, the Terraform language has other types of variables such as lists, maps, tuples, and even more complex object variables.</p>
+<p class="mce-root">Among these variable types are maps, which are represented by a collection of key-value elements and are widely used to write dynamic and scalable Terraform configurations.</p>
+<p class="mce-root">Maps can have several uses, which are as follows:</p>
+<ul>
+<li>
+<p>To put all the properties of a block in a Terraform resource into a single variable</p>
+</li>
+<li>
+<p>To avoid the declaration of several variables of the <strong>same type</strong> and thus put all the values of these variables in a single variable of the <kbd>map</kbd> type </p>
+</li>
+<li>
+<p>To have a key-value reference table of elements that will be used in the Terraform configuration</p>
+</li>
+</ul>
+<p class="mce-root">In this recipe, we will see a simple and practical case of using a map variable to dynamically define all the tags of an Azure resource.</p>
+<h2 id="uuid-1163acd1-2cf0-403f-a434-ed555a25d189">Getting ready</h2>
+<p>For this recipe, we start with a basic Terraform configuration that allows us to provision a Resource Group and an App Service instance in Azure.</p>
+<p class="mce-root">The source code for this recipe is available at <a href="https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP03/map">https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP03/map</a>.<a href="https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP03/map"/></p>
+<p class="mce-root">In this recipe, we will illustrate the use of maps in two use cases, which are as follows:</p>
+<ul>
+<li class="mce-root">
+<p>The implementation of the tags of this Resource Group</p>
+</li>
+<li class="mce-root">
+<p>The App settings properties of the App Service</p>
+</li>
+</ul>
+<h2 id="uuid-9dcd674e-a6ba-475f-ad6a-23c81b9f6d10">How to do it…</h2>
+<p>Perform the following steps:</p>
+<ol>
+<li>In the <kbd>variables.tf</kbd> <span>file,</span> we add the following variable declarations:</li>
+</ol>
+<pre style="padding-left: 60px">variable "tags" {<br/><strong>  type = map(strin</strong><strong>g)</strong><br/>  description = "Tags"<br/>  default = {}<br/>}<br/><br/>variable "app_settings" {<br/>  <strong>type = map(string)</strong><br/>  description = "App settings of the App Service"<br/>  default = {}<br/>}</pre>
+<ol start="2">
+<li class="mce-root">Then, in the <kbd>terraform.tfvars</kbd> file, we add this code:</li>
+</ol>
+<pre style="padding-left: 60px" class="mce-root">tags = {<br/>  ENV = "DEV1"<br/>  CODE_PROJECT = "DEMO"<br/>}<br/><br/>app_settings = {<br/>  KEY1 = "VAL1"<br/>}</pre>
+<ol start="3">
+<li class="mce-root">Finally, we modify the <kbd>main.tf</kbd> file with the following code:</li>
+</ol>
+<pre style="padding-left: 60px">resource "azurerm_resource_group" "rg-app" {<br/>  name = "${var.resource_group_name}-${var.environement}"<br/>  location = var.location<br/>  <strong>tags = var.tags</strong><br/>}<br/><br/>resource "azurerm_app_service" "app" {<br/>  name = "${var.app_name}-${var.environement}"<br/>  location = azurerm_resource_group.rg-app.location<br/>  resource_group_name = azurerm_resource_group.rg-app.name<br/>  app_service_plan_id = azurerm_app_service_plan.plan-app.id<br/><br/>  site_config {<br/>    dotnet_framework_version = "v4.0"<br/>  }<br/>  <strong>app_settings = var.app_settings</strong><br/>}</pre>
+<h2 id="uuid-056d9d38-021c-42e9-a656-9a13a1587f49">How it works…</h2>
+<p>In <em>step 1</em>, we have declared two variables for which we have specified their type, which is <kbd>map (string)</kbd>. That is to say, it will be composed of elements of the key-value type and the value is in <em>string</em> format. Moreover, given that these variables can be omitted and their values are therefore optional, we have assigned them an empty default value, which is <kbd>{}</kbd> for <kbd>map</kbd>.</p>
+<p class="mce-root">Then, in <em>step 2</em>, we defined the values of these two variables with the tags for the resources, as well as the <kbd>app_settings</kbd> for the App Service.</p>
+<p class="mce-root">Finally, in <em>step 3</em>, we use these variables in the Terraform configuration that provides the Resource Group and the App Service.</p>
+<p>The following screenshot shows a sample of the execution of the <kbd>terraform plan</kbd> command in this recipe:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/0bbda167-4c4f-4eb5-ad9f-9860a7ffeea7.png" style="width:35.33em;height:19.42em;"/></p>
+<p>We can see in the previous screenshot that the <kbd>app_settings</kbd> and <kbd>tags</kbd> properties are populated with the values of the <kbd>map</kbd> variables.</p>
+<h2 id="uuid-bab1f6cb-30cf-401d-8348-c96d10535629">There's more…</h2>
+<p>Maps thus allow us to simplify the use of blocks of objects in resources, but be careful – it is not possible to put a variable inside <kbd>map</kbd>. A <kbd>map</kbd> type variable is therefore to be considered as a single block of variables.</p>
+<p class="mce-root">To go further, we can see that it is also possible to merge maps; that is, to merge two maps, we can use the <kbd>merge</kbd> function, which is native to Terraform.</p>
+<p class="mce-root">The following steps show how to use this function to merge the app settings properties of the App Service:</p>
+<ol>
+<li class="mce-root">In the <kbd>variables.tf</kbd> file, we create a <kbd>custom_app_settings</kbd> <span>variable </span>that will contain the custom app settings provided by the user:</li>
+</ol>
+<pre style="padding-left: 60px">variable "custom_app_settings" {<br/> description = "Custom app settings"<br/> type = map(string)<br/> default = {}<br/>}</pre>
+<ol start="2">
+<li>In the <kbd>terraform.tfvars</kbd> file, we instantiate this variable with a custom map:</li>
+</ol>
+<pre style="padding-left: 60px">custom_app_settings = {<br/> CUSTOM_KEY1 = "CUSTOM_VAL1"<br/>}</pre>
+<ol start="3">
+<li>Finally, in the <kbd>main.tf</kbd> file, we use a local variable to define the default app settings, and in the <kbd>azurerm_app_service</kbd> resource, we use the <kbd>merge</kbd> function to merge the default app settings with the custom app settings:</li>
+</ol>
+<pre style="padding-left: 60px">locals {<br/>  <strong>default_app_settings</strong> = {<br/>  "DEFAULT_KEY1" = "DEFAULT_VAL1"<br/>  }<br/>}<br/><br/>resource "azurerm_app_service" "app" {<br/>  name = "${var.app_name}-${var.environement}"<br/>  location = azurerm_resource_group.rg-app.location<br/>  resource_group_name = azurerm_resource_group.rg-app.name<br/>  app_service_plan_id = azurerm_app_service_plan.plan-app.id<br/><br/>  site_config {<br/>    dotnet_framework_version = "v4.0"<br/>    scm_type = "LocalGit"<br/>  }<br/><br/><strong>  app_settings = merge(local.default_app_settings,var.custom_app_settings)</strong><br/>}</pre>
+<p class="mce-root">In the preceding code, we have defined default app settings properties for the <span><span>Azure App Service</span></span>, and the user can enrich these settings if needed by adding custom app settings.</p>
+<p class="mce-root">Moreover, it is also possible to create a <kbd>map</kbd> object on the fly, directly in the code, without having to use a variable.</p>
+<p class="mce-root">For this, we can use the <kbd>{....}</kbd> syntax integrated to Terraform, which takes in a list of key values as parameters, as seen in the following code:</p>
+<div>
+<pre><span>app_settings = {"KEY1" = </span><span>"VAL1"</span><span>, "KEY2" = </span><span>"VAL2"</span><span>}<br/></span></pre>
+<p>In this recipe, we studied the use of maps. But if we want to use more complex maps with key-values of different types, then we will use object variables, as explained in the documentation at <a href="https://www.terraform.io/docs/configuration/types.html#object-">https://www.terraform.io/docs/configuration/types.html#object-</a>.</p>
+<p><span>In the following recipe, we will discuss how to iterate on the list of key-value elements that constitute a map variable.<br/></span></p>
+</div>
+<h2 id="uuid-5915de36-7d6e-428d-8073-dae9bad2390a">See also</h2>
+<p>The documentation relating to the merge function is available at <a href="https://www.terraform.io/docs/configuration/functions/merge.html">https://www.terraform.io/docs/configuration/functions/merge.html</a>.</p>
+<h1 id="uuid-8acf5973-2881-470e-9258-d0f6f4fdbfa2">Looping over object collections</h1>
+<p>We have seen in the previous recipes of the chapter the use of the <kbd>count</kbd> property, which allows us to provision <em>N</em> identical resources, as well as the use of map variables, which allow key-value objects.</p>
+<p class="mce-root">In this recipe, we will discuss how to provision <em>N</em> resources of the same type but with different properties using the loop functionalities included in Terraform since version 0.12.</p>
+<h2 id="uuid-2ce7dc0b-a49e-4225-97c4-604ed5dee2c0">Getting ready</h2>
+<p>To get started, we start with a basic Terraform configuration that allows you to deploy a single App Service in Azure.</p>
+<p>The basic Terraform configuration is as follows:</p>
+<pre>resource "azurerm_app_service" "app" {<br/>  name = "${var.app_name}-${var.environement}"<br/>  location = azurerm_resource_group.rg-app.location<br/>  resource_group_name = azurerm_resource_group.rg-app.name<br/>  app_service_plan_id = azurerm_app_service_plan.plan-app.id<br/>}</pre>
+<p class="mce-root">The source code for this recipe is available at <a href="https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP03/list_map">https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP03/list_map</a>.<a href="https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP03/list_map"/></p>
+<h2 id="uuid-e5340218-496a-49f1-8791-6085cfd3b976">How to do it…</h2>
+<p>Perform the following steps:</p>
+<ol>
+<li>In the <kbd>variables.tf</kbd> file, we add the following Terraform configuration:</li>
+</ol>
+<pre style="padding-left: 60px">variable "web_apps" {<br/>  description = "List of App Service to create"<br/>  <strong>type = any</strong><br/>}</pre>
+<ol start="2">
+<li class="mce-root">In the <kbd>terraform.tfvars</kbd> file, we add the following configuration:</li>
+</ol>
+<pre style="padding-left: 60px">web_apps = {<br/> webapp1 = {<br/> "name" = "webappdemobook1"<br/> "location" = "West Europe"<br/> "dotnet_framework_version" = "v4.0"<br/> "serverdatabase_name" = "server1"<br/> },<br/><br/> webapp2 = {<br/> "name" = "webapptestbook2"<br/> "dotnet_framework_version" = "v4.0"<br/> "serverdatabase_name" = "server2"<br/> }<br/>}</pre>
+<ol start="3">
+<li class="mce-root">In the <kbd>main.tf</kbd> file, we modify the code of the App Service with the following configuration:</li>
+</ol>
+<pre style="padding-left: 60px">resource "azurerm_app_service" "app" {<br/><strong>  for_each = var.web_apps</strong><br/>  name = <strong>each.value["name"]</strong><br/>  location = <strong>lookup(each.value, "location", "West Europe")</strong><br/>  resource_group_name = azurerm_resource_group.rg-app.name<br/>  app_service_plan_id = azurerm_app_service_plan.plan-app.id<br/> <br/>  site_config {<br/>   dotnet_framework_version = <strong>each.value["dotnet_framework_version"]</strong><br/>  }<br/><br/>  connection_string {<br/>    name = "DataBase"<br/>    type = "SQLServer"<br/>    value = "Server=${<strong>each.value["serverdatabase_name"]</strong>};Integrated Security=SSPI"<br/>  }<br/>}</pre>
+<ol start="4">
+<li class="mce-root">Finally, in the <kbd>outputs.tf</kbd> file, we add the following code:</li>
+</ol>
+<div>
+<pre style="padding-left: 60px"><span>output</span><span> </span><span>"app_service_names"</span><span> </span><span>{<br/></span><span>  value = <strong>[for app in azurerm_app_service.app : app.name]</strong><br/></span><span>}</span></pre></div>
+<h2 id="uuid-3e45b5e9-c7fa-433d-b0e4-b7de55fe9ccc">How it works…</h2>
+<p>In <em>step 1</em>, we declared a new variable of type <kbd>any</kbd>, that is, we do not specify its type because it is complex.</p>
+<div class="packt_infobox">It is worth noting that complex variables can be declared. It does make the code more verbose, but it can be very helpful in validation.</div>
+<p class="mce-root">In <em>step 2</em>, we instantiate this variable with a list of map objects that will be the properties of each App Service. In this list, we have two App Service instances in which we specify the properties in the form of a map with the name, version of the framework, the Azure region location, and the name of the database server of the application that will be used in the App Service.</p>
+<p class="mce-root">In <em>step 3</em>, in the <kbd>azurerm_app_service</kbd> resource, we don't use the <kbd>count</kbd> property anymore, but rather the <kbd>for_each</kbd> <span>expression </span>(which is included in Terraform 0.12), which allows us to loop on lists.</p>
+<p class="mce-root">Then, for each property of <kbd>azurerm_app_service</kbd> resource, we can use the short expression <kbd>each.value["&lt;property name&gt;"]</kbd> or the <kbd>lookup</kbd> function integrated in Terraform that takes in the following parameters:</p>
+<ul>
+<li class="mce-root">
+<p>The current element of the <kbd>for_each</kbd> expression with <kbd>each.value</kbd>, thus the line of the list.</p>
+</li>
+<li class="mce-root">
+<p>The name of the property of the map, which in our sample is <kbd>location</kbd>.</p>
+</li>
+<li class="mce-root">
+<p>Then comes the third parameter of this lookup function, which is not mandatory. It allows you to specify the value to use if the property is not present in the map. We used the Azure <span class="packt_screen">West Europe</span> region, which is the default value.</p>
+</li>
+</ul>
+<p class="mce-root">Finally, in <em>step 4</em>, we created an output that uses the <kbd>for</kbd> <span>expression </span>to iterate on the list of resources that have been provisioned, and export their names as output.</p>
+<p>The result of this output is shown in the following screenshot:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/45320b9d-4891-496d-800f-0f8ca252a22b.png" style="width:36.00em;height:11.25em;"/></p>
+<p>In the previous screenshot, we can see the result of the output, which displays the name of two provisioned Azure App Service instances in the console.</p>
+<h2 id="uuid-5c08494b-e353-4152-b950-fb756acbab2e">There's more…</h2>
+<p>In this recipe, we have learned expressions and functions from the Terraform language that allows for the provisioning of resource collections.</p>
+<p>I advise you to take a good look at the articles and documentation on the <kbd>for</kbd> and <kbd>for_each</kbd> expressions. <span>Regarding</span> the <kbd>lookup</kbd> and <kbd>element</kbd> functions, they can be used, but it is preferable to use the native syntax instead <span>(such as <kbd>var_name[42]</kbd> and <kbd>var_map["key"]</kbd>) to access elements of a map, list, or set.</span></p>
+<p class="mce-root">It is obvious that in this recipe, we have used simple resources such as Azure App Service, but these methods can also be applied to more property-rich resources such as virtual machines.</p>
+<h2 id="uuid-91598b74-5a1a-4bb5-a11b-b29418600794">See also</h2>
+<ul>
+<li>Documentation on loops with <kbd>for</kbd> and <kbd>for_each</kbd> is available at <a href="https://www.terraform.io/docs/configuration/resources.html">https://www.terraform.io/docs/configuration/resources.html</a>, and the article on these loops can be found at <a href="https://www.hashicorp.com/blog/hashicorp-terraform-0-12-preview-for-and-for-each/">https://www.hashicorp.com/blog/hashicorp-terraform-0-12-preview-for-and-for-each/</a>.</li>
+<li class="mce-root">The documentation on the <kbd>lookup</kbd> function is available at <a href="https://www.terraform.io/docs/configuration/functions/lookup.html">https://www.terraform.io/docs/configuration/functions/lookup.html</a>.</li>
+</ul>
+<h1 id="uuid-a589bf58-6836-4d22-9aff-651e56b4e3cf">Generating multiple blocks with dynamic expressions</h1>
+<p>Terraform resources are defined by the following elements:</p>
+<ul>
+<li>Properties that are in the form <kbd>property name = value</kbd>, which we have seen several times in this book</li>
+<li>Blocks that represent a grouping of properties, such as the <kbd>site_config</kbd> block inside the <kbd>azurerm_app_service</kbd> resource</li>
+</ul>
+<p class="mce-root">Depending on the Terraform resource, a block can be present once or even multiple times in the same resource, such as the <kbd>security_rule</kbd> block inside the <kbd>azurerm_network_security_group</kbd> resource (see the documentation, for example, at <a href="https://www.terraform.io/docs/providers/azurerm/r/network_security_group.html">https://www.terraform.io/docs/providers/azurerm/r/network_security_group.html</a>).</p>
+<p class="mce-root">Until Terraform version 0.12, it was not possible to make these blocks present several times in the same resource dynamically using, for example, a variable of <kbd><span>list</span></kbd> type.</p>
+<p class="mce-root">One of the great novelties of Terraform 0.12 is the new <kbd>dynamic</kbd> expression that allows us to loop the blocks in resources.</p>
+<p class="mce-root">In this recipe, we will see how to use the dynamic expression to provision an <kbd>azurerm_network_security_group</kbd> <span>resource </span>in Azure, which contains a list of security rules.</p>
+<h2 id="uuid-4882d125-6288-4e66-a9a8-c79fad3f37b6">Getting ready</h2>
+<p>To get started, we don't need any basic Terraform configuration. In this recipe, we will use a Terraform file that allows us to create an Azure Resource Group in which we will create a Network Security Group.</p>
+<p><span>The source code for this recipe is available at <a href="https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP03/dynamics">https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP03/dynamics</a></span>.<a href="https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP03/dynamics"/></p>
+<h2 id="uuid-761bb0fe-ba05-4a01-96b5-7448056dc4e2">How to do it…</h2>
+<p>To use dynamic expressions, perform the following steps:</p>
+<ol>
+<li>In the <kbd>variables.tf</kbd> file, we add the following code:</li>
+</ol>
+<pre style="padding-left: 60px">variable "ngs_rules" {<br/> description = "List of NSG rules"<br/> type = any<br/>}</pre>
+<ol start="2">
+<li class="mce-root">In the <kbd>terraform.tfvars</kbd> file, we add the following code:</li>
+</ol>
+<pre style="padding-left: 60px">ngs_rules = [<br/> {<br/> name = "rule1"<br/> priority = 100<br/> direction = "Inbound"<br/> access = "Allow"<br/> protocol = "Tcp"<br/> source_port_range = "*"<br/> destination_port_range = "80"<br/> source_address_prefix = "*"<br/> destination_address_prefix = "*"<br/> }, <br/> {<br/> name = "rule"<br/> priority = 110<br/> direction = "Inbound"<br/> access = "Allow"<br/> protocol = "Tcp"<br/> source_port_range = "*"<br/> destination_port_range = "22"<br/> source_address_prefix = "*"<br/> destination_address_prefix = "*"<br/> }<br/>]</pre>
+<ol start="3">
+<li class="mce-root">In the <kbd>main.tf</kbd> file, we add the code for the Network Security Group with the following code:</li>
+</ol>
+<pre style="padding-left: 60px">resource "azurerm_network_security_group" "example" {<br/>  name = "acceptanceTestSecurityGroup1"<br/>  location = azurerm_resource_group.rg.location<br/>  resource_group_name = azurerm_resource_group.rg.name<br/> <br/><strong>  dynamic</strong> "security_rule" {<br/>     <strong>for_each</strong> = var.ngs_rules<br/>     content {<br/>      name = <strong>security_rule.value</strong>["name"]<br/>      priority = security_rule.value["priority"]<br/>      direction = security_rule.value["direction"]<br/>      access = security_rule.value["access"]<br/>      protocol = security_rule.value["protocol"]<br/>      source_port_range = security_rule.value["source_port_range"]<br/>      destination_port_range = security_rule.value["destination_port_range"]<br/>      source_address_prefix = security_rule.value["source_address_prefix"]<br/>      destination_address_prefix = security_rule.value["destination_address_prefix"]<br/>     }<br/>  }<br/>}</pre>
+<h2 id="uuid-d9cfccc7-b417-4ee6-8877-c061a156335a">How it works…</h2>
+<p>In <em>step 1</em>, we create an <kbd>nsg_rules</kbd> <span>variable </span>of type <kbd>any</kbd>, which will contain the list of rules in map format.</p>
+<p class="mce-root">Then, in <em>step 2</em>, we instantiate this <kbd>nsg_rules</kbd> variable with the list of rules and their properties.</p>
+<p class="mce-root">Finally, in <em>step 3</em>, in the <kbd>azurerm_network_security_group</kbd> <span>resource,</span> we add the <kbd>dynamic</kbd> instruction, which allows us to generate <em>N</em> blocks of <kbd>security_rule</kbd>.</p>
+<p class="mce-root">In this <kbd>dynamic</kbd> Terraform expression, we make a <kbd>for_each</kbd> loop (as seen in the <em>Looping over object collections</em> recipe earlier in this chapter), which will iterate on the lines of the <kbd>nsg_rules</kbd> <span>variable </span>and will map each property of the resource to the maps of the list.</p>
+<p>This following screenshot shows the execution of the <kbd>terraform plan</kbd> command:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/8174d0fc-466c-40fe-b2ef-076abf3ca640.png" style="width:32.92em;height:40.83em;"/></p>
+<p>We can see the list of security rules <span>in the preceding output.</span></p>
+<h2 id="uuid-5d2bfb2d-33c4-4788-9afe-fbe5913cb763">There's more…</h2>
+<p class="mce-root">If you want to render the presence of a block conditionally, you can also use the conditions in the <kbd>dynamic</kbd> expression, as shown in the following code example:</p>
+<pre class="mce-root">resource "azurerm_linux_virtual_machine" "virtual_machine" {<br/>...<br/>  dynamic "boot_diagnostics" {<br/>     <strong>for_each = local.use_boot_diagnostics == true ? [1] : []</strong><br/>     content {<br/>     storage_account_uri = "https://storageboot.blob.core.windows.net/"<br/>     }<br/>  }<br/>}</pre>
+<p>In this example, in the <kbd>for_each</kbd> expression of the <kbd>dynamic</kbd> expression, we have a condition that returns a list with one element if the local value, <kbd>use_boot_diagnostics</kbd>, is true. Otherwise, this condition returns an empty list that will not make the <kbd>boot_diagnostics</kbd> <span>block </span>appear in the <kbd>azurerm_virtual_machine</kbd> resource.</p>
+<h2 id="uuid-38bc06d4-b1e9-472f-927c-6e9cd9f82556">See also</h2>
+<ul>
+<li>Documentation on dynamic expressions is available at <a href="https://www.terraform.io/docs/configuration/expressions.html#dynamic-blocks">https://www.terraform.io/docs/configuration/expressions.html#dynamic-blocks</a>.</li>
+<li>Another example of a Terraform guide on dynamic expressions is available at <a href="https://github.com/hashicorp/terraform-guides/tree/master/infrastructure-as-code/terraform-0.12-examples/advanced-dynamic-blocks">https://github.com/hashicorp/terraform-guides/tree/master/infrastructure-as-code/terraform-0.12-examples/advanced-dynamic-blocks</a>.</li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    </body></html>

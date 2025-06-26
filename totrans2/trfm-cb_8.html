@@ -1,0 +1,507 @@
+<html><head></head><body>
+        <section>
+
+                            <header class="header-title chapter-title">
+                    Using Terraform Cloud to Improve Collaboration
+                </header>
+            
+            <article>
+                
+<p class="mce-root">Throughout this book, we have learned how to write Terraform configurations and use the Terraform CLI throughout different recipes. All this applies to small projects and small teams, but in a corporate context, when working on large infrastructure projects, it is necessary to have a real platform for sharing modules and centralized deployment. This platform, which must be able to be connected to a source control repository with a <strong>Version Control System</strong> <span>(</span><strong>VCS</strong>) such as Git, must allow infrastructure changes to be applied to Terraform in an automated and centralized manner for all team members. This is why, since 2019, HashiCorp has published a SaaS platform (known as a cloud) called <strong>Terraform Cloud</strong>. To learn more about Terraform Cloud and its history, please refer to the documentation here: <a href="https://www.terraform.io/docs/cloud/index.html">https://www.terraform.io/docs/cloud/index.html</a>.</p>
+<p class="mce-root">This Terraform Cloud platform (which also exists in an on-premise version called <strong>Terraform Enterprise</strong>), in its free plan in particular, provides functionalities of the <kbd>remote</kbd> backend type, a private modules registry, user management <span>for a team of up to five users,</span> and remote execution of Terraform configuration, which is stored in a VCS repository. In its paid plan, Terraform Cloud also integrates more advanced team management functionalities, provides <span>cost estimation for </span>resources that will be managed by Terraform, and supplies integration with <strong>Sentinel</strong>, which is a compliance framework. The complete and detailed list of Terraform Cloud functionalities is available in the documentation here: <a href="https://www.hashicorp.com/products/terraform/pricing/">https://www.hashicorp.com/products/terraform/pricing/</a>.</p>
+<p class="mce-root">In this last chapter of this book, we will learn how to use the <kbd>remote</kbd> backend of Terraform Cloud and how to <span>share Terraform modules in the private registry on Terraform Cloud</span>. Then, we will learn how to perform the remote execution of Terraform configuration directly inside Terraform Cloud and <span>how to use Terraform Cloud using its APIs. </span>Finally, we will end this chapter by exploring the paid features and usage of Sentinel in order to apply compliance tests and visualize cost estimation.</p>
+<p>In this chapter, we'll cover the following recipes:</p>
+<ul>
+<li>Using the remote backend in Terraform Cloud</li>
+<li>Using Terraform Cloud as a private module registry</li>
+<li>Executing Terraform configuration remotely in Terraform Cloud</li>
+<li>Automating Terraform Cloud using APIs</li>
+<li>Testing the compliance of Terraform configurations using Sentinel</li>
+<li>Using cost estimation for cloud cost resources governance</li>
+</ul>
+<p>Let's get started!</p>
+<h1 id="uuid-3a8e9a5b-6c90-44bf-ba7e-8f8b655ef5c5">Technical requirements</h1>
+<p>The primary prerequisite for this chapter is to have an account on the Terraform Cloud platform. Creating an account is simple and offers a free plan. You can do this at <a href="https://app.terraform.io/signup/account">https://app.terraform.io/signup/account</a>.</p>
+<div class="mce-root packt_infobox">For all the recipes in this chapter, we will already be connected to Terraform Cloud via a web browser.</div>
+<p class="mce-root">After registering for an account, it will be necessary (if you haven't done so already) to create an organization by clicking on the <span class="packt_screen">Create organization</span> link.</p>
+<div class="mce-root packt_infobox">For detailed steps regarding how to create an account and organization, follow the Terraform learning process at <a href="https://learn.hashicorp.com/terraform/cloud-getting-started/signup">https://learn.hashicorp.com/terraform/cloud-getting-started/signup</a>. For more information on organizations, read the documentation at <a href="https://www.terraform.io/docs/cloud/users-teams-organizations/organizations.html#creating-organizations">https://www.terraform.io/docs/cloud/users-teams-organizations/organizations.html#creating-organizations</a>.</div>
+<p class="mce-root">Finally, it's important that you're familiar with the concept of workspaces in Terraform Cloud (which is a little different from the workspaces we studied in the <em>Using workspaces to manage environments</em> recipe in <a href="fc591e87-b893-40fa-9021-7827bffcc094.xhtml">Chapter 4</a>, <em>Using the Terraform CLI</em>). Please refer to the documentation at <a href="https://www.terraform.io/docs/cloud/workspaces/index.html">https://www.terraform.io/docs/cloud/workspaces/index.html</a> to find out more.</p>
+<p class="mce-root">When creating a connection between Terraform Cloud and a Git repository, we will be using <span>GitHub</span>. You can create a free account on GitHub at <a href="https://github.com/">https://github.com/</a>.</p>
+<p><span>The source code for this chapter is available at <a href="https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP08">https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP08</a>.</span></p>
+<p>Check out the following video to see the code in action: <a href="https://bit.ly/2Zl3tyA">https://bit.ly/2Zl3tyA</a></p>
+<h1 id="uuid-355dd923-3451-4da4-bd72-fdbb66b41248">Using the remote backend in Terraform Cloud</h1>
+<p>Throughout this book, we have discussed the backend and its importance for storing and sharing the Terraform state file.</p>
+<p class="mce-root">In the <em>Protecting the state file in the Azure remote backend</em> <span>recipe </span>in <a href="d054157b-d534-47c9-8079-3af13107c4ef.xhtml">Chapter 6</a>, <em>Provisioning Azure Infrastructure with Terraform</em>, we had a concrete case of this when we set up and used a backend in Azure (using Azure Storage). However, this recipe can only be applied with an Azure subscription. The different types of backend listed at <a href="https://www.terraform.io/docs/backends/types/index.html">https://www.terraform.io/docs/backends/types/index.html</a> mostly require you to purchase platforms or tools.</p>
+<p class="mce-root">One of Terraform's primary features is that it allows you to host a Terraform state file in a managed service, which is called a <kbd>remote</kbd> backend.</p>
+<p class="mce-root">In this recipe, we will learn how to use the <kbd>remote</kbd> backend in Terraform Cloud.</p>
+<h2 id="uuid-f7195d60-b001-475e-8c94-0687fa002d02">Getting ready</h2>
+<p>The prerequisite for this recipe (as for all the others in this chapter) is that you have an account on Terraform Cloud (<a href="http://app.terraform.io/">http://app.terraform.io/</a>) and are logged in. Furthermore, you will need to create a new workspace called <kbd>demo-app</kbd> manually from the Terraform Cloud UI by following the documentation at <a href="https://www.terraform.io/docs/cloud/workspaces/creating.html">https://www.terraform.io/docs/cloud/workspaces/creating.html</a> and configuring it without choosing a VCS repository.</p>
+<p class="mce-root">The goal of this recipe is to configure and use the <kbd>remote</kbd> backend for a simple Terraform configuration (for a better understanding that does not depend on a cloud provider). Furthermore, the execution of this Terraform configuration will be configured in Terraform Cloud for execution in <strong>local</strong> mode; that is, on a machine outside Terraform Cloud (which can be a local workstation or a CI/CD pipeline agent).</p>
+<div class="mce-root packt_infobox">Note that in this recipe, we will be using local mode. In the next recipe, we will explain how to execute in <strong>remote </strong>mode.</div>
+<p class="mce-root">The source code for this recipe is available here: <a href="https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP08/app">https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP08/app</a>.</p>
+<h2 id="uuid-9f8ea46d-5605-4a46-9715-692072b32471">How to do it…</h2>
+<p>This recipe will be split into three parts, as follows:</p>
+<ol>
+<li>Configuring local mode execution in Terraform Cloud</li>
+<li>Generating a new API token</li>
+<li>Configuring and using the <kbd>remote</kbd> backend</li>
+</ol>
+<p>For the first part, we will configure local mode execution, as follows:</p>
+<ol>
+<li>In our new Terraform Cloud workspace (<kbd>demo-app</kbd>), go to the <span class="packt_screen">Settings</span> | <span class="packt_screen">General</span> tab and change the <span class="packt_screen">Execution Mode</span> option to <span class="packt_screen">Local</span>:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/9af14b46-4133-4271-af9d-cf9d0a731855.png" style="width:41.33em;height:23.67em;"/></p>
+<ol start="2">
+<li> Click the <span class="packt_screen">Save settings</span> button to apply these changes.</li>
+</ol>
+<p>Now, for the second part, we need to generate a new API token to authenticate with Terraform Cloud. Follow these steps:</p>
+<ol>
+<li>In the <span class="packt_screen">Settings</span> tab of the <kbd>demoBook</kbd> organization, go to the <span class="packt_screen">API Tokens</span> tab:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/e201e661-e42e-4f64-932b-b5438375916e.png"/></p>
+<ol start="2">
+<li>Scroll down to the bottom of this page and click on the <span class="packt_screen">Create an authentication token</span> button to generate a new API token.</li>
+<li>Keep this generated token safe.</li>
+</ol>
+<p>Finally, the last part is to configure and use the <kbd>remote</kbd> backend. Follow these steps:</p>
+<ol>
+<li>In the <kbd>main.tf</kbd> file of the Terraform configuration, add the following backend configuration:</li>
+</ol>
+<pre style="padding-left: 60px"><span>terraform </span>{<br/>  <span>backend </span><span>"remote" </span>{<br/>    <span>hostname     </span>= <span>"app.terraform.io"<br/></span><span>    </span><span>organization </span>= <span>"demoBook"<br/></span><span><br/></span><span>    </span><span>workspaces </span>{<br/>      <span>name </span>= <span>"demo-app"<br/></span><span>    </span>}<br/>  }<br/>}</pre>
+<ol start="2">
+<li>Then, in the appropriate Terraform CLI configuration folder, which is the home directory <span>(documented here: </span><a href="https://www.terraform.io/docs/commands/cli-config.html">https://www.terraform.io/docs/commands/cli-config.html</a><span>)</span>, create a new file called <kbd>terraform.rc</kbd> (for Windows OS) or <kbd>.terraform.rc</kbd> (for Linux OS). This will be the Terraform CLI configuration. Inside this file, add the following content:</li>
+</ol>
+<pre style="padding-left: 60px">credentials "app.terraform.io" {<br/> token = "&lt;your api token generated&gt;"<br/>}</pre>
+<ol start="3">
+<li>Execute the basic workflow Terraform commands with <kbd>init</kbd>, <kbd>plan</kbd>, and <kbd>apply</kbd> from your local workstation.</li>
+</ol>
+<h2 id="uuid-d6bfa216-8c36-4a56-8eb9-ca32b457e2e9">How it works…</h2>
+<p>In the first part of this recipe, we configured the Terraform execution mode of our workspace. In this configuration, we chose local mode, which indicates that Terraform will ensure the configuration is installed on a private machine (either a local development station or a CI/CD pipeline agent). In this case, the created workspace is just used to store the Terraform state.</p>
+<p class="mce-root">Then, in the second part, we created a token that allows the Terraform binary to authenticate with our Terraform Cloud workspace.</p>
+<p class="mce-root">In the last part, we wrote the Terraform configuration, which describes the settings of our <kbd>remote</kbd> backend. In this configuration, we used the <kbd>remote</kbd> backend, in which we added the following parameters:</p>
+<ul>
+<li class="mce-root"><kbd>hostname</kbd> with the <kbd>"app.terraform.io"</kbd> <span>value, </span>which is the domain of Terraform Cloud</li>
+<li class="mce-root"><kbd>organization</kbd>, which contains the <kbd>demoBook</kbd> <span>name </span>of the organization</li>
+<li class="mce-root"><kbd>workspaces</kbd> with the name of the <kbd>demo-app</kbd> <span>workspace </span>that we created manually in the prerequisites of this recipe</li>
+</ul>
+<p class="mce-root">Then, in <em>step 2</em>, we created the Terraform CLI configuration file by adding the authentication token that was generated in the second part of this recipe.</p>
+<p class="mce-root">Finally, in the last step, we executed the Terraform commands workflow.</p>
+<p class="mce-root">After executing these commands, on the <span><span class="packt_screen">States</span> </span>tab of our workspace, we will see that our status file has been created:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/99304b91-d7b7-4122-99af-756b9474697c.png"/></p>
+<p class="mce-root">By clicking on this file, you can view its content or download it.</p>
+<h2 id="uuid-7fe5ab49-bdd3-49e9-bd71-8995bd75b50a">There's more…</h2>
+<p>In this recipe, we learned how to centrally store report files in the Terraform Cloud backend.</p>
+<p class="mce-root">To do this, we created a workspace manually so that we could configure it and choose the local execution mode. In the <em>Executing Terraform configuration in Terraform Cloud</em> <span>recipe </span>of this chapter, if we want to use remote mode, we simply put the name of the workspace in the configuration of the backend, which creates it automatically if it does not exist.</p>
+<p class="mce-root CDPAlignLeft CDPAlign">Then, we configured the Terraform CLI with the <kbd>terraform.rc</kbd> file. Another solution is to use the <kbd>terraform login</kbd> command, which creates the token, and the <kbd><span>credential.tfrc.json</span></kbd> configuration file.</p>
+<p class="mce-root CDPAlignLeft CDPAlign">The following screenshot shows the execution of this command:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/58fa6df4-8306-4e69-aac1-4ae675436a12.png" style="width:54.08em;height:40.08em;"/></p>
+<div class="mce-root packt_infobox">This command is not to be used for automation usage as it requires a web browser and manual intervention.</div>
+<p class="mce-root">Concerning the token, we created it at the organization level in order to protect Terraform's organization-only executions. To give broader permissions to all organizations in this account, you can create a token on the full account in <span class="packt_screen">User Settings</span> and then in the <span class="packt_screen">Tokens</span> tab:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/6e65e800-a66d-40f0-866f-270512edcef3.png" style="width:37.67em;height:26.00em;"/></p>
+<p class="mce-root">To learn more about the use of API tokens, please refer to the documentation at <a href="https://www.terraform.io/docs/cloud/users-teams-organizations/api-tokens.html">https://www.terraform.io/docs/cloud/users-teams-organizations/api-tokens.html</a>.</p>
+<p class="mce-root">Finally, you can read the documentation at <a href="https://www.terraform.io/docs/cloud/architectural-details/data-security.html">https://www.terraform.io/docs/cloud/architectural-details/data-security.html</a> to learn more about securing data and the Terraform state file, which are stored in Terraform Cloud. If you already have Terraform configurations with state files that are stored in other types of backends and you would like to migrate them to Terraform Cloud, here is the migration documentation: <a href="https://www.terraform.io/docs/cloud/migrate/index.html">https://www.terraform.io/docs/cloud/migrate/index.html</a>.</p>
+<h2 id="uuid-b365310a-3059-4113-9326-26c1f8e9ec18">See also</h2>
+<ul>
+<li>The documentation on the <kbd>remote</kbd> backend is available here: <a href="https://www.terraform.io/docs/backends/types/remote.html">https://www.terraform.io/docs/backends/types/remote.html</a></li>
+<li class="mce-root">The <kbd>terraform login</kbd> command documentation is available here: <a href="https://www.terraform.io/docs/commands/login.html">https://www.terraform.io/docs/commands/login.html</a></li>
+<li class="mce-root">Documentation on the configuration of the Terraform CLI is available here: <a href="https://www.terraform.io/docs/commands/cli-config.html.">https://www.terraform.io/docs/commands/cli-config.html.</a></li>
+</ul>
+<h1 id="uuid-d62bedd9-18ce-4fe7-9282-d824d2d56b41">Using Terraform Cloud as a private module registry</h1>
+<p>In the previous recipe, we learned how to use Terraform Cloud as a remote backend that is centralized, secure, and free of charge.</p>
+<p class="mce-root">In this book, we have dedicated <a href="ddb13a41-5cdd-4931-b38f-d185d3a10c1e.xhtml">Chapter 5</a>, <em>Sharing Terraform Configuration with Modules</em>, to the creation, usage, and sharing of Terraform modules. As a reminder, what we studied was publishing modules in the Terraform public registry, which is publicly accessible by all Terraform users, and sharing Terraform modules privately using a Git repository.</p>
+<p class="mce-root">Concerning private module sharing, the Git repository system is efficient but does not offer a centralized platform for sharing and documenting modules like the public registry does. In order to provide companies with a private registry of their Terraform modules, HashiCorp has integrated this functionality into Terraform Cloud/Enterprise.</p>
+<p class="mce-root">In this recipe, we will learn how to publish and use a Terraform module in the private registry of the Terraform Cloud.</p>
+<h2 id="uuid-60c988e7-cea8-4e14-804d-eef724ba4275">Getting ready</h2>
+<p>In order to publish a module in Terraform Registry, you'll need to store your module code in a VCS file that is supported by Terraform Cloud. The list of supported file types can be found at <a href="https://www.terraform.io/docs/cloud/vcs/index.html">https://www.terraform.io/docs/cloud/vcs/index.html</a>.</p>
+<p class="mce-root">To start this recipe, in the <span class="packt_screen">Settings</span> section of the Terraform Cloud organization, we need to create a connection to the VCS provider that contains the Terraform configuration, as described in the documentation at <a href="https://www.terraform.io/docs/cloud/vcs/index.html">https://www.terraform.io/docs/cloud/vcs/index.html</a>.</p>
+<p class="mce-root">In our scenario, we will use the GitHub VCS, which contains a <kbd>terraform-azurerm-webapp</kbd> repository (which creates a Service Plan, an App Service instance, and an A<span>pplication </span>Insights in Azure). To get this repository, you can fork <a href="https://github.com/mikaelkrief/terraform-azurerm-webapp">https://github.com/mikaelkrief/terraform-azurerm-webapp</a>.</p>
+<p class="mce-root">In addition, as we studied in the <em>Sharing Terraform module using GitHub</em> recipe in <a href="ddb13a41-5cdd-4931-b38f-d185d3a10c1e.xhtml">Chapter 5</a>, <em>Sharing Terraform Configuration with Modules</em>, you need to create a Git tag in this repository that contains the version number of the module. For this recipe, we will create a <kbd>v1.0.0</kbd> tag, as shown in the following screenshot:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/8a1a183b-6730-42ad-b254-2443e7fdb302.png" style="width:28.92em;height:22.17em;"/></p>
+<p class="mce-root">To integrate between Terraform Cloud and GitHub, execute the process documented here: <a href="https://www.terraform.io/docs/cloud/vcs/github-app.html">https://www.terraform.io/docs/cloud/vcs/github-app.html</a>. At the end of this integration, we get the following screen under <span class="packt_screen">Settings</span> | <span class="packt_screen">VCS Providers</span>:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/57257202-73e2-453d-a5b3-9fdb753d18ce.png"/></p>
+<p class="mce-root">Our organization now has a connection to the required GitHub account and we can start publishing the module in Terraform Cloud.</p>
+<h2 id="uuid-74c12b02-f71f-450c-9e07-fa6e89d20d64">How to do it…</h2>
+<p>To publish a Terraform module in Terraform Cloud's private registry, perform the following steps:</p>
+<ol>
+<li>In our Terraform Cloud organization, click on the <span class="packt_screen">Modules</span> <span>menu, </span>which is located in the top bar menu:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/cea0efd3-d8e5-4eeb-9e6d-71392fbf54ad.png" style="width:27.50em;height:4.58em;"/></p>
+<ol start="2">
+<li>To add the module, click on the <span class="packt_screen">Add module</span> button:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/b7b7f06b-2c97-4396-85bc-8ea75c941d09.png" style="width:35.33em;height:12.25em;"/></p>
+<ol start="3">
+<li>Then, in the next layout, in the first step of the wizard, choose <span class="packt_screen">GitHub</span> as the VCS provider, which we integrated as part of the requirements for this recipe:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/5cc76d1d-f121-409e-9b06-25062ecb67c1.png" style="width:38.25em;height:16.33em;"/></p>
+<ol start="4">
+<li>In the second step of the wizard, choose the repository that contains the Terraform module configuration:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/7d2be4bc-69da-4fc6-8f06-a43ccde44b07.png" style="width:26.67em;height:24.58em;"/></p>
+<ol start="5">
+<li>Finally, in the last step of the wizard, publish the module by clicking on the <span class="packt_screen">Publish module</span> button:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/d6ba232f-7a68-4a91-84fa-18d7624f1411.png" style="width:41.00em;height:17.75em;"/></p>
+<h2 id="uuid-714a66c4-4c25-4a8d-a332-f1cbe37513d2">How it works…</h2>
+<p>To publish a module in the private registry of Terraform, you just have to follow the steps proposed by the wizard, which consist of choosing a VCS provider and then selecting the repository that contains the Terraform configuration of the module so that it can be published. After doing this, details about the module will be displayed in the layout of the public registry. In the center of this page, you will be able to see the contents of the <kbd>Readme.md</kbd> file, while on the right-hand side, you will be able to see the technical information about the use of this module.</p>
+<h2 id="uuid-159f8034-2f3a-48e9-97dc-8cc1bbd0f362">There's more…</h2>
+<p>Once this module has been published in this registry, you can use it in a Terraform configuration. If you're using Terraform Cloud in local execution mode, you must configure the Terraform CLI with the authentication token in the <kbd>terraform.rc</kbd> file, as described in the previous recipe. Then, you need to use this module in a Terraform configuration and write the following:</p>
+<pre>module "webapp" {
+  source  = "app.terraform.io/demoBook/webapp/azurerm"
+  version = "1.0.0"<br/>...
+}</pre>
+<p class="mce-root">In this configuration, the <kbd>source</kbd> property is the module identifier in the Terraform Cloud registry, while the <kbd>version</kbd> property corresponds to the Git tag that's been set in the repository. After doing this, you can select what version you wish to use from the <span class="packt_screen">Versions</span> drop-down list:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/6ab8d8d6-c982-4d0d-b3a1-2773bfd828f5.png" style="width:24.33em;height:22.58em;"/></p>
+<p class="mce-root">If we change the Terraform configuration of the module and we want to upgrade its version, we just have to add a Git tag to this repository, along with the desired version. By doing this, the module will be automatically updated in the Terraform Cloud registry.</p>
+<p class="mce-root">In addition, if your modules have been published in this private registry, you can generate the Terraform configuration that calls them using the design configuration feature of Terraform Cloud. You can find out more about this at <a href="https://www.terraform.io/docs/cloud/registry/design.html">https://www.terraform.io/docs/cloud/registry/design.html</a>.</p>
+<p class="mce-root">Finally, please note that if you have several organizations in Terraform Cloud and you want to use the same modules in all of them, you will have to publish these modules in each of your organizations. As for upgrading their versions, this will be done automatically for each organization.</p>
+<h2 id="uuid-c529b470-2332-4348-b9f1-e0d25aca32d3">See also</h2>
+<p>Documentation regarding privately registering modules in Terraform Cloud is available here: <a href="https://www.terraform.io/docs/cloud/registry/index.html">https://www.terraform.io/docs/cloud/registry/index.html</a>.</p>
+<h1 id="uuid-ae2c9ab2-1852-48d8-b48e-5d85386b0186">Executing Terraform configuration remotely in Terraform Cloud</h1>
+<p>In the previous two recipes, we studied the use of Terraform Cloud with local runtime settings. This configuration indicates that the Terraform binary that applies the Terraform configuration is installed on a machine outside the Terraform Cloud platform. This machine is therefore private and can be a development workstation or a machine that serves as an agent for a CI/CD pipeline (such as on an Azure pipeline agent or a Jenkins node).</p>
+<p class="mce-root">One of the great advantages of Terraform Cloud is its ability to execute Terraform configurations directly within this platform. This feature, called <strong>remote operations</strong>, makes it possible to have free Terraform configuration execution pipelines without having to install, configure, and maintain VMs that serve as agents. In addition, it provides a shared Terraform execution interface for all the members of the organization.</p>
+<p class="mce-root">In this recipe, we will look at the steps involved in running a Terraform configuration in Terraform Cloud using the UI workflow.</p>
+<h2 id="uuid-dc97797c-872d-4abb-a01f-6081f205a9d7">Getting ready</h2>
+<p class="mce-root">The Terraform configuration source code that we will be using in this recipe can be found at <a href="https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP08/remote">https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP08/remote</a>. This configuration creates a Resource Group and an App Service <span>in Azure. If you want to use this Terraform configuration, you will need to make a fork of this repository. </span>This configuration also uses a <kbd>terraform-azurerm-webapp</kbd> <span>Terraform </span>module, which has been published in the private registry of our Terraform Cloud organization. For more information about publishing a module in the private registry, see the previous recipe, <em>Using Terraform Cloud as a private module registry</em>.</p>
+<p class="mce-root">Since, in this Terraform configuration, we will be creating Azure resources, we need to create an Azure Service Principal that has sufficient permissions in the subscription. For more information on Azure Service Principals and the authentication of Terraform to Azure, see the <em>Protecting the Azure credential provider</em> recipe in <a href="d054157b-d534-47c9-8079-3af13107c4ef.xhtml">Chapter 6</a>, <em>Provisioning Azure Infrastructure with Terraform</em>.</p>
+<p class="mce-root">Also, since we will be exposing a Terraform configuration in GitHub, we will need to add the GitHub VCS provider, as explained in the documentation here: <a href="https://www.terraform.io/docs/cloud/vcs/github-app.html">https://www.terraform.io/docs/cloud/vcs/github-app.html</a>.</p>
+<p class="mce-root">Finally, all the steps of this recipe will be done in the Terraform Cloud web interface.</p>
+<h2 id="uuid-6d59a811-b9b3-4319-b6f1-007d6563e51d">How to do it…</h2>
+<p>Before we execute the Terraform configuration, we need to create and configure a new workspace. Follow these steps:</p>
+<ol>
+<li>Inside the <span class="packt_screen">Workspace</span> section of our organization, click on the <span class="packt_screen">New organization</span> button to create a new organization.</li>
+<li>In the first step of the wizard, choose the VCS provider we <span>registered </span>in the requirements. Here, we will choose our GitHub provider:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/0b0e1220-84b7-4bcf-afa5-79bc6be8c03d.png"/></p>
+<ol start="3">
+<li>Then, in the second step of this wizard, select the GitHub repository that contains the Terraform configuration so that we can execute it in Terraform Cloud:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/14df9a6f-c6fa-421f-8fee-6a721937e02b.png"/></p>
+<ol start="4">
+<li class="CDPAlignLeft CDPAlign">Finally, in the last step of the wizard, configure this workspace by specifying the mandatory parameter, which is the name of the workspace. This is <kbd>demo-app-remote</kbd> in our case:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/44cf213d-0db1-4e55-bc21-af7d677cff98.png"/></p>
+<ol start="5">
+<li>In the optional <span class="packt_screen">Advanced options</span> tab, set the folder path of the Terraform configuration (leave this blank if the Terraform <span>configuration</span> is in the root of your repository). We can also fill in the <span class="packt_screen">Automatic Run Triggering</span><span> and </span><span class="packt_screen">VCS branch</span> <span>parameters </span><span>so that they can be run (we leave the</span> <span>master branch empty):</span></li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/7cfb421f-a021-4884-95e7-718f680d8334.png" style="width:53.00em;height:42.67em;"/></p>
+<ol start="6">
+<li>Finally, click on the <span class="packt_screen">Create workspace</span> button to finalize the creation of the workspace.</li>
+</ol>
+<p>Now that we've created the workspace, because we're deploying resources in Azure, we need to add the four Azure authentication <span>environment </span>variables to the workspace variables settings. Follow these steps:</p>
+<ol>
+<li>Click on the <span class="packt_screen">Configure variables</span> button:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/b0749a08-0723-4911-8a4f-5d580c3a2db4.png"/></p>
+<ol start="2">
+<li>Then, in the <span class="packt_screen">Environment Variables</span> section, add our four Terraform Azure provider environment variables, as shown in the following screenshot:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/a342a133-9e33-49ea-9d2f-22b29ecdba6b.png" style="width:30.25em;height:20.00em;"/></p>
+<p>Now that we've configured our workspace, we can execute the Terraform configuration inside Terraform Cloud.</p>
+<p>To run the Terraform configuration remotely in Terraform Cloud, perform the following steps:</p>
+<ol>
+<li class="CDPAlignLeft CDPAlign">To trigger the execution of the Terraform configuration, click on the <span class="packt_screen">Queue plan</span> button, enter a reason for doing this, and confirm this by clicking on the <span class="packt_screen">Queue plan</span> button:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/67d01631-33c5-433d-8b78-5c64b122b033.png"/></p>
+<ol start="2">
+<li class="CDPAlignLeft CDPAlign">Terraform Cloud will launch a new execution for this Terraform configuration. By running the <kbd>terraform plan</kbd> command, we will be able to see the logs for this execution:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/3a2f7ef7-5e5b-436b-bdae-893f82027b6d.png" style="width:34.08em;height:27.92em;"/></p>
+<p style="padding-left: 60px">After executing <kbd>plan</kbd>, Terraform Cloud expects the user to confirm this before the changes are applied.</p>
+<ol start="3">
+<li class="CDPAlignLeft CDPAlign">If we agree to the preview changes, we can confirm these changes by clicking on the <span class="packt_screen">Confirm &amp; Apply</span> button:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/7209e9c5-8d98-49d1-88a2-2682d9d7c5ce.png" style="width:33.08em;height:11.92em;"/></p>
+<p style="padding-left: 60px">Add some comments and click on the <span class="packt_screen">Confirm Plan</span> button:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/23353f4a-932d-4697-b1a3-321d2ba28c94.png" style="width:29.17em;height:18.83em;"/></p>
+<p style="padding-left: 60px">Once finished, the result of executing the plan will be provided:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/2aed3cc2-b4b2-4bbe-9b9c-354bdc750415.png" style="width:40.58em;height:31.17em;"/></p>
+<h2 id="uuid-bc39770a-e5de-4485-aabb-d4f70eb6cc3e">How it works…</h2>
+<p>In this recipe, we configured a workspace in Terraform Cloud in order to run a Terraform configuration that's in a GitHub repository directly in an instance managed by Terraform Cloud.</p>
+<p class="mce-root">In the middle of this configuration, before executing the Terraform configuration, we performed the Azure environment variables configuration, which is an optional step and depends on the resources and cloud providers you wish to manage.</p>
+<h2 id="uuid-51bba8fe-a4f2-412b-a632-f4e71ebfc342">There's more…</h2>
+<p>In this recipe, we learned how to run the <kbd>plan</kbd> and <kbd>apply</kbd> Terraform Cloud variables directly using the web interface of this platform. In the workspace settings, you can also configure whether you want to apply the plan manually (that is, with a confirmation, like in our recipe) or automatically. You can also choose the version of the Terraform binary you wish to use (by default, it uses the <span>latest stable version that can found at the time of the workspace's creation;</span> beta versions are not taken into account):</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/89a0eace-93ad-4193-bf7b-c821b23294eb.png"/></p>
+<p class="mce-root">You can also destroy all the resources that have been provisioned using the <span class="packt_screen">Destruction and Deletion</span> feature, which is accessible in the <span class="packt_screen">Settings</span> | <span class="packt_screen">Destruction and Deletion</span> menu, and then click on the <span class="packt_screen">Queue destroy plan</span> button:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/2a5e295a-71fb-479c-8320-a997c3733de8.png" style="width:37.33em;height:25.58em;"/></p>
+<p class="mce-root">In addition, as you may have noticed, by running the Terraform configuration in Terraform Cloud using the UI, we did not need to configure the <kbd>remote</kbd> backend information for the state file, as we discussed in the <em>Using a remote backend in Terraform Cloud</em> <span>recipe </span>of this chapter. In our case, the configuration of the Terraform state file is integrated with the workspace. In the <span class="packt_screen">States</span> tab, we'll notice the presence of the Terraform state file:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/4a6ec36c-334f-46e9-b5d3-c68be74849d7.png" style="width:41.33em;height:14.92em;"/></p>
+<p class="mce-root">Moreover, if you are in a development context and want to check the development before committing to the repository, you can still use this remote mode of Terraform execution to make a plan. This is done by controlling this execution, which takes place in Terraform Cloud using your Terraform binary (or CLI). To do this, simply add the configuration of the <kbd>remote</kbd> backend, as in the <em>Using a remote backend in Terraform Cloud</em> <span>recipe </span>of this chapter, by using the name of the workspace we created in the first step of that recipe, which corresponds to the following code:</p>
+<pre><span>terraform </span>{<br/>  <span>backend </span><span>"remote" </span>{<br/>    <span>hostname     </span>= <span>"app.terraform.io"<br/></span><span>    </span><span>organization </span>= <span>"demoBook"<br/></span><span><br/></span><span>    </span><span>workspaces </span>{<br/>      <span>name </span>= <span>"demo-app-remote"<br/></span><span>    </span>}<br/>  }<br/>}</pre>
+<p class="mce-root">Then, on the development station, execute the <kbd>terraform plan</kbd> command, as shown in the following screenshot:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/2edbecc7-028d-4a41-b089-9f6a10b86ec2.png"/></p>
+<p class="mce-root">During this execution, your Terraform CLI will create a configuration package and upload it to the Terraform Cloud workspace. The CLI triggers the Terraform Cloud CLI to run Terraform on the uploaded package. Finally, the output of the <kbd><span>plan</span></kbd> command is also available in the command-line terminal. Please also note that, in this case, you do not need to set the environment variables locally since they are already configured in the workspace.</p>
+<div class="mce-root packt_infobox">In order to ensure that the changes are applied in one place, you can't run the <kbd>terraform apply</kbd> command on a workspace that is connected to a VCS. However, if your workspace is not connected to a VCS, then you can also execute the <span><kbd>apply</kbd> </span>command from your local CLI.</div>
+<p class="mce-root">Finally, if your Terraform configuration includes the provisioning <kbd>local-exec</kbd> (which we studied in the <em>Executing local programs with Terraform</em> recipe in <a href="3099c9ac-8c38-4e7d-8146-411fac26a2b7.xhtml">Chapter 2</a>, <em>Writing Terraform Configuration</em>) and, in its command, it uses a third-party tool, you will have to ensure that this tool is already present or installed on the Terraform Cloud agent, which will execute the Terraform binary. For more information about additional third-party tools in the execution of Terraform Cloud, I recommend reading the documentation available at <a href="https://www.terraform.io/docs/cloud/run/install-software.html">https://www.terraform.io/docs/cloud/run/install-software.html</a>.</p>
+<h2 id="uuid-c3d741e4-ea04-4bfc-8c30-16b1312b2ac5">See also</h2>
+<ul>
+<li>The documentation on remote execution in Terraform Cloud is available here: <a href="https://www.terraform.io/docs/cloud/run/index.html">https://www.terraform.io/docs/cloud/run/index.html</a>.</li>
+<li>The documentation on using the CLI with remote execution is available here: <a href="https://www.terraform.io/docs/cloud/run/cli.html">https://www.terraform.io/docs/cloud/run/cli.html</a>.</li>
+</ul>
+<h1 id="uuid-79ab3154-5fa4-41a0-af0a-2f5aee8cb463">Automating Terraform Cloud using APIs</h1>
+<p>In the previous recipes, we learned how to use the Terraform Cloud platform to store Terraform state files in a <kbd>remote</kbd> backend. Then, we used Terraform Cloud as a private registry of modules and learned how to run Terraform configurations remotely in Terraform Cloud.</p>
+<p class="mce-root">All these actions were mainly done via the Terraform Cloud UI web interface. In the <em>There's more...</em> section of the previous recipe, we discussed that it is also possible to use the Terraform CLI locally to run Terraform remotely.</p>
+<p class="mce-root">In a company, we need to automate all of these actions for the following reasons:</p>
+<ul>
+<li class="mce-root">The use of the UI is ergonomic but requires a lot of manual actions, which, with many projects, can be very time- and resource-consuming.</li>
+<li class="mce-root">In Terraform Cloud, the execution workflow in remote mode is fixed with the execution of the <kbd>plan</kbd> command, as well as the application. It isn't possible to add other actions (which we have studied in this book) such as the execution of integration tests upstream. Due to this, it isn't possible to customize the workflow with the business needs of the company.</li>
+</ul>
+<p class="mce-root">Due to the need for automation and customization, HashiCorp has published APIs that allow Terraform Cloud to be managed as it should be with the UI.</p>
+<p class="mce-root">In this recipe, we will look at automating the actions of Terraform Cloud using its APIs.</p>
+<h2 id="uuid-4b7fc061-8c39-4c5b-b09d-9be505095955">Getting ready</h2>
+<p>Before starting, it is good to recall the Terraform Cloud workflow, which is as follows:</p>
+<ul>
+<li>Write the Terraform configuration, then commit it to a VCS repository (such as Git).</li>
+<li>In Terraform Cloud, the workspace retrieves this Terraform configuration and executes the dry run using the <kbd>terraform plan</kbd> command.</li>
+<li>In manual mode, if the user confirms the plan, Terraform Cloud triggers the application and applies the changes to the infrastructure.</li>
+<li>In automatic mode (auto-apply), the changes are applied automatically after the <kbd>plan</kbd> command has been issued.</li>
+</ul>
+<p class="mce-root">In this recipe, we will use the same scenario and Terraform configuration that we used for the previous recipe, except we will use scripts that call the Terraform Cloud APIs.</p>
+<p class="mce-root">As a prerequisite, however, you will need to create an API token in your Terraform Cloud user account settings. This will be used for authentication:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/f4099a5d-54c6-4251-ba65-024cde5510d6.png"/></p>
+<p class="mce-root">A run is triggered via an API by using a user API token, not an organization token.</p>
+<p class="mce-root">In regard to the scripting language used in this recipe, we will use PowerShell. However, you can adapt this and make use of your usual programming languages (shell, Python, C#, and so on).</p>
+<p class="mce-root">The source code for this recipe is available at <a href="https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP08/api">https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP08/api</a>.</p>
+<h2 id="uuid-e4245217-d6fc-4edb-b44b-0c4cac39dde1">How to do it…</h2>
+<p>To automate Terraform Cloud with an API, perform the following steps inside a new folder:</p>
+<ol>
+<li>Create a JSON file named <kbd>workspace.json</kbd>. This will contain the definition of the workspace we will be creating. Insert the following content:</li>
+</ol>
+<pre style="padding-left: 60px">{<br/>  <span>"data"</span><span>: </span>{<br/>    <span>"attributes"</span><span>: </span>{<br/>      <span>"name"</span><span>: </span><span>"workspace-demo-api"</span><span>,<br/></span><span>      </span><span>"auto-apply"</span><span>: true,<br/></span><span>      </span><span>"working-directory"</span><span>: </span><span>"CHAP08/remote"</span><span>,<br/></span><span>      </span><span>"vcs-repo"</span><span>: </span>{<br/>        <span>"identifier"</span><span>: </span><span>"mikaelkrief/terraform-Cookbook"</span><span>,<br/></span><span>        </span><span>"oauth-token-id"</span><span>: </span><span>"ot-Jxxxxxxxxxx"</span><span>,</span><span><br/></span><span>        </span><span>"branch"</span><span>: </span><span>""</span><span>,<br/></span><span>        </span><span>"default-branch"</span><span>: true,<br/></span><span>        </span><span>"queue-all-runs"</span><span>: true<br/></span><span>      </span>}<br/>    }<span>,<br/></span><span>    </span><span>"type"</span><span>: </span><span>"workspaces"<br/></span><span>  </span>}<br/>}</pre>
+<div class="packt_infobox">To understand how to get <kbd>oauth-token-id</kbd>, read the documentation available at <a href="https://www.terraform.io/docs/cloud/api/oauth-tokens.html">https://www.terraform.io/docs/cloud/api/oauth-tokens.html</a>.</div>
+<ol start="2">
+<li>Create a PowerShell script called <kbd>tfcloud-workspaces.ps1</kbd> that contains the following content:</li>
+</ol>
+<pre style="padding-left: 60px">$apiToken = $args[<span>0</span>]  <span>#API TOKEN<br/></span>$organization = <span>"demoBook"<br/></span>$headers = @{ }<br/>$headers[<span>"Authorization"</span>] = <span>"Bearer  </span>$apiToken<span>"<br/></span>$headers[<span>"Content-Type"</span>] = <span>"application/vnd.api+json"<br/></span>$uriWorkspaces = <span>"https://app.terraform.io/api/v2/organizations/</span>$organization<span>/workspaces"<br/></span><span>try<br/></span>{<br/>    $json = Get-Content(<span>"workspace.json"</span>)<br/>    $response = Invoke-RestMethod -Uri $uriWorkspaces -Body $json -Headers $headers -Method Post<br/>    $worspaceId = $response.data.id<br/>    Write-Host $worspaceId<br/>}<br/><span>Catch<br/></span>{<br/>   ...<br/>}</pre>
+<p style="padding-left: 60px" class="mce-root">The complete source code of this script is available at <a href="https://github.com/PacktPublishing/Terraform-Cookbook/blob/master/CHAP08/api/tfcloud-workspaces.ps1">https://github.com/PacktPublishing/Terraform-Cookbook/blob/master/CHAP08/api/tfcloud-workspaces.ps1</a>.</p>
+<ol start="3">
+<li class="mce-root">In a PowerShell terminal,<span> run the following command to create a workspace:</span></li>
+</ol>
+<pre style="color: black;padding-left: 60px"><strong>.\tfcloud-workspaces.ps1 &lt;your api token&gt;</strong></pre>
+<p style="padding-left: 60px">At the end of this execution, the script will display the ID for the created workspace:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/d365119d-9089-4c60-ae34-a5772e113ad8.png"/></p>
+<ol start="4">
+<li>Create another JSON file called <kbd>variables.json</kbd> that will contain the definition of the environment variables to create. Insert the following content:</li>
+</ol>
+<pre style="padding-left: 60px">{<br/>  <span>"vars"</span><span>: </span>[<br/>    {<br/>      <span>"data"</span><span>: </span>{<br/>        <span>"type"</span><span>: </span><span>"vars"</span><span>,<br/></span><span>        </span><span>"attributes"</span><span>: </span>{<br/>          <span>"key"</span><span>: </span><span>"ARM_SUBSCRIPTION_ID"</span><span>,<br/></span><span>          </span><span>"value"</span><span>: </span><span>"xxxxx-xxxxxxx-xxxxxx-xxxxxx"</span><span>,</span><span><br/></span><span>          </span><span>"category"</span><span>: </span><span>"env"</span><span>,<br/></span><span>....<br/></span><span>        </span>}<br/>      }<br/>    }<span>,</span><span><br/></span><span>  ....</span><br/>  ]<br/>}</pre>
+<p style="padding-left: 60px"><span>The complete source code for this JSON script is available at <a href="https://github.com/PacktPublishing/Terraform-Cookbook/blob/master/CHAP08/api/variables.json">https://github.com/PacktPublishing/Terraform-Cookbook/blob/master/CHAP08/api/variables.json</a>.</span></p>
+<ol start="5">
+<li>Create a PowerShell script called <kbd>tfcloud-variables.ps1</kbd> that contains the following content:</li>
+</ol>
+<pre style="padding-left: 60px">$apiToken = $args[<span>0</span>]  <span>#API TOKEN<br/></span>$worspaceId = $args[<span>1</span>] <span># WORKSPACE ID<br/></span>$headers = @{ }<br/>$headers[<span>"Authorization"</span>] = <span>"Bearer  </span>$apiToken<span>"<br/></span>$headers[<span>"Content-Type"</span>] = <span>"application/vnd.api+json"<br/></span>$uriVariables = <span>"https://app.terraform.io/api/v2/workspaces/</span>$worspaceId<span>/vars"<br/></span><br/>$json = Get-Content(<span>"variables.json"</span>) | ConvertFrom-Json<br/>$varList = $json.vars<br/><span>foreach </span>($var <span>in </span>$varList)<br/>{<br/>   $varjson = $var | ConvertTo-Json<br/>   Invoke-RestMethod -Uri $uriVariables -Body $varjson -Headers $headers -Method Post<br/>}</pre>
+<p style="padding-left: 60px"><span>The complete source code for this script is available at <a href="https://github.com/PacktPublishing/Terraform-Cookbook/blob/master/CHAP08/api/tfcloud-variables.ps1">https://github.com/PacktPublishing/Terraform-Cookbook/blob/master/CHAP08/api/tfcloud-variables.ps1</a>.</span></p>
+<ol start="6">
+<li class="mce-root">In PowerShell,<span> run the preceding script to create environment variables in the workspaces we've created with the following command:</span></li>
+</ol>
+<pre style="color: black;padding-left: 60px"><strong>.\tfcloud-variables.ps1 &lt;your token id&gt; &lt;workspace id&gt;</strong></pre>
+<ol start="7">
+<li>To trigger a new execution of the Terraform configuration, create a JSON file called <kbd>run.json</kbd> that contains the definition of the queue. Add the following content:</li>
+</ol>
+<pre style="padding-left: 60px">{<br/>  <span>"data"</span><span>: </span>{<br/>    <span>"attributes"</span><span>: </span>{<br/>      <span>"is-destroy"</span><span>: false,<br/></span><span>      </span><span>"message"</span><span>: </span><span>"Run for demo Book"<br/></span><span>    </span>}<span>,<br/></span><span>    </span><span>"type"</span><span>:</span><span>"runs"</span><span>,<br/></span><span>    </span><span>"relationships"</span><span>: </span>{<br/>      <span>"workspace"</span><span>: </span>{<br/>        <span>"data"</span><span>: </span>{<br/>          <span>"type"</span><span>: </span><span>"workspaces"</span><span>,<br/></span><span>          </span><span>"id"</span><span>: </span><span>"ws-xxxxxxxxxx"<br/></span><span>        </span>}<br/>      }<br/>    }<br/>  }<br/>}</pre>
+<ol start="8">
+<li>Create a PowerShell script called <kbd>tfcloud-run.ps1</kbd> that contains the following content:</li>
+</ol>
+<pre style="padding-left: 60px">$apiToken = $args[<span>0</span>]  <span>#API TOKEN<br/></span>$headers = @{ }<br/>$headers[<span>"Authorization"</span>] = <span>"Bearer  </span>$apiToken<span>"<br/></span>$headers[<span>"Content-Type"</span>] = <span>"application/vnd.api+json"<br/></span>$uriWorkspaces = <span>"https://app.terraform.io/api/v2/runs"<br/></span><span><br/></span>$json = Get-Content(<span>"run.json"</span>)<br/>Invoke-RestMethod -Uri $uriWorkspaces -Body $json -Headers $headers -Method Post</pre>
+<ol start="9">
+<li>In PowerShell, run the following command to queue a new Terraform <kbd>run</kbd>:</li>
+</ol>
+<pre style="padding-left: 60px"><strong><span>.\tfcloud-run-plan.ps1</span><span> &lt;your yoken api&gt;</span></strong></pre>
+<h2 id="uuid-1d243559-b6f0-44ac-9b2e-a512aba83550">How it works…</h2>
+<p>In this recipe, we automated the implementation of a Terraform workflow in three steps, as follows:</p>
+<ol>
+<li>Creating and configuring a workspace</li>
+<li>Creating environment variables in this workspace</li>
+<li>Triggering a Terraform <kbd>run</kbd> in the Terraform configuration defined in this workspace</li>
+</ol>
+<p class="mce-root">From <em>steps 1</em> to <em>3</em>, we used the API to create a workspace. To do this, we created a file called <kbd>workspace.json</kbd> that contains the body (payload) that will be sent as a parameter to the API. In this file, we defined the following properties:</p>
+<ul>
+<li><kbd>name</kbd>: The name of the workspace to create.</li>
+<li><kbd>working-directory</kbd>: The directory of the repository that contains the Terraform configuration.</li>
+<li><kbd>auto-apply</kbd>: This indicates that the runs will be done automatically after the plan, <span>without the user having to review this plan </span>(optional property).</li>
+<li><kbd>vcs-repo</kbd>: This block contains information about the VCS provider we configured in the organization, which is detailed here: <a href="https://www.terraform.io/docs/cloud/vcs/index.html">https://www.terraform.io/docs/cloud/vcs/index.html</a>. The <kbd>oauth-token-id</kbd> property is obtained either by the VCS provider's screen or via an API, as detailed here: <a href="https://www.terraform.io/docs/cloud/api/oauth-clients.html">https://www.terraform.io/docs/cloud/api/oauth-clients.html</a>.</li>
+</ul>
+<p>Then, we wrote and executed the PowerShell script that calls the workspace creation API. In this script, we defined the user's API token and the name of the organization <span>as a variable before calling</span> the workspace creation API.</p>
+<div class="packt_infobox">The documentation for the workspace API is available here: <a href="https://www.terraform.io/docs/cloud/api/workspaces.html">https://www.terraform.io/docs/cloud/api/workspaces.html</a>.</div>
+<p>At the end of its execution, this script displays the ID of the created workspace, which will have to be preserved so that we can continue making API calls. In the web interface of Terraform Cloud, we will be able to view this new workspace:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/f4dbd97d-72d6-44eb-8ae2-b1f2034a4401.png"/></p>
+<p class="mce-root">Then, from <em>steps 4</em> to <em>6</em>, we used the API to create the environment variables in this new workspace. To do this, we created a <kbd>variables.json</kbd> file that contains the four variables of the Azure Service Principal, as well as their body, which will be processed so that the API parameters for its payload are sent to the API. In this file, we defined the following properties <span>for each of the variables</span>:</p>
+<ul>
+<li class="mce-root"><kbd>name</kbd></li>
+<li class="mce-root"><kbd>value</kbd></li>
+<li class="mce-root"><kbd>category</kbd>: <kbd>env</kbd> (to define it as an environment variable)</li>
+</ul>
+<p class="mce-root">Then, we wrote and executed the PowerShell script that calls the workspace creation API for each of these variables.</p>
+<div class="packt_infobox">In this recipe, we created these four environment variables because the Terraform configuration we used as an example manages an Azure infrastructure. This step is optional if you don't need environment variables.<br/>
+<br/>
+In addition, the documentation for the variables API is available at <a href="https://www.terraform.io/docs/cloud/api/workspace-variables.html">https://www.terraform.io/docs/cloud/api/workspace-variables.html</a>.</div>
+<p class="mce-root CDPAlignLeft CDPAlign">At the end of its execution, in the Terraform Cloud UI, we will be able to see the new variable environments:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/93322496-c740-45b6-b9db-056a1ba1fc1c.png"/></p>
+<p class="mce-root">Finally, in <em>steps 7</em> to <em>9</em>, we used the API to trigger a run <span>–</span> that is, the execution of the Terraform configuration we defined in the workspace (in the VCS). To do this, we created a file called <kbd>run.json</kbd> that will also be used as a payload for the API. This contains the following properties:</p>
+<ul>
+<li class="mce-root"><kbd>message</kbd>: Message about the run</li>
+<li class="mce-root"><kbd>workspace.id</kbd>: Workspace ID</li>
+</ul>
+<p class="mce-root">Then, we wrote and executed the PowerShell script that calls the <kbd>run</kbd> trigger API. At the end of its execution, we saw that the execution of Terraform is triggered in Terraform Cloud, as shown in the following screenshot:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/47703ed7-5261-423d-af62-26fe8b7f0ce6.png"/></p>
+<p class="mce-root">By using the <kbd>auto-apply</kbd> property of the workspace, <kbd>terraform apply</kbd> will complete automatically, without requiring manual configuration by the user.</p>
+<h2 id="uuid-8677630a-ef71-46a9-a427-427b99d87e66">There's more…</h2>
+<p>In this recipe, we looked at the simple and basic use of the Terraform cloud APIs. As always, there are many other scenarios in which we can use them.</p>
+<div class="mce-root packt_infobox">Remember to protect the API token and <span>any Azure or similar tokens </span>by not putting them in clear text in your scripts.</div>
+<p class="mce-root">Furthermore, to stay in an IaC context, instead of using the APIs directly, you can use the Terraform configuration with the <strong>Terraform Enterprise</strong> <strong>provider</strong>, which is documented here: <a href="https://www.terraform.io/docs/providers/tfe/index.html">https://www.terraform.io/docs/providers/tfe/index.html</a>. It is also recommended by HashiCorp for Terraform Cloud administration purposes. You can find more information about this at <a href="https://www.terraform.io/docs/cloud/api/index.html">https://www.terraform.io/docs/cloud/api/index.html</a> (first note).</p>
+<h2 id="uuid-1a31235a-a458-4586-942d-fac351ea5a24">See also</h2>
+<ul>
+<li>The documentation about the various Terraform Cloud APIs is available here: <a href="https://www.terraform.io/docs/cloud/api/index.html">https://www.terraform.io/docs/cloud/api/index.html</a>.</li>
+<li class="mce-root">The following is a video demonstration on the use of Terraform Cloud/Enterprise APIs: <a href="https://www.hashicorp.com/resources/demystifying-the-terraform-enterprise-api/">https://www.hashicorp.com/resources/demystifying-the-terraform-enterprise-api/</a>.</li>
+</ul>
+<h1 id="uuid-47573faa-5ba3-4f37-864c-3ed397ee4873">Testing the compliance of Terraform configurations using Sentinel</h1>
+<p>The aspect of Terraform configuration tests has been discussed several times in this book, such as using <kbd>terratest</kbd> (in the <em>Testing Terraform module code with Terratest</em> recipe of <a href="d054157b-d534-47c9-8079-3af13107c4ef.xhtml">Chapter 5</a>, <em>Provisioning Azure Infrastructure with Terraform</em>) and <kbd>kitchen-terraform</kbd> (in the <em>Testing Terraform configuration using kitchen-terraform</em> recipe of <a href="905f7886-2827-44fe-af8c-4f9f3e3a9cef.xhtml">Chapter 7</a>, <em>Deep Diving into Terraform</em>). The common point of these two tools is that the purpose of the tests is to write and test the changes that have already been applied by Terraform.</p>
+<p class="mce-root">All these tests are very beneficial but they are done after the changes have been made. The rollback also requires work from all teams. To be even more in line with the business and financial requirements of the company, there is another level of testing that verifies the compliance of the Terraform configuration before it is applied to the target infrastructure.</p>
+<p class="mce-root">In Terraform, these compliance tests are carried out after the <kbd>terraform plan</kbd> command is executed. They verify that the result of the <kbd>plan</kbd> command corresponds to the rules described in the tests. Only if these tests have passed can the <kbd>terraform apply</kbd> command be executed.</p>
+<p class="mce-root">Among the tools and frameworks for compliance testing, Terraform Cloud offers, in its paid plan, the stack, which allows us to write tests using the <strong>Sentinel</strong> framework and execute them directly in Terraform Cloud by using the <kbd>run</kbd> command between <kbd>plan</kbd> and <kbd>apply</kbd>.</p>
+<p class="mce-root">In this recipe, we will study a simple case of writing compliance tests and executing them in Terraform Cloud.</p>
+<h2 id="uuid-1e33404c-2083-407d-8ae8-ec815e06ccd0">Getting ready</h2>
+<p>The essential requirement for this recipe is to have a Terraform Cloud paid plan. We will be using <span class="packt_screen">Team &amp; Governance</span>:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/9eb5bfb1-8b7d-4b09-882b-4f271a768a44.png" style="width:41.42em;height:11.50em;"/></p>
+<p class="mce-root">If you have the free plan, you can try all the features of the paid plan for 30 days by activating your free trial:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/1663a27d-194f-44bd-90ae-2d61676251ac.png"/></p>
+<p>Documentation about the plans, prices, and features is available here: <a href="https://www.terraform.io/docs/cloud/paid.html">https://www.terraform.io/docs/cloud/paid.html</a>.</p>
+<p class="mce-root">The Terraform configuration that we will be using has already been discussed and is available at <a href="https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP08/remote">https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP08/remote</a>. This configuration will create a Resource Group, a Service Plan, and an Azure App Service.</p>
+<p>In addition, to use the code written in this recipe in your organization, you need to create a fork of the original repository of this book (<a href="https://github.com/PacktPublishing/Terraform-Cookbook">https://github.com/PacktPublishing/Terraform-Cookbook</a>).</p>
+<p class="mce-root">The goal of this recipe is to write the rules, as part of policy sets, that will test the following:</p>
+<ul>
+<li class="mce-root">That the FTP mode for the App Service is configured only with FTPS mode.</li>
+<li class="mce-root">That the Service Plan that will be provisioned to an SKU tier type is either Basic or Standard. This rule prohibits the provisioning of Premium or Premium v2 Service Plan.</li>
+</ul>
+<p class="mce-root">Then, we will learn how to apply these policy sets during the execution of Terraform Cloud.</p>
+<p class="mce-root">To write these policies, we will use <strong>Sentinel</strong>, which is a test framework provided by HashiCorp. Its documentation is available at <a href="https://www.hashicorp.com/resources/writing-and-testing-sentinel-policies-for-terraform/">https://www.hashicorp.com/resources/writing-and-testing-sentinel-policies-for-terraform/</a>.</p>
+<div class="mce-root packt_infobox">The purpose of this recipe is not to study all the elements for writing policies (the preceding guide can be used for that). Here, we will be writing some simple code that you can easily reproduce.</div>
+<p class="mce-root">Finally, the <kbd>demo-app-remote</kbd> <span>workspace </span>must be created and configured in Terraform Cloud, as described in the <em>Executing Terraform configuration remotely in Terraform Cloud</em> <span>recipe of</span> this chapter.</p>
+<p>The source code for this recipe is available here: <a href="https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP08/sentinel-policies">https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP08/sentinel-policies</a>.</p>
+<h2 id="uuid-16d7b6c6-2279-4d1a-8795-a0dee3d1f25c">How to do it…</h2>
+<p>To complete this recipe, we will do three things:</p>
+<ol>
+<li style="font-weight: 400">Write the policy rules</li>
+<li style="font-weight: 400">Configure the organization in order to integrate these policies</li>
+<li style="font-weight: 400">Run the Terraform configuration with these policies</li>
+</ol>
+<p>We start by writing the compliance policies, as follows:</p>
+<div class="packt_infobox">The code we will be writing in this part can be in the same repository where the configuration to be tested is located. Alternatively, if its policies are shared, then this code can be put in another repository.<br/>
+<br/>
+It is still a good practice to put these policies in a separate repository so that you don't mix the Terraform configuration commits of the policy. Another reason to do this would be that this separate repository could be managed by another team (such as ops or security). <br/>
+<br/>
+In this recipe, for simplicity, we will write our code in the repository that contains the Terraform configuration, which has already been integrated into the VCS providers of our organization.</div>
+<ol>
+<li>Inside a new folder, <kbd>sentinel-policies</kbd>, create a new file called <kbd>restrict-app-service-to-ftps.sentinel</kbd> to test the FTP mode of the App Service instance. Use the following code to do so:</li>
+</ol>
+<pre style="padding-left: 60px">import "tfplan-functions" as plan<br/><br/>allAzureAppServices = plan.find_resources("azurerm_app_service")<br/><br/>violatingAzureAppServices = plan.filter_attribute_is_not_value(allAzureAppServices,<br/>                            "site_config.0.ftps_state", "FtpsOnly" , true)<br/><br/>main = rule {<br/>  length(violatingAzureAppServices["messages"]) is 0<br/>}</pre>
+<p style="padding-left: 60px">The complete source code for this file is available here: <a href="https://github.com/PacktPublishing/Terraform-Cookbook/blob/master/CHAP08/sentinel-policies/restrict-app-service-to-ftps.sentinel">https://github.com/PacktPublishing/Terraform-Cookbook/blob/master/CHAP08/sentinel-policies/restrict-app-service-to-ftps.sentinel</a>.</p>
+<ol start="2">
+<li>Create a new file called <kbd>allowed-app-service-plan-tiers.sentinel</kbd> to test the type of Service Plan SKU. Ensure it contains the following content:</li>
+</ol>
+<pre style="padding-left: 60px">import "tfplan-functions" as plan<br/><br/>allowed_tiers = ["Basic", "Standard"]<br/><br/>allAzureServicePlan = plan.find_resources("azurerm_app_service_plan")<br/><br/>violatingAzureServicePlan = plan.filter_attribute_not_in_list(allAzureServicePlan,<br/> "sku.0.tier", allowed_tiers, true)<br/><br/>main = rule {<br/>  length(violatingAzureServicePlan["messages"]) is 0<br/>}</pre>
+<p style="padding-left: 60px">The complete source code for this file (with comments) is available here: <a href="https://github.com/PacktPublishing/Terraform-Cookbook/blob/master/CHAP08/sentinel-policies/allowed-app-service-plan-tiers.sentinel">https://github.com/PacktPublishing/Terraform-Cookbook/blob/master/CHAP08/sentinel-policies/allowed-app-service-plan-tiers.sentinel</a>.</p>
+<ol start="3">
+<li>Create a new file called <kbd>sentinel.hcl</kbd>. This will be the entry point for the tests and references of the two preceding policies. Add the following content:</li>
+</ol>
+<pre style="padding-left: 60px"><span>module </span><span>"tfplan-functions" </span>{<br/>  <span>source </span>= <span>"https://raw.githubusercontent.com/hashicorp/terraform-guides/master/governance/third-generation/common-functions/tfplan-functions/tfplan-functions.sentinel"<br/></span>}<br/><br/>policy "restrict-app-service-to-ftps"{<br/>  source ="./restrict-app-service-to-ftps.sentinel"<br/>  enforcement_level = "hard-mandatory"<br/>}<br/><br/><span>policy </span><span>"allowed-app-service-plan-tiers"</span>{<br/>  <span>source </span>=<span>"./allowed-app-service-plan-tiers.sentinel"<br/></span><span>  </span><span>enforcement_level </span>= <span>"hard-mandatory"<br/></span>}</pre>
+<ol start="4">
+<li>Commit and push all the files into the remote repository.</li>
+</ol>
+<p>For the second phase, we need to configure <span class="packt_screen">Policy Sets</span> in our Terraform Cloud organization:</p>
+<ol>
+<li>In your organization <span class="packt_screen">Settings</span>, go to the <span class="packt_screen">Policy Sets</span> tab and click on the <span class="packt_screen">Connect a new policy set</span> button:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/113d055f-437d-4605-8fab-66c3e49dab5b.png" style="width:34.92em;height:22.58em;"/></p>
+<ol start="2">
+<li>In the first step of the wizard, choose the VCS provider that contains the code for the policies we just wrote:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/9bee5245-536a-4635-a224-dfc8f41c3106.png" style="width:34.58em;height:20.25em;"/></p>
+<ol start="3">
+<li>In the second step, select the repository that contains the policy's code:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/d4e7d6fe-9928-4cba-8571-94c813bb7df0.png"/></p>
+<ol start="4">
+<li> In the last step of the wizard, configure the policy set by adding <span class="packt_screen">Name</span> and <span class="packt_screen">Description</span> details, as shown in the following screenshot:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/8cb58246-a389-442e-8362-8d5fd5726704.png"/></p>
+<p style="padding-left: 60px">Under <span class="packt_screen">Additional options</span>, specify the folder that contains the code policies and the target workspace that will use these policies:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/63cf27d1-d6a5-420b-9aa8-6b1aae1727d5.png" style="width:34.75em;height:24.67em;"/></p>
+<p style="padding-left: 60px">The following screenshot shows the workspaces you need to choose in order to use the policy set:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/3ae840d7-b2fb-40ba-9754-695398278646.png" style="width:31.25em;height:20.17em;"/></p>
+<ol start="5">
+<li>Click on the <span class="packt_screen">Connect policy set</span> button to create the policy sets.</li>
+</ol>
+<p>Now, we can run the Terraform configuration in Terraform Cloud and check the policies:</p>
+<ol>
+<li>In the <kbd><span>demo-app-remote</span></kbd> workspace we created in the <em>Executing Terraform configuration remotely in Terraform Cloud</em> <span>recipe </span>of this chapter, we will queue a new Terraform <kbd>run</kbd>.</li>
+<li>In the results of this <kbd>run</kbd>, we will be able to see the policy check's result:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/80226245-bf5f-4bcb-9e56-811c6093e811.png" style="width:35.50em;height:18.42em;"/></p>
+<ol start="3">
+<li>If the policy check if successful, apply the changes by clicking the <span class="packt_screen">Confirm &amp; Apply</span> button:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/9e9c8084-fb4f-4071-96a1-62014c2ddfbe.png" style="width:28.92em;height:20.08em;"/></p>
+<h2 id="uuid-bc1747e0-e2ca-4a0e-977e-2dc3f1f879fb">How it works…</h2>
+<p>In the first part of this recipe, we wrote the compliance tests so that we could test our Terraform configuration using <strong>Sentinel</strong>.</p>
+<p class="mce-root">In the <kbd><span>restrict-app-service-to-ftps.sentinel</span></kbd><span> file, </span>by writing the <kbd>import "tfplan-functions" as plan</kbd> <span>line, </span>we imported a Sentinel function library, which is available at<span> </span><a href="https://github.com/hashicorp/terraform-guides/tree/master/governance/third-generation/common-functions/tfplan-functions">https://github.com/hashicorp/terraform-guides/tree/master/governance/third-generation/common-functions/tfplan-functions</a>. The lines after that line search for all<span> </span><kbd>azurerm_app_service</kbd><span> </span>resources in the<span> </span><kbd>terraform plan</kbd><span> command </span>and check that the FTPS state is configured to FTPS only:</p>
+<pre>allAzureAppServices = plan.find_resources("azurerm_app_service")<br/>violatingAzureAppServices = plan.filter_attribute_is_not_value(<br/>                            allAzureAppServices, "site_config.0.ftps_state", <br/>                            "FtpsOnly" , true)</pre>
+<p class="mce-root">This is the call point of the test and sends a message in the event of an error with a non-compliant FTPS state.</p>
+<p class="mce-root">In the second file, <kbd>allowed-app-service-plan-tiers.sentinel</kbd><span>, we wrote t</span>he <kbd>allowed_tiers = ["Basic", "Standard"]</kbd> <span>line </span>to create a list of SKUs that are allowed for the Service Plan. The lines search for all <kbd>azurerm_service_plan</kbd> resources in <kbd>terraform plan</kbd> and check that the SKU is in the list we declared previously:</p>
+<pre>allAzureServicePlan = plan.find_resources("azurerm_app_service_plan")<br/><br/>violatingAzureServicePlan = plan.filter_attribute_not_in_list(allAzureServicePlan,<br/>                    "sku.0.tier", allowed_tiers, true)</pre>
+<p class="mce-root">This is the call point of the test and sends a message in the event of an error with a non-compliant SKU.</p>
+<p class="mce-root">The third file we wrote, <kbd>sentinel.hcl</kbd>, is the entry point for the test file. We used a module that imports the custom library and the declaration of the two policies that refer to the two files we wrote earlier.</p>
+<div class="mce-root packt_infobox">Other examples of Sentinel tests are available here: <a href="https://github.com/hashicorp/terraform-guides/tree/master/governance/third-generation">https://github.com/hashicorp/terraform-guides/tree/master/governance/third-generation</a>.</div>
+<p class="mce-root">Then, in the second part of this recipe, we configured the policy sets in our Terraform Cloud organization by selecting the repository that contains the Sentinel code and selecting the workspaces that these policies will apply to.</p>
+<p class="mce-root">Finally, once the tests had been written and the configuration of the policy sets had been carried out, we triggered a Terraform <kbd>run</kbd> (in remote mode) on the workspace we selected in the policy sets and the result of the poster with successful compliance tests.</p>
+<h2 id="uuid-2ef37645-6041-4f89-8d19-e3bb663821ed">There's more…</h2>
+<p>After completing this recipe, all the tests passed successfully, but what is interesting is testing their functionality by testing a case where they fail. To do this, we need to sufficiently modify the Terraform configuration that is used in the workspace by modifying the SKU type of the Service Plan, as follows:</p>
+<pre><span>module </span><span>"webapp" </span>{<br/>  <span>source               </span>= <span>"app.terraform.io/demoBook/webapp/azurerm"<br/></span><span>  </span><span>version              </span>= <span>"1.0.4"<br/></span><span>  ...</span><span><br/></span><strong><span>  sp_sku               </span>= </strong><span><strong>"Premium"</strong><br/></span>}<br/><br/></pre>
+<p>This SKU takes a <kbd>Premium</kbd> value that was prohibited in the list of SKUs allowed in the tests. Then, we execute <kbd>run</kbd>. During its execution, we get the following result:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/777b10d1-26ee-4b26-bd59-ad20583cbf4a.png" style="width:45.75em;height:29.33em;"/></p>
+<p class="mce-root">As we can see, the compliance tests failed after the <kbd>terraform plan</kbd> command was run and the implementation of the changes is refused.</p>
+<p class="mce-root">As far as blocking the application is concerned, this is configured in the <kbd>sentinel.hcl</kbd> file with the <kbd>enforcement_level ="hard-mandatory"</kbd><span> </span>property for each policy. To find out more about the values of this property and their implication, read the documentation at <a href="https://docs.hashicorp.com/sentinel/concepts/enforcement-levels/">https://docs.hashicorp.com/sentinel/concepts/enforcement-levels/</a> <a href="https://docs.hashicorp.com/sentinel/concepts/enforcement-levels/">and here</a> <a href="https://www.terraform.io/docs/cloud/sentinel/manage-policies.html">https://www.terraform.io/docs/cloud/sentinel/manage-policies.html</a>.</p>
+<h2 id="uuid-471992ab-3ec9-4c1d-a58d-b37ae8a3cb94">See also</h2>
+<ul>
+<li>The code for Sentinel functions is available here: <a href="https://github.com/hashicorp/terraform-guides/tree/master/governance/third-generation">https://github.com/hashicorp/terraform-guides/tree/master/governance/third-generation</a>.</li>
+<li class="mce-root">The documentation on how to install the Sentinel CLI is available at <a href="https://docs.hashicorp.com/sentinel/intro/getting-started/install/">https://docs.hashicorp.com/sentinel/intro/getting-started/install/</a>.</li>
+<li class="mce-root">The guide to writing and installing policies is available here: <a href="https://www.hashicorp.com/resources/writing-and-testing-sentinel-policies-for-terraform/">https://www.hashicorp.com/resources/writing-and-testing-sentinel-policies-for-terraform/</a>.</li>
+<li class="mce-root">The basic learning guide for policies is available here: <a href="https://learn.hashicorp.com/terraform/cloud-getting-started/enforce-policies">https://learn.hashicorp.com/terraform/cloud-getting-started/enforce-policies</a>.</li>
+<li class="mce-root">Read this article to learn more about the use of Sentinel: <a href="https://medium.com/hashicorp-engineering/using-new-sentinel-features-in-terraform-cloud-c1ade728cbb">https://medium.com/hashicorp-engineering/using-new-sentinel-features-in-terraform-cloud-c1ade728cbb0</a>.</li>
+<li class="mce-root">The following is a video that demonstrates policy testing: <a href="https://www.hashicorp.com/resources/testing-terraform-sentinel-policies-using-mocks/">https://www.hashicorp.com/resources/testing-terraform-sentinel-policies-using-mocks/</a>.</li>
+<li><span>There are other tools we can use to write and execute Terraform compliance configuration, such as </span><em>terraform-compliance</em><span> (</span><a href="https://github.com/eerkunt/terraform-compliance">https://github.com/eerkunt/terraform-compliance</a><span>) and <em>Open Policy Agent</em> (</span><a href="https://www.openpolicyagent.org/docs/latest/terraform/">https://www.openpolicyagent.org/docs/latest/terraform/</a><span>). They are both free and open source, but beware: they can't be used in a Terraform Cloud execution.</span></li>
+</ul>
+<h1 id="uuid-9bcd92b6-c3c8-43c6-9aaf-8d631990567d">Using cost estimation for cloud cost resources governance</h1>
+<p class="mce-root">When we create resources in a cloud architecture, we often tend to forget that this incurs a financial cost that depends on the types of resources that are created. This is even more true with automation and IaC, which allow us to create a multitude of resources <span>using a few commands</span>.</p>
+<p class="mce-root">One of the interesting features of the version of Terraform Cloud that's integrated into the paid plan is cost estimation, which makes it possible to visualize the cost of the resources that are handled in the Terraform configuration while it's being run.</p>
+<p class="mce-root">In this recipe, we will learn how to use cost estimation in Terraform Cloud.</p>
+<h2 id="uuid-f2d31ab5-2c7d-44ba-ad23-114ebd0d8bd4">Getting ready</h2>
+<p>Before you start this recipe, you must have a paid Terraform Cloud plan or activate the free trial (for a 30-day duration):</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/ebc2228a-8813-45fd-825a-6653697b964f.png"/></p>
+<p class="mce-root">After doing this, you need to get to know the cloud providers and the resources that are supported by the cost management functionality. This list is available at <a href="https://www.terraform.io/docs/cloud/cost-estimation/index.html#supported-resources">https://www.terraform.io/docs/cloud/cost-estimation/index.html#supported-resources</a>.</p>
+<p class="mce-root">The purpose of this recipe is to provision a virtual machine in Azure with Terraform and to visualize the cost estimation of this resource in the Terraform Cloud interface.</p>
+<p>The source code for the Terraform configuration that will be executed in this recipe is available here: <a href="https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP08/cost">https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP08/cost</a>.</p>
+<h2 id="uuid-2cbcbfd0-433d-451e-a839-0997bb4e7343">How to do it…</h2>
+<p>To view the estimation of cost for our resources, perform the following steps:</p>
+<ol>
+<li>In the <span class="packt_screen">Settings</span> section of the Terraform Cloud organization, in the <span class="packt_screen">Cost Estimation</span> tab, check the <span class="packt_screen">Enable Cost Estimation for all workspaces</span> checkbox:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/91d03bfa-68a5-44ba-923e-fed328e01a5c.png" style="width:40.17em;height:26.92em;"/></p>
+<ol start="2">
+<li>In the created workspace that provisions the Azure VM with our Terraform configuration, queue a new <kbd>run</kbd>.</li>
+<li>Just after executing our <kbd>plan</kbd>, we can view the evaluated cost of the resource:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/a299bda9-d34a-4ae2-8eef-3e27ba37df5f.png" style="width:42.00em;height:22.83em;"/></p>
+<h2 id="uuid-ea99637a-3b6e-45ae-9d47-aaece69ff33e">How it works…</h2>
+<p>Once the cost estimation option has been activated, Terraform Cloud uses the APIs of the different cloud providers to evaluate and display the costs of the resources that will be provisioned.</p>
+<h2 id="uuid-c201729a-4c71-44f9-a3d9-79378067a8e4">There's more…</h2>
+<p>It is important to note that this is only an estimate and that it is necessary to refer to the different price documentations of the cloud providers.</p>
+<p class="mce-root">You can also write policies with Sentinel (which we studied in the previous recipe) to integrate compliance rules for estimated costs. For more information, please read the documentation at <a href="https://www.terraform.io/docs/cloud/cost-estimation/index.html#verifying-costs-in-policies">https://www.terraform.io/docs/cloud/cost-estimation/index.html#verifying-costs-in-policies</a>.</p>
+<h2 id="uuid-b98fc8df-ec88-4192-9fd0-c0d9203b4409">See also</h2>
+<p>The documentation regarding the cost estimation feature is available here: <a href="https://www.terraform.io/docs/cloud/cost-estimation/index.html">https://www.terraform.io/docs/cloud/cost-estimation/index.html</a>.</p>
+
+
+            </article>
+
+            
+        </section>
+    </body></html>

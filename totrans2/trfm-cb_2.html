@@ -1,0 +1,553 @@
+<html><head></head><body>
+        <section>
+
+                            <header class="header-title chapter-title">
+                    Writing Terraform Configuration
+                </header>
+            
+            <article>
+                
+<p>When you start writing Terraform configuration, you will notice very quickly that the language provided by Terraform is very rich and allows for a lot of manipulation. </p>
+<p>In the recipes in this chapter, you will learn how to use the Terraform language effectively in order to apply it to real-life business scenarios. We will discuss how to specify the versions of the provider to be used, as well as how to make the code more dynamic with variables and outputs. Then, we will use these concepts to provision several environments with Terraform. After that, we will consider the use of functions and conditions.</p>
+<p>We will also learn how to retrieve data from external systems with data blocks, other Terraform state files, and external resources. Finally, we will cover the use of Terraform for local operations, such as running a local executable and manipulating local files.</p>
+<p class="mce-root">In this chapter, we will cover the following recipes:</p>
+<ul>
+<li>Configuring Terraform and the provider version to use</li>
+<li>Manipulating variables</li>
+<li>Using local variables for custom functions</li>
+<li>Using outputs to expose Terraform provisioned data</li>
+<li>Provisioning infrastructure in multiple environments</li>
+<li>Obtaining external data with data sources</li>
+<li>Using external resources from other state files</li>
+<li>Querying external data with Terraform</li>
+<li>Calling Terraform built-in functions</li>
+<li>Writing conditional expressions</li>
+<li>Manipulating local files with Terraform</li>
+<li>Executing local programs with Terraform</li>
+<li>Generating passwords with Terraform</li>
+</ul>
+<p>Let's get started!</p>
+<h1 id="uuid-e4d76dd7-0a1b-4ca1-9f91-53b6e5b35f4c">Technical requirements</h1>
+<p>For this chapter, you will need to have the Terraform binary installed on your computer. The source code for this chapter is available at <a href="https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP02">https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP02</a>.</p>
+<p>Check out the following video to see the code in action: <a href="https://bit.ly/3hcZNVR">https://bit.ly/3hcZNVR</a></p>
+<h1 id="uuid-af84778d-dd91-4fe0-9438-5f7ff1b510af">Configuring Terraform and the provider version to use</h1>
+<p>The default behavior of Terraform is that, when executing the <kbd>terraform init</kbd> command, the version of the Terraform binary (which we will call the <strong>Command-Line Interface</strong> (<strong>CLI</strong>), as explained here: <a href="https://www.terraform.io/docs/glossary.html#cli">https://www.terraform.io/docs/glossary.html#cli</a>) used is the one installed on the local workstation. In addition, this command downloads the latest version of the providers used in the code.</p>
+<p class="mce-root">However, for compatibility reasons, <span>it is always advisable to avoid surprises</span> so that you can specify which version of the Terraform binary is going to be used in the Terraform configuration. The following are some examples:</p>
+<ul>
+<li class="mce-root">A Terraform configuration written with HCL 2 must indicate that it has to be executed with a Terraform version greater than or equal to 0.12.</li>
+<li><span>A Terraform configuration that contains </span>new features such as <kbd>count</kbd> and <kbd>for_each</kbd> in modules must <span>indicate that it has to be executed with a Terraform version greater than or equal to 0.13.</span></li>
+</ul>
+<div class="packt_infobox">For more details about the HCL syntax, read the documentation at <a href="https://www.terraform.io/docs/configuration/syntax.html">https://www.terraform.io/docs/configuration/syntax.html</a>.</div>
+<p class="mce-root">In the same vein and for the same reasons of compatibility, we may want to specify the provider version to be used.</p>
+<p class="mce-root">In this recipe, we will learn how to specify the Terraform version, as well as the provider version.</p>
+<h2 id="uuid-cff8c75f-c84a-4597-897a-bfeea3a127ab">Getting ready</h2>
+<p>To start this recipe, we will write a basic Terraform configuration file that contains the following code:</p>
+<div>
+<pre><span>variable</span><span> </span><span>"resource_group_name"</span><span> </span><span>{<br/></span><span>  </span><span>default</span><span> = </span><span>"rg_test"<br/></span><span>}<br/></span><span>resource</span><span> </span><span>"azurerm_resource_group"</span><span> </span><span>"rg"</span><span> </span><span>{<br/></span><span>  </span><span>name</span><span>     = </span><span>var</span><span>.</span><span>resource_group_name<br/></span><span>  </span><span>location</span><span> = </span><span>"West</span><span> </span><span>Europe"<br/></span><span>}<br/></span><span>resource</span><span> </span><span>"azurerm_public_ip"</span><span> </span><span>"pip"</span><span> </span><span>{<br/></span><span>  </span><span>name</span><span>                         = </span><span>"bookip"<br/></span><span>  </span><span>location</span><span>                     = </span><span>"West</span><span> </span><span>Europe"<br/></span><span>  </span><span>resource_group_name</span><span>          = </span><span>azurerm_resource_group</span><span>.</span><span>rg</span><span>.</span><span>name<br/></span><span>  </span><span>public_ip_address_allocation</span><span> = </span><span>"Dynamic"<br/></span><span>  </span><span>domain_name_label</span><span>            = </span><span>"bookdevops"<br/></span><span>}</span></pre></div>
+<p class="mce-root">This example code provides resources in Azure (a Resource Group and a public IP address). For more details, read the following documentation about the Terraform AzureRM provider: <a href="https://www.terraform.io/docs/providers/azurerm/index.html">https://www.terraform.io/docs/providers/azurerm/index.html</a></p>
+<div class="mce-root packt_infobox">In addition, this code contains the improvements that were made to the HCL 2.0 language since Terraform 0.12. For more details about these HCL enhancements, go to <a href="https://www.slideshare.net/mitchp/terraform-012-deep-dive-hcl-20-for-infrastructure-as-code-remote-plan-apply-125837028">https://www.slideshare.net/mitchp/terraform-012-deep-dive-hcl-20-for-infrastructure-as-code-remote-plan-apply-125837028</a>.</div>
+<p class="mce-root">Finally, when executing the <kbd>terraform plan</kbd> command inside this code, we get the following warning message:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/754aad40-3123-4b99-ba8d-190489a662e3.png"/></p>
+<p class="mce-root">This means that, currently, this Terraform configuration is still compatible with the latest version of the provider but that in a future version of the provider, this property will be changed and therefore this code will no longer work.</p>
+<p class="mce-root">Now, let's discuss the steps we need to follow to make the following compliances:</p>
+<ul>
+<li class="mce-root">This configuration can only be executed if Terraform 0.13 (at least) is installed on the local computer.</li>
+<li class="mce-root">Our current configuration can be executed even if the <kbd>azurerm</kbd> provider evolves with breaking changes.</li>
+</ul>
+<div class="packt_infobox"><span>Regarding </span>the new features provided by Terraform 0.13, read the change log here – <a href="https://github.com/hashicorp/terraform/blob/master/CHANGELOG.md">https://github.com/hashicorp/terraform/blob/master/CHANGELOG.md</a>, and the upgrade guide here – <a href="https://github.com/hashicorp/terraform/blob/master/website/upgrade-guides/0-13.html.markdown">https://github.com/hashicorp/terraform/blob/master/website/upgrade-guides/0-13.html.markdown</a>.<a href="https://github.com/hashicorp/terraform/blob/master/website/upgrade-guides/0-13.html.markdown"/></div>
+<p>We'll take a look at this next.</p>
+<h2 id="uuid-ab507363-f72d-4283-8f9a-5b83ffaac5e5">How to do it…</h2>
+<p>To specify the Terraform version to be installed on the local workstation, do the following:</p>
+<ol>
+<li class="mce-root">In the Terraform configuration, add the following block:</li>
+</ol>
+<div>
+<pre style="padding-left: 60px"><span>terraform</span><span> </span><span>{<br/></span><span>  </span><strong><span>required_version</span><span> = </span></strong><strong><span>"</span><span>&gt;= </span></strong><span><strong>0.13"</strong></span><span><br/></span><span>}</span></pre></div>
+<ol start="2">
+<li class="mce-root">To specify the provider source and version to use, we need to add the <kbd>required_provider</kbd> block inside the same <kbd>terraform</kbd> configuration block:</li>
+</ol>
+<div>
+<pre style="padding-left: 60px"><span>terraform </span>{<br/>  ...<span><br/></span><span>  </span><span>required_providers </span>{<br/>    <span>azurerm </span>= {<br/>      source = "hashicorp/azurerm"<br/>      <span>version </span>= "<span>2.10.0"<br/></span><span>    </span>}<br/>  }<br/>}</pre></div>
+<h2 id="uuid-77b08b6b-ad7b-4852-be2d-671326a0df38">How it works…</h2>
+<p>When executing the <kbd>terraform init</kbd> command, Terraform will check that the version of the installed Terraform binary that executes the Terraform configuration file corresponds to the version specified in the <kbd>required_version</kbd> property of the <kbd>terraform</kbd> block.</p>
+<p><span>If it matches, it won't throw an error as it is greater than version 0.13. Otherwise, it will throw an error:</span></p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/4dd89fda-144c-4ded-95b4-051e0029f4a4.png"/></p>
+<p class="mce-root">With regard to the specification of the provider version, when executing the <kbd>terraform init</kbd> command, if no version is specified, Terraform downloads the latest version of the provider, otherwise it downloads the specified version, as shown in the following two screenshots.</p>
+<p>The following screenshot shows the provider plugin being downloaded from the specified <kbd>source</kbd> without us specifying the required version (at the time of writing, the latest version of the provider is 2.20.0):</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/280032a1-412f-4a80-86f0-55e0681092c5.png"/></p>
+<p>As we can see, the latest version of the <kbd>azurerm</kbd> provider (2.20.0) has been downloaded.</p>
+<p>In addition, the following screenshot shows the <kbd>azurerm</kbd> provider plugin being downloaded when we specify the required version (2.10.0):</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/aec54df2-67e1-4d5d-abc4-c5c4a3cce7e7.png"/></p>
+<p>As we can see, the specified version of the <kbd>azurerm</kbd> provider (2.10.0) has been downloaded.</p>
+<div class="mce-root packt_infobox">For more details about the <kbd>required_version</kbd> block and provider versions, go to <a href="https://www.terraform.io/docs/configuration/terraform.html#specifying-required-provider-versions">https://www.terraform.io/docs/configuration/terraform.html#specifying-required-provider-versions</a>.</div>
+<p>In this <kbd>required_version</kbd> block, we also add the <kbd>source</kbd> property, which was introduced in version 0.13 of Terraform and is documented here: <a href="https://github.com/hashicorp/terraform/blob/master/website/upgrade-guides/0-13.html.markdown#explicit-provider-source-locations">https://github.com/hashicorp/terraform/blob/master/website/upgrade-guides/0-13.html.markdown#explicit-provider-source-locations</a></p>
+<h2 id="uuid-de8895d3-a111-4536-931c-dd5ddb3bb9c4">There's more…</h2>
+<p>In this recipe, we learned how to download the <kbd>azurerm</kbd> provider in various ways. What we did here applies to all providers you may wish to download.</p>
+<p>It is also important to mention that the version of the Terraform binary that's used is specified in the Terraform state file. This is to ensure that nobody applies this Terraform configuration with a lower version of the Terraform binary, thus ensuring that the format of the Terraform state file conforms with the correct version of the Terraform binary.</p>
+<h2 id="uuid-5db6b4f2-cc80-4968-92e7-0b92eb98f8a3">See also</h2>
+<ul>
+<li>For more information about the properties of the Terraform block, go to <a href="https://www.terraform.io/docs/configuration/terraform.html">https://www.terraform.io/docs/configuration/terraform.html</a>.</li>
+<li class="mce-root">For more information about the properties of the providers, go to <a href="https://www.terraform.io/docs/configuration/providers.html">https://www.terraform.io/docs/configuration/providers.html</a>.</li>
+<li>More information about Terraform binary versioning is documented at <a href="https://www.terraform.io/docs/extend/best-practices/versioning.html">https://www.terraform.io/docs/extend/best-practices/versioning.html</a>.</li>
+<li>The upgrade guide for the <kbd>azurerm</kbd> provider (to version 2.0) is available at <a href="https://www.terraform.io/docs/providers/azurerm/guides/2.0-upgrade-guide.html">https://www.terraform.io/docs/providers/azurerm/guides/2.0-upgrade-guide.html</a>.</li>
+</ul>
+<h1 id="uuid-25b649fc-0351-4c93-85d1-8263cd2ebd2a">Manipulating variables</h1>
+<p>When you write a Terraform configuration file where all the properties are hardcoded in the code, you often find yourself faced with the problem of having to duplicate it in order to reuse it.</p>
+<p class="mce-root">In this recipe, we'll learn how to make the Terraform <span>configuration </span>more dynamic by using variables.</p>
+<h2 id="uuid-c1450d2e-0b16-4d37-a032-f3b8775129a6">Getting ready</h2>
+<p>To begin, we are going to work on the <kbd>main.tf</kbd> file, which contains a basic Terraform <span>configuration:</span></p>
+<div>
+<pre><span>resource</span><span> </span><span>"azurerm_resource_group"</span><span> </span><span>"rg"</span><span> </span><span>{<br/></span><span>  </span><span>name</span><span>     = </span><span>"My-RG"<br/></span><span>  </span><span>location</span><span> = </span><span>"West</span><span> </span><span>Europe"<br/></span><span>}</span></pre></div>
+<p class="mce-root">As we can see, the <kbd>name</kbd> and <kbd>location</kbd> properties have values written in the code in a static way.</p>
+<p class="mce-root">Let's learn how to make them dynamic using variables.</p>
+<h2 id="uuid-81c213d5-0831-44ce-af19-60e63746c111">How to do it…</h2>
+<p>Perform the following steps:</p>
+<ol>
+<li>In the same <kbd>main.tf</kbd> file, add the following variable declarations:</li>
+</ol>
+<div>
+<pre style="padding-left: 60px"><span>variable</span><span> </span><span>"resource_group_name"</span><span> </span><span>{<br/></span><span>  </span><span>description</span><span> =</span><span>"The</span><span> </span><span>name</span><span> </span><span>of</span><span> </span><span>the</span><span> </span><span>resource</span><span> </span><span>group"<br/></span><span>}<br/></span><span>variable</span><span> </span><span>"location"</span><span> </span><span>{<br/></span><span>  </span><span>description</span><span> =</span><span>"The</span><span> </span><span>name</span><span> </span><span>of</span><span> </span><span>the</span><span> </span><span>Azure</span><span> </span><span>location"<br/></span><span>  </span><span>default</span><span> =</span><span>"West</span><span> </span><span>Europe"<br/></span><span>}</span></pre></div>
+<ol start="2">
+<li class="mce-root">Then, modify the Terraform <span>configuration </span>we had at the beginning of this recipe so that it<span> refers to our new variables, as follows</span>:</li>
+</ol>
+<div>
+<pre style="padding-left: 60px"><span>resource</span><span> </span><span>"azurerm_resource_group"</span><span> </span><span>"rg"</span><span> </span><span>{<br/></span><span>  </span><span>name</span><span>     = </span><span>var</span><span>.</span><span>resource_group_name<br/></span><span>  </span><span>location</span><span> = </span><span>var</span><span>.</span><span>location<br/></span><span>}</span></pre></div>
+<ol start="3">
+<li class="mce-root">Finally, in the same folder that contains the <kbd>main.tf</kbd> file, create a new file called <kbd>terraform.tfvars</kbd> and add the following content:</li>
+</ol>
+<div>
+<pre style="padding-left: 60px"><span>resource_group_name</span><span> = </span><span>"My-RG"<br/></span><span>location</span><span>            = </span><span>"westeurope"</span></pre></div>
+<h2 id="uuid-e73bb153-91e3-4827-af54-6a995da8b012">How it works…</h2>
+<p>In <em>step 1</em>, we wrote the declaration of the two variables, which consists of the following elements:</p>
+<ul>
+<li>A variable name: This must be unique to this Terraform configuration and must be explicit enough to be understood by all the contributors of the code.</li>
+<li>A description of what this variable represents: This description is optional, but is recommended because it can be displayed by the CLI and can also be integrated into the documentation, which is automatically generated.</li>
+<li>A default value: This is optional. Not setting a default value makes it mandatory to enter a default value.</li>
+</ul>
+<p>Then, in <em>step 2</em>, we modified the Terraform <span>configuration </span>to use these two variables. We did this using the <kbd>var.&lt;name of the variable&gt;</kbd><em> </em>syntax.</p>
+<p class="mce-root">Finally, in <em>step 3</em>, we gave values to these variables in the <kbd>terraform.tfvars</kbd> <span>file, </span>which is used natively by Terraform.</p>
+<p>The result of executing this Terraform <span>configuration </span>is shown in the following screenshot:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/96421f7a-ab2b-42e4-b74f-abf39af53249.png" style="width:42.25em;height:29.67em;"/></p>
+<h2 id="uuid-76784fd4-be2d-42d3-ade1-853219e42cf4">There's more…</h2>
+<p class="mce-root">Setting a value in the variable <span>is optional in the <kbd>terraform.tfvars</kbd> file since we have set a default value for the variable.</span></p>
+<p class="mce-root">Apart from this <kbd>terraform.tfvars</kbd> file, it is possible to give a variable a value using the <kbd>-var</kbd> option of the <kbd>terraform plan</kbd> and <kbd>terraform apply</kbd> commands, as shown in the following command:</p>
+<pre class="mce-root"><strong>terraform plan -var "location=westus"</strong></pre>
+<p class="mce-root">So, with this command, the <kbd>location</kbd> variable declared in our code will have a value of <kbd>westus</kbd> instead of <kbd>westeurope</kbd>.</p>
+<p>In addition, with the 0.13 version of Terraform released in August 2020, we can now create custom validation rules for variables which makes it possible for us to verify a value during the <kbd>terraform plan</kbd> execution.</p>
+<p>In our recipe, we can complete the <kbd><span>location</span></kbd> variable with a validation rule in the <kbd>validation</kbd> block as shown in the following code:</p>
+<pre>variable "location" {<br/>  description ="The name of the Azure location"<br/>  default ="West Europe"<br/>  validation { # TF 0.13<br/>    condition = can(index(["westeurope","westus"], var.location) &gt;= 0)<br/>    error_message = "The location must be westeurope or westus."<br/>  }<br/>}</pre>
+<p>In the preceding configuration, the rule checks that if the value of the <kbd>location</kbd> variable is <kbd>westeurope</kbd> or <kbd>westus</kbd>.</p>
+<p>The following screenshot shows the <kbd>terraform plan</kbd> command in execution if we put another value in the <kbd>location</kbd> variable, such as <kbd>westus2</kbd>:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/3f568703-848d-47d5-96af-41d501ff5cef.png"/></p>
+<p>For more information about variable custom rules validation read the documentation at <a href="https://www.terraform.io/docs/configuration/variables.html#custom-validation-rules">https://www.terraform.io/docs/configuration/variables.html#custom-validation-rules</a>.</p>
+<p class="mce-root">Finally, there is another alternative to setting a value to a variable, which consists of setting an environment variable called <kbd>TF_VAR_&lt;variable name&gt;</kbd>. As in our case, we can create an environment variable called <kbd>TF_VAR_location</kbd> with a value of <kbd>westus</kbd> and then execute the <kbd>terraform plan</kbd> <span>command </span>in a classical way.</p>
+<div class="mce-root packt_infobox">Note that using the <kbd>-var</kbd> option or the <kbd>TF_VAR_&lt;name of the variable&gt;</kbd> environment variable doesn't hardcode these variable's values inside the Terraform configuration. They make it possible for us to give values of variables to the flight. But be careful <span>– these options</span> can have consequences if the same code is executed with other values initially provided in parameters <span>and the plan's output isn't reviewed carefully</span>.</div>
+<h2 id="uuid-22de3ef5-21af-4e7b-bdf6-bf8ccb11da74">See also</h2>
+<p>In this recipe, we looked at the basic use of variables. We will look at <span>more advanced uses of these when we learn how to manage environments </span>in the <em>Managing infrastructure in multiple environments</em> <span>recipe, </span>later in this chapter.</p>
+<p class="mce-root">For more information on variables, refer to the documentation here: <a href="https://www.terraform.io/docs/configuration/variables.html">https://www.terraform.io/docs/configuration/variables.html</a></p>
+<h1 id="uuid-a6ed9cfa-ebef-47c3-8b4d-1d1d35aaba5d">Using local variables for custom functions</h1>
+<p>In the previous recipe, we learned how to use variables to dynamize our Terraform <span>configuration</span>. Sometimes, this use can be a bit more tedious when it comes to using combinations of variables.</p>
+<p class="mce-root"><span>In this recipe, w</span>e will learn how to implement local variables and use them as custom functions.</p>
+<h2 id="uuid-9a02031f-b813-46e4-9f2c-305e5ef51c10">Getting ready</h2>
+<p>To start with, we will use the following Terraform <span>configuration</span>:</p>
+<pre>variable "application_name" {<br/>  description = "The name of application"<br/>}<br/>variable "environment_name" {<br/>  description = "The name of environment"<br/>}<br/>variable "country_code" {<br/>  description = "The country code (FR-US-...)"<br/>}<br/>resource "azurerm_resource_group" "rg" {<br/>  name = "<strong>XXXX</strong>" # VARIABLE TO USE<br/>  location = "West Europe"<br/>}<br/>resource "azurerm_public_ip" "pip" {<br/>  name = "<strong>XXXX</strong>" # VARIABLE TO USE<br/>  location = "West Europe"<br/>  resource_group_name = azurerm_resource_group.rg.name<br/>  allocation_method = "Dynamic"<br/>  domain_name_label = "mydomain"<br/>}</pre>
+<p class="mce-root">The goal of this recipe is <span>to consistently render</span> the names of the Azure resources. We must provide them with the following nomenclature rule:</p>
+<pre class="mce-root">CodeAzureResource - Name Application - Environment name - Country Code</pre>
+<h2 id="uuid-374cb566-3ea5-4c95-bc3c-a9649e862d79">How to do it…</h2>
+<p><span>Perform the following steps:</span></p>
+<ol>
+<li>In the <kbd>main.tf</kbd> file, which contains our Terraform <span>configuration</span>, we will add a local variable called <kbd>resource_name</kbd>, along with the following code:</li>
+</ol>
+<div>
+<pre style="padding-left: 60px"><span>locals</span><span> </span><span>{<br/></span><span>  </span><span>resource_name</span><span> = </span><span>"</span><span>${</span><span>var</span><span>.</span><span>application_name</span><span>}</span><span>-</span><span>${</span><span>var</span><span>.</span><span>environment_name</span><span>}</span><span>-</span><span>${</span><span>var.country_code</span><span>}</span><span>"<br/></span><span>}</span></pre></div>
+<ol start="2">
+<li>We then use this <span>local </span>variable in the resources with the following code:</li>
+</ol>
+<pre style="padding-left: 60px">resource "azurerm_resource_group" "rg" {<br/> name = <strong>"RG-${local.resource_name}"</strong><br/> location = "West Europe"<br/>}<br/>resource "azurerm_public_ip" "pip" {<br/> name = <strong>"IP-${local.resource_name}"</strong><br/> location = "West Europe"<br/> resource_group_name = azurerm_resource_group.rg.name<br/> public_ip_address_allocation = "Dynamic"<br/> domain_name_label = "mydomain"<br/>}</pre>
+<h2 id="uuid-493a3491-d5b8-4a31-90f3-c3d686f46e70">How it works…</h2>
+<p>In <em>step 1</em>, we created a variable called <kbd>resource_name</kbd> that is local to our Terraform <span>configuration</span>. This allows us to create a combination of several Terraform variables (which we will see the result of in the <em>Using outputs to expose Terraform provisioned data</em> <span>recipe </span>of this chapter).</p>
+<p class="mce-root">Then, in <em>step 2</em>, we used this local variable with the <kbd>local.&lt;name of the local variable&gt;</kbd> expression. Moreover, in the <kbd>name</kbd> property, we used it as a concatenation of a variable and static text, which is why we used the <kbd>"${}"</kbd> syntax.</p>
+<p><span>The result of executing this Terraform configuration is as follows:</span></p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/75e03e97-6029-48a3-9892-88380f2295a7.png" style="width:25.00em;height:10.58em;"/></p>
+<p>In the previous screenshot, we can see the output of executing the <kbd>terraform plan</kbd> command with the <kbd>name</kbd> of the Resource Group that we calculated with the <kbd>locals</kbd> variable.</p>
+<h2 id="uuid-67b009df-a838-4a68-a833-34cc0b6a173e">See also</h2>
+<p>For more information on local variables, take a look at the following documentation: <a href="https://www.terraform.io/docs/configuration/locals.html">https://www.terraform.io/docs/configuration/locals.html</a></p>
+<h1 id="uuid-5c4f9e9e-cf56-40d7-8924-821ae73de117">Using outputs to expose Terraform provisioned data</h1>
+<p>When using Infrastructure as Code tools such as Terraform, it is often necessary to retrieve output values from the provisioned resources after code execution.</p>
+<p class="mce-root">One of the uses of these output values is that they can be used after execution by other programs. This is often the case when the execution of the Terraform <span>configuration </span>is integrated into a CI/CD pipeline.</p>
+<p class="mce-root">For example, we can use these output values in a CI/CD pipeline that creates an Azure App Service with Terraform and also deploys the application to this Azure App Service. In this example, we can have the name of the App Service (web app type) as the output of the Terraform <span>configuration</span>. These output values are also very useful for transmitting information through modules, which we will see in detail in <a href="ddb13a41-5cdd-4931-b38f-d185d3a10c1e.xhtml">Chapter 5</a>, <em>Sharing Terraform Configuration with Modules</em>.</p>
+<p class="mce-root">In this recipe, we will learn how to implement output values in Terraform's <span>configuration.</span></p>
+<h2 id="uuid-ecdf25fa-5c27-45cb-a48f-19d0abfab67c">Getting ready</h2>
+<p>To proceed, we are going to add some Terraform <span>configuration </span>that we already have in the existing <kbd>main.tf</kbd> file.</p>
+<p>The following is an extract of this existing code, which provides an App Service in Azure:</p>
+<div>
+<pre>...<br/><span>resource</span><span> </span><span>"azurerm_app_service"</span><span> </span><span>"app"</span><span> </span><span>{<br/></span><span>  </span><span>name</span><span>                = </span><span>"</span><span>${</span><span>var</span><span>.</span><span>app_name</span><span>}</span><span>-</span><span>${</span><span>var</span><span>.</span><span>environment</span><span>}</span><span>"<br/></span><span>  </span><span>location</span><span>            = </span><span>azurerm_resource_group</span><span>.</span><span>rg-app</span><span>.</span><span>location<br/></span><span>  </span><span>resource_group_name</span><span> = </span><span>azurerm_resource_group</span><span>.</span><span>rg-app</span><span>.</span><span>name<br/></span><span>  </span><span>app_service_plan_id</span><span> = </span><span>azurerm_app_service_plan</span><span>.</span><span>plan-app</span><span>.</span><span>id<br/></span><span>}<br/></span>...</pre></div>
+<h2 id="uuid-098b4349-aae8-4f0e-b0c5-9e94db5175cc">How to do it…</h2>
+<p>To ensure we have an output value, we will just add the following code to this <kbd>main.tf</kbd> file:</p>
+<div>
+<pre><strong><span>output</span><span> </span></strong><span>"webapp_name"</span><span> </span><span>{<br/></span><span>  description = "output Name of the webapp"<br/></span><span>  value</span><span> = </span><span>azurerm_app_service</span><span>.</span><span>app</span><span>.</span><span>name</span><span><br/></span><span>}</span></pre></div>
+<h2 id="uuid-83a3806a-c5ee-4b46-978d-8e9ac2a16b98">How it works…</h2>
+<p>The <kbd>output</kbd> block of Terraform is defined by a name, <kbd>webapp_name</kbd>, <span>and a </span>value<span>,</span> <kbd>azurerm_app_service.app.name</kbd><span>. These refer to the name of the Azure App Service that is provided in the same Terraform configuration.</span> Optionally, we can add a <kbd>description</kbd> that describes what the output returns, which can also be very useful for autogenerated documentation or in the use of modules.</p>
+<p class="mce-root">It is, of course, possible to define more than one output in the same Terraform <span>configuration</span>.</p>
+<p class="mce-root">The outputs are stored in the Terraform state file and are displayed when the <kbd>terraform apply</kbd> command is executed, as shown in the following screenshot:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/fa2ba3e2-fbcc-44c4-830f-5ad926575e67.png"/></p>
+<p class="mce-root">Here, we see two output values that are displayed at the end of the execution.</p>
+<h2 id="uuid-a01bbb6d-9742-4013-a5e9-b41bc57169de">There's more…</h2>
+<p>There are two ways to retrieve the values of the output in order to exploit them, as follows:</p>
+<ul>
+<li>By using the <kbd>terraform output</kbd> command in the Terraform CLI, which we will see in the <em>Exporting the output in JSON</em> recipe in <a href="fc591e87-b893-40fa-9021-7827bffcc094.xhtml">Chapter 4</a>, <em>Using the Terraform CLI</em></li>
+<li>By using the <kbd>terraform_remote_state</kbd> data source object, which we will discuss in the <em>Using external resources from other state files</em> <span>recipe, </span>later in this chapter</li>
+</ul>
+<h2 id="uuid-94e2d1ed-9110-4fbf-996b-a1bf39a9da82">See also</h2>
+<p>Documentation on Terraform outputs is available at <a href="https://www.terraform.io/docs/configuration/outputs.html">https://www.terraform.io/docs/configuration/outputs.html</a>.</p>
+<h1 id="uuid-3528192e-c159-4ea5-a23c-1d8a7c5d4157">Provisioning infrastructure in multiple environments</h1>
+<p>In the same way that we deploy an application to several environments (dev, test, QA, and production), we also need to provision infrastructure on these different environments.</p>
+<p class="mce-root">The question that often arises is how to write a maintainable and scalable Terraform <span>configuration </span>that would allow us to provision infrastructure for multiple environments.</p>
+<p class="mce-root">To answer this question, it is important to know that there are several solutions for organizing Terraform <span>configuration </span>topologies that will allow for this provisioning.</p>
+<p class="mce-root"><span>In this recipe, w</span>e will look at two Terraform <span>configuration </span>structure topologies that will allow us to deploy an Azure infrastructure to multiple environments.</p>
+<h2 id="uuid-84b38808-ca7b-4164-b1f8-42624e38c22d">Getting ready</h2>
+<p>To fully understand this recipe, you will need to have a good understanding of the notion of variables, as discussed in the <em>Manipulating variables</em> recipe of this chapter.</p>
+<p class="mce-root">The goal of the Terraform <span>configuration </span>that we are going to write is to deploy an Azure App Service for a single environment. Its code is distributed in the following files:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/a9d8f674-bdcf-4d37-860c-bf99d2c7d570.png"/></p>
+<p class="mce-root">In the preceding diagram, we can see the following:</p>
+<ul>
+<li class="mce-root">The <kbd>main.tf</kbd> file contains the Terraform <span>configuration </span>of the resources to be provisioned.</li>
+<li class="mce-root">The <kbd>variables.tf</kbd> file contains the declaration of the variables.</li>
+<li class="mce-root">The <kbd>terraform.tfvars</kbd> <span>file </span>contains the values of the variables.</li>
+</ul>
+<p>The Terraform source code for this basic example is available at <a href="https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP02/myApp/simple-env">https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP02/myApp/simple-env</a>.<a href="https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP02/myApp/simple-env"/></p>
+<p class="mce-root">What is important in this recipe is not the content of the code, but the folder structure and the Terraform commands to be executed.</p>
+<h2 id="uuid-7e93c98e-58ba-44c4-b45e-d740dde11eb7">How to do it…</h2>
+<p>Follow these steps to implement the first Terraform <span>configuration </span>folder topology:</p>
+<ol>
+<li>In an empty folder, create a separate directory per environment: one for dev, one for test, one for QA, and one for production.</li>
+<li>Copy the Terraform base configuration into each of these directories identically.</li>
+</ol>
+<ol start="3">
+<li>Then, in each of these directories, modify the values of the <kbd>terraform.tfvars</kbd> <span>file </span>with the information that is specific to the environment. Here is an extract of each of these <kbd>terraform.tfvars</kbd> <span>files:</span></li>
+</ol>
+<div>
+<pre style="padding-left: 60px"><span>resource_group_name</span><span> = </span><span>"RG-App"<br/></span><span>service_plan_name</span><span> = </span><span>"Plan-App"<br/></span><span>environment</span><span> </span><span>= </span><span>"DEV" #name of the environment to change</span></pre></div>
+<ol start="4">
+<li class="mce-root">Finally, to provision each of these environments, inside each of these directories, execute the classical Terraform execution workflow by running the <kbd>terraform init</kbd>, <kbd>terraform plan</kbd>, and <kbd>terraform apply</kbd> commands.</li>
+</ol>
+<p class="mce-root">Follow these steps to implement the second topology of the Terraform <span>configuration </span>folder:</p>
+<ol>
+<li class="mce-root">In the folder that contains our basic Terraform <span>configuration</span>, create three subdirectories: <kbd>dev</kbd>, <kbd>test</kbd>, and <kbd>production</kbd>.</li>
+<li>Then, in each of these subdirectories, copy only the <kbd>terraform.tfvars</kbd> base <span>file,</span> in which we modify the variables with the correct values of the target environments. The following is an extract from each <kbd>terraform.tfvars</kbd><span> file:</span></li>
+</ol>
+<div>
+<pre style="padding-left: 60px"><span>resource_group_name</span><span> = </span><span>"RG-App"<br/></span><span>service_plan_name</span><span> = </span><span>"Plan-App"<br/></span><span>environment</span><span> </span><span>= </span><span>"DEV" #name of the environment to change</span></pre></div>
+<ol start="3">
+<li class="mce-root">Finally, to provision each of these environments, go to the root folder of the Terraform <span>configuration </span>and execute the following commands:</li>
+</ol>
+<pre style="padding-left: 60px" class="mce-root">terraform init<br/>terraform plan <strong>-var-file</strong>="&lt;environment folder&gt;/terraform.tfvars"<br/>terraform apply <strong>-var-file</strong>="&lt;environment folder&gt;/terraform.tfvars"</pre>
+<h2 id="uuid-972d93de-979f-4906-b38c-6662afd66214">How it works…</h2>
+<p>In the first topology, we duplicate the same Terraform <span>configuration </span>for each environment and just change the values of the variables in the <kbd>terraform.tfvars</kbd> file of each folder.</p>
+<p>By doing this, we get the following folder structure:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/7837e09f-2dbc-498a-bf8f-8b914453e13f.png" style="width:25.33em;height:33.17em;"/></p>
+<p>Terraform is then executed with the basic Terraform commands. This structure can be used if the infrastructure does not contain the same resources for each environment. This is because duplicating all the Terraform <span>configuration </span>in each environment folder offers us the advantage of being able to easily add or remove resources for one environment without affecting the other environments.</p>
+<p><span>However,</span> this is duplicate code, which implies that this code must be maintained several times (we must modify the infrastructure for all environments, make changes to the Terraform configuration, and so on).</p>
+<p class="mce-root">In the second topology, we kept the Terraform <span>configuration </span>in the common base for all environments and have just one <kbd>terraform.tfvars</kbd> file per environment. By doing this, we get the following folder structure:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/6a6f86a3-75ba-4b95-b9e8-6c4ec3f060eb.png" style="width:24.42em;height:25.58em;"/></p>
+<p class="mce-root">As for the execution of the Terraform <span>configuration</span>, we have added the <kbd>-var-file</kbd> option to the <kbd>plan</kbd> and <kbd>apply</kbd> <span>commands</span>. This structure can be used if the infrastructure is the same for all environments but only the configuration changes.</p>
+<p class="mce-root">The advantage of this topology is that we have only one common piece of Terraform resource code (in the <kbd>main.tf</kbd> and <kbd>variables.tf</kbd> files), and just one <kbd>terraform.tfvars</kbd> file to fill in, so we will have to make a few changes in case of code evolution or a new environment.</p>
+<p class="mce-root">On the other hand, the changes that were made to the Terraform <kbd>main.tf</kbd> code will apply to all the environments, which in this case requires more testing and verification.</p>
+<h2 id="uuid-a36c1416-bbc0-404f-ac4f-8059daab6bab">See also</h2>
+<ul>
+<li>There are other solutions to Terrafor<span>m configuration folder structure topologies, as we will discuss in</span><span> </span><a href="ddb13a41-5cdd-4931-b38f-d185d3a10c1e.xhtml">Chapter 5</a>, <span><em>Sharing Terraform Configuration with Modules</em></span>.</li>
+<li>Documentation regarding the <kbd>-var-file</kbd> option of the <kbd>plan</kbd> and <kbd>apply</kbd> commands is available at <a href="https://www.terraform.io/docs/commands/plan.html">https://www.terraform.io/docs/commands/plan.html</a>.</li>
+<li class="mce-root">An article explaining the best practices surrounding Terraform <span>configuration </span>can be found at <a href="https://www.terraform-best-practices.com/code-structure">https://www.terraform-best-practices.com/code-structure</a>.<a href="https://www.terraform-best-practices.com/code-structure"/></li>
+<li>The following blog post explains the folder structure for production Terraform <span>configuration</span>: <a href="https://www.hashicorp.com/blog/structuring-hashicorp-terraform-configuration-for-production">https://www.hashicorp.com/blog/structuring-hashicorp-terraform-configuration-for-production</a></li>
+</ul>
+<h1 id="uuid-d386f307-caa5-4355-b371-37bed96d843d">Obtaining external data with data sources</h1>
+<p>When infrastructure is provisioned with Terraform, it is sometimes necessary to retrieve information about the already existing resources. Indeed, when deploying resources to a certain infrastructure, there is often a need to place ourselves in an existing infrastructure or link it to other resources that have already been provisioned.</p>
+<p class="mce-root"><span>In this recipe, w</span>e will learn how, in our Terraform <span>configuration, </span>to retrieve information about resources already present in an infrastructure.</p>
+<h2 id="uuid-7c636362-8930-49c4-8e07-c266dac9c810">Getting ready</h2>
+<p>For this recipe, we will use an existing Terraform <span>configuration </span>that provides an Azure App Service in the Azure cloud. This source code is available at <a href="https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP02/data">https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP02/data</a>.</p>
+<p class="mce-root">This code is incomplete because, for this project, we need to store the App Service in an existing Service Plan. This Service Plan is the one we will use for the entire App Service.</p>
+<h2 id="uuid-4d968f4a-f5c6-4726-9fcc-303c57cb01ce">How to do it…</h2>
+<p><span>Perform the following steps:</span></p>
+<ol>
+<li>In our file that contains our Terraform <span>configuration</span>, add the following data block:</li>
+</ol>
+<div>
+<pre style="padding-left: 60px"><strong><span>data</span><span> </span></strong><span>"azurerm_app_service_plan"</span><span> </span><span>"myplan"</span><span> </span><span>{<br/></span><span>  name                = </span><span>"app-service-plan"<br/></span><span>  resource_group_name = </span><span>"rg-service_plan"<br/></span><span>}</span></pre></div>
+<p style="padding-left: 60px" class="mce-root">In the properties sections, specify the name and the Resource Group of the Service Plan to be used.</p>
+<ol start="2">
+<li class="mce-root">Then, complete the existing App Service configuration, as follows:</li>
+</ol>
+<div>
+<pre style="padding-left: 60px"><span>resource</span><span> </span><span>"azurerm_app_service"</span><span> </span><span>"app"</span><span> </span><span>{<br/></span><span>  name                = </span><span>"</span><span>${var</span><span>.</span><span>app_name}</span><span>-</span><span>${var</span><span>.</span><span>environement}</span><span>"<br/></span><span>  location            = azurerm_resource_group.rg-app.location<br/></span><span>  resource_group_name = azurerm_resource_group.rg-app.name<br/></span><span>  <strong>app_service_plan_id = data.azurerm_app_service_plan.myplan.id</strong><br/></span><span>}</span></pre></div>
+<h2 id="uuid-20661849-4f26-4926-8bde-73a10a4ded82">How it works…</h2>
+<p>In <em>step 1</em>, a data block is added to query existing resources. In this data block, we specify the Resource Group and the name of the existing Service Plan.</p>
+<p>In <em>step 2</em>, we use the ID of the Service Plan that was retrieved by the data block we added in <em>step 1</em>.</p>
+<p><span>The result of executing this Terraform configuration can be seen in the following screenshot:</span></p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/886e9632-addb-4b12-9d32-fcdefe01e433.png"/></p>
+<p>As we can see, we have the ID of the Service Plan that was retrieved by the <kbd>data</kbd> block.</p>
+<h2 id="uuid-a6ba23f0-fbab-4e1f-81db-375314e8e597">There's more…</h2>
+<p>What's interesting about the use of data blocks is that when executing the <kbd>terraform destroy</kbd> command on our Terraform <span>configuration</span>, Terraform does not perform a destroy action on the resource called by the data block.</p>
+<p class="mce-root">Moreover, the use of data blocks is to be preferred to the use of IDs written in clear text in the code, which can change because the data block recovers the information dynamically.</p>
+<p class="mce-root">Finally, the data block is also called when executing the <kbd>terraform plan</kbd> command, so your external resource must be present before you execute the <kbd>terraform plan</kbd> and <kbd>terraform apply</kbd> commands.</p>
+<p class="mce-root">If this external resource is not already present, we get the following error in the <kbd>terraform plan</kbd> command:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/4d15acf6-1388-49a0-a0e9-d2de230d869f.png"/></p>
+<div class="mce-root packt_infobox">You need to know which providers to use in your Terraform <span>configuration </span>since not all providers implement data blocks.</div>
+<h2 id="uuid-b3388feb-0ca4-4403-bf13-a156816ffd29">See also</h2>
+<p>For more information about data <span>blocks, take a look at the following </span>documentation: <a href="https://www.terraform.io/docs/configuration/data-sources.html">https://www.terraform.io/docs/configuration/data-sources.html</a><a href="https://www.terraform.io/docs/configuration/data-sources.html"/></p>
+<h1 id="uuid-82ffbafd-0940-4242-ba55-f6690f3ce1df">Using external resources from other state files</h1>
+<p><span>In the previous recipe, w</span>e saw that it's possible to retrieve information about resources already present in the infrastructure using data blocks.</p>
+<p class="mce-root"><span>In this recipe, w</span>e will learn that it is also possible to retrieve external information that is present in other Terraform state files.</p>
+<h2 id="uuid-ec677b28-49c2-47bc-a865-795735371ed7">Getting ready</h2>
+<p>For this recipe, we will, similar to the previous recipe, use a Terraform <span>configuration </span>that provisions an Azure App Service that must be part of an already provisioned Service Plan.</p>
+<p>Unlike the previous recipe, we will not use individual data sources; instead, we will read outputs from an existing Terraform state file that was used to provision the Service Plan.</p>
+<p class="mce-root">As a prerequisite, in the Terraform <span>configuration </span>that was used to provision the Service Plan, we must have an output value (see the <em>Using outputs to expose Terraform provisioned data</em> <span>recipe </span>in this chapter) that returns the identifier of the Service Plan, as shown in the following code:</p>
+<pre class="mce-root">resource "azurerm_app_service_plan" "plan-app" {<br/>  name = "MyServicePlan"<br/>  location = "westeurope"<br/>  resource_group_name = "myrg"<br/>    sku {<br/>     tier = "Standard"<br/>     size = "S1"<br/>     }<br/>}<br/><br/>output "service_plan_id" {<br/>  description = "output Id of the service plan"<br/>  value = azurerm_app_service_plan.plan-app.id<br/>}</pre>
+<p class="mce-root">In addition, we used a remote backend version of Azure Storage (see the <em>Protecting state files in an Azure remote backend</em> <span>recipe </span>in <a href="d054157b-d534-47c9-8079-3af13107c4ef.xhtml">Chapter 6</a>, <em>Provisioning Azure Infrastructure with Terraform</em>, for more information) to store the Terraform state file of the Service Plan.</p>
+<h2 id="uuid-61dd2cb2-b0d4-4f10-8763-69e262d3aa76">How to do it…</h2>
+<p><span>Perform the following steps:</span></p>
+<ol>
+<li>In the Terraform <span>configuration </span>that provides the Azure App Service, add and configure the <kbd>terraform_remote_state</kbd> block, as follows:</li>
+</ol>
+<pre style="padding-left: 60px" class="mce-root">data "<strong>terraform_remote_state</strong>" "service_plan_tfstate" {<br/>  backend = "azurerm"<br/>  config = {<br/>     resource_group_name = "rg_tfstate"<br/>     storage_account_name = "storstate"<br/>     container_name = "tfbackends"<br/>     key = "serviceplan.tfstate"<br/>  }<br/>}</pre>
+<ol start="2">
+<li class="mce-root">Then, in the Terraform configuration of the Azure App Service, use the created output of the Service Plan, as follows:</li>
+</ol>
+<pre style="padding-left: 60px" class="mce-root">resource "azurerm_app_service" "app" {<br/>  name = "${var.app_name}-${var.environement}"<br/>  location = azurerm_resource_group.rg-app.location<br/>  resource_group_name = azurerm_resource_group.rg-app.name<br/>  <strong>app_service_plan_id = data.terraform_remote_state.service_plan_tfstate.service_plan_id</strong><br/>}</pre>
+<h2 id="uuid-b28388f5-02b2-4d42-abc3-14cbd5185ede">How it works…</h2>
+<p>In <em>step 1</em>, we added the <kbd>terraform_remote_state</kbd> block, which allows us to retrieve outputs present in another Terraform state file. In its block, we specified the remote backend information, which is where the given Terraform state is stored (in this recipe, we used Azure Storage). </p>
+<p>In <em>step 2</em>, we used the ID returned by the output present in the Terraform state file.</p>
+<p>The result of executing this code is exactly the same as what we saw in the <em><span>Using external resources with data blocks</span></em><span> </span>recipe.</p>
+<h2 id="uuid-2a0b151a-2931-4047-9f7c-7dbae6c72226">There's more…</h2>
+<p>This technique is very practical when separating the Terraform <span>configuration </span>that deploys a complex infrastructure.</p>
+<p>Separating the Terraform <span>configuration </span>is a good practice because it allows better control and maintainability of the Terraform <span>configuration</span>. It also allows us to provision each part separately, without it impacting the rest of the infrastructure.</p>
+<p class="mce-root">To know when to use a data block or a <kbd>terraform_remote_state</kbd> block, the following recommendations must be kept in mind:</p>
+<ul>
+<li>The <kbd>data</kbd> block is used in the following cases:
+<ul>
+<li>When external resources have not been provisioned with Terraform <span>configuration </span>(it has been built manually or with a script)</li>
+<li>When the user providing the resources of our Terraform <span>configuration </span>does not have access to another remote backend</li>
+</ul>
+</li>
+<li class="mce-root">The <kbd>terraform_remote_state</kbd> block is used in the following cases:<br/>
+<ul>
+<li class="mce-root">External resources have not been provisioned with Terraform <span>configuration</span></li>
+<li class="mce-root">When the user providing the resources of our Terraform <span>configuration </span>has read access to the other remote backend</li>
+<li class="mce-root">When the external Terraform state file contains the output of the property we need in our Terraform <span>configuration</span></li>
+</ul>
+</li>
+</ul>
+<h2 id="uuid-6a369f85-461d-4bfc-8ff4-7e8f33bbd8f0">See also</h2>
+<p>The documentation for the <kbd>terraform_remote_state</kbd> block is available at <a href="https://www.terraform.io/docs/providers/terraform/d/remote_state.html">https://www.terraform.io/docs/providers/terraform/d/remote_state.html</a>.</p>
+<h1 id="uuid-ed94425c-0e1c-4da8-80bc-f31dab23dadb">Querying external data with Terraform</h1>
+<p>In the previous two recipes, we learned that it is possible to use either the <kbd>data</kbd> block or the <kbd>terraform_remote_state</kbd> block to retrieve external data. However, there are scenarios where the <kbd>data</kbd> block does not exist in the provider or <kbd>terraform_remote_state</kbd> cannot be used, such as when we need to process with an external API or need to use a local tool and process its output.</p>
+<p class="mce-root">To meet this need, there is an <kbd>external</kbd> resource in Terraform that allows you to call an external program and retrieve its output data so that it can be used in the Terraform <span>configuration</span>.</p>
+<div class="packt_infobox">Use of the <kbd>external</kbd> provider imposes prerequisites that may not be obvious (for example, in this case, we expect a particular version of PowerShell) or may be difficult to communicate other than through <kbd>README</kbd> files or documentation. Also, Terraform is generally designed to work the same cross-platform (operating system/architecture), but this essentially restricts the configuration to particular platforms that can (and do) run PowerShell <span>– </span>presumably just Windows. These requirements apply to both CI and local environments.</div>
+<p class="mce-root">In this recipe, we will learn how to call an external program and retrieve its output so that we can reuse it.</p>
+<h2 id="uuid-1022404c-e3d0-40f2-9135-f530eb4ce9e1">Getting ready</h2>
+<p>For this recipe, we will use an existing Terraform <span>configuration </span>that allows us to provision a Resource Group in Azure.</p>
+<p>Here, we want a Resource Group to be in a different Azure region (location), depending on the environment (dev or production).</p>
+<p class="mce-root">The source code for this recipe is available at <a href="https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP02/external">https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP02/external</a>.<a href="https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP02/external"/></p>
+<h2 id="uuid-34afbde7-8db9-45b7-baeb-f613b68e0bed">How to do it…</h2>
+<p>Perform the following steps:</p>
+<ol>
+<li>In the directory that contains our <kbd>main.tf</kbd> file, create a PowerShell <kbd>GetLocation.ps1</kbd> script that contains the following content:</li>
+</ol>
+<pre style="padding-left: 60px" class="mce-root"># Read the JSON payload from stdin<br/>$jsonpayload = [Console]::In.ReadLine()<br/><br/># Convert JSON to a string<br/>$json = ConvertFrom-Json $jsonpayload<br/>$environment = $json.environment<br/><br/>if($environment -eq "Production"){<br/> $location="westeurope"<br/>}else{<br/> $location="westus"<br/>}<br/><br/># Write output to stdout<br/>Write-Output "{ ""location"" : ""$location""}"</pre>
+<ol start="2">
+<li>In the <kbd>main.tf</kbd> file, add the <kbd>external</kbd> block, as follows:</li>
+</ol>
+<pre style="padding-left: 60px">data "<strong>external</strong>" "getlocation" {<br/>  program = ["Powershell.exe", "./GetLocation.ps1"]<br/>  query = {<br/>      environment = "${var.environment_name}"<br/>  }<br/>}</pre>
+<ol start="3">
+<li class="mce-root">Then, modify the code of the Resource Group to make its location more dynamic, as follows:</li>
+</ol>
+<pre style="padding-left: 60px">resource "azurerm_resource_group" "rg" {<br/>  name = "RG-${local.resource_name}"<br/>  <strong>location = data.external.getlocation.result.location</strong><br/>}</pre>
+<ol start="4">
+<li class="mce-root">Optionally, you can add an <kbd>output</kbd> value that has the following configuration:</li>
+</ol>
+<div>
+<pre style="padding-left: 60px"><span>output</span><span> </span><span>"locationname"</span><span> </span><span>{<br/></span><span>  value = data.external.getlocation.result.location<br/></span><span>}</span></pre></div>
+<h2 id="uuid-c268de5a-db4b-40d7-9978-90e8abb04fff">How it works…</h2>
+<p>In <em>step 1</em>, we wrote the PowerShell <kbd>GetLocation.ps1</kbd> script, which will be called by Terraform locally. This script takes in <kbd>environment</kbd> as an input parameter in JSON format. Then, this PowerShell script makes a condition on this input environment and returns the right Azure region as output so that we can use it in our Terraform <span>configuration</span>.</p>
+<p class="mce-root">Then, in <em>step 2</em>, we used the Terraform <kbd>external</kbd> resource, which calls this PowerShell script and provides it with the contents of the <kbd>environment_name</kbd> variable as a parameter.</p>
+<p class="mce-root">Finally, in <em>step 3</em>, we used the return value of this <kbd>external</kbd> block in the <kbd>location</kbd> property of the Resource Group.</p>
+<p class="mce-root">The following screenshot shows the output of executing <kbd>terraform plan</kbd> with the <kbd>environment_name</kbd> variable, which is set to <kbd>Dev</kbd>:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/f4d30c6d-2474-48b7-a7e5-383de2bf5be6.png" style="width:54.25em;height:31.58em;"/></p>
+<p class="mce-root">As you can see, the regional location of the Resource Group is <kbd>westus</kbd>.</p>
+<p class="mce-root">The following screenshot shows the output executing <kbd>terraform plan</kbd> with the <kbd>environment_name</kbd> variable, which is set to <kbd>Production</kbd>:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/ceb825a5-e06d-42ff-a631-cd4cc59f85ab.png" style="width:42.75em;height:22.83em;"/></p>
+<p class="mce-root"><span>As you can see, the location of the</span> Resource Group is <kbd>westeurope</kbd>.</p>
+<div class="mce-root packt_infobox">As we saw in the <em>Manipulating variables</em> <span>recipe</span>, in this example, we used the <kbd>-var</kbd> option of the <kbd>terraform plan</kbd> command, which allows us to assign a value to a variable upon executing the command.</div>
+<p class="mce-root">Optionally, we can also add a Terraform <kbd>output</kbd> that exposes this value. This can be displayed upon executing Terraform. This can also be exploited at other places in the Terraform configuration.</p>
+<p>The following screenshot shows the output after running the <kbd>terraform apply</kbd> command:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/e13ba774-e0de-4825-8727-c70e511fcecd.png"/></p>
+<p>As we can see, the <kbd>terraform output</kbd> command displays the right <kbd>locationname</kbd> value.</p>
+<h2 id="uuid-35e3581d-2e93-4c82-95b9-7a6412f70a61">There's more…</h2>
+<p>In this recipe, we used a PowerShell script, but this script also works with all the other scripting languages and tools that are installed on your local machine.</p>
+<p class="mce-root">This <kbd>external</kbd> resource contains specifics about the protocol, the format of the parameters, and its output. I advise that you read its documentation to learn more: <a href="https://www.terraform.io/docs/providers/external/data_source.html">https://www.terraform.io/docs/providers/external/data_source.html</a></p>
+<h2 id="uuid-e772d17f-479c-49ae-bd4b-324ea7324485">See also</h2>
+<p>The following are some example articles regarding how to use the <kbd>external</kbd> Terraform resource:</p>
+<ul>
+<li><a href="https://dzone.com/articles/lets-play-with-terraform-external-provider">https://dzone.com/articles/lets-play-with-terraform-external-provider</a></li>
+<li><a href="https://thegrayzone.co.uk/blog/2017/03/external-terraform-provider-powershell/">https://thegrayzone.co.uk/blog/2017/03/external-terraform-provider-powershell/</a></li>
+</ul>
+<h1 id="uuid-1be8d57c-2579-4e50-8ec3-573eaf80a85d">Calling Terraform built-in functions</h1>
+<p>When provisioning infrastructure or handling resources with Terraform, it is sometimes necessary to use transformations or combinations of elements provided in the Terraform <span>configuration</span>.</p>
+<p class="mce-root">For this purpose, the language supplied with Terraform (HCL2) includes functions that are built-in and can be used in any Terraform configuration.</p>
+<p class="mce-root"><span>In this recipe, w</span>e will discuss how to use built-in functions to apply transformations to code.</p>
+<h2 id="uuid-3a307dd5-fc08-44e6-85a4-0d0f84d4be40">Getting ready</h2>
+<p>To complete this recipe, we will start from scratch regarding the Terraform <span>configuration, </span>which will be used to provision a Resource Group in Azure. This Resource Group will be named according to the following naming convention:</p>
+<pre>RG-&lt;APP NAME&gt;-&lt;ENVIRONMENT&gt;</pre>
+<p>This name should be entirely in uppercase.</p>
+<p>The source code for this recipe is available at <a href="https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP02/fct">https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP02/fct</a>.  </p>
+<h2 id="uuid-b96d4142-f1d9-4469-9b1c-4b248daf213a">How to do it…</h2>
+<p>Perform the following steps:</p>
+<ol>
+<li>In a new local folder, create a file called <kbd>main.tf</kbd>.</li>
+<li>In this <kbd>main.tf</kbd> file, write the following code:</li>
+</ol>
+<pre style="padding-left: 60px">variable "app_name" {<br/>  description = "Name of application"<br/>}<br/>variable "environement" {<br/>  description = "Environement Name"<br/>}</pre>
+<ol start="3">
+<li> Finally, in this <kbd>main.tf</kbd> file, write the following Terraform <span>configuration</span>:</li>
+</ol>
+<div>
+<pre style="padding-left: 60px"><span>resource</span><span> </span><span>"azurerm_resource_group"</span><span> </span><span>"rg-app"</span><span> </span><span>{<br/></span><span>  name     = <strong>upper</strong>(<strong>format</strong>(</span><span>"RG-%s-%s"</span><span>,var.app-name,var.environement))<br/></span><span>  location = </span><span>"westeurope"<br/></span><span>}</span></pre></div>
+<h2 id="uuid-c52c3102-cbea-4428-a344-c45c3125cec8">How it works…</h2>
+<p>In <em>step 3</em>, we defined the property name of the resource with a Terraform <kbd>format</kbd> function, which allows us to format text. In this function, we used the <kbd>%s</kbd> verb to indicate that it is a character string that will be replaced, in order, by the name of the application and the name of the environment.</p>
+<p class="mce-root">Furthermore, to capitalize everything inside, we encapsulate the <kbd>format</kbd> function in the <kbd>upper</kbd> function, which capitalizes all its contents.</p>
+<p><span>The result of executing these Terraform commands on this code can be seen in the following screenshot:</span></p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/b5e9edb9-77c1-499c-a08f-18cdb39c54a8.png" style="width:37.50em;height:27.00em;"/></p>
+<p class="mce-root">Thus, thanks to these functions, it is possible to control the properties that will be used in the Terraform <span>configuration. This also allows us to apply</span> transformations automatically, without having to impose constraints on the user using the Terraform <span>configuration</span>.</p>
+<h2 id="uuid-0c23090b-7388-456e-a2cd-d44204514038">See also</h2>
+<p>There are a multitude of predefined functions in Terraform. The full list can be found at <a href="https://www.terraform.io/docs/configuration/functions.html">https://www.terraform.io/docs/configuration/functions.html</a> (see the left menu).</p>
+<h1 id="uuid-2183e1cf-feda-4645-8d6e-07f43ad3dafc">Writing conditional expressions</h1>
+<p>When writing the Terraform <span>configuration</span>, we may need to make the code more dynamic by integrating various conditions. In this recipe, we will discuss an example of an equal condition operation.</p>
+<h2 id="uuid-f9a49a38-83c0-4bcd-b267-57db1d7ca14a">Getting ready</h2>
+<p>For this recipe, we will use the Terraform <span>configuration </span>we wrote in the previous recipe, whose code is available at <a href="https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP02/fct">https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP02/fct</a>.</p>
+<p class="mce-root">We will complete this code by adding a condition to the name of the Resource Group. This condition is as follows: if the name of the environment is equal to <kbd>Production</kbd>, then the name of the Resource Group will be in the form <kbd>RG-&lt;APP NAME&gt;</kbd>; otherwise, the name of the Resource Group will be in the form <kbd>RG-&lt;APP NAME&gt;-&lt;ENVIRONMENT NAME&gt;</kbd>.</p>
+<h2 id="uuid-7875d2cb-76a5-45ad-abbb-e3785255b2ed">How to do it…</h2>
+<p>In the Terraform <span>configuration </span>of the <kbd>main.tf</kbd> file, modify the code of the Resource Group, as follows:</p>
+<pre>resource "azurerm_resource_group" "rg-app" {<br/>    name = <strong>var.environment == "Production" ? upper(format("RG-%s",var.app-name)) : upper(format("RG-%s-%s",var.app-name,var.environment))</strong><br/>    location = "westeurope"<br/>}</pre>
+<h2 id="uuid-4523b2ac-1cc0-439a-b413-ecbe9462a7e5">How it works…</h2>
+<p>Here, we added the following condition:</p>
+<pre>condition ? true assert : false assert</pre>
+<p><span>The result of executing Terraform commands on this code if the <kbd>environment</kbd> variable is equal to production can be seen in the following screenshot:</span></p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/2f28a9fc-dc9b-4f05-b45b-6c4c01f15584.png" style="width:35.42em;height:24.50em;"/></p>
+<p><span>If the <kbd>environment</kbd> variable is not equal to <kbd>production</kbd>, we'll get the following output:</span></p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/5f8fff9d-56d4-4ca9-b71c-ae503b854b6c.png" style="width:34.83em;height:25.00em;"/></p>
+<h2 id="uuid-98e1beed-a502-47a7-b798-b94baf0ea1b8">See also</h2>
+<p>Documentation on the various conditions of Terraform can be found at <a href="https://www.terraform.io/docs/configuration/expressions.html#conditional-expressions">https://www.terraform.io/docs/configuration/expressions.html#conditional-expressions</a>.<a href="https://www.terraform.io/docs/configuration/expressions.html#conditional-expressions"/></p>
+<h1 id="uuid-70317517-5bfe-489d-a511-c8d57b72452a">Manipulating local files with Terraform</h1>
+<p class="mce-root">Terraform is very popular due to its Infrastructure as Code functionality for cloud providers. But it also has many providers that allow us to manipulate the local system.</p>
+<p>In the <em>Querying external data with Terraform</em> recipe, we discussed local script executions that are performed by Terraform to get data for external data sources.</p>
+<p>In this recipe, we will study another type of local operation that involves creating and archiving local files with Terraform.</p>
+<h2 id="uuid-c47abc1c-497e-4fbd-a9bd-e4f051215555">Getting ready</h2>
+<p>For this recipe, we don't need any prerequisites or base code <span>–</span> we will write the code from scratch.</p>
+<p>The source code for this recipe is available at <a href="https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP02/files">https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP02/files</a>.<a href="https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP02/files"/></p>
+<h2 id="uuid-99397744-5ca8-4bb7-8729-57deb47c6710">How to do it…</h2>
+<p>Perform the following steps:</p>
+<ol>
+<li>In a new folder called <kbd>files</kbd>, create a <kbd>main.tf</kbd> file. Write the following code inside it:</li>
+</ol>
+<pre style="padding-left: 60px">resource "local_file" "myfile" {<br/>  content = "This is my text"<br/>  filename = "../mytextfile.txt"<br/>}</pre>
+<ol start="2">
+<li>In a command-line terminal, navigate to the <kbd>files</kbd> directory and execute Terraform's workflow commands, which are as follows:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>terraform init</strong><br/><strong>terraform plan -out="app.tfplan"</strong><br/><strong>terraform apply "app.tfplan"</strong></pre>
+<ol start="3">
+<li>In a new<span> </span><kbd>archive</kbd> folder, create a<span> </span><kbd>main.tf</kbd><span> </span>file and write the following Terraform <span>configuration inside it</span>:</li>
+</ol>
+<pre style="padding-left: 60px">data "archive_file" "backup" {<br/>  type = "zip"<br/>  source_file = "../mytextfile.txt"<br/>  output_path = "${path.module}/archives/backup.zip"<br/>}</pre>
+<ol start="4">
+<li class="mce-root">Then, using the command-line terminal, navigate to the <kbd>archive</kbd> directory and execute the following Terraform commands:</li>
+</ol>
+<pre style="padding-left: 60px" class="mce-root"><strong>terraform init</strong><br/><strong>terraform plan</strong></pre>
+<h2 id="uuid-2881e513-a9f9-40a6-97d7-9b26cf48a0e2">How it works…</h2>
+<p>In <em>step 1</em>, we wrote a piece of Terraform <span>configuration</span> that uses the <kbd>local</kbd><span> provider </span>and the <kbd>local_file</kbd> resource. This resource creates a file called<span> </span><kbd>mytextfile.txt</kbd> and adds <kbd>This is my text</kbd> to it.</p>
+<p>Then, in <em>step 2</em>, we executed Terraform on this code. By doing this, we obtained the <kbd>mytextfile.txt</kbd><span> file </span>on our local disk.</p>
+<p><span>The result of executing the <kbd>terraform plan</kbd> command on this code can be seen in the following screenshot:</span></p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/7f6d91dc-b509-46fe-920c-c66e80ccfa4c.png" style="width:27.42em;height:17.08em;"/></p>
+<p>After we executed <kbd>terraform apply</kbd>, the <kbd>mytextfile.txt</kbd> file became available on our local filesystem.</p>
+<p class="mce-root">In the second part of this recipe, in <em>step 3</em>, we wrote a piece of Terraform <span>configuration </span>that uses the <kbd>archive</kbd><span> provider a</span>nd the<span> </span><kbd>archive_file</kbd><span> </span>resource to create a ZIP file that contains the file we created in <em>steps 1</em> and <em>2</em>.</p>
+<p><span>After we executed </span><kbd>terraform apply</kbd><span>, the ZIP archive <kbd>backup.zip</kbd> file became available on our local filesystem, in the <kbd>archives</kbd> folder.</span></p>
+<h2 id="uuid-74ca03c3-361a-4f0b-8067-1f2a00992200">There's more…</h2>
+<p>As we can see, the<span> </span><kbd>archive_file</kbd><span> </span>resource we used in the second part of this recipe is of the <span><kbd>data</kbd> block type </span>(which we learned about in the <em>Obtaining external data with data sources </em>recipe of this chapter) and is therefore based on an element that already exists before we execute the<span> </span><kbd>terraform plan</kbd><span> </span>command.</p>
+<p>In our case, the file to be included in the archive must already be present on the local disk.</p>
+<h2 id="uuid-feb7abe5-33dd-42bd-b41c-83a3ec14aec0">See also</h2>
+<ul>
+<li>Documentation on the<span> </span><kbd>local_file</kbd><span> </span>resource is available at<span> </span><a href="https://www.terraform.io/docs/providers/local/r/file.html">https://www.terraform.io/docs/providers/local/r/file.html</a>.</li>
+<li class="mce-root">Documentation on the <kbd>archive_file</kbd><span> resource </span>is available at<span> </span><a href="https://www.terraform.io/docs/providers/archive/d/archive_file.html">https://www.terraform.io/docs/providers/archive/d/archive_file.html</a>.</li>
+</ul>
+<h1 id="uuid-7bb3eed2-b4fe-4b97-9824-da3e72346efc">Executing local programs with Terraform </h1>
+<p>As we saw in the previous recipe regarding file manipulation, apart from infrastructure provisioning, Terraform also allows you to run programs or scripts that are located on the local workstation where Terraform has been installed.</p>
+<p class="mce-root">In this recipe, we will learn how to execute a local program inside the Terraform <span>configuration</span>.</p>
+<h2 id="uuid-06e15bd9-97b2-4403-84a3-e3ed686a0bcb">Getting ready</h2>
+<p>For this recipe, we will complete the Terraform <span>configuration </span>that we used in the previous recipe to write a file on the local machine. Our goal will be to execute a PowerShell command with Terraform that will read and display the contents of the file that we have written using Terraform.</p>
+<p class="mce-root">Of course, we will have to run this Terraform script on a Windows operating system.</p>
+<p>The source code for this recipe is available at <a href="https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP02/files_local_exec">https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP02/files_local_exec</a>.<a href="https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP02/files_local_exec"/></p>
+<h2 id="uuid-3404612c-a51b-4afb-92e9-c35e70ae17d8">How to do it…</h2>
+<p>Perform the following steps:</p>
+<ol>
+<li>In the <kbd>main.tf</kbd> <span>file, </span>which is in the <kbd>files</kbd> directory of the source code from the previous recipe, complete the Terraform <span>configuration </span>with the following code:</li>
+</ol>
+<pre style="padding-left: 60px" class="mce-root">resource "null_resource" "readcontentfile" {<br/>  provisioner "local-exec" {<br/>   command = "Get-Content -Path ../mytextfile.txt"<br/>   interpreter = ["PowerShell", "-Command"]<br/>  }<br/>}</pre>
+<ol start="2">
+<li>Then, in a command-line terminal, execute the Terraform workflow commands, as follows:</li>
+</ol>
+<pre style="padding-left: 60px"><strong>terraform init</strong><br/><strong>terraform plan -out="app.tfplan"</strong><br/><strong>terraform apply "app.tfplan"</strong></pre>
+<h2 id="uuid-a3113b72-d146-416d-bdbc-a28e7267ef1e">How it works…</h2>
+<p>In this recipe, we used <kbd>null_resource</kbd>, which is a <kbd>null</kbd> provider resource. This resource doesn't allow us to create resources, but rather run programs locally.</p>
+<p class="mce-root">In this resource, we have the <kbd>provisioner</kbd> block, which is of the <kbd>local-exec</kbd> type, which operates on our local machine. Then, in this block, we indicate the command to execute, which is the <kbd>-Content</kbd> command of PowerShell. With this, we are telling Terraform <span>to use </span>the <kbd>PowerShell</kbd> interpreter to execute this command.</p>
+<p class="mce-root">When executing the respective Terraform commands, we get the following result:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/055c4a2d-3632-4aa2-9225-5a858acca537.png"/></p>
+<p class="mce-root">As you can see, the text <kbd>This is my text</kbd>, which we had written in the file (in the <kbd>local_file</kbd> resource), is displayed in the Terraform runtime output.</p>
+<h2 id="uuid-84948f09-dd31-487b-b3dc-38e03ecc823e">There's more…</h2>
+<p>In this recipe, we looked at a simple <kbd>local-exec</kbd> <span>command </span>being executed with Terraform. It is also possible to execute several commands that are stored <span>in </span>a script file (Bash, PowerShell, and so on) with a sample Terraform <span>configuration, as shown here:</span></p>
+<pre class="mce-root">resource "null_resource" "readcontentfile" {<br/>  provisioner "local-exec" {<br/>    command = "<strong>myscript.ps1</strong>"<br/>    interpreter = ["PowerShell", "-Command"]<br/>  }<br/>}</pre>
+<div class="packt_infobox"><span>The <kbd>local-exec</kbd> provisioner sets expectations on the local system, which may not be obvious. This is usually otherwise mitigated by cross-platform builds from providers and Terraform itself, where the implementation should generally work the same on any supported platform (macOS/Linux/Windows).</span></div>
+<p class="mce-root">In addition, it is important to know that the <kbd>local-exec</kbd> provisioner, once executed, ensures that the Terraform state file cannot be executed a second time by the <kbd>terraform apply</kbd> command.</p>
+<p class="mce-root">To be able to execute the <kbd>local-exec</kbd> command based on a trigger element, such as a resource that has been modified, it is necessary to add a <kbd>trigger</kbd> object inside <kbd>null_resource</kbd> that will act as the trigger element of the <kbd>local-exec</kbd> resource.</p>
+<p class="mce-root">The following example code uses a trigger, based on <kbd>timestamp</kbd>, to execute the <kbd>local-exec</kbd> code at each execution step of Terraform:</p>
+<pre>resource "null_resource" "readcontentfile" {<br/> <strong> triggers = {</strong><br/><strong>   trigger = timestamp()</strong><br/><strong>  }</strong><br/>  provisioner "local-exec" {<br/>   command = "Get-Content -Path ../mytextfile.txt"<br/>   interpreter = ["PowerShell", "-Command"]<br/>  }<br/>}</pre>
+<p class="mce-root">In this example, the trigger is a timestamp that will have a different value each time Terraform is run.</p>
+<p class="mce-root">We will look at another concrete use case of <kbd>local-exec</kbd> in the <em>Executing Azure CLI commands in Terraform</em> <span>recipe </span>in <a href="d054157b-d534-47c9-8079-3af13107c4ef.xhtml">Chapter 6</a>, <em>Provisioning Azure Infrastructure with Terraform</em>.</p>
+<h2 id="uuid-784fc8ff-10ba-4296-b79b-6a32fc7c0af6">See also</h2>
+<p>The <kbd>local-exec</kbd> provisioner documentation is available at <a href="https://www.terraform.io/docs/provisioners/local-exec.html">https://www.terraform.io/docs/provisioners/local-exec.html</a>.</p>
+<h1 id="uuid-939334e9-4f8b-4f46-b7e9-1daf02519aae">Generating passwords with Terraform</h1>
+<p>When provisioning infrastructure with Terraform, there are some resources that require passwords in their properties, such as VMs and databases.</p>
+<p class="mce-root">To ensure better security by not writing passwords in clear text, you can use a Terraform provider, which allows you to generate passwords.</p>
+<p class="mce-root">In this recipe, we will discuss how to generate a password with Terraform and assign it to a resource.</p>
+<h2 id="uuid-eb028cb5-f2a5-4e98-af0e-f95ce7c513ec">Getting ready</h2>
+<p>In this recipe, we need to provision a VM in Azure that will be provisioned with an administrator password generated dynamically by Terraform.</p>
+<p class="mce-root">To do this, we will base ourselves on an already existing Terraform <span>configuration </span>that provisions a VM in Azure.</p>
+<p class="mce-root">The source code for this recipe is available at <a href="https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP02/password">https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP02/password</a>.<a href="https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP02/password"/></p>
+<h2 id="uuid-fd21a508-07e7-48b9-a7c3-ce2a573e4a57">How to do it…</h2>
+<p>Perform the following steps:</p>
+<ol>
+<li class="mce-root">In the Terraform <span>configuration </span>file for the VM, add the following code:</li>
+</ol>
+<pre style="padding-left: 60px" class="mce-root">resource "random_password" "password" {<br/>  length = 16<br/>  special = true<br/>  override_special = "_%@"<br/>}</pre>
+<ol start="2">
+<li class="mce-root">Then, in the code of the resource itself, modify the password property with the following code:</li>
+</ol>
+<pre style="padding-left: 60px" class="mce-root">resource "azurerm_virtual_machine" "myterraformvm" {<br/>  name = "myVM"<br/>  location = "westeurope"<br/>  resource_group_name = azurerm_resource_group.myterraformgroup.name<br/>  network_interface_ids = [azurerm_network_interface.myterraformnic.id]<br/>  vm_size = "Standard_DS1_v2"<br/>....<br/>  os_profile {<br/>     computer_name = "vmdemo"<br/>     admin_username = "admin"<br/>     <strong>admin_password = random_password.password.result</strong><br/>  }<br/>....<br/>}</pre>
+<h2 id="uuid-398fc7c4-3e19-4796-92d4-9ea65dec29b2">How it works…</h2>
+<p>In <em>step 1</em>, we added the Terraform <kbd>random_password</kbd> resource from the <kbd>random</kbd> provider, which allows us to generate strings according to the properties provided. These will be sensitive, meaning that they're protected by Terraform.</p>
+<p>Then, in <em>step 2</em>, we used its result (with the <kbd>result</kbd> property) in the password property of the VM.</p>
+<p><span>The result of executing the </span><kbd>terraform plan</kbd><span> command on this code can be seen in the following screenshot:</span></p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/e6a3aa5e-05d5-4346-95c4-8d25d3458422.png" style="width:23.83em;height:19.17em;"/></p>
+<p>As we can see, the result is <kbd>sensitive value</kbd>.</p>
+<div class="packt_infobox">Please note that the fact a property is sensitive in Terraform means that it cannot be displayed when using the Terraform <kbd>plan</kbd><span> </span>and<span> </span><kbd>apply</kbd><span> commands </span>in the console output display.<br/>
+<br/>
+On the other hand, it will be present in clear text in the Terraform state file.</div>
+<h2 id="uuid-ee2bdb73-5829-4817-80da-b1834a46ed35">See also</h2>
+<ul>
+<li>To find out more about the <kbd>random_password</kbd> resource, read the following documentation: <a href="https://www.terraform.io/docs/providers/random/r/password.html">https://www.terraform.io/docs/providers/random/r/password.html</a>.<a href="https://www.terraform.io/docs/providers/random/r/password.html"/></li>
+<li>Documentation regarding sensitive data in Terraform state files is available at <a href="https://www.terraform.io/docs/state/sensitive-data.html">https://www.terraform.io/docs/state/sensitive-data.html</a>.</li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    </body></html>

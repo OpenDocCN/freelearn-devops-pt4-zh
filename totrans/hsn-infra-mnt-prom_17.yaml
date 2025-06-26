@@ -425,6 +425,8 @@
   id: totrans-64
   prefs: []
   type: TYPE_NORMAL
+  zh: 拥有全球视角也会成为一个问题，因为每个 Prometheus 实例都会有自己的数据子集。这可能会使得仪表板的制作变得更加困难，因为数据的位置可能不会立即清晰（例如，当在
+    Grafana 中使用多个数据源时），还可能阻止一些查询聚合跨多个分片的服务。这个问题可以通过几种技术来缓解，我们将在本章稍后进行探讨。
 - en: Lastly, some recording and alerting rules might become impractical if the required
     time series aren't located in the same shard. As an example, let's imagine we
     have a shard with OS-level metrics and another with an application metrics. Alerts
@@ -437,11 +439,15 @@
   id: totrans-65
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后，一些录制和告警规则可能变得不切实际，如果所需的时间序列不位于同一个分片中。例如，假设我们有一个包含操作系统级别指标的分片和另一个包含应用程序指标的分片。需要关联两个分片的指标的告警将会成为问题。这个问题可以通过仔细规划每个分片包含的内容来缓解，或者通过使用联邦使所需的指标在需要的地方可用，或者通过使用远程写入将数据写入外部系统，这些系统可以在
+    Prometheus 之外执行此操作（正如我们将在[第14章](1fb2aaff-5fe3-44ed-9df8-1cd27f383906.xhtml)中看到的，*将长时存储与
+    Prometheus 集成*）。
 - en: Alternatives to sharding
   id: totrans-66
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 分片的替代方案
 - en: 'As mentioned at the beginning of this chapter, a single Prometheus instance
     will take you a long way if configured and utilized properly. Striving to avoid
     high cardinality metrics should be a top concern, mitigate the need to start sharding.
@@ -453,6 +459,9 @@
   id: totrans-67
   prefs: []
   type: TYPE_NORMAL
+  zh: 如本章开头所述，单个 Prometheus 实例如果配置和使用得当，可以带来很大的帮助。避免高基数（high cardinality）指标应当是首要关注点，并且要尽量减少启动分片的需求。一种有助于保护
+    Prometheus 实例不被抓取产生不合理数量指标的目标的方法是定义每次抓取作业的最大样本摄取量。为此，你只需要在抓取作业中添加 `sample_limit`；如果在
+    `metric_relabel_configs` 后的样本数量超过配置的限制，抓取将会完全丢弃。以下是一个配置示例：
 - en: '[PRE6]'
   id: totrans-68
   prefs: []
@@ -463,15 +472,18 @@
   id: totrans-69
   prefs: []
   type: TYPE_NORMAL
+  zh: 下图展示了当抓取达到配置的 `sample_limit` 时会发生什么：
 - en: '![](img/ac48f1e9-23ab-4093-8f91-146727e3826f.png)'
   id: totrans-70
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/ac48f1e9-23ab-4093-8f91-146727e3826f.png)'
 - en: 'Figure 13.5: Prometheus targets endpoint showing scrape jobs being dropped
     due to exceeded sample limit'
   id: totrans-71
   prefs: []
   type: TYPE_NORMAL
+  zh: 图 13.5：Prometheus 目标端点显示由于超过样本限制而丢弃的抓取作业
 - en: When using this limiter, you should keep an eye out for scrapes getting dropped
     using the `prometheus_target_scrapes_exceeded_sample_limit_total`metric in conjunction
     with the `up` metric. While the latter tells you Prometheus couldn't scrape the
@@ -479,6 +491,8 @@
   id: totrans-72
   prefs: []
   type: TYPE_NORMAL
+  zh: 在使用这个限制器时，你应该留意通过 `prometheus_target_scrapes_exceeded_sample_limit_total` 指标与
+    `up` 指标一起监控抓取是否被丢弃。后者告诉你 Prometheus 无法抓取目标，而前者则会告诉你原因。
 - en: If dropping scrapes is out of the question and you are able to sustain the loss
     of resolution, an alternative is to increase the scrape interval. Bear in mind
     that you shouldn't increase it over two minutes, as doing so creates the risk
@@ -487,11 +501,14 @@
   id: totrans-73
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果丢弃抓取是不可接受的，并且你能够接受分辨率的损失，另一种选择是增加抓取间隔。请记住，你不应该将其增加到超过两分钟，因为这样做会增加由于单次抓取失败而导致指标过时的风险，正如我们在[第5章](12e775c2-bee9-4ebe-ad73-2f9313eeeeee.xhtml)中所解释的，*运行
+    Prometheus 服务器*。
 - en: Having a global view using federation
   id: totrans-74
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 使用联邦（federation）实现全球视角
 - en: When you have multiple Prometheus servers, it can become quite cumbersome to
     know which one to query for a certain metric. Another problem that quickly comes
     up is how to aggregate data from multiple instances, possibly in multiple datacenters.
@@ -868,14 +885,18 @@
   id: totrans-122
   prefs: []
   type: TYPE_NORMAL
+  zh: 简而言之，sidecar 使 Prometheus 实例中的数据对其他 Thanos 组件可用，而 Query 组件则是一个 API 兼容的 Prometheus
+    替代品，将它收到的查询分发给其他 Thanos 组件，如 sidecar 或其他 Query 实例。从概念上讲，Thanos 所采用的全局视图方法类似于以下示意图：
 - en: '![](img/b3048a37-faa6-4f29-ba14-3e4853c86f39.png)'
   id: totrans-123
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/b3048a37-faa6-4f29-ba14-3e4853c86f39.png)'
 - en: 'Figure 13.10: Global view with Thanos example diagram'
   id: totrans-124
   prefs: []
   type: TYPE_NORMAL
+  zh: 图 13.10：带有 Thanos 示例图的全局视图
 - en: Thanos components that can return query results implement what is called a *store
     API*. When a request hits a Thanos querier, it will fan out to all the store API
     nodes configured for it, which in our example are the Thanos sidecars that make
@@ -887,16 +908,21 @@
   id: totrans-125
   prefs: []
   type: TYPE_NORMAL
+  zh: 可以返回查询结果的 Thanos 组件实现了所谓的 *store API*。当请求命中 Thanos 查询器时，它将分发到为其配置的所有存储 API 节点，在我们的示例中就是使各自
+    Prometheus 服务器中的时间序列可用的 Thanos sidecars。查询器将整理这些响应（能够聚合分散的数据或去重数据），然后对数据集执行所需的
+    PromQL 查询。去重功能在使用 Prometheus 服务器对提高可用性时特别有用。
 - en: Now, let's take a look at each of these components, digging deeper into how
     they work and how to set them up.
   id: totrans-126
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，让我们深入了解这些组件，深入研究它们如何工作以及如何设置它们。
 - en: Sidecar
   id: totrans-127
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: Sidecar
 - en: The sidecar component is meant to be deployed locally alongside Prometheus and
     connect to it via its remote-read API. Prometheus' remote-read API allows integration
     with other systems so that they can access samples as if they were locally available
@@ -911,12 +937,19 @@
   id: totrans-128
   prefs: []
   type: TYPE_NORMAL
+  zh: sidecar 组件旨在与 Prometheus 一起本地部署，并通过其远程读取 API 与 Prometheus 连接。Prometheus 的远程读取
+    API 允许与其他系统集成，以便它们可以像查询本地可用的样本一样访问样本。这显然在查询路径中引入了网络，可能会导致带宽相关问题。sidecar 利用这一点将
+    Prometheus 中的数据提供给其他 Thanos 组件。它将存储 API 作为 gRPC 端点暴露（默认绑定到端口 `10901`），然后 Thanos
+    查询组件将使用这个端点，从查询者的角度来看，sidecar 变成了一个数据存储。sidecar 还在端口 `10902` 上暴露了一个 HTTP 端点，并提供了一个用于
+    `/metrics` 的处理程序，以便您可以在 Prometheus 中收集其内部指标。
 - en: The Prometheus instance that the sidecar is attached to must set `external_labels`
     so that each instance is uniquely identified. This is essential for Thanos to
     filter out which store APIs to query and for deduplication to work.
   id: totrans-129
   prefs: []
   type: TYPE_NORMAL
+  zh: sidecar 附加到的 Prometheus 实例必须设置 `external_labels`，以便每个实例都有唯一标识。这对 Thanos 过滤出要查询的存储
+    API 和去重功能至关重要。
 - en: Unfortunately, having unique external labels will break Alertmanager deduplication
     when using pairs of Prometheus instances for high availability. You should use
     `alert_relabel_configs` in the `alerting` section to drop any label that is unique
@@ -924,12 +957,15 @@
   id: totrans-130
   prefs: []
   type: TYPE_NORMAL
+  zh: 不幸的是，具有唯一外部标签会在使用一对 Prometheus 实例以提高可用性时破坏 Alertmanager 的去重功能。您应在 `alerting`
+    部分使用 `alert_relabel_configs` 来删除每个 Prometheus 实例特有的标签。
 - en: 'In our test environment, we can find a Thanos sidecar running in each of the
     available shards. To quickly validate the configuration in use, we can run the
     following instruction in any shard instances:'
   id: totrans-131
   prefs: []
   type: TYPE_NORMAL
+  zh: 在我们的测试环境中，我们可以发现每个可用的分片中都有一个 Thanos sidecar 正在运行。为了快速验证正在使用的配置，我们可以在任何一个分片实例中运行以下指令：
 - en: '[PRE9]'
   id: totrans-132
   prefs: []
@@ -941,11 +977,13 @@
   id: totrans-133
   prefs: []
   type: TYPE_NORMAL
+  zh: 上面的代码片段表明，sidecar 正在连接到本地的 Prometheus 实例。sidecar 提供了更多的功能，正如我们将在下一章中看到的那样，但为了实现全局视图，这个配置已经足够。
 - en: Query
   id: totrans-134
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: Query
 - en: The query component implements the Prometheus HTTP API, which enables PromQL
     expressions to run against data from all configured Thanos store APIs. It also
     includes a web interface for querying, which is based on Prometheus' own UI with
@@ -956,12 +994,16 @@
   id: totrans-135
   prefs: []
   type: TYPE_NORMAL
+  zh: 查询组件实现了 Prometheus HTTP API，使得 PromQL 表达式可以在所有配置的 Thanos 存储 API 上运行。它还包括一个查询的
+    web 界面，基于 Prometheus 自己的 UI，并做了一些小的改动，让用户感觉更加熟悉。该组件是完全无状态的，可以水平扩展。由于兼容 Prometheus
+    API，它可以直接作为 Prometheus 类型的数据源在 Grafana 中使用，实现对 Prometheus 查询的无缝替代。
 - en: 'This Thanos component is also running in our test environment, specifically
     in the *global* instance, and its configuration can be viewed by running the following
     instruction:'
   id: totrans-136
   prefs: []
   type: TYPE_NORMAL
+  zh: 这个 Thanos 组件也在我们的测试环境中运行，特别是在 *global* 实例中，其配置可以通过运行以下指令查看：
 - en: '[PRE10]'
   id: totrans-137
   prefs: []
@@ -975,19 +1017,24 @@
   id: totrans-138
   prefs: []
   type: TYPE_NORMAL
+  zh: 如前面的代码片段所示，我们需要指定所有包含存储 API 的组件，才能通过查询器提供它们。由于我们大多数使用的是该组件的默认值，web 界面可在端口 `10902`
+    上访问，我们可以通过将浏览器指向 `http://192.168.42.12:10902/stores` 来验证，正如以下截图所示：
 - en: '![](img/812e6400-0a6d-48a5-a309-6d8d2757c29e.png)'
   id: totrans-139
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/812e6400-0a6d-48a5-a309-6d8d2757c29e.png)'
 - en: 'Figure 13.11: Thanos query web interface showing the /stores endpoint'
   id: totrans-140
   prefs: []
   type: TYPE_NORMAL
+  zh: '图 13.11: Thanos 查询 web 界面显示 `/stores` 端点'
 - en: The querier HTTP port also serves the `/metrics` endpoint for Prometheus metric
     collection.
   id: totrans-141
   prefs: []
   type: TYPE_NORMAL
+  zh: 查询器的 HTTP 端口还提供 Prometheus 指标收集的 `/metrics` 端点。
 - en: 'The `--query.replica-label` flag allows for the deduplication of metrics using
     a specific Prometheus external label. For example, we have the exact same `icmp`
     job on `shard01` and `shard02`, and both have a `shard` external label to uniquely
@@ -1002,25 +1049,34 @@
   id: totrans-142
   prefs: []
   type: TYPE_NORMAL
+  zh: '`--query.replica-label` 标志允许使用特定的 Prometheus 外部标签进行指标去重。例如，我们在 `shard01` 和
+    `shard02` 上有完全相同的 `icmp` 作业，并且这两个作业都有一个 `shard` 外部标签来唯一标识它们。如果没有去重，我们在进行查询时将看到每个指标有两个结果，因为这两个
+    sidecar 都有相关数据。通过将 `shard` 标记为标识副本的标签，查询器可以选择其中一个结果。我们可以通过应用程序编程接口（在 `GET` 参数中发送
+    `dedup=true`）或 web 界面（选择 **去重** 选项）来切换去重功能，这取决于我们是否希望包括所有存储 API 的指标，还是只获取单一结果，仿佛只有一个
+    Prometheus 实例拥有该数据。以下截图展示了这一差异：'
 - en: '![](img/6e7ca518-d237-4ec1-b1b1-0a795993e048.png)'
   id: totrans-143
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/6e7ca518-d237-4ec1-b1b1-0a795993e048.png)'
 - en: 'Figure 13.12: Thanos query deduplication disabled and enabled'
   id: totrans-144
   prefs: []
   type: TYPE_NORMAL
+  zh: '图 13.12: Thanos 查询去重功能禁用和启用'
 - en: The deduplication feature is enabled by default so that the querier can seamlessly
     replace Prometheus in serving queries. This way, upstream systems such as Grafana
     can continue functioning without even knowing that the query layer has changed.
   id: totrans-145
   prefs: []
   type: TYPE_NORMAL
+  zh: 默认启用去重功能，使得查询器可以无缝地替代 Prometheus 进行查询服务。这样，上游系统，如 Grafana，可以继续正常工作，而不会意识到查询层已经发生变化。
 - en: Summary
   id: totrans-146
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 概述
 - en: In this chapter, we tackled issues concerning running Prometheus at scale. Even
     though a single Prometheus instance can get you a long way, it's a good idea to
     have the knowledge to grow if required. We've learned how vertical and horizontal
@@ -1032,47 +1088,58 @@
   id: totrans-147
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本章中，我们解决了在大规模环境中运行 Prometheus 时的问题。尽管单个 Prometheus 实例可以让你走得很远，但如果有需要，具备扩展知识是一个好主意。我们学习了垂直和水平切片的工作原理，何时使用切片，以及切片带来的好处和问题。我们还了解了在联邦
+    Prometheus 时常见的模式（层次型或跨服务型），以及如何根据我们的需求选择它们。由于有时我们需要的不仅仅是开箱即用的联邦功能，我们还介绍了 Thanos
+    项目及其如何解决全局视图问题。
 - en: In the next chapter, we'll be tackling another common requirement and one that
     isn't a core concern of the Prometheus project, which is the long-term storage
     of time series.
   id: totrans-148
   prefs: []
   type: TYPE_NORMAL
+  zh: 在下一章中，我们将探讨另一个常见需求，这个需求并不是 Prometheus 项目的核心问题，那就是时间序列的长期存储。
 - en: Questions
   id: totrans-149
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 问题
 - en: When should you consider sharding Prometheus?
   id: totrans-150
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 什么时候应该考虑切片 Prometheus？
 - en: What's the difference between sharding vertically and horizontally?
   id: totrans-151
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 垂直切片和水平切片有什么区别？
 - en: Is there anything you can do before opting for a sharding strategy?
   id: totrans-152
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在选择切片策略之前，你可以做些什么？
 - en: What type of metrics are best suited for being federated in a hierarchical pattern?
   id: totrans-153
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 哪种类型的指标最适合以层次型模式进行联邦？
 - en: Why might you require cross-service federation?
   id: totrans-154
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 为什么你可能需要跨服务联邦？
 - en: What protocol is used between Thanos querier and sidecar?
   id: totrans-155
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: Thanos 查询器与 sidecar 之间使用什么协议？
 - en: If a replica label is not set in a Thanos querier that is configured with sidecars
     running alongside Prometheus HA pairs, what happens to the results of queries
     that are executed there?
@@ -1080,23 +1147,28 @@
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 如果 Thanos 查询器中没有设置副本标签，而该查询器配置了与 Prometheus HA 对一起运行的 sidecar，那么执行的查询结果会发生什么？
 - en: Further reading
   id: totrans-157
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 进一步阅读
 - en: '**Scaling and Federating Prometheus**: [https://www.robustperception.io/scaling-and-federating-prometheus](https://www.robustperception.io/scaling-and-federating-prometheus)'
   id: totrans-158
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**扩展和联邦 Prometheus**：[https://www.robustperception.io/scaling-and-federating-prometheus](https://www.robustperception.io/scaling-and-federating-prometheus)'
 - en: '**Thanos components**: [https://github.com/improbable-eng/thanos/tree/master/docs/components](https://github.com/improbable-eng/thanos/tree/master/docs/components)'
   id: totrans-159
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**Thanos 组件**：[https://github.com/improbable-eng/thanos/tree/master/docs/components](https://github.com/improbable-eng/thanos/tree/master/docs/components)'
 - en: '**Thanos - Prometheus at scale**: [https://improbable.io/blog/thanos-prometheus-at-scale](https://improbable.io/blog/thanos-prometheus-at-scale)'
   id: totrans-160
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**萨诺斯 - 大规模的 Prometheus**：[https://improbable.io/blog/thanos-prometheus-at-scale](https://improbable.io/blog/thanos-prometheus-at-scale)'

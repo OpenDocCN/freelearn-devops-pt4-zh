@@ -1,7 +1,9 @@
 - en: Integrating Long-Term Storage with Prometheus
+  id: totrans-0
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 将长期存储与Prometheus集成
 - en: The single-instance design of Prometheus makes it impractical to maintain large
     datasets of historical data, as it is limited by the amount of storage that's
     available locally. Having time series that span large periods allows seasonal
@@ -11,148 +13,227 @@
     as well as shipping metrics for object storage with the help of Thanos. This will
     provide options on how to tackle this requirement, enabling several architecture
     choices.
+  id: totrans-1
   prefs: []
   type: TYPE_NORMAL
+  zh: Prometheus的单实例设计使其不适合维护大量历史数据集，因为它受限于本地可用的存储空间。拥有跨越较长时间段的时间序列可以进行季节性趋势分析和容量规划，因此，当数据集无法适应本地存储时，Prometheus通过将数据推送到第三方集群存储系统来解决这一问题。在本章中，我们将探讨远程读取和写入API，以及如何借助Thanos将指标发送到对象存储。这将提供多种处理这一需求的选项，支持多种架构选择。
 - en: 'In brief, the following topics will be covered in this chapter:'
+  id: totrans-2
   prefs: []
   type: TYPE_NORMAL
+  zh: 简而言之，本章将涵盖以下主题：
 - en: Test environment for this chapter
+  id: totrans-3
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 本章的测试环境
 - en: Remote write and remote read
+  id: totrans-4
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 远程写入与远程读取
 - en: Options for metrics storage
+  id: totrans-5
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 指标存储选项
 - en: Thanos remote storage and ecosystem
+  id: totrans-6
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: Thanos远程存储与生态系统
 - en: Test environment for this chapter
+  id: totrans-7
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 本章的测试环境
 - en: In this chapter, we'll be focusing on clustered storage. For this, we'll be
     deploying three instances to help simulate a scenario where Prometheus generates
     metrics and then we'll go through some options regarding how to store them on
     an object storage solution. This approach will allow us to not only explore the
     required configurations but also see how everything works together.
+  id: totrans-8
   prefs: []
   type: TYPE_NORMAL
+  zh: 本章将重点讨论集群存储。为此，我们将部署三个实例，模拟一个Prometheus生成指标的场景，然后我们将讨论如何将它们存储到对象存储解决方案中。这种方法不仅能帮助我们探索所需的配置，还能了解各部分如何协同工作。
 - en: 'The setup we''ll be using resembles the following diagram:'
+  id: totrans-9
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们将使用的设置类似于以下图示：
 - en: '![](img/cdf6ecf8-f54a-4bb0-9d8a-0f01dd3dc307.png)'
+  id: totrans-10
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/cdf6ecf8-f54a-4bb0-9d8a-0f01dd3dc307.png)'
 - en: 'Figure 14.1: Test environment for this chapter'
+  id: totrans-11
   prefs: []
   type: TYPE_NORMAL
+  zh: 图14.1：本章的测试环境
 - en: In the next section, we will explain how to get the test environment up and
     running.
+  id: totrans-12
   prefs: []
   type: TYPE_NORMAL
+  zh: 在下一节中，我们将解释如何启动和运行测试环境。
 - en: Deployment
+  id: totrans-13
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 部署
 - en: 'To launch a new test environment, move into this path, relative to the repository
     root, shown as follows:'
+  id: totrans-14
   prefs: []
   type: TYPE_NORMAL
+  zh: 要启动一个新的测试环境，请进入以下路径，相对于仓库根目录，如下所示：
 - en: '[PRE0]'
+  id: totrans-15
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE0]'
 - en: 'Ensure that no other test environments are running and spin up this chapter''s
     environment, shown as follows:'
+  id: totrans-16
   prefs: []
   type: TYPE_NORMAL
+  zh: 确保没有其他测试环境正在运行，并启动本章的环境，展示如下：
 - en: '[PRE1]'
+  id: totrans-17
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE1]'
 - en: 'You can validate the successful deployment of the test environment using the
     following command:'
+  id: totrans-18
   prefs: []
   type: TYPE_NORMAL
+  zh: 你可以使用以下命令验证测试环境是否成功部署：
 - en: '[PRE2]'
+  id: totrans-19
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE2]'
 - en: 'This will output the following:'
+  id: totrans-20
   prefs: []
   type: TYPE_NORMAL
+  zh: 这将输出以下内容：
 - en: '[PRE3]'
+  id: totrans-21
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE3]'
 - en: 'When the deployment tasks end, you''ll be able to validate the following endpoints
     on your host machine using your favorite JavaScript-enabled web browser:'
+  id: totrans-22
   prefs: []
   type: TYPE_NORMAL
+  zh: 部署任务完成后，你将能够通过你最喜欢的支持JavaScript的网页浏览器，在你的主机上验证以下端点：
 - en: '| **Service** | **Endpoint** |'
+  id: totrans-23
   prefs: []
   type: TYPE_TB
+  zh: '| **服务** | **端点** |'
 - en: '| Prometheus | `http://192.168.42.10:9090` |'
+  id: totrans-24
   prefs: []
   type: TYPE_TB
+  zh: '| Prometheus | `http://192.168.42.10:9090` |'
 - en: '| Thanos sidecar | `http://192.168.42.10:10902` |'
+  id: totrans-25
   prefs: []
   type: TYPE_TB
+  zh: '| Thanos sidecar | `http://192.168.42.10:10902` |'
 - en: '| Object storage`Access key: strongACCESSkey``Secret key:  strongSECRETkey`
     | `http://192.168.42.11:9000` |'
+  id: totrans-26
   prefs: []
   type: TYPE_TB
+  zh: '| 对象存储`访问密钥: strongACCESSkey``密钥: strongSECRETkey` | `http://192.168.42.11:9000`
+    |'
 - en: '| Thanos querier | `http://192.168.42.12:10902` |'
+  id: totrans-27
   prefs: []
   type: TYPE_TB
+  zh: '| Thanos查询器 | `http://192.168.42.12:10902` |'
 - en: 'You should be able to access the desired instance by using one of the following
     commands:'
+  id: totrans-28
   prefs: []
   type: TYPE_NORMAL
+  zh: 你应该能够使用以下命令之一访问所需的实例：
 - en: '| **Instance** | **Command** |'
+  id: totrans-29
   prefs: []
   type: TYPE_TB
+  zh: '| **实例** | **命令** |'
 - en: '| Prometheus | `vagrant ssh prometheus` |'
+  id: totrans-30
   prefs: []
   type: TYPE_TB
+  zh: '| Prometheus | `vagrant ssh prometheus` |'
 - en: '| Storage | `vagrant ssh storage` |'
+  id: totrans-31
   prefs: []
   type: TYPE_TB
+  zh: '| 存储 | `vagrant ssh storage` |'
 - en: '| Thanos | `vagrant ssh thanos` |'
+  id: totrans-32
   prefs: []
   type: TYPE_TB
+  zh: '| Thanos | `vagrant ssh thanos` |'
 - en: Cleanup
+  id: totrans-33
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 清理
 - en: 'When you''ve finished testing, just make sure that you''re inside `./chapter14/`
     and execute the following command:'
+  id: totrans-34
   prefs: []
   type: TYPE_NORMAL
+  zh: 测试完成后，确保你在`./chapter14/`目录内并执行以下命令：
 - en: '[PRE4]'
+  id: totrans-35
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE4]'
 - en: Don't worry too much; you can easily spin up the environment again if you need
     to.
+  id: totrans-36
   prefs: []
   type: TYPE_NORMAL
+  zh: 不用太担心；如果需要的话，你可以轻松地重新启动环境。
 - en: Remote write and remote read
+  id: totrans-37
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 远程写入与远程读取
 - en: 'Remote write and remote read allow Prometheus to push and pull samples, respectively:
     remote write is usually employed to implement remote storage strategies, while
     remote read allows PromQL queries to transparently target remote data. In the
     following topics, we''ll go into each of these functionalities and present some
     examples of where they can be used.'
+  id: totrans-38
   prefs: []
   type: TYPE_NORMAL
+  zh: 远程写入和远程读取分别允许Prometheus推送和拉取样本：远程写入通常用于实现远程存储策略，而远程读取则允许PromQL查询透明地针对远程数据。在接下来的主题中，我们将详细介绍这些功能，并展示它们可以应用的一些示例。
 - en: Remote write
+  id: totrans-39
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 远程写入
 - en: Remote write was a very sought after feature for Prometheus. It was first implemented
     as native support for sending samples in the openTSDB, InfluxDB, and Graphite
     data formats. However, a decision was soon made to not support each possible remote
@@ -165,11 +246,15 @@
     whatever integration is required follows the philosophy we discussed in [Chapter
     12](5360e790-3884-4eeb-aaa1-8aad21dc6c1e.xhtml), *Choosing the Right Service Discovery*,
     for building custom service discovery integrations.
+  id: totrans-40
   prefs: []
   type: TYPE_NORMAL
+  zh: 远程写入是Prometheus非常需要的一个功能。它最初作为对openTSDB、InfluxDB和Graphite数据格式的样本发送的原生支持实现。然而，很快就做出了决定，不再支持每一个可能的远程系统，而是提供一个通用的写入机制，适用于构建自定义适配器。这使得与Prometheus开发路线图解耦的自定义集成成为可能，同时也为这些桥接中支持读取路径打开了可能性。远程写入的系统特定实现从Prometheus二进制文件中移除，并作为示例转化为独立的适配器。依赖适配器并赋能社区以构建所需的任何集成的逻辑，遵循了我们在[第12章](5360e790-3884-4eeb-aaa1-8aad21dc6c1e.xhtml)中讨论的哲学——*选择合适的服务发现*，用于构建自定义服务发现集成。
 - en: Official examples of custom remote storage adapters can be found at [https://github.com/prometheus/prometheus/tree/master/documentation/examples/remote_storage/remote_storage_adapter](https://github.com/prometheus/prometheus/tree/master/documentation/examples/remote_storage/remote_storage_adapter).
+  id: totrans-41
   prefs: []
   type: TYPE_NORMAL
+  zh: 自定义远程存储适配器的官方示例可以在[https://github.com/prometheus/prometheus/tree/master/documentation/examples/remote_storage/remote_storage_adapter](https://github.com/prometheus/prometheus/tree/master/documentation/examples/remote_storage/remote_storage_adapter)找到。
 - en: Prometheus sends individual samples to remote write endpoints, using a very
     simple format which isn't tied to Prometheus internals. The system on the other
     end might not even be a storage system but a stream processor, such as Kafka or
@@ -177,8 +262,10 @@
     already knew how to create efficient chunks and could just send those over the
     wire. Chunks would have made supporting streaming systems impractical, and sending
     samples is both easier to understand and easier to implement with regard to adapters.
+  id: totrans-42
   prefs: []
   type: TYPE_NORMAL
+  zh: Prometheus将单个样本发送到远程写入端点，使用一种非常简单的格式，这种格式与Prometheus的内部实现无关。另一端的系统可能甚至不是一个存储系统，而是一个流处理器，如Kafka或Riemann。当定义远程写入设计时，这是一个艰难的决定，因为Prometheus已经知道如何创建高效的块并可以直接将其发送。块会使支持流系统变得不切实际，而发送样本在适配器方面既更易于理解，也更易于实现。
 - en: Remote write was the target of a great enhancement with the release of Prometheus
     2.8\. Previously, when a metric failed to be delivered to a remote write endpoint
     (due to network or service issues) there was just a small buffer to store the
@@ -191,39 +278,57 @@
     scraped samples. Using the WAL on the remote write subsystem makes Prometheus
     memory usage more predictable and allows it to resume from where it left off after
     a connectivity outage to the remote system.
+  id: totrans-43
   prefs: []
   type: TYPE_NORMAL
+  zh: 远程写操作在 Prometheus 2.8 发布时得到了重大增强。此前，当指标未能成功传送到远程写入端点（由于网络或服务问题）时，只有一个小缓冲区用于存储数据。如果缓冲区被填满，指标将被丢弃，并且永久丢失在那些远程系统中。更糟糕的是，缓冲区可能会造成背压，导致
+    Prometheus 服务器由于 **内存溢出** (**OOM**) 错误而崩溃。自从远程写 API 开始依赖 **预写日志** (**WAL**) 来进行账务处理后，这种情况不再发生。远程写操作现在直接从
+    WAL 中读取数据，WAL 包含所有正在进行的事务和抓取的样本。在远程写子系统中使用 WAL 使 Prometheus 的内存使用更加可预测，并允许它在与远程系统的连接中断后从中断点继续。
 - en: 'Configuration-wise, the following snippet illustrates the minimal code required
     to set up a remote write endpoint in Prometheus:'
+  id: totrans-44
   prefs: []
   type: TYPE_NORMAL
+  zh: 配置方面，以下代码片段展示了在 Prometheus 中设置远程写入端点所需的最小代码：
 - en: '[PRE5]'
+  id: totrans-45
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE5]'
 - en: Since remote write is another instance of interfacing with external systems,
     `external_labels` are also applied to samples before being sent. This can also
     prevent collision of metrics on the remote side when using more than one Prometheus
     server to push data to the same location. Remote write also supports `write_relabel_configs`
     to allow you to control which metrics are sent and which are dropped. This relabeling
     is run after external labels are applied.
+  id: totrans-46
   prefs: []
   type: TYPE_NORMAL
+  zh: 由于远程写操作是与外部系统交互的另一种形式，`external_labels` 也会在发送数据之前应用于样本。这也可以防止在使用多个 Prometheus
+    服务器将数据推送到相同位置时，远端发生指标冲突。远程写操作还支持 `write_relabel_configs`，允许您控制哪些指标被发送，哪些被丢弃。此重新标签化操作在应用外部标签之后进行。
 - en: Later in this chapter, we'll talk about a fairly new (and experimental) Thanos
     component called **receiver** as a practical example of remote write usage.
+  id: totrans-47
   prefs: []
   type: TYPE_NORMAL
+  zh: 本章稍后我们将讨论一个相对较新（且实验性的）Thanos 组件，称为 **receiver**，它作为远程写操作的实际应用示例。
 - en: Remote read
+  id: totrans-48
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 远程读取
 - en: After the remote write feature was made available, requests for remote read
     started to flow. Imagine sending Prometheus data to a remote endpoint and then
     having to learn a new query language such as InfluxQL (the InfluxDB query language)
     to access the aforementioned data. The inclusion of this feature enables the transparent
     use of PromQL against data stored outside the Prometheus server as if it was locally
     available.
+  id: totrans-49
   prefs: []
   type: TYPE_NORMAL
+  zh: 在远程写功能推出后，远程读取的请求开始增加。试想一下，将 Prometheus 数据发送到远程端点，然后不得不学习一种新的查询语言，如 InfluxQL（InfluxDB
+    查询语言），以访问上述数据。这个功能的引入使得可以透明地使用 PromQL 来查询存储在 Prometheus 服务器外部的数据，就像它是本地可用的那样。
 - en: Queries run against remote data are centrally evaluated. This means that remote
     endpoints just send the data for the requested matchers and time ranges, and PromQL
     is applied in the Prometheus instance where the query originated. Once again,
@@ -234,8 +339,11 @@
     the implementation complexity of the aforementioned systems. Centralized evaluation
     also allows the remote systems to  downsample the requested data, which greatly
     improves queries with very long time ranges.
+  id: totrans-50
   prefs: []
   type: TYPE_NORMAL
+  zh: 针对远程数据执行的查询是集中评估的。这意味着远程端点只会发送请求的匹配器和时间范围的数据，PromQL 会在发起查询的 Prometheus 实例中应用。再次强调，选择集中式（而非分布式）查询评估是设计
+    API 时的一个关键决策。分布式评估本可以分担每个查询的负载，但会迫使远程系统理解和评估 PromQL，并处理数据非互斥时的各种边界情况，极大地增加了前述系统的实现复杂性。集中评估还允许远程系统对请求的数据进行下采样，从而显著提高了处理非常长时间范围查询的效率。
 - en: One example where remote read can be useful is assisting migration between major
     versions of Prometheus, such as going from Prometheus *v1* to Prometheus *v2*.
     The latter can be configured to a remote read from the former, thus making the
@@ -244,33 +352,48 @@
     that trips the implementer of this strategy is the fact that `external_labels`
     from the Prometheus instance configured with remote read need to have a match
     in the `external_labels` from the Prometheus instance being read.
+  id: totrans-51
   prefs: []
   type: TYPE_NORMAL
+  zh: 远程读取有一个典型的应用场景，即帮助在 Prometheus 的主要版本之间迁移，比如从 Prometheus *v1* 迁移到 Prometheus
+    *v2*。后者可以配置为从前者进行远程读取，从而使旧实例成为只读（不配置抓取任务）。这将 *v1* 实例作为一种强化的远程存储，直到它的指标不再有用。实施这一策略时，一个常见的陷阱是，配置了远程读取的
+    Prometheus 实例的 `external_labels` 需要与被读取的 Prometheus 实例的 `external_labels` 匹配。
 - en: 'On the flipside, an example of the remote read endpoint in Prometheus itself
     was seen in the previous chapter ([Chapter 13](3615e455-c55b-49af-8c9b-b5342d4859dd.xhtml),
     *Scaling and Federating Prometheus*): the Thanos sidecar uses the remote read
     API from the local Prometheus instance to get the time series data requested by
     the Thanos querier.'
+  id: totrans-52
   prefs: []
   type: TYPE_NORMAL
+  zh: 另一方面，在上一章（[第13章](3615e455-c55b-49af-8c9b-b5342d4859dd.xhtml)，*扩展与联邦化 Prometheus*）中，已经展示了
+    Prometheus 自身的远程读取端点示例：Thanos 侧车使用本地 Prometheus 实例的远程读取 API 来获取 Thanos 查询器请求的时间序列数据。
 - en: 'Configuration-wise, it is quite simple to set up Prometheus to do a remote
     read. The following snippet shows the required section of the configuration file:'
+  id: totrans-53
   prefs: []
   type: TYPE_NORMAL
+  zh: 在配置方面，设置 Prometheus 进行远程读取非常简单。以下代码段展示了配置文件中需要的部分：
 - en: '[PRE6]'
+  id: totrans-54
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE6]'
 - en: The `remote_read` section also allows you to specify a list of matchers using
     `required_matchers` that need to be present in a selector to query a given endpoint.
     This is useful for remote systems that aren't storage or when you only write a
     subset of your metrics to remote storage, thus needing to restrict remote reads
     to those metrics.
+  id: totrans-55
   prefs: []
   type: TYPE_NORMAL
+  zh: '`remote_read` 部分还允许你使用 `required_matchers` 指定一个匹配器列表，这些匹配器需要出现在选择器中，以查询给定的端点。这对于不是存储的远程系统或仅将部分指标写入远程存储时非常有用，因此需要限制远程读取到这些指标。'
 - en: Options for metrics storage
+  id: totrans-56
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 指标存储的选项
 - en: 'By default, Prometheus does a great job of managing local storage of metrics
     using its own TSDB. But there are cases where this is not enough: local storage
     is limited by the amount of disk space available locally to the Prometheus instance,
@@ -278,12 +401,17 @@
     volumes that go beyond the amount of disk space that is feasible to have attached
     to the instance. In the following sections, we''ll be discussing the local storage
     approach, as well as the currently available options for remote storage.'
+  id: totrans-57
   prefs: []
   type: TYPE_NORMAL
+  zh: 默认情况下，Prometheus 很好地管理着本地存储的指标，使用它自己的 TSDB。但也有一些情况是它无法满足的：本地存储受限于 Prometheus
+    实例的本地磁盘空间，对于较长的保存周期（如多年）以及超出实例附加磁盘空间容量的大量数据来说，这并不理想。在接下来的部分中，我们将讨论本地存储方法，以及当前可用的远程存储选项。
 - en: Local storage
+  id: totrans-58
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 本地存储
 - en: 'Prometheus'' out-of-the-box storage solution for time series data is simply
     local storage. It is simpler to understand and simpler to manage: the database
     lives in a single directory, which is easy to back up, restore, or destroy if
@@ -292,32 +420,44 @@
     most. High availability is commonly achieved by simply running two Prometheus
     instances with the same configuration, each with its own database. This storage
     solution, however, does not cover all uses cases, and has a few shortcomings:'
+  id: totrans-59
   prefs: []
   type: TYPE_NORMAL
+  zh: Prometheus 的开箱即用时间序列数据存储解决方案就是本地存储。它更易于理解和管理：数据库存在于一个单独的目录中，便于备份、恢复或在需要时销毁。通过避免集群化，Prometheus
+    确保在面临网络分区时仍能保持正常行为；你不希望在最需要的时候，监控系统突然崩溃。高可用性通常通过简单地运行两个配置相同、各自拥有独立数据库的 Prometheus
+    实例来实现。然而，这种存储解决方案并不能涵盖所有使用场景，且存在一些不足之处：
 - en: It's not durable – in a container orchestration deployment, the collected data
     will disappear when the container is rescheduled (as the previous data is destroyed
     and the current data is started afresh) if persistent volumes are not used, while
     in a VM deployment, the data will be as durable as the local disk.
+  id: totrans-60
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 它不具备持久性——在容器编排部署中，如果没有使用持久化卷，收集的数据会在容器重新调度时消失（因为之前的数据被销毁，当前数据会重新开始），而在虚拟机部署中，数据的持久性与本地磁盘一样。
 - en: It's not horizontally scalable – using local storage means that your dataset
     can only be as big as the disk space you can make available to the instance.
+  id: totrans-61
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 它不能水平扩展——使用本地存储意味着你的数据集只能大到你为实例提供的磁盘空间。
 - en: It wasn't designed for long-term retention, even though, with the right metric
     criteria and cardinality control, commodity storage will go a long way.
+  id: totrans-62
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 它并不是为了长期存储设计的，尽管在适当的度量标准和基数控制下，商品存储能够走得很远。
 - en: These shortcomings are the result of trade-offs that are made to ensure that
     small and medium deployments (which are by far the more common use cases) work
     great while also making advanced and large-scale use cases possible. Alerting
     and dashboards, in the context of day-to-day operational monitoring or troubleshooting
     ongoing incidents, only require a couple of weeks of data at most.
+  id: totrans-63
   prefs: []
   type: TYPE_NORMAL
+  zh: 这些不足之处是为了确保小型和中型部署（这些部署是最常见的使用场景）能够良好运行，同时也能使得高级和大规模的使用场景成为可能，而做出的折中。告警和仪表盘，在日常操作监控或排查正在进行的事件时，只需要最多几周的数据。
 - en: Before going all out for a remote metric storage system for long-term retention,
     we might consider managing local storage through the use of TSDB admin API endpoints,
     that is, `snapshot` and `delete_series`. These endpoints help keep local storage
@@ -325,116 +465,168 @@
     *Running a Prometheus Server*, the TSDB administration API is not available by
     default; Prometheus needs to be started with the `--web.enable-admin-api` flag
     so that the API is enabled.
+  id: totrans-64
   prefs: []
   type: TYPE_NORMAL
+  zh: 在全力投入到一个远程度量存储系统用于长期存储之前，我们可以考虑通过使用 TSDB 管理 API 端点来管理本地存储，也就是 `snapshot` 和 `delete_series`。这些端点有助于保持本地存储的可控性。正如我们在[第
+    5 章](12e775c2-bee9-4ebe-ad73-2f9313eeeeee.xhtml)《运行 Prometheus 服务器》中提到的，TSDB 管理
+    API 默认情况下不可用；Prometheus 需要启动时带上 `--web.enable-admin-api` 标志才能启用该 API。
 - en: 'In this chapter''s test environment, you can try using these endpoints and
     evaluate what they aim to accomplish. By connecting to the `prometheus` instance,
     we can validate that the TSDB admin API has been enabled, and look up the local
     storage path by using the following command:'
+  id: totrans-65
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本章的测试环境中，你可以尝试使用这些端点，并评估它们的目标。通过连接到 `prometheus` 实例，我们可以验证 TSDB 管理 API 是否已经启用，并使用以下命令查找本地存储路径：
 - en: '[PRE7]'
+  id: totrans-66
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE7]'
 - en: 'Issuing an HTTP `POST` to the `/api/v1/admin/tsdb/snapshot` endpoint will trigger
     a new snapshot that will store the available blocks in a snapshots directory.
     Snapshots are made using hard links, which makes them very space-efficient as
     long as Prometheus still has those blocks.  The following instructions illustrate
     how everything is processed:'
+  id: totrans-67
   prefs: []
   type: TYPE_NORMAL
+  zh: 向 `/api/v1/admin/tsdb/snapshot` 端点发出 HTTP `POST` 请求将触发一个新的快照，快照会将可用的块存储在一个快照目录中。快照是使用硬链接创建的，这使得它们在
+    Prometheus 仍然保留这些块的情况下非常节省空间。以下说明展示了所有过程是如何处理的：
 - en: '[PRE8]'
+  id: totrans-68
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE8]'
 - en: You can then back up the snapshot directory, which can be used as the TSDB storage
     path for another Prometheus instance through `--storage.tsdb.path` when that historical
     data is required for querying. Note that `--storage.tsdb.retention.time` might
     need to be adjusted to your data duration, as Prometheus might start deleting
     blocks outside the retention period.
+  id: totrans-69
   prefs: []
   type: TYPE_NORMAL
+  zh: 然后，你可以备份快照目录，当需要查询历史数据时，可以通过 `--storage.tsdb.path` 将其用作另一个 Prometheus 实例的 TSDB
+    存储路径。请注意，可能需要根据你的数据存储时间调整 `--storage.tsdb.retention.time`，因为 Prometheus 可能会开始删除超出保留期的块。
 - en: 'This, of course, will not prevent the growth of the TSDB. To manage this aspect,
     we can employ the `/api/v1/admin/tsdb/delete_series` endpoint, which is useful
     for weekly or even daily maintenance. It operates by means of an HTTP POST request
     with a set of match selectors that mark all matching time series for deletion,
     optionally restricting the deletion to a given time window if a time range is
     also sent. The following table provides an overview of the URL parameters in question:'
+  id: totrans-70
   prefs: []
   type: TYPE_NORMAL
+  zh: 当然，这并不会阻止TSDB的增长。为了管理这一方面，我们可以使用`/api/v1/admin/tsdb/delete_series`端点，这对每周甚至每日的维护都很有用。它通过HTTP
+    POST请求操作，并携带一组匹配选择器，标记所有符合条件的时间序列以供删除，如果发送了时间范围，还可以选择将删除限制在给定的时间窗口内。下表提供了相关URL参数的概述：
 - en: '| **URL parameters** | **Description** |'
+  id: totrans-71
   prefs: []
   type: TYPE_TB
+  zh: '| **URL 参数** | **描述** |'
 - en: '| `match[]=<selector>` | One or more match selectors, for example, `match[]={__name__=~"go_.*"}`(Deletes
     all metrics whose name starts with `go_`) |'
+  id: totrans-72
   prefs: []
   type: TYPE_TB
+  zh: '| `match[]=<selector>` | 一个或多个匹配选择器，例如`match[]={__name__=~"go_.*"}`（删除所有名称以`go_`开头的度量）
+    |'
 - en: '| `start=<unix_timestamp>` | Start time for the deletion in the RFC 3339 or
     Unix format (optional, defaults to the earliest possible time) |'
+  id: totrans-73
   prefs: []
   type: TYPE_TB
+  zh: '| `start=<unix_timestamp>` | 删除的开始时间，采用RFC 3339或Unix格式（可选，默认值为最早时间） |'
 - en: '| `end=<unix_timestamp>` | End time for the deletion in RFC 3339 or Unix format
     (optional, defaults to the latest possible time) |'
+  id: totrans-74
   prefs: []
   type: TYPE_TB
+  zh: '| `end=<unix_timestamp>` | 删除的结束时间，采用RFC 3339或Unix格式（可选，默认值为最新时间） |'
 - en: 'After the `POST` request is performed, an HTTP `204` is returned. This will
     not immediately free up disk space, as it will have to wait until the next Prometheus
     compaction event. You can force this cleanup by requesting the `clean_tombstones`
     endpoint, as exemplified in the following instructions:'
+  id: totrans-75
   prefs: []
   type: TYPE_NORMAL
+  zh: 在执行`POST`请求后，会返回HTTP `204`。这并不会立即释放磁盘空间，因为它需要等到下一个Prometheus压缩事件。你可以通过请求`clean_tombstones`端点强制进行清理，以下是相关的操作示例：
 - en: '[PRE9]'
+  id: totrans-76
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE9]'
 - en: This knowledge might help you keep local storage under control and avoid stepping
     into complex and time-consuming alternatives, when the concern is mostly around
     scalability.
+  id: totrans-77
   prefs: []
   type: TYPE_NORMAL
+  zh: 这些知识可能帮助你控制本地存储，避免在关注点主要是可扩展性时进入复杂且耗时的替代方案。
 - en: Remote storage integrations
+  id: totrans-78
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 远程存储集成
 - en: 'Opting for remote metric storage shouldn''t be taken lightly as it has several
     implications. Some factors to consider when choosing a remote storage solution,
     to name but a few, are as follows:'
+  id: totrans-79
   prefs: []
   type: TYPE_NORMAL
+  zh: 选择远程度量存储不应轻视，因为它有多个影响因素。选择远程存储解决方案时需要考虑的一些因素如下：
 - en: '**Maturity**: Some storage solutions are more mature and better maintained
     than others.'
+  id: totrans-80
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**成熟度**：一些存储解决方案比其他的更成熟且维护得更好。'
 - en: '**Control**: There are some solutions where you run your own instances, while
     others are SaaS offerings.'
+  id: totrans-81
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**控制**：有些解决方案是由你自己运行实例的，而另一些则是SaaS服务。'
 - en: '**Availability, reliability and scalability**: If you choose to manage the
     storage solution internally, you need to consider these aspects.'
+  id: totrans-82
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**可用性、可靠性与可扩展性**：如果选择内部管理存储解决方案，你需要考虑这些方面。'
 - en: '**Maintainability**: Some options are truly complex to deploy and/or maintain.'
+  id: totrans-83
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**可维护性**：一些选项的部署和/或维护非常复杂。'
 - en: '**Remote read and write**: Do you truly need both, or does write suffice for
     your use case?'
+  id: totrans-84
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**远程读写**：你是否真的需要同时支持读写，还是仅写操作足以满足你的用例？'
 - en: '**Cost**: It might all come down to this; we define cost not only in the monetary
     sense, but also in terms of the time required to learn, test, and operate a solution.'
+  id: totrans-85
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**成本**：这一切可能归结于此；我们定义成本不仅仅是指金钱，还包括学习、测试和操作解决方案所需的时间。'
 - en: Another critical factor to consider relates to alerting. For reliability, rules
     should only query local data; this prevents transient failures in the network
     layer to negatively affect rule evaluation. As such, data in remote storage systems
     shouldn't be used for critical alerting, or at least you should be able to tolerate
     them being missing.
+  id: totrans-86
   prefs: []
   type: TYPE_NORMAL
+  zh: 另一个关键因素与告警相关。为了确保可靠性，规则应该只查询本地数据；这样可以防止网络层的瞬时故障对规则评估产生负面影响。因此，远程存储系统中的数据不应用于关键告警，至少你应当能够容忍它们的缺失。
 - en: 'If the scale you''re working with demands scalable storage or if historical
     data is crucial for your use case, for example, for capacity planning, then there
     are a few options available. The official Prometheus documentation has a comprehensive
@@ -445,20 +637,28 @@
     M3DB, to name a few); other monitoring systems (OpenTSDB, Graphite); and even
     generic datastores (such as Elasticsearch and TiKV). A good portion of them support
     both remote read and write. Some of them deserve an entire book of their own.'
+  id: totrans-87
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你所处理的规模要求可扩展的存储，或者历史数据对你的用例至关重要，例如用于容量规划，那么有一些可用的选项。官方 Prometheus 文档提供了一个详尽的已知远程存储集成列表，网址为[https://prometheus.io/docs/operating/integrations/#remote-endpoints-and-storage](https://prometheus.io/docs/operating/integrations/#remote-endpoints-and-storage)。这个列表涵盖了多种不同的用例：SaaS
+    服务（如 SignalFX 和 Splunk）；流处理系统（Kafka）；不同的时序数据库——包括付费（IRONdb）和开源（InfluxDB、Cortex、TimescaleDB、M3DB
+    等）；其他监控系统（OpenTSDB、Graphite）；甚至是通用数据存储（如 Elasticsearch 和 TiKV）。其中很多支持远程读写功能。有些甚至值得单独写一本书来介绍。
 - en: 'Curiously, the solution we are going to explore in depth isn''t in the aforementioned
     list at the time of writing, as it uses an entirely different approach to the
     problem we''re dealing with. In fact, Prometheus doesn''t even need to know about
     it because it works like an overlay. We are going to focus on the most promising
     long-term storage solution, which beautifully balances complexity, cost, and the
     feature set: Thanos.'
+  id: totrans-88
   prefs: []
   type: TYPE_NORMAL
+  zh: 有趣的是，我们将深入探讨的解决方案在写作时并不在上述列表中，因为它采用了与我们处理问题的方式完全不同的策略。事实上，Prometheus 根本不需要了解它，因为它像一个覆盖层一样工作。我们将专注于最有前景的长期存储解决方案，它在复杂性、成本和功能集之间达到了优美的平衡：Thanos。
 - en: Thanos remote storage and ecosystem
+  id: totrans-89
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: Thanos 远程存储和生态系统
 - en: In [Chapter 13](3615e455-c55b-49af-8c9b-b5342d4859dd.xhtml), *Scaling and Federating
     Prometheus*, we were introduced to Thanos, an open source project that was created
     to improve upon some of the shortcomings of Prometheus at scale. Specifically,
@@ -468,89 +668,125 @@
     using object storage. Keep in mind that complexity will increase when going down
     this path, so validate your requirements and whether the global view approach
     and local storage aren't enough for your particular use case.
+  id: totrans-90
   prefs: []
   type: TYPE_NORMAL
+  zh: 在[第13章](3615e455-c55b-49af-8c9b-b5342d4859dd.xhtml)《扩展和联邦 Prometheus》中，我们介绍了
+    Thanos，这是一个开源项目，旨在改进 Prometheus 在大规模使用中的一些不足之处。具体来说，我们探讨了 Thanos 如何使用 Thanos sidecar
+    和 querier 组件解决多个 Prometheus 实例的全局视图问题。现在是时候了解其他 Thanos 组件，并探索它们如何协同工作，以通过对象存储实现廉价的长期数据保留。请记住，在走这条路径时，复杂性会增加，因此请验证你的需求，并考虑全局视图方法和本地存储是否足以满足你的特定用例。
 - en: Thanos ecosystem
+  id: totrans-91
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: Thanos 生态系统
 - en: 'Besides the Thanos querier and sidecar, which we covered previously, there
     are a few other components in the Thanos ecosystem. All of these components coexist
     in the same binary and are run by invoking different sub-commands, which we''ll
     enumerate later:'
+  id: totrans-92
   prefs: []
   type: TYPE_NORMAL
+  zh: 除了我们之前介绍的 Thanos querier 和 sidecar，Thanos 生态系统中还有其他一些组件。所有这些组件共存在同一个二进制文件中，并通过调用不同的子命令运行，稍后我们会列举它们：
 - en: '`query`: Commonly known as *querier*, it''s a daemon that''s responsible for
     fanning out queries and deduplicating results to configured StoreAPI endpoints'
+  id: totrans-93
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`query`：通常被称为 *querier*，它是一个守护进程，负责将查询分发出去并对配置的 StoreAPI 端点返回的结果进行去重。'
 - en: '`sidecar`: A daemon which exposes a StoreAPI endpoint for accessing the data
     from a local Prometheus instance and ships the aforementioned instance''s TSDB
     blocks to object storage'
+  id: totrans-94
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`sidecar`：一个守护进程，暴露一个 StoreAPI 端点，用于访问本地 Prometheus 实例中的数据，并将前述实例的 TSDB 数据块传输到对象存储。'
 - en: '`store`: A daemon which acts as a gateway for remote storage, exposing a StoreAPI
     endpoint'
+  id: totrans-95
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`store`：一个守护进程，充当远程存储的网关，暴露一个 StoreAPI 端点。'
 - en: '`compact`: Commonly known as *compactor,* this daemon is responsible for compacting
     blocks that are available in object storage and creating new downsampled time
     series'
+  id: totrans-96
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`compact`：通常被称为 *compactor*，这个守护进程负责压缩对象存储中可用的块，并创建新的下采样时序数据。'
 - en: '`bucket`: A command line-tool that can verify, recover, and inspect data stored
     in object storage'
+  id: totrans-97
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`bucket`：一个命令行工具，用于验证、恢复和检查存储在对象存储中的数据。'
 - en: '`receive`: Known as *receiver*, it''s a daemon that accepts remote writes from
     Prometheus instances, exposing pushed data through a StoreAPI endpoint, and can
     ship blocks to object storage'
+  id: totrans-98
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`receive`：也叫*receiver*，它是一个守护进程，接受来自Prometheus实例的远程写入，通过StoreAPI端点暴露推送的数据，并将数据块发送到对象存储。'
 - en: '`rule`: Commonly known as *ruler*, it''s a daemon that evaluates Prometheus
     rules (recording and alerting) against remote StoreAPI endpoints, exposes its
     own StoreAPI to make evaluation results available for querying, ships results
     to object storage, and connects to an Alertmanager cluster to send alerts'
+  id: totrans-99
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`rule`：通常称为*ruler*，它是一个守护进程，用于评估Prometheus规则（记录和告警），并通过远程StoreAPI端点进行评估，暴露自己的StoreAPI以便查询评估结果，将结果发送到对象存储，并连接到Alertmanager集群以发送警报。'
 - en: You can find all the source code and installation files for Thanos at [https://github.com/improbable-eng/thanos](https://github.com/improbable-eng/thanos).
+  id: totrans-100
   prefs: []
   type: TYPE_NORMAL
+  zh: 你可以在[https://github.com/improbable-eng/thanos](https://github.com/improbable-eng/thanos)找到所有Thanos的源代码和安装文件。
 - en: 'All of the following components work together to solve several challenges:'
+  id: totrans-101
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下所有组件协同工作，解决了多个挑战：
 - en: '**Global view**: Querying every Prometheus instance from the same place, while
     aggregating and deduplicating the returned time series.'
+  id: totrans-102
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**全局视图**：从同一个地方查询所有Prometheus实例，同时对返回的时间序列进行聚合和去重。'
 - en: '**Downsampling**: Querying months or even years of data is a problem if samples
     come at full resolution; by automatically creating downsampled data, queries that
     span large time periods become feasible.'
+  id: totrans-103
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**降采样**：如果样本以完整分辨率返回，查询数月甚至数年的数据会成为问题；通过自动创建降采样数据，跨越长时间段的查询变得可行。'
 - en: '**Rules**: Enables the creation of global alerts and recording rules that mix
     metrics from different Prometheus shards.'
+  id: totrans-104
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**规则**：支持创建全局警报和记录规则，能够混合来自不同Prometheus分片的度量数据。'
 - en: '**Long-term retention**: By leveraging object storage, it delegates durability,
     reliability, and scalability concerns of storage to outside the monitoring stack.'
+  id: totrans-105
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**长期保存**：通过利用对象存储，将存储的持久性、可靠性和可扩展性问题委托给监控栈之外的系统。'
 - en: While we'll be providing a glimpse of how these challenges are tackled with
     Thanos, our main focus will be on the long-term storage aspect of it.
+  id: totrans-106
   prefs: []
   type: TYPE_NORMAL
+  zh: 虽然我们将提供如何使用Thanos应对这些挑战的简要介绍，但我们的主要关注点将是Thanos的长期存储方面。
 - en: 'Storage-wise, the Thanos project settled on object storage for long-term data.
     Most cloud providers provide this service, with the added benefit of also ensuring
     **service-level agreements** (**SLA**) for it. Object storage usually has 99.999999999%
@@ -562,118 +798,171 @@
     are modeled to mimic the well-known AWS S3 due to so many tools supporting it.
     Moreover, object storage from cloud providers is typically a very cost-effective
     solution.'
+  id: totrans-107
   prefs: []
   type: TYPE_NORMAL
+  zh: 从存储角度来看，Thanos项目选择了对象存储来进行长期数据保存。大多数云服务提供商都提供这一服务，且还额外确保**服务水平协议**（**SLA**）。对象存储通常在任何顶级云服务商上都有99.999999999%的持久性和99.99%的可用性。如果你有自己的本地基础设施，也有一些可用的选择：使用Swift（提供对象存储API的OpenStack组件），或者甚至是MinIO项目，这是我们在本章测试环境中使用的。大多数这些本地对象存储解决方案都具有相同的特点：它们提供的API模仿了广为人知的AWS
+    S3，因为有许多工具都支持它。此外，云服务提供商的对象存储通常是一个非常具成本效益的解决方案。
 - en: 'The following diagram provides a simple overview of the core components that
     are needed to achieve long-term retention of Prometheus time series data using
     Thanos:'
+  id: totrans-108
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下图表提供了一个简单的概览，展示了使用Thanos实现Prometheus时间序列数据长期保存所需的核心组件：
 - en: '![](img/94916cc1-d386-4b83-8afb-3e7440cc68a5.png)'
+  id: totrans-109
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/94916cc1-d386-4b83-8afb-3e7440cc68a5.png)'
 - en: 'Figure 14.2: High-level Thanos long-term storage architecture'
+  id: totrans-110
   prefs: []
   type: TYPE_NORMAL
+  zh: 图 14.2：Thanos长期存储架构概览
 - en: As we can see in the previous diagram, we only need some Thanos components to
     tackle this challenge. In the following topics, we'll go over every component
     and expand on its role in the overall design.
+  id: totrans-111
   prefs: []
   type: TYPE_NORMAL
+  zh: 正如我们在前面的图表中看到的，我们只需要一些Thanos组件来应对这个挑战。在接下来的主题中，我们将详细介绍每个组件，并扩展它在整体设计中的作用。
 - en: Thanos components
+  id: totrans-112
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: Thanos组件
 - en: Now that we've seen an overview of the Thanos long-term storage architecture,
     it's time to meet all the available Thanos components. Besides providing an introduction
     to every single one of them, we'll be emphasizing those that are available in
     the test environment, expanding on their role in the ecosystem, and the configuration
     which is in place.
+  id: totrans-113
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在我们已经看到Thanos长期存储架构的概述，是时候了解所有可用的Thanos组件了。除了介绍每个组件之外，我们还将强调那些在测试环境中可用的组件，详细说明它们在生态系统中的作用及其配置。
 - en: You can find some community-driven alerts and dashboards at [https://github.com/improbable-eng/thanos/tree/master/examples](https://github.com/improbable-eng/thanos/tree/master/examples).
+  id: totrans-114
   prefs: []
   type: TYPE_NORMAL
+  zh: 你可以在[https://github.com/improbable-eng/thanos/tree/master/examples](https://github.com/improbable-eng/thanos/tree/master/examples)找到一些社区驱动的警报和仪表盘。
 - en: Test environment specifics
+  id: totrans-115
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 测试环境细节
 - en: 'As stated at the beginning of this book, using the provided test environments
     won''t incur any cost. As such, since we require an object storage bucket for
     our examples, we relied on a project called MinIO, which exposes an S3-compatible
     API; you can find more information about it at [https://min.io/](https://min.io/).
     Configuration-wise, this storage endpoint should be available in the storage instance
     with the following settings:'
+  id: totrans-116
   prefs: []
   type: TYPE_NORMAL
+  zh: 正如本书开头所述，使用提供的测试环境不会产生任何费用。因此，由于我们需要一个对象存储桶来进行示例，我们依赖于一个名为MinIO的项目，它提供了一个兼容S3的API；你可以在[https://min.io/](https://min.io/)找到更多关于它的信息。在配置方面，存储端点应该在存储实例中以以下设置可用：
 - en: '[PRE10]'
+  id: totrans-117
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE10]'
 - en: 'The preceding `systemd` unit file loads the following environment variables:'
+  id: totrans-118
   prefs: []
   type: TYPE_NORMAL
+  zh: 上述的`systemd`单元文件加载了以下环境变量：
 - en: '[PRE11]'
+  id: totrans-119
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE11]'
 - en: 'To ensure that you don''t have to wait two hours to have blocks to ship into
     the object storage, the Prometheus server in our test environment has the following
     settings in place:'
+  id: totrans-120
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了确保你不必等两个小时才能将块数据传输到对象存储，我们的测试环境中的Prometheus服务器已设置如下：
 - en: '[PRE12]'
+  id: totrans-121
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE12]'
 - en: This configuration changes the block duration, setting the interval at which
     to flush them to disk, from the default two hours to ten minutes. Although setting
     such a low value is very useful for testing this particular feature, it is completely
     ill-advised for anything else. To make this crystal clear, there's no good reason
     to change these values to anything other than two hours, except for testing.
+  id: totrans-122
   prefs: []
   type: TYPE_NORMAL
+  zh: 此配置更改了块的持续时间，将它们刷写到磁盘的间隔从默认的两个小时更改为十分钟。虽然设置如此低的值对测试此特性非常有用，但对于其他任何情况，这种做法都是完全不建议的。为了让这一点更加明确，除了测试外，没有任何理由将这些值更改为其他任何值，除了两个小时。
 - en: With the specifics for this chapter's test environment out of the way, we can
     now proceed to introduce each individual Thanos component.
+  id: totrans-123
   prefs: []
   type: TYPE_NORMAL
+  zh: 了解了本章测试环境的细节后，我们可以继续介绍每个单独的Thanos组件。
 - en: Thanos query
+  id: totrans-124
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: Thanos查询
 - en: In [Chapter 13](3615e455-c55b-49af-8c9b-b5342d4859dd.xhtml),* Scaling and Federating
     Prometheus*, we had the chance to explore the Thanos querier and sidecar to solve
     the global view problem. For this component, the features we covered then will
     also be used in this chapter. We'll continue using querier to query several StoreAPI
     endpoints, taking advantage of the deduplication it provides, and using the query
     API through its web interface.
+  id: totrans-125
   prefs: []
   type: TYPE_NORMAL
+  zh: 在[第13章](3615e455-c55b-49af-8c9b-b5342d4859dd.xhtml)，*扩展和联邦Prometheus*中，我们有机会探索Thanos查询器和sidecar来解决全局视图问题。对于这个组件，我们当时介绍的功能将在本章中继续使用。我们将继续使用查询器查询多个StoreAPI端点，利用它提供的去重功能，并通过其Web界面使用查询API。
 - en: 'The configuration that''s available in our test environment is quite simple,
     as we can see in the following snippet, which was taken from the `thanos` instance:'
+  id: totrans-126
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们在测试环境中可用的配置非常简单，正如我们在以下代码片段中看到的，这来自`thanos`实例：
 - en: '[PRE13]'
+  id: totrans-127
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE13]'
 - en: 'As you can see in the previous snippet, we specified several `--store` endpoints.
     To understand which is which, we can point our browser at the Thanos querier web
     interface, available at [http://192.168.42.12:10902/stores](http://192.168.42.12:10902/stores),
     and see the available stores, as depicted by following screenshot:'
+  id: totrans-128
   prefs: []
   type: TYPE_NORMAL
+  zh: 正如你在之前的代码片段中看到的，我们指定了多个`--store`端点。为了了解每个端点的具体作用，我们可以将浏览器指向Thanos查询器的Web界面，地址是[http://192.168.42.12:10902/stores](http://192.168.42.12:10902/stores)，在界面上查看可用的存储，如下图所示：
 - en: '![](img/19cc7e59-1495-4f5f-a41a-4b6d25479ee0.png)'
+  id: totrans-129
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/19cc7e59-1495-4f5f-a41a-4b6d25479ee0.png)'
 - en: 'Figure 14.3: Thanos querier /stores endpoint'
+  id: totrans-130
   prefs: []
   type: TYPE_NORMAL
+  zh: 图14.3：Thanos查询器 /stores端点
 - en: The previous screenshot illustrates all the available store APIs in our test
     environment. These will be the sources of data that will be used any time you
     execute a query in the Thanos querier.
+  id: totrans-131
   prefs: []
   type: TYPE_NORMAL
+  zh: 之前的截图展示了我们测试环境中所有可用的存储 API。这些将是你在 Thanos 查询器中执行查询时使用的数据源。
 - en: Thanos sidecar
+  id: totrans-132
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: Thanos sidecar
 - en: Besides the Store API that's exposed by the Thanos sidecar we covered previously,
     this component is also is able to gather TSDB blocks from disk and ship them to
     an object storage bucket. This allows you to decrease the retention of the Prometheus
@@ -681,70 +970,108 @@
     upload feature in the sidecar, the `--storage.tsdb.min-block-duration` and `--storage.tsdb.max-block-duration`
     flags need to be set to the same value (two hours to match the default behavior),
     so that Prometheus local compaction is disabled.
+  id: totrans-133
   prefs: []
   type: TYPE_NORMAL
+  zh: 除了之前讨论的 Thanos sidecar 暴露的 Store API，该组件还能够从磁盘收集 TSDB 块并将其传输到对象存储桶中。这使得你可以通过将历史数据保存在持久介质中来减少
+    Prometheus 服务器的保留数据。为了使用 sidecar 中的块上传功能，`--storage.tsdb.min-block-duration` 和
+    `--storage.tsdb.max-block-duration` 标志需要设置为相同的值（两个小时，以匹配默认行为），以便禁用 Prometheus
+    的本地压缩。
 - en: 'The configuration in use is available on the `prometheus` instance and can
     be inspected by executing the following instruction:'
+  id: totrans-134
   prefs: []
   type: TYPE_NORMAL
+  zh: 当前使用的配置文件可以在 `prometheus` 实例中查看，并可以通过执行以下命令进行检查：
 - en: '[PRE14]'
+  id: totrans-135
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE14]'
 - en: 'As we can see, the `--objstore.config-file` flag loads all the required configuration
     from the file in order to ship the TSDB blocks to an object storage bucket, such
     as the bucket name (in our case, `thanos`), the storage endpoint, and access credentials.
     The following are the contents of that file:'
+  id: totrans-136
   prefs: []
   type: TYPE_NORMAL
+  zh: 如我们所见，`--objstore.config-file` 标志加载了所有必需的配置文件，以便将 TSDB 块传输到对象存储桶中，例如桶名称（在我们的案例中是
+    `thanos`）、存储端点和访问凭证。以下是该文件的内容：
 - en: '[PRE15]'
+  id: totrans-137
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE15]'
 - en: 'In our Prometheus test instance, a new TSDB block will be generated every 10
     minutes, and the Thanos sidecar will take care of shipping it to the object storage
     endpoint. We can review the available blocks in our bucket by using MinIO''s web
     interface, available at [http://192.168.42.11:9000/minio/thanos/](http://192.168.42.11:9000/minio/thanos/).
     After logging in with the `access_key` and `secret_key` shown in the previous
     code snippet, you''ll be greeted with something resembling the following screenshot:'
+  id: totrans-138
   prefs: []
   type: TYPE_NORMAL
+  zh: 在我们的 Prometheus 测试实例中，每 10 分钟会生成一个新的 TSDB 块，Thanos sidecar 会负责将其传输到对象存储端点。我们可以通过使用
+    MinIO 的 Web 界面来查看存储桶中可用的块，界面地址为 [http://192.168.42.11:9000/minio/thanos/](http://192.168.42.11:9000/minio/thanos/)。登录时使用前面代码片段中显示的
+    `access_key` 和 `secret_key`，你将看到类似以下截图的界面：
 - en: '![](img/c3a97419-6648-445d-8fcc-3dd614274523.png)'
+  id: totrans-139
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/c3a97419-6648-445d-8fcc-3dd614274523.png)'
 - en: 'Figure 14.4: MinIO object storage web interface'
+  id: totrans-140
   prefs: []
   type: TYPE_NORMAL
+  zh: 图 14.4：MinIO 对象存储 Web 界面
 - en: We should now have some historical data available for testing. We'll need a
     way to query this data. That's where the Thanos store gateway comes into play.
+  id: totrans-141
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在我们应该有一些历史数据可供测试。我们需要一种查询这些数据的方式。此时，Thanos 存储网关就发挥作用了。
 - en: Thanos store gateway
+  id: totrans-142
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: Thanos 存储网关
 - en: The Thanos store gateway's main function is to provide access to the historical
     time series data in the blocks that are shipped to object storage through a StoreAPI
     endpoint. This means that it effectively acts as an API gateway. All major object
     store integrations in Thanos store (Google Cloud Storage, AWS S3, Azure Storage)
     are considered stable enough to run in production. It uses a relatively small
     local cache of all block metadata, and it keeps it in sync with the storage bucket.
+  id: totrans-143
   prefs: []
   type: TYPE_NORMAL
+  zh: Thanos 存储网关的主要功能是通过 StoreAPI 端点提供对历史时间序列数据的访问，这些数据存储在被传输到对象存储的块中。这意味着它实际上充当了一个
+    API 网关。Thanos 存储中的所有主要对象存储集成（Google Cloud Storage、AWS S3、Azure Storage）都被认为足够稳定，可以在生产环境中运行。它使用一个相对较小的本地缓存来存储所有块的元数据，并将其与存储桶保持同步。
 - en: 'A minimal configuration for this component is available in the Thanos instance
     in our test environment. The following is the snippet from it:'
+  id: totrans-144
   prefs: []
   type: TYPE_NORMAL
+  zh: 在我们的测试环境中的 Thanos 实例中，可以找到此组件的最小配置。以下是其中的一段代码：
 - en: '[PRE16]'
+  id: totrans-145
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE16]'
 - en: As we can see, object storage configuration is done in its own configuration
     file. Like most of the other components, a store binds a StoreAPI GRPC port for
     receiving queries and an HTTP port so that its metrics can be collected by Prometheus.
+  id: totrans-146
   prefs: []
   type: TYPE_NORMAL
+  zh: 如我们所见，对象存储配置在其自己的配置文件中进行。与大多数其他组件一样，store 绑定了一个 StoreAPI GRPC 端口用于接收查询，以及一个
+    HTTP 端口以便其指标能够被 Prometheus 收集。
 - en: Thanos compact
+  id: totrans-147
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: Thanos 压缩
 - en: 'Since Prometheus block compaction needs to be turned off for Thanos sidecar
     upload feature to work reliably, this work is delegated to a different component:
     Thanos compact. It was designed to use the same compaction strategy as the Prometheus
@@ -752,8 +1079,11 @@
     cannot be done directly in object storage, this component requires a fair amount
     of available space (a few hundred GB, depending on the amount stored remotely)
     in local disks to process the blocks.'
+  id: totrans-148
   prefs: []
   type: TYPE_NORMAL
+  zh: 由于必须关闭 Prometheus 块压缩才能使 Thanos sidecar 上传功能可靠工作，因此这项工作被委托给一个不同的组件：Thanos 压缩。它设计用于采用与
+    Prometheus 存储引擎相同的压缩策略，但应用于对象存储中的块。由于不能直接在对象存储中进行压缩，因此该组件需要相当多的可用空间（几百 GB，具体取决于远程存储的数据量）来处理这些块。
 - en: 'Another important function Thanos compact performs is creating downsampled
     samples. The biggest advantage of downsampling is querying large time ranges reliably,
     without needing to pull an overwhelming amount of data. The usage of `*_over_time`
@@ -769,78 +1099,117 @@
     in time, which you wouldn''t be able to do with just downsampled data. There are
     three flags for managing the retention of data (that is, how long to keep it)
     in raw, five minute, and one hour form, as shown in the following table:'
+  id: totrans-149
   prefs: []
   type: TYPE_NORMAL
+  zh: Thanos 压缩的另一个重要功能是创建下采样样本。下采样的最大优点是可以可靠地查询较大的时间范围，而无需拉取大量数据。当使用下采样数据时，强烈建议使用`*_over_time`函数（如在[第
+    7 章](205ddb34-6ee8-4e22-b80f-39d5b2198c29.xhtml),* Prometheus 查询语言 – PromQL* 中讨论的那样）。这是因为用于下采样的方法不仅仅是删除样本，而是使用五种不同的聚合函数对其进行预聚合。这意味着每个原始时间序列会生成五个新的时间序列。需要特别注意的是，完整分辨率数据只有在
+    40 小时后才会被下采样为五分钟分辨率。同样，使用先前已下采样的五分钟分辨率数据作为来源，经过 10 天后才会生成一小时的下采样数据。保留原始数据可能对缩放到特定时间事件有帮助，而仅仅依靠下采样数据则无法做到这一点。以下是管理数据保留（即保存多长时间）在原始数据、五分钟分辨率和一小时分辨率形式中的三种标志，如下表所示：
 - en: '| **Flag** | **Duration** |'
+  id: totrans-150
   prefs: []
   type: TYPE_TB
+  zh: '| **标志** | **持续时间** |'
 - en: '| `--retention.resolution-raw` | The duration keeps data with a raw resolution
     in the object storage bucket, for example, 365d (it defaults to 0d, which means
     forever) |'
+  id: totrans-151
   prefs: []
   type: TYPE_TB
+  zh: '| `--retention.resolution-raw` | 保持数据以原始分辨率在对象存储桶中保存的持续时间，例如 365d（默认为 0d，即永久保存）
+    |'
 - en: '| `--retention.resolution-5m` | The duration to keep data with 5-minute in
     the object storage bucket, for example, 365d (it defaults to 0d, which means forever)
     |'
+  id: totrans-152
   prefs: []
   type: TYPE_TB
+  zh: '| `--retention.resolution-5m` | 保持数据在对象存储桶中以 5 分钟分辨率保存的时间，例如 365d（默认为 0d，即永久保存）
+    |'
 - en: '| `--retention.resolution-1h` | The duration to keep data with 1-hour in the
     object storage bucket, for example, 365d (it defaults to 0d, which means forever)
     |'
+  id: totrans-153
   prefs: []
   type: TYPE_TB
+  zh: '| `--retention.resolution-1h` | 保持数据在对象存储桶中以 1 小时分辨率保存的时间，例如 365d（默认为 0d，即永久保存）
+    |'
 - en: Each storage bucket should only have one Thanos compactor associated with it,
     as it's not designed to run concurrently.
+  id: totrans-154
   prefs: []
   type: TYPE_NORMAL
+  zh: 每个存储桶应该只关联一个 Thanos 压缩器，因为它并不设计为支持并发运行。
 - en: When considering retention policies, bear in mind that, as the first downsampling
     step aggregates five minutes-worth of data and the aggregation produces five new
     time series, you’d need to have a scrape interval lower than one minute to actually
     save space (the number of samples in the interval needs to be higher than the
     samples produced by the aggregation step).
+  id: totrans-155
   prefs: []
   type: TYPE_NORMAL
+  zh: 在考虑保留策略时，请记住，由于第一步下采样会将五分钟的数据聚合起来，并且该聚合会生成五个新的时间序列，因此您需要拥有低于一分钟的抓取间隔，才能真正节省空间（间隔中的样本数需要大于聚合步骤生成的样本数）。
 - en: 'The compactor can either be run as a daemon which springs to action whenever
     it''s needed, or as single-shot job, exiting at the end of the run. In our test
     environment, we have a Thanos compactor running in the `thanos` instance to manage
     our object storage bucket. It''s running as a service (using the `--wait` flag)
     to make the test environment simpler. The configuration being used is shown in
     the following snippet:'
+  id: totrans-156
   prefs: []
   type: TYPE_NORMAL
+  zh: 压缩器可以作为守护进程运行，必要时启动，或者作为单次任务运行，任务完成后退出。在我们的测试环境中，我们在 `thanos` 实例中运行 Thanos 压缩器来管理我们的对象存储桶。它作为一个服务运行（使用
+    `--wait` 标志），使测试环境更简洁。正在使用的配置如下所示：
 - en: '[PRE17]'
+  id: totrans-157
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE17]'
 - en: Just like the other components, the HTTP endpoint is useful for scraping metrics
     from it. As can be seen in the `retention.*` flags, we're keeping the data in
     all the available resolutions forever. We'll be discussing Thanos bucket next,
     a debugging tool that helps inspect Thanos-managed storage buckets.
+  id: totrans-158
   prefs: []
   type: TYPE_NORMAL
+  zh: 和其他组件一样，HTTP 端点对于抓取指标非常有用。正如 `retention.*` 标志所示，我们将数据保存在所有可用的分辨率中，永久保存。接下来我们将讨论
+    Thanos 桶，这是一个调试工具，用于检查 Thanos 管理的存储桶。
 - en: Thanos bucket
+  id: totrans-159
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: Thanos 桶
 - en: This component of the Thanos ecosystem is responsible for verifying, repairing,
     listing, and inspecting blocks in object storage. Unlike other components, this
     one behaves as a command-line tool instead of a daemon.
+  id: totrans-160
   prefs: []
   type: TYPE_NORMAL
+  zh: Thanos 生态系统的这个组件负责验证、修复、列出和检查对象存储中的数据块。与其他组件不同，这个组件作为命令行工具运行，而不是守护进程。
 - en: 'You can try out the following example of its usage: listing the available blocks
     in our object storage bucket:'
+  id: totrans-161
   prefs: []
   type: TYPE_NORMAL
+  zh: 你可以尝试以下示例，列出我们对象存储桶中可用的数据块：
 - en: '[PRE18]'
+  id: totrans-162
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE18]'
 - en: This tool is very useful for troubleshooting issues and quickly understanding
     the state of blocks in the storage bucket.
+  id: totrans-163
   prefs: []
   type: TYPE_NORMAL
+  zh: 这个工具对于故障排查非常有用，能够快速了解存储桶中数据块的状态。
 - en: Thanos receive
+  id: totrans-164
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: Thanos 接收
 - en: This component, at the time of writing, is still very experimental. However,
     as promised in the *Remote write and read* section of this chapter, this component
     is an excellent example of what remote write is all about, so we decided to show
@@ -848,11 +1217,16 @@
     and stores received samples locally. The receiver also implements a StoreAPI endpoint,
     so it has the ability to act as a store node. Finally, it can also ship blocks
     to object storage, just like sidecar.
+  id: totrans-165
   prefs: []
   type: TYPE_NORMAL
+  zh: 这个组件在写作时仍然是非常实验性的。不过，正如本章*远程写入和读取*部分所承诺的，这个组件是远程写入的一个极好示例，因此我们决定展示它的功能。它作为 Prometheus
+    远程写入请求的目标，并将接收到的样本存储在本地。接收器还实现了 StoreAPI 端点，因此它具有作为存储节点的能力。最后，它也可以像 sidecar 一样将数据块传输到对象存储中。
 - en: To make more sense of what all of this means, let's explore two scenarios.
+  id: totrans-166
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了更好地理解这一切，我们来探讨两种场景。
 - en: A Prometheus server will, by default, generate a block every two hours. Even
     using Thanos sidecar with block shipping, there's no way for Thanos querier to
     get to data that is still in the WAL without sidecar having to request it via
@@ -866,12 +1240,21 @@
     server. You could continue to use Thanos sidecar just to ship blocks and Thanos
     receiver to answer all Thanos querier inquiries, just like a fresh cache, protecting
     the Prometheus write path in the process.
+  id: totrans-167
   prefs: []
   type: TYPE_NORMAL
+  zh: 默认情况下，Prometheus 服务器每两小时生成一个数据块。即使使用 Thanos sidecar 进行数据块传输，Thanos 查询器也无法直接访问仍在
+    WAL 中的数据，除非 sidecar 通过远程读取 API 向 Prometheus 服务器请求数据。当你达到一定规模时，Grafana 或其他 API
+    客户端可能会对 Prometheus 产生巨大的请求负载，最终可能影响 Prometheus 的性能，甚至影响告警功能，尽管如我们之前所见，Prometheus
+    已有一些保护机制。通过使用 Thanos 接收器，你可以将客户端查询简单地转发给它，确保 Prometheus 服务器的主要任务是抓取数据和评估规则。简而言之，你实际上是将
+    Prometheus 服务器的读取与写入操作分离了。你可以继续使用 Thanos sidecar 仅用于传输数据块，而使用 Thanos 接收器来回答所有
+    Thanos 查询器的查询，就像一个新的缓存一样，保护 Prometheus 的写入路径。
 - en: Thanos receiver generates blocks every two hours and, unlike Prometheus, this
     value is hardcoded by design.
+  id: totrans-168
   prefs: []
   type: TYPE_NORMAL
+  zh: Thanos 接收器每两小时生成一个数据块，与 Prometheus 不同，这个值是按设计硬编码的。
 - en: Imagine another scenario where there are several tenants/teams using the infrastructure
     you're managing. If they're technically savvy enough, they'll eventually want
     to manage their own Prometheus servers. You could try to provide all the automation
@@ -882,15 +1265,23 @@
     abstracting the complexity of remote storage from the tenant altogether. This
     would just be the first step in providing long-term storage as a service for your
     infrastructure.
+  id: totrans-169
   prefs: []
   type: TYPE_NORMAL
+  zh: 假设另一个场景，其中有多个租户/团队使用你正在管理的基础设施。如果他们技术足够精通，他们最终会想要管理自己的 Prometheus 服务器。你可以尝试提供所有管理他们服务器所需的自动化，但你很快会遇到瓶颈。一个选择是给他们一个
+    Prometheus 服务器来管理，一个 Thanos 接收端点，以及一个 Thanos 存储端点。Thanos 接收方将负责将块发送到对象存储，Thanos
+    存储将提供一种访问这些数据的方式，从而将远程存储的复杂性完全抽象化。 这将只是为你的基础设施提供长期存储作为服务的第一步。
 - en: 'In our test environment, in the `thanos` instance, we have a Thanos receiver
     running. In the following snippet, we can see its configuration:'
+  id: totrans-170
   prefs: []
   type: TYPE_NORMAL
+  zh: 在我们的测试环境中，在 `thanos` 实例中，我们运行了一个 Thanos 接收方。在下面的代码片段中，我们可以看到它的配置：
 - en: '[PRE19]'
+  id: totrans-171
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE19]'
 - en: 'Since we already have a Thanos sidecar running alongside our Prometheus server,
     which is sending TSDB blocks to object storage, we disabled the shipping functionality
     of the receiver just by not adding the `--objstore.config-file` flag. Notice the
@@ -900,49 +1291,74 @@
     provide the remote write endpoint. If we look into the `prometheus` instance,
     we will see the following configuration, which takes advantage of the aforementioned
     flag:'
+  id: totrans-172
   prefs: []
   type: TYPE_NORMAL
+  zh: 由于我们已经在 Prometheus 服务器旁边运行了一个 Thanos sidecar，它将 TSDB 块发送到对象存储，我们通过不添加 `--objstore.config-file`
+    标志禁用了接收方的发送功能。注意 `--labels` 标志，它允许我们指定一个标签，添加到通过该接收方的 StoreAPI 暴露的所有时间序列中；这实际上是一种配置外部标签的方式。另一个值得注意的标志是
+    `--remote-write.address`，它用于提供远程写入端点。如果我们查看 `prometheus` 实例，我们会看到以下配置，这利用了前述标志：
 - en: '[PRE20]'
+  id: totrans-173
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE20]'
 - en: 'To test all of this, we can simply stop the Thanos sidecar in the `prometheus`
     instance, as follows:'
+  id: totrans-174
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了测试这一切，我们可以简单地停止 `prometheus` 实例中的 Thanos sidecar，方法如下：
 - en: '[PRE21]'
+  id: totrans-175
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE21]'
 - en: 'After doing this, Thanos querier will no longer be able to access Thanos sidecar
     and the recent block information won''t be flushed to disk. This way, we can validate
     whether the receiver will provide this data. If we go over to the Thanos querier
     web interface at [http://192.168.42.12:10902/graph](http://192.168.42.12:10902/graph)
     and run an instant query such as `up{instance=~"prometheus.+"}`, we are presented
     with the following output:'
+  id: totrans-176
   prefs: []
   type: TYPE_NORMAL
+  zh: 完成此操作后，Thanos 查询器将无法访问 Thanos sidecar，并且最近的块信息将不会刷新到磁盘。通过这种方式，我们可以验证接收方是否会提供这些数据。如果我们访问
+    [http://192.168.42.12:10902/graph](http://192.168.42.12:10902/graph) 的 Thanos
+    查询器 Web 界面，并运行像 `up{instance=~"prometheus.+"}` 这样的即时查询，我们将看到以下输出：
 - en: '![](img/926c492e-582f-4f38-b16e-1c524b097a11.png)'
+  id: totrans-177
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/926c492e-582f-4f38-b16e-1c524b097a11.png)'
 - en: 'Figure 14.5: Thanos receiver showing metrics, even with the Thanos sidecar
     down'
+  id: totrans-178
   prefs: []
   type: TYPE_NORMAL
+  zh: 图 14.5：即使 Thanos sidecar 停止，Thanos 接收方仍显示度量
 - en: Note the `store` label, indicating that Thanos receiver is providing data while
     also informing us that Thanos sidecar is currently down. This proves that we can
     query recent data thanks to the Prometheus remote write API.
+  id: totrans-179
   prefs: []
   type: TYPE_NORMAL
+  zh: 请注意 `store` 标签，表示 Thanos 接收方正在提供数据，同时也告诉我们 Thanos sidecar 当前已停止。这证明了我们可以通过 Prometheus
+    的远程写入 API 查询到最近的数据。
 - en: 'The decision to use this component shouldn''t be taken lightly, as it has some
     disadvantages: besides the fact that it is clearly marked as experimental, it
     is effectively a push-based system, like Graphite. This means that all the downsides
     from push-based approaches apply, namely difficulty in managing abusive/rogue
     clients.'
+  id: totrans-180
   prefs: []
   type: TYPE_NORMAL
+  zh: 使用此组件的决策不应轻率作出，因为它存在一些缺点：除了它被明确标记为实验性之外，它实际上是一个基于推送的系统，就像 Graphite 一样。这意味着所有推送式方法的缺点都适用，即管理滥用/恶意客户端的困难。
 - en: Thanos rule
+  id: totrans-181
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: Thanos 规则
 - en: This component allows you to run Prometheus-compatible rules (recording/alerting)
     against remote query endpoints, such as Thanos querier or sidecar. It exposes
     a StoreAPI endpoint to make the results of rule evaluations available, which are
@@ -961,22 +1377,36 @@
     the most. Though Thanos ruler can have a legitimate set of use cases, it shouldn't
     be considered for most alerting needs. Nonetheless, it's important to acknowledge
     its existence.
+  id: totrans-182
   prefs: []
   type: TYPE_NORMAL
+  zh: 这个组件允许你在远程查询端点（如 Thanos querier 或 sidecar）上运行 Prometheus 兼容的规则（记录/告警）。它公开一个
+    StoreAPI 端点，以便将规则评估结果提供出来，结果会存储在本地块中，也可以将这些 TSDB 块发送到对象存储。可以想象将此组件用作规则的集中管理解决方案，而不是将它们分散在多个
+    Prometheus 实例中，但这不是其目的，而且不建议这么做。在本书中，我们强调了规则的重要性，尤其是告警规则。我们还强调了在具有所需指标的 Prometheus
+    实例中本地运行这些规则的重要性。我们提供了一些替代方案，如层级或跨服务联合，用于从不同的 Prometheus 实例收集指标。如果使用 Thanos ruler
+    进行告警，你将向关键路径添加多个故障点：其他 Thanos 组件、网络以及在最坏的情况下，对象存储。告警需要是可预测和可靠的，这样你才可以在最需要时确信它能正常工作。尽管
+    Thanos ruler 有一系列合法的使用场景，但它不应被视为大多数告警需求的解决方案。尽管如此，承认其存在仍然很重要。
 - en: More information regarding the Thanos ruler can be found at [https://thanos.io/components/rule.md](https://thanos.io/components/rule.md/).
+  id: totrans-183
   prefs: []
   type: TYPE_NORMAL
+  zh: 有关 Thanos ruler 的更多信息，请访问 [https://thanos.io/components/rule.md](https://thanos.io/components/rule.md/)。
 - en: 'We now have a complete overview of the Thanos ecosystem and how it''s configured
     on the test environment. We invite you to experiment with all the components while
     evaluating their behavior: for example, stopping all the store APIs except the
     Thanos store or using the Thanos bucket to understand what data is available in
     the object storage bucket.'
+  id: totrans-184
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在我们已经全面了解了 Thanos 生态系统以及它在测试环境中的配置。我们邀请你在评估其行为时，尝试所有组件：例如，停止除 Thanos store
+    以外的所有 store API，或使用 Thanos 存储桶来了解对象存储桶中可用的数据。
 - en: Summary
+  id: totrans-185
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 总结
 - en: In this chapter, we were introduced to remote read and remote write endpoints.
     We learned how the recent remote write strategy using WAL is so important for
     the global performance and availability of Prometheus. Then, we explored some
@@ -986,49 +1416,75 @@
     ecosystem of components, providing practical examples showing how all the different
     pieces work together. With this, we can now build a long-term storage solution
     for Prometheus if we need to.
+  id: totrans-186
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本章中，我们介绍了远程读取和远程写入端点。我们了解了使用 WAL 的远程写入策略对 Prometheus 的全球性能和可用性如此重要。接着，我们探讨了一些保持
+    Prometheus 本地存储可控的替代方案，同时解释了选择长期存储解决方案的影响。最后，我们深入探讨了 Thanos，揭示了一些设计决策并介绍了完整的组件生态系统，提供了实际示例，展示了所有不同组件如何协同工作。通过这些，我们现在可以根据需要为
+    Prometheus 构建长期存储解决方案。
 - en: Questions
+  id: totrans-187
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 问题
 - en: What are the main advantages of a remote write based on WAL?
+  id: totrans-188
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 基于 WAL 的远程写入的主要优点是什么？
 - en: How can you perform a backup of a running Prometheus server?
+  id: totrans-189
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 如何对正在运行的 Prometheus 服务器执行备份？
 - en: Can the disk space of a Prometheus server be freed at runtime? If so, how?
+  id: totrans-190
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 能否在运行时释放 Prometheus 服务器的磁盘空间？如果可以，应该如何操作？
 - en: What are the main advantages of Thanos using object storage?
+  id: totrans-191
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: Thanos 使用对象存储的主要优点是什么？
 - en: Does it make sense to keep data in all available resolutions?
+  id: totrans-192
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 保留所有可用分辨率的数据是否有意义？
 - en: What is the role of Thanos store?
+  id: totrans-193
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: Thanos store 的作用是什么？
 - en: How can you inspect the data that's available in object storage using Thanos?
+  id: totrans-194
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 如何使用 Thanos 检查对象存储中可用的数据？
 - en: Further reading
+  id: totrans-195
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 深入阅读
 - en: '**Prometheus HTTP API**: [https://prometheus.io/docs/prometheus/latest/querying/api/](https://prometheus.io/docs/prometheus/latest/querying/api/)'
+  id: totrans-196
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**Prometheus HTTP API**: [https://prometheus.io/docs/prometheus/latest/querying/api/](https://prometheus.io/docs/prometheus/latest/querying/api/)'
 - en: '**Thanos official website**: [https://thanos.io](https://thanos.io/)'
+  id: totrans-197
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**灭霸官方网站**: [https://thanos.io](https://thanos.io/)'

@@ -1,157 +1,237 @@
 - en: Troubleshooting
+  id: totrans-0
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 故障排除
 - en: Ceph is largely autonomous in taking care of itself and recovering from failure
     scenarios, but in some cases human intervention is required. This chapter will
     look at common errors and failure scenarios and how to bring Ceph back to working
     order by troubleshooting them.
+  id: totrans-1
   prefs: []
   type: TYPE_NORMAL
+  zh: Ceph 在大多数情况下能够自主管理和从故障情景中恢复，但在某些情况下需要人工干预。本章将讨论常见的错误和故障场景，并介绍如何通过故障排除将 Ceph
+    恢复到正常工作状态。
 - en: 'In this chapter we will cover the following topics:'
+  id: totrans-2
   prefs: []
   type: TYPE_NORMAL
+  zh: 本章将涉及以下主题：
 - en: How to correctly repair inconsistent objects
+  id: totrans-3
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 如何正确修复不一致的对象
 - en: How to solve problems with the help of peering
+  id: totrans-4
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 如何通过对等来解决问题
 - en: How to deal with `near_full` and `too_full` OSDs
+  id: totrans-5
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 如何处理 `near_full` 和 `too_full` OSD
 - en: How to investigate errors via Ceph logging
+  id: totrans-6
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 如何通过 Ceph 日志调查错误
 - en: How to investigate poor performance
+  id: totrans-7
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 如何调查性能问题
 - en: How to investigate PGs in a down state
+  id: totrans-8
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 如何调查处于停机状态的 PG
 - en: Repairing inconsistent objects
+  id: totrans-9
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 修复不一致的对象
 - en: With BlueStore, all data is checksumed by default, so the steps in this section
     to safely determine the correct copy of the object no longer apply.
+  id: totrans-10
   prefs: []
   type: TYPE_NORMAL
+  zh: 使用 BlueStore 时，所有数据默认都会进行校验和检查，因此本节中用于安全确认对象副本的步骤不再适用。
 - en: 'We will now see how we can correctly repair inconsistent objects:'
+  id: totrans-11
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在我们将展示如何正确修复不一致的对象：
 - en: 'To be able to recreate an inconsistent scenario, create an RBD, and later we''ll
     make a filesystem on it:'
+  id: totrans-12
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 为了能够重现不一致的场景，创建一个 RBD，稍后我们将在其上创建文件系统：
 - en: '![](img/07131b2d-a45a-446f-b60a-e029ac54549d.png)'
+  id: totrans-13
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/07131b2d-a45a-446f-b60a-e029ac54549d.png)'
 - en: 'Check to see which objects have been created by formatting the RBD with a filesystem:'
+  id: totrans-14
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 通过检查已创建的对象，确定通过格式化 RBD 后文件系统上创建的对象：
 - en: '![](img/7473fca0-98dc-42ca-b93c-651d0ba4b467.png)'
+  id: totrans-15
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/7473fca0-98dc-42ca-b93c-651d0ba4b467.png)'
 - en: 'Pick one object at random and use the `osd map` command to find out which PG
     the object is stored in:'
+  id: totrans-16
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 随机选择一个对象，并使用 `osd map` 命令找出该对象存储在哪个 PG 中：
 - en: '![](img/0b42bd82-9f14-4bc1-9327-194ba0dadd0c.png)'
+  id: totrans-17
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/0b42bd82-9f14-4bc1-9327-194ba0dadd0c.png)'
 - en: 'Find this object on the disk on one of the OSD nodes; in this case, it is `OSD.0`
     on `OSD1`:'
+  id: totrans-18
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在一个 OSD 节点的磁盘上找到该对象；在此案例中，它位于 `OSD1` 上的 `OSD.0`：
 - en: '![](img/d3c6ed04-34c8-48ca-8728-6ea21a10cc01.png)'
+  id: totrans-19
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/d3c6ed04-34c8-48ca-8728-6ea21a10cc01.png)'
 - en: 'Corrupt it by echoing garbage over the top of it:'
+  id: totrans-20
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 通过向其写入垃圾数据来破坏它：
 - en: '![](img/649ee1fe-2df4-4335-8864-7a2463d82dec.png)'
+  id: totrans-21
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/649ee1fe-2df4-4335-8864-7a2463d82dec.png)'
 - en: 'Tell Ceph to do a scrub on the PG that contains the object we corrupted:'
+  id: totrans-22
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 告诉 Ceph 对我们破坏的对象所在的 PG 执行清理：
 - en: '![](img/88baf197-08c4-4eff-8fda-3494cb3b8983.png)'
+  id: totrans-23
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/88baf197-08c4-4eff-8fda-3494cb3b8983.png)'
 - en: 'If you check the Ceph status, you will see that Ceph has detected the corrupted
     object and marked the PG as inconsistent. From this point onward, forget that
     we corrupted the object manually and work through the process as if it were for
     real:'
+  id: totrans-24
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 如果你检查 Ceph 状态，你将看到 Ceph 已经检测到损坏的对象并将 PG 标记为不一致。从现在开始，忘记我们手动破坏对象的事实，按照正常流程进行修复：
 - en: '![](img/7cee2fad-1997-4a02-a5cd-a53fc520565c.png)'
+  id: totrans-25
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/7cee2fad-1997-4a02-a5cd-a53fc520565c.png)'
 - en: By looking at the detailed health report, we can find the PG that contains the
     corrupted object. We could just tell Ceph to repair the PG now; however, if the
     primary OSD is the one that holds the corrupted object, it will overwrite the
     remaining good copies. This would be bad, so in order to make sure this doesn't
     happen, before running the `repair` command, we will confirm which OSD holds the
     corrupt object.
+  id: totrans-26
   prefs: []
   type: TYPE_NORMAL
+  zh: 通过查看详细的健康报告，我们可以找到包含损坏对象的 PG。我们可以直接让 Ceph 修复 PG；但是，如果主要的 OSD 持有损坏的对象，它将覆盖其余的正常副本。这是不可取的，因此为了确保这种情况不会发生，在运行
+    `repair` 命令之前，我们将确认哪个 OSD 持有损坏的对象。
 - en: '![](img/03111330-f1b8-4f31-92c6-fd6cb77f37e3.png)'
+  id: totrans-27
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/03111330-f1b8-4f31-92c6-fd6cb77f37e3.png)'
 - en: By looking at the health report, we can see the three OSDs that hold a copy
     of the object; the first OSD is the primary.
+  id: totrans-28
   prefs: []
   type: TYPE_NORMAL
+  zh: 通过查看健康报告，我们可以看到持有对象副本的三台 OSD；第一台 OSD 是主 OSD。
 - en: Log onto the primary OSD node and open the log file for the primary OSD. You
     should be able to find the log entry that indicates what object was flagged by
     the PG scrub.
+  id: totrans-29
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 登录到主 OSD 节点并打开主 OSD 的日志文件。你应该能够找到标明哪个对象被 PG 清理标记的日志条目。
 - en: 'Navigate through the PG structure, find the object mentioned in the log file,
     and calculate a `md5sum` of each copy:'
+  id: totrans-30
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 浏览 PG 结构，找到日志文件中提到的对象，并计算每个副本的 `md5sum`：
 - en: '![](img/498fda62-7f79-4431-8771-1f64691af145.png)'
+  id: totrans-31
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/498fda62-7f79-4431-8771-1f64691af145.png)'
 - en: '`md5sum` of object on `osd` node one.'
+  id: totrans-32
   prefs: []
   type: TYPE_NORMAL
+  zh: '`md5sum` 计算 `osd` 节点一上的对象。'
 - en: '![](img/e1633c2f-2f8c-4009-a610-75059eb6a8cc.png)'
+  id: totrans-33
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/e1633c2f-2f8c-4009-a610-75059eb6a8cc.png)'
 - en: '`md5sum` of object on `osd` node two.'
+  id: totrans-34
   prefs: []
   type: TYPE_NORMAL
+  zh: '`md5sum` 计算 `osd` 节点二上的对象。'
 - en: '![](img/e4ccb034-e57a-4107-acf2-e93029fa69c2.png)'
+  id: totrans-35
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/e4ccb034-e57a-4107-acf2-e93029fa69c2.png)'
 - en: '`md5sum` of object on `osd` node three.'
+  id: totrans-36
   prefs: []
   type: TYPE_NORMAL
+  zh: '`md5sum`的对象在`osd`节点三。'
 - en: We can see that the object on `OSD.0` has a different `md5sum`, and so we know
     that it is the corrupt object.
+  id: totrans-37
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们可以看到`OSD.0`上的对象有不同的`md5sum`，因此我们知道它是那个损坏的对象。
 - en: '[PRE0]'
+  id: totrans-38
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE0]'
 - en: 'Although we already know which copy of the object was corrupted as we manually
     corrupted the object on `OSD.0`, let''s pretend we hadn''t done it, and that this
     corruption was caused by some random cosmic ray. We now have the `md5sum` of the
@@ -161,67 +241,98 @@
     is 2, as can be seen in both the Ceph health details and the Ceph `OSD map` commands,
     we can safely run the `ceph pg repair` command without the fear of copying the
     bad object over the top of the remaining good copies:'
+  id: totrans-39
   prefs: []
   type: TYPE_NORMAL
+  zh: 尽管我们已经知道哪个对象副本被破坏，因为我们手动在`OSD.0`上破坏了该对象，假设我们没有这么做，并且这个破坏是由某些随机的宇宙射线造成的。现在我们有了三个副本的`md5sum`，并且可以清楚地看到`OSD.0`上的副本是错误的。这就是为什么2x复制方案不好的一大原因；如果PG变得不一致，你无法分辨哪个副本是坏的。由于该PG的主OSD是2，正如在Ceph健康详情和Ceph
+    `OSD map`命令中看到的，我们可以放心地运行`ceph pg repair`命令，而不必担心将坏对象覆盖到剩余的好副本上：
 - en: '![](img/a17d3536-836b-47bb-8cb4-b9c5c63fa0b6.png)'
+  id: totrans-40
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/a17d3536-836b-47bb-8cb4-b9c5c63fa0b6.png)'
 - en: 'We can see that the inconsistent PG has repaired itself:'
+  id: totrans-41
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们可以看到不一致的PG已经自我修复：
 - en: '![](img/cc5c798c-1389-4ab6-b0f4-1c80d33d4cbc.png)'
+  id: totrans-42
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/cc5c798c-1389-4ab6-b0f4-1c80d33d4cbc.png)'
 - en: 'In the event that the copy is corrupt on the primary OSD, then the following
     steps should be taken:'
+  id: totrans-43
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果主OSD上的副本损坏，则应采取以下步骤：
 - en: Stop the primary OSD.
+  id: totrans-44
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 停止主OSD。
 - en: Delete the object from the PG directory.
+  id: totrans-45
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 从PG目录中删除该对象。
 - en: Restart the OSD.
+  id: totrans-46
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 重启OSD。
 - en: Instruct Ceph to repair the PG.
+  id: totrans-47
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 指示Ceph修复PG。
 - en: Full OSDs
+  id: totrans-48
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 完整的OSD
 - en: By default, Ceph will warn us when OSD utilization approaches 85%, and it will
     stop writing I/O to the OSD when it reaches 95%. If, for some reason, the OSD
     completely fills up to 100%, the OSD is likely to crash and will refuse to come
     back online. An OSD that is above the 85% warning level will also refuse to participate
     in backfilling, so the recovery of the cluster may be impacted when OSDs are in
     a near-full state.
+  id: totrans-49
   prefs: []
   type: TYPE_NORMAL
+  zh: 默认情况下，当OSD的利用率接近85%时，Ceph会警告我们，并且当达到95%时，它将停止向OSD写入I/O。如果由于某些原因，OSD完全填满至100%，OSD很可能会崩溃，并拒绝重新上线。一个超过85%警告级别的OSD也会拒绝参与回填，因此当OSD处于接近满载状态时，集群的恢复可能会受到影响。
 - en: Before covering the troubleshooting steps around full OSDs, it is highly recommended
     that you monitor the capacity utilization of your OSDs, as described in [Chapter
     8](e1176b5d-603f-424a-83db-023605c29083.xhtml), *Monitoring Ceph*. This will give
     you advanced warning as OSDs approach the `near_full` warning threshold.
+  id: totrans-50
   prefs: []
   type: TYPE_NORMAL
+  zh: 在讨论有关满载OSD的故障排除步骤之前，强烈建议你监控OSD的容量利用率，正如在[第8章](e1176b5d-603f-424a-83db-023605c29083.xhtml)《监控Ceph》中所述。这将为你提供提前警告，提醒OSD接近`near_full`警告阈值。
 - en: 'If you find yourself in a situation where your cluster is above the near-full
     warning state, you have two options:'
+  id: totrans-51
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你发现集群的状态接近满载警告状态，你有两个选择：
 - en: Add some more OSDs
+  id: totrans-52
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 增加一些更多的OSD。
 - en: Delete some data
+  id: totrans-53
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 删除一些数据。
 - en: However, in the real world, both of these are either impossible or will take
     time, in which case the situation can deteriorate. If the OSD is only at the `near_full`
     threshold, you can probably get things back on track by checking whether your
@@ -229,56 +340,80 @@
     in more detail in [Chapter 9](5c0bf2de-c75e-4aa7-b3d9-8a1e038e3735.xhtml), *Tuning
     Ceph*. The same applies to the `too_full` OSDs as; although you are unlikely going
     to get them back below 85%, at least you can resume write operations.
+  id: totrans-54
   prefs: []
   type: TYPE_NORMAL
+  zh: 然而，在现实世界中，这两种情况要么是不可能的，要么需要时间，这时情况可能会恶化。如果OSD仅处于`near_full`阈值，你可能通过检查OSD的利用率是否平衡来重新调整状态，然后执行PG平衡操作。如果没有平衡，这在[第9章](5c0bf2de-c75e-4aa7-b3d9-8a1e038e3735.xhtml)《调整Ceph》中有更详细的说明。`too_full`的OSD也适用相同的方法；虽然你不太可能将它们恢复到85%以下，但至少可以恢复写操作。
 - en: If your OSDs have completely filled up, they are in an offline state and will
     refuse to start. Now you have an additional problem. If the OSDs will not start,
     no matter what rebalancing or deletion of data you carry out, it will not be reflected
     on the full OSDs as they are offline. The only way to recover from this situation
     is to manually delete some PGs from the disk's filesystem to let the OSD start.
+  id: totrans-55
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你的OSD完全满了，它们将处于离线状态，并且会拒绝启动。现在你遇到了一个额外的问题。如果OSD无法启动，无论你进行什么重新平衡或删除数据，都无法在已满的OSD上反映出来，因为它们处于离线状态。唯一能从这种情况恢复的方法是手动从磁盘文件系统中删除一些PG，以便OSD可以启动。
 - en: 'The following steps should be undertaken for this:'
+  id: totrans-56
   prefs: []
   type: TYPE_NORMAL
+  zh: 为此应采取以下步骤：
 - en: Make sure the OSD process is not running.
+  id: totrans-57
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 确保OSD进程没有在运行。
 - en: Set `nobackfill` on the cluster, to stop the recovery from happening when the
     OSD comes back online.
+  id: totrans-58
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在集群上设置`nobackfill`，以防止OSD重新上线时发生恢复。
 - en: Find a PG that is in an active, clean, and remapped state and exists on the
     offline OSD.
+  id: totrans-59
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 找到一个处于活动、清洁和重新映射状态并存在于离线OSD上的PG。
 - en: Delete this PG from the offline OSD using ceph-objectstore-tool.
+  id: totrans-60
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 使用ceph-objectstore-tool从离线OSD删除该PG。
 - en: Restart the OSD.
+  id: totrans-61
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 重启OSD。
 - en: Delete data from the Ceph cluster or rebalance the PGs.
+  id: totrans-62
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 从Ceph集群中删除数据或重新平衡PG。
 - en: Remove `nobackfill`.
+  id: totrans-63
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 移除`nobackfill`。
 - en: Run a scrub and repair the PG you just deleted.
+  id: totrans-64
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 运行擦除操作并修复你刚刚删除的PG。
 - en: Ceph logging
+  id: totrans-65
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: Ceph日志
 - en: 'When investigating errors, it is very handy to be able to look through the
     Ceph log files to get a better idea of what is going on. By default, the logging
     levels are set so that only the important events are logged. During troubleshooting,
@@ -287,43 +422,62 @@
     new logging level, and then restart the component, or, if you don''t wish to restart
     the Ceph daemons, you can inject the new configuration parameter into the live
     running daemon. To inject parameters, use the `ceph tell` command:'
+  id: totrans-66
   prefs: []
   type: TYPE_NORMAL
+  zh: 在调查错误时，能够查看Ceph日志文件非常方便，这有助于更好地了解发生了什么。默认情况下，日志级别设置为只记录重要事件。在故障排除过程中，可能需要提高日志级别，以揭示错误的原因。要提高日志级别，你可以编辑`ceph.conf`，添加新的日志级别，然后重启组件，或者，如果你不希望重启Ceph守护进程，你可以将新的配置参数注入到正在运行的守护进程中。要注入参数，可以使用`ceph
+    tell`命令：
 - en: '[PRE1]'
+  id: totrans-67
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE1]'
 - en: Then, set the logging level for the OSD log on `osd.0` to `0/5`. The number
     `0` is the disk logging level, and the number `5` is the in-memory logging level.
+  id: totrans-68
   prefs: []
   type: TYPE_NORMAL
+  zh: 然后，将`osd.0`的OSD日志级别设置为`0/5`。数字`0`表示磁盘日志级别，数字`5`表示内存日志级别。
 - en: At a logging level of `20`, the logs are extremely verbose and will grow quickly.
     Do not keep high-verbosity logging enabled for too long. Higher logging levels
     will also have an impact on performance.
+  id: totrans-69
   prefs: []
   type: TYPE_NORMAL
+  zh: 在`20`的日志级别下，日志会非常详细且快速增长。不要长时间保持高详细度日志开启。更高的日志级别也会影响性能。
 - en: Slow performance
+  id: totrans-70
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 慢性能
 - en: Slow performance is defined as when the cluster is actively processing I/O requests,
     but it appears to be operating at a lower performance level than what is expected.
     Generally, slow performance is caused by a component of your Ceph cluster reaching
     saturation and becoming a bottleneck. This maybe due to an increased number of
     client requests or a component failure that is causing Ceph to perform recovery.
+  id: totrans-71
   prefs: []
   type: TYPE_NORMAL
+  zh: 慢性能定义为集群正在积极处理I/O请求，但似乎运行在低于预期的性能水平。通常，慢性能是由于Ceph集群的某个组件达到了饱和并成为瓶颈。这可能是由于客户端请求增加或组件故障，导致Ceph执行恢复操作。
 - en: Causes
+  id: totrans-72
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 原因
 - en: Although there are many things that may cause Ceph to experience slow performance,
     here are some of the most likely causes.
+  id: totrans-73
   prefs: []
   type: TYPE_NORMAL
+  zh: 虽然有许多原因可能导致Ceph性能变慢，以下是一些最可能的原因。
 - en: Increased client workload
+  id: totrans-74
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 客户端工作负载增加
 - en: Sometimes, slow performance may not be due to an underlying fault; it may just
     be that the number and type of client requests may have exceeded the capability
     of the hardware. Whether this is due to a number of separate workloads all running
@@ -331,23 +485,31 @@
     are capturing the number of client requests across your cluster, this should be
     easy to trend. If the increased workload looks like it's permanent, the only solution
     is to add some additional hardware.
+  id: totrans-75
   prefs: []
   type: TYPE_NORMAL
+  zh: 有时候，性能慢可能不是由于底层故障引起的；可能只是客户端请求的数量和类型超出了硬件的承载能力。无论是多个独立工作负载同时运行，还是在一段时间内缓慢增加的工作负载，如果你在集群中捕获客户端请求的数量，这应该很容易进行趋势分析。如果增加的工作负载看起来像是永久性的，那么唯一的解决方案就是增加一些额外的硬件。
 - en: Down OSDs
+  id: totrans-76
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 故障OSD
 - en: If a significant number of OSDs are marked as down in a cluster, perhaps due
     to a whole OSD node going offline – although recovery will not start until the
     OSDs are marked out – the performance will be affected, as the number of IOPs
     available to service the client IO will now be lower. Your monitoring solution
     should alert you if this is happening and allow you to take action.
+  id: totrans-77
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果在集群中有大量OSD被标记为**down**，可能是由于整个OSD节点下线——虽然恢复操作不会开始，直到OSD被标记为**out**——但性能会受到影响，因为现在可用于服务客户端IO的IOPS数量将减少。如果发生这种情况，你的监控解决方案应该会发出警报，并允许你采取相应的措施。
 - en: Recovery and backfilling
+  id: totrans-78
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 恢复与填充
 - en: When an OSD is marked out, the affected PGs will re-peer with new OSDs and start
     the process of recovering and backfilling data across the cluster. This process
     can put a strain on the disks in a Ceph cluster and lead to higher latencies for
@@ -355,12 +517,16 @@
     backfilling by reducing the rate and priority. These should be evaluated against
     the impact of slower recovery from failed disks, which may reduce the durability
     of the cluster.
+  id: totrans-79
   prefs: []
   type: TYPE_NORMAL
+  zh: 当一个OSD被标记为**out**时，受影响的PG将与新的OSD重新配对，并开始在集群中恢复和填充数据的过程。这个过程可能会对Ceph集群中的磁盘造成压力，并导致客户端请求的延迟增加。有几个调优选项可以通过降低恢复速率和优先级来减少填充的影响。这些应该与从故障磁盘恢复较慢所带来的影响进行权衡，因为这可能会降低集群的持久性。
 - en: Scrubbing
+  id: totrans-80
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 检查
 - en: When Ceph performs deep scrubbing to check your data for any inconsistencies,
     it has to read all the objects from the OSD; this can be a very IO-intensive task,
     and on large drives, the process can take a long time. Scrubbing is vital to protect
@@ -368,71 +534,102 @@
     were discussed in Chapter 9, *Tuning Ceph*, regarding setting windows for scrubbing
     and its priority. By tweaking these settings, a lot of the performance impact
     on client workloads from scrubbing can be avoided.
+  id: totrans-81
   prefs: []
   type: TYPE_NORMAL
+  zh: 当Ceph执行深度检查以检查数据是否存在不一致时，它必须读取OSD中的所有对象；这可能是一个非常IO密集的任务，在大容量磁盘上，这个过程可能需要很长时间。深度检查对于防止数据丢失至关重要，因此不应禁用。在第9章《*调优Ceph*》中讨论了各种调优选项，关于设置深度检查的时间窗口和优先级。通过调整这些设置，可以避免深度检查对客户端工作负载的性能影响。
 - en: Snaptrimming
+  id: totrans-82
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 快照修剪
 - en: When you remove a snapshot, Ceph has to delete all the objects that have been
     created due to the copy-on-write nature of the snapshot process. From Ceph 10.2.8
     onward, there is an improved OSD setting called `osd_snap_trim_sleep`, which makes
     Ceph wait for the specified number of settings between the trimming of each snapshot
     object. This ensures that the backing object store does not become overloaded.
+  id: totrans-83
   prefs: []
   type: TYPE_NORMAL
+  zh: 当你删除一个快照时，Ceph必须删除由于快照过程中的写时复制特性所创建的所有对象。从Ceph 10.2.8开始，提供了一个改进的OSD设置`osd_snap_trim_sleep`，使Ceph在修剪每个快照对象之间等待指定的时间间隔。这确保了后端对象存储不会过载。
 - en: Although this setting was available in previous jewel releases, its behavior
     was not the same and should not be used.
+  id: totrans-84
   prefs: []
   type: TYPE_NORMAL
+  zh: 尽管在之前的Jewel版本中已有此设置，但其行为有所不同，且不应使用。
 - en: Hardware or driver issues
+  id: totrans-85
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 硬件或驱动程序问题
 - en: If you have recently introduced new hardware into your Ceph cluster and, after
     backfilling has rebalanced your data, you start experiencing slow performance,
     check for firmware or driver updates relating to your hardware, as newer drivers
     may require a newer kernel. If you have only introduced a small amount of hardware,
     you can temporarily mark the OSDs out on it without going below your pool's `min_size`;
     this can be a good way to rule out hardware issues.
+  id: totrans-86
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你最近将新硬件引入到 Ceph 集群中，并且在数据回填重新平衡后开始遇到性能缓慢，检查与硬件相关的固件或驱动程序更新，因为较新的驱动程序可能需要更新的内核。如果你仅引入了少量硬件，你可以暂时将其中的
+    OSD 标记为不可用，而不低于池的 `min_size`；这可以是排除硬件问题的好方法。
 - en: Monitoring
+  id: totrans-87
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 监控
 - en: This is where the monitoring you configured in Chapter 8, *Tiering with Ceph,*
     can really come in handy, as it will allow you to compare long-term trends with
     current metric readings and see whether there are any clear anomalies.
+  id: totrans-88
   prefs: []
   type: TYPE_NORMAL
+  zh: 这是你在第 8 章 *Ceph 分层* 中配置的监控真正派上用场的地方，它可以让你将长期趋势与当前的指标数据进行对比，并查看是否存在明显的异常。
 - en: It is recommended you first look at the disk performance as, in most cases of
     poor performance, the underlying disks are normally the components that become
     the bottleneck.
+  id: totrans-89
   prefs: []
   type: TYPE_NORMAL
+  zh: 建议你首先查看磁盘性能，因为在大多数性能不佳的情况下，底层磁盘通常是成为瓶颈的组件。
 - en: If you do not have monitoring configured or wish to manually drill deeper into
     the performance metrics, there are a number of tools you can use to accomplish
     this.
+  id: totrans-90
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你没有配置监控，或者希望手动深入挖掘性能指标，有许多工具可以帮助你实现这一目标。
 - en: iostat
+  id: totrans-91
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: iostat
 - en: '`iostat` can be used to get a running overview of the performance and latency
     of all the disks running in your OSD nodes. Run `iostat` with the following command:'
+  id: totrans-92
   prefs: []
   type: TYPE_NORMAL
+  zh: '`iostat` 可以用来实时查看你所有 OSD 节点上磁盘的性能和延迟。使用以下命令运行 `iostat`：'
 - en: '[PRE2]'
+  id: totrans-93
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE2]'
 - en: 'You will get a display similar to this, which will refresh once a second:'
+  id: totrans-94
   prefs: []
   type: TYPE_NORMAL
+  zh: 你将看到类似这样的显示，每秒刷新一次：
 - en: '![](img/4e342165-b756-45b0-b46d-77d9cd040e68.png)'
+  id: totrans-95
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/4e342165-b756-45b0-b46d-77d9cd040e68.png)'
 - en: As a rule of thumb, if a large number of your disks are showing a high `%` util
     over a period of time, it is likely that your disks are being saturated. It may
     also be worth looking at the `r_await` time to see whether read requests are taking
@@ -440,72 +637,104 @@
     earlier, if you find that high disk utilization is the cause of slow performance
     and the triggering factor is unlikely to dissipate soon, extra disks are the only
     solution.
+  id: totrans-96
   prefs: []
   type: TYPE_NORMAL
+  zh: 一般来说，如果你的磁盘在一段时间内显示出较高的 `%` 利用率，那么很可能你的磁盘已经达到饱和。你还可以查看 `r_await` 时间，看看读取请求是否比你在
+    OSD 节点上预期的磁盘类型需要的时间更长。如前所述，如果你发现高磁盘利用率是导致性能缓慢的原因，并且触发因素不太可能很快消失，增加磁盘是唯一的解决办法。
 - en: htop
+  id: totrans-97
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: htop
 - en: 'Like the standard top utility, `htop` provides a live view of the CPU and the
     memory consumption of the host. However, it also produces a more intuitive display
     that may make judging overall system-resource use easier, especially with the
     rapidly-changing resource usage of Ceph:'
+  id: totrans-98
   prefs: []
   type: TYPE_NORMAL
+  zh: 与标准的 top 工具类似，`htop` 提供了主机 CPU 和内存消耗的实时视图。然而，它也生成了一个更直观的显示，这可以使判断系统资源使用情况变得更容易，特别是对于
+    Ceph 资源使用快速变化的情况：
 - en: '![](img/0f53b1ff-e4ce-4d2f-a58d-6f82e4202196.png)'
+  id: totrans-99
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/0f53b1ff-e4ce-4d2f-a58d-6f82e4202196.png)'
 - en: atop
+  id: totrans-100
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: atop
 - en: atop is another useful tool. It captures performance metrics for CPU, RAM, disk,
     network, and can present this all in one view; this makes it very easy to get
     a complete overview of the system resource usage.
+  id: totrans-101
   prefs: []
   type: TYPE_NORMAL
+  zh: atop 是另一个有用的工具。它可以捕获 CPU、RAM、磁盘、网络的性能指标，并将这些指标展示在一个视图中；这样，你可以轻松地获得系统资源使用的完整概览。
 - en: Diagnostics
+  id: totrans-102
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 诊断
 - en: 'There are a number of internal Ceph tools that can be used to help diagnose
     slow performance. The most useful command for investigating slow performance is
     dumping current inflight operations, which can be done with the following command:'
+  id: totrans-103
   prefs: []
   type: TYPE_NORMAL
+  zh: 有一些内部的 Ceph 工具可以帮助诊断性能缓慢问题。调查性能问题时最有用的命令是转储当前的飞行操作，可以通过以下命令完成：
 - en: '[PRE3]'
+  id: totrans-104
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE3]'
 - en: 'This will dump all current operations for the specified OSD and break down
     all the various timings for each step of the operation. Here is an example of
     an inflight IO:'
+  id: totrans-105
   prefs: []
   type: TYPE_NORMAL
+  zh: 这将转储指定 OSD 当前的所有操作，并细分每个操作步骤的各种时间。以下是一个飞行中的 IO 示例：
 - en: '![](img/1e43402e-9b97-44e2-b365-76ae84c5b8b6.png)'
+  id: totrans-106
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/1e43402e-9b97-44e2-b365-76ae84c5b8b6.png)'
 - en: From the previous example IO, we can see all the stages that are logged for
     each operation; it is clear that this operation is running without any performance
     problems. However, in the event of slow performance, you may see a large delay
     between two steps, and directing your investigation into this area may lead you
     to the root cause.
+  id: totrans-107
   prefs: []
   type: TYPE_NORMAL
+  zh: 从前面的 IO 示例中，我们可以看到每个操作的各个阶段都被记录下来；显然该操作没有任何性能问题。然而，在性能缓慢的情况下，你可能会看到两个步骤之间存在较大的延迟，集中调查这个区域可能会引导你找到根本原因。
 - en: Extremely slow performance or no IO
+  id: totrans-108
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 极端缓慢的性能或没有 IO
 - en: If your cluster is performing really slowly, to the point that it is barely
     servicing IO requests, there is probably an underlying fault or configuration
     issue. These slow requests will likely be highlighted on the Ceph status display
     with a counter for how long the request has been blocked. There are a number of
     things to check in this case.
+  id: totrans-109
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你的集群运行非常缓慢，几乎无法处理 IO 请求，可能存在潜在的故障或配置问题。这些缓慢的请求通常会在 Ceph 状态显示中以被阻塞的时间计数器的形式突出显示。在这种情况下，有很多事情需要检查。
 - en: Flapping OSDs
+  id: totrans-110
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: OSD 波动
 - en: Check `ceph.log` on the monitors, and see whether it looks like any OSDs are
     flapping up and down. When an OSD joins a cluster, its PGs begin peering. During
     this peering process, IO is temporarily halted, so in the event of a number of
@@ -514,24 +743,35 @@
     and see whether there are any clues as to what is causing them to flap. Flapping
     OSDs can be tough to track down as there can be several different causes, and
     the problem can be widespread.
+  id: totrans-111
   prefs: []
   type: TYPE_NORMAL
+  zh: 检查监视器上的 `ceph.log`，查看是否有任何 OSD 波动的迹象。当 OSD 加入集群时，它的 PG 开始进行对等操作。在对等过程中，IO 会暂时暂停，因此如果有多个
+    OSD 波动，客户端的 IO 可能会受到严重影响。如果发现 OSD 波动的证据，下一步是查看那些波动的 OSD 的日志，看看是否有任何线索说明它们波动的原因。追踪
+    OSD 波动可能很困难，因为可能有多个不同的原因，且问题可能是广泛存在的。
 - en: Jumbo frames
+  id: totrans-112
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: Jumbo 帧
 - en: Check that a network change hasn't caused problems with jumbo frames if in use.
     If jumbo frames are not working correctly, smaller packets will most likely be
     successfully getting through to other OSDs and MONs, but larger packets will be
     dropped. This will result in OSDs that appear to be half-functioning, and it can
     be very difficult to find an obvious cause. If something odd seems to be happening,
     always check that jumbo frames are being allowed across your network using ping.
+  id: totrans-113
   prefs: []
   type: TYPE_NORMAL
+  zh: 检查是否由于网络变化导致使用中的 Jumbo 帧出现问题。如果 Jumbo 帧工作不正常，小的数据包很可能能够顺利传输到其他 OSD 和 MON，但较大的数据包则会被丢弃。这将导致
+    OSD 显示为半正常工作状态，而找出明显的原因可能非常困难。如果发现有异常情况，始终检查网络是否允许 Jumbo 帧通过，可以使用 ping 命令进行检查。
 - en: Failing disks
+  id: totrans-114
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 故障磁盘
 - en: As Ceph stripes data across all disks in the cluster, a single disk, which is
     in the process of failing but has not yet completely failed, may start to cause
     slow or blocked IO across the cluster. Often, this will be caused by a disk that
@@ -539,71 +779,105 @@
     the disk to completely fail. Normally, a disk will only reallocate sectors when
     a bad sector is written to. Monitoring the SMART stats from the disks will normally
     pick up conditions such as these and allow you to take action.
+  id: totrans-115
   prefs: []
   type: TYPE_NORMAL
+  zh: 由于 Ceph 会将数据条带化分布到集群中的所有磁盘，因此一个正在失败但尚未完全失败的单一磁盘，可能会开始导致集群中的 IO 变慢或被阻塞。通常，这是由于磁盘遭遇大量读错误，但错误还不严重到导致磁盘完全失败。通常，只有当写入坏道时，磁盘才会重新分配扇区。通过监控磁盘的
+    SMART 状态，通常可以发现此类问题并采取相应措施。
 - en: Slow OSDs
+  id: totrans-116
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 慢速 OSD
 - en: Sometimes an OSD may start performing very poorly for no apparent reason. If
     there is nothing obvious being revealed by your monitoring tools, consult `ceph.log`
     and the Ceph health detail output. You can also run Ceph `osd perf`, which will
     list all the commit and apply latencies of all your OSDs and may also help you
     identify a problematic OSD.
+  id: totrans-117
   prefs: []
   type: TYPE_NORMAL
+  zh: 有时候，OSD 可能会在没有明显原因的情况下表现得非常差。如果监控工具没有显示任何明显的问题，可以查看 `ceph.log` 和 Ceph 健康状态的详细输出。你还可以运行
+    Ceph `osd perf`，它会列出所有 OSD 的提交和应用延迟，可能有助于你识别出问题 OSD。
 - en: If there is a common pattern of OSDs referenced in the slow requests, there
     is a good chance that the mentioned OSD is the cause of the problems. It is probably
     worth restarting the OSD in case that resolves the issue; if the OSD is still
     problematic, it would be advisable to mark it out and then replace the OSD.
+  id: totrans-118
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果在慢请求中引用了某种常见模式的 OSD，说明所提到的 OSD 很可能是问题的根源。此时重启 OSD 可能会解决问题；如果 OSD 仍然存在问题，建议标记该
+    OSD 并替换它。
 - en: Out of capacity
+  id: totrans-119
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 容量不足
 - en: If your Ceph cluster fills up past 95%, the OSDs will stop accepting IO. The
     only way to recover from this situation is to delete some data to reduce the utilization
     on each OSD. If an OSD will not start or you are unable to delete data, you can
     adjust the full threshold with the `mon_osd_full_ratio` variable. This will hopefully
     buy you enough time to remove some data and get the cluster into a usable state.
+  id: totrans-120
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果您的 Ceph 集群使用超过 95% 的容量，OSD 将停止接收 I/O 操作。要恢复这种情况，唯一的方法是删除一些数据，以减少每个 OSD 的使用率。如果某个
+    OSD 无法启动或您无法删除数据，您可以通过调整 `mon_osd_full_ratio` 变量来修改满阈值。这将为您争取足够的时间来删除数据，并使集群恢复到可用状态。
 - en: Investigating PGs in a down state
+  id: totrans-121
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 调查处于故障状态的 PG
 - en: 'A PG in a down state will not service any client operations, and any object
     contained within the PG will be unavailable. This will cause slow requests to
     build up across the cluster as clients try to access these objects. The most common
     reason for a PG to be in a down state is when a number of OSDs are offline, which
     means that there are no valid copies of the PGs on any active OSDs. However, to
     find out why a PG is down, you can run the following command:'
+  id: totrans-122
   prefs: []
   type: TYPE_NORMAL
+  zh: 处于故障状态的 PG 将无法提供任何客户端操作，PG 中的任何对象都将无法访问。这会导致集群中的慢请求逐渐积累，因为客户端尝试访问这些对象。PG 处于故障状态最常见的原因是当多个
+    OSD 离线时，这意味着在任何活动的 OSD 上都没有有效的 PG 副本。然而，要找出 PG 故障的原因，您可以运行以下命令：
 - en: '[PRE4]'
+  id: totrans-123
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE4]'
 - en: 'This will produce a large amount of output; the section we are interested in
     shows the peering status. The example here was taken from a PG whose pool was
     set to `min_size` `1` and had data written to it when only OSD `0` was up and
     running. OSD `0` was then stopped and OSDs `1` and `2` were started:'
+  id: totrans-124
   prefs: []
   type: TYPE_NORMAL
+  zh: 这将产生大量输出；我们关注的部分显示了对等状态。此处的示例取自一个池，该池的 `min_size` 设置为 `1`，且在仅有 OSD `0` 启动时已写入数据。然后
+    OSD `0` 被停止，OSD `1` 和 OSD `2` 被启动：
 - en: '![](img/08cc15aa-68de-4a19-b672-bdacb54e86e0.png)'
+  id: totrans-125
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/08cc15aa-68de-4a19-b672-bdacb54e86e0.png)'
 - en: We can see that the peering process is being blocked, as Ceph knows that the
     PG has newer data written to OSD `0`. It has probed OSDs 1 and 2 for the data,
     which means that it didn't find anything it needed. It wants to try to poll OSD
     0, but it can't because the OSD is down, hence the `starting or marking this osd
     lost may let us proceed` message appeared.
+  id: totrans-126
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们可以看到对等过程被阻塞，因为 Ceph 知道 PG 有更新的数据写入 OSD `0`。它已尝试从 OSD `1` 和 OSD `2` 中获取数据，但没有找到所需的内容。它想要重新检查
+    OSD `0`，但由于该 OSD 已停机，无法进行，因此出现了 `starting or marking this osd lost may let us
+    proceed` 消息。
 - en: Large monitor databases
+  id: totrans-127
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 大型监视器数据库
 - en: Ceph monitors use `leveldb` to store all of the required monitor data for your
     cluster. This includes things such as the monitor map, OSD map, and PG map, which
     OSDs and clients pull from the monitors to be able to locate objects in the RADOS
@@ -612,71 +886,103 @@
     discard any of the older cluster maps from its database. If the cluster is in
     a degraded state for an extended period of time and/or the cluster has a large
     number of OSDs, the monitor database can grow very large.
+  id: totrans-128
   prefs: []
   type: TYPE_NORMAL
+  zh: Ceph 监视器使用 `leveldb` 来存储集群所需的所有监视器数据。这包括监视器映射、OSD 映射和 PG 映射等内容，OSD 和客户端从监视器中获取这些信息，以便在
+    RADOS 集群中定位对象。需要特别注意的一点是，在集群健康状况不等于 `HEALTH_OK` 的期间，监视器不会从其数据库中丢弃任何旧的集群映射。如果集群处于降级状态时间过长，或者集群中有大量
+    OSD，监视器数据库可能会变得非常大。
 - en: In normal operating conditions, the monitors are very lightweight on resource
     consumption; because of this, it's quite common for smaller disk sizes to be used
     for the monitors. In the scenario where a degraded condition continues for an
     extended period, it's possible for the disk holding the monitor database to fill
     up, which, if it occurs across all your monitor nodes, will take down the entire
     cluster.
+  id: totrans-129
   prefs: []
   type: TYPE_NORMAL
+  zh: 在正常的操作条件下，监视器对资源的消耗非常轻量；因此，使用较小磁盘来存储监视器是很常见的。在长期处于降级状态的情况下，存储监视器数据库的磁盘可能会满，如果这种情况发生在所有监视节点上，就会导致整个集群宕机。
 - en: To guard against this behavior, it may be worth deploying your monitor nodes
     using LVM so that, if the disks need to be expanded, it can be done a lot more
     easily. When you get into this situation, adding disk space is the only solution,
     until you can get the rest of your cluster into a `HEALTH_OK` state.
+  id: totrans-130
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了防止这种行为，值得考虑使用LVM部署监视节点，这样，如果磁盘需要扩展，可以更轻松地进行。当你遇到这种情况时，增加磁盘空间是唯一的解决方案，直到你能够让集群的其余部分处于`HEALTH_OK`状态。
 - en: 'If your cluster is in a `HEALTH_OK` state, but the monitor database is still
     large, you can compact it by running the following command:'
+  id: totrans-131
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你的集群处于`HEALTH_OK`状态，但监视数据库仍然很大，可以通过运行以下命令来压缩它：
 - en: '[PRE5]'
+  id: totrans-132
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE5]'
 - en: However, this will only work if your cluster is in a `HEALTH_OK` state; the
     cluster will not discard old cluster maps, which can be compacted, until it's
     in a `HEALTH_OK` state.
+  id: totrans-133
   prefs: []
   type: TYPE_NORMAL
+  zh: 然而，这只有在集群处于`HEALTH_OK`状态时才有效；集群不会丢弃旧的集群映射，直到它处于`HEALTH_OK`状态，这些映射才可以被压缩。
 - en: Summary
+  id: totrans-134
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 总结
 - en: In this chapter, you learned how to deal with problems that Ceph is not able
     to solve by itself. You now understand the necessary steps to troubleshoot a variety
     of issues that, if left unhandled, could become bigger problems. Furthermore,
     you have a good idea of the key areas to look at when your Ceph cluster is not
     performing as expected. You should feel confident that you are in a good place
     to handle Ceph-related issues whenever they appear.
+  id: totrans-135
   prefs: []
   type: TYPE_NORMAL
+  zh: 本章中，你学习了如何处理Ceph无法自行解决的问题。现在你已经了解了排查各种问题的必要步骤，如果不处理，这些问题可能会变得更严重。此外，你也了解了在Ceph集群无法正常运行时，应该关注的关键领域。你应该有信心，能够处理任何Ceph相关的问题。
 - en: In the next chapter, we will continue to look into troubleshooting processes
     and will explore the situations where data loss has already happened.
+  id: totrans-136
   prefs: []
   type: TYPE_NORMAL
+  zh: 在下一章，我们将继续探讨故障排除过程，并探讨数据丢失已经发生的情况。
 - en: Questions
+  id: totrans-137
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 问题
 - en: What is the command to repair an inconsistent PG?
+  id: totrans-138
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 修复不一致PG的命令是什么？
 - en: What command can you use to change the logging level on the fly?
+  id: totrans-139
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 你可以使用什么命令来动态更改日志级别？
 - en: Why might the monitor databases grow large over time?
+  id: totrans-140
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 为什么监视数据库随着时间的推移可能会变大？
 - en: What is the command to query a PG?
+  id: totrans-141
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 查询PG的命令是什么？
 - en: Why might scrubbing have a performance impact on a Ceph cluster?
+  id: totrans-142
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 为什么scrubbing会对Ceph集群的性能产生影响？

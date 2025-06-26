@@ -1,0 +1,842 @@
+<html><head></head><body>
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Developing a Customized Solution for Dynamics 365 Business Central</h1>
+                </header>
+            
+            <article>
+                
+<p><span>In the previous chapter, we saw the fundamentals of extension development for Dynamics 365 Business Central and we analyzed all of the building blocks for creating extensions, such as e</span><span>vents and b</span><span>asic objects definitions, and how to e</span><span>xtend standard objects.</span></p>
+<p>In this chapter, we'll put all of these concepts together and create a real-world extension for Dynamics 365 Business Central. These extensions will be created by using <strong>AppSource</strong> guidelines and best code practices.</p>
+<p>This chapter will cover the following topics:</p>
+<ul>
+<li>Translating a business case into a real-world extension</li>
+<li><span>Understanding dependent extension</span></li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Translating a business case into a real-world extension</h1>
+                </header>
+            
+            <article>
+                
+<p>In this section, let's imagine having a Dynamics 365 Business Central customer with various business requirements. We want to create an extension to satisfy this customer's needs.</p>
+<p>Our customer is a big commercial company that has adopted Dynamics 365 Business Central as the company's ERP and has various business requirements that require customization of the standard features to be satisfied.</p>
+<p class="mce-root"/>
+<p>The business requirements are as follows:</p>
+<ul>
+<li>Sales: These requirements include the following:
+<ul>
+<li>The company wants to classify customers based on custom categories that they can define as needed and that can change in the future. Each <kbd>Customer Category</kbd> must have its own details that can be used for some business processes.</li>
+<li>The sales office must be able to create a default <kbd><span>Customer Category</span></kbd> and assign this default value to a customer automatically.</li>
+<li>The sales office needs the possibility to create gift campaigns for customer categories. A gift campaign is related to a limited period of time and a limited set of items.</li>
+<li>A gift campaign can be set to inactive for a certain period of time.</li>
+<li>When a gift campaign is active, the sales order manager must be able to automatically assign free gifts on a customer's sales order (they need a button on a sales order document that analyzes the order content, checks whether a campaign is active, and creates the free gift lines accordingly).</li>
+<li>When a sales operator inserts a sales order line, they should be alerted if the customer is ordering an item quantity near to an active campaign promotion.</li>
+<li>When a sales order is posted, the generated item ledger entry must store the <kbd><span>Customer Category</span></kbd> value (at the time of this order) for reporting purposes.</li>
+</ul>
+</li>
+<li>Vendor quality: These requirements include the following:
+<ul>
+<li>The company has a quality process in place (CSQ, <span>international institute for the certification of business </span>quality) and they need to classify vendors according to their CSQ requirements:
+<ul>
+<li>Score related to item quality (from 1 to 10)</li>
+<li>Score related to delivery on time (from 1 to 10)</li>
+<li>Score related to item packaging (from 1 to 10)</li>
+<li>Score related to pricing (from 1 to 10)</li>
+</ul>
+</li>
+<li>The <kbd>Vendor Quality Card</kbd> must also display some financial data:
+<ul>
+<li>Invoiced for current year <em>N</em></li>
+<li>Invoiced for the year <em>N-1</em></li>
+<li>Invoiced for the year <em>N-2</em></li>
+<li>Amount d<span>ue </span>for this vendor</li>
+<li>Amount to pay (not already due) for this vendor</li>
+</ul>
+</li>
+<li>The assigned scores determine a vendor rating (a numeric value) based on an algorithm.</li>
+<li>The purchase office cannot release a purchase order if the vendor does not meet standard company requirements (the vendor rating).</li>
+<li>The application's behavior could be extended in the future.</li>
+</ul>
+</li>
+</ul>
+<p>These customizations will be developed as a single extension by using the per-tenant range (50.000 – 99.999). We will use AppSource rules and we'll use the <strong>PKT</strong> tag (registered with Microsoft as our AppSource prefix/suffix) to target all of our objects. The project's <kbd>.al</kbd> files will be named according to the AppSource naming conventions.</p>
+<p>We start our development tasks by opening Visual Studio Code and creating a new extension project (<span class="packt_screen">View | Command Palette | AL:GO!</span>), selecting the Wave 2 release as the target.</p>
+<p>We set the extension's manifest file (<kbd>app.json</kbd>) as follows:</p>
+<div>
+<pre><span>{<br/></span><span>  </span><span>"id"</span><span>: </span><span>"dd03d28e-4dfe-48d9-9520-c875595362b6"</span><span>,<br/></span><span>  </span><span>"name"</span><span>: </span><span>"PacktDemoExtension"</span><span>,<br/></span><span>  </span><span>"publisher"</span><span>: </span><span>"SD"</span><span>,<br/></span><span>  </span><span>"brief"</span><span>: </span><span>"Customer Category, Gift Campaigns and Vendor Quality Management"</span><span>,<br/></span><span>  </span><span>"description"</span><span>: </span><span>"Customer Category, Gift Campaigns and Vendor Quality Management"</span><span>,<br/></span><span>  </span><span>"version"</span><span>: </span><span>"1.0.0.0"</span><span>,<br/></span><span>  </span><span>"privacyStatement"</span><span>: </span><span>""</span><span>,<br/></span><span>  </span><span>"EULA"</span><span>: </span><span>""</span><span>,<br/></span><span>  </span><span>"help"</span><span>: </span><span>""</span><span>,<br/></span><span>  </span><span>"url"</span><span>: </span><span>"http://www.demiliani.com"</span><span>,<br/></span><span>  </span><span>"logo"</span><span>: </span><span>"./Logo/ExtLogo.png"</span><span>,<br/></span><span>  </span><span>"dependencies"</span><span>: [<br/></span><span>    {<br/></span><span>      </span><span>"appId"</span><span>: </span><span>"63ca2fa4-4f03-4f2b-a480-172fef340d3f"</span><span>,<br/></span><span>      </span><span>"publisher"</span><span>: </span><span>"Microsoft"</span><span>,<br/></span><span>      </span><span>"name"</span><span>: </span><span>"System Application"</span><span>,<br/></span><span>      </span><span>"version"</span><span>: </span><span>"1.0.0.0"<br/></span><span>    },<br/></span><span>    {<br/></span><span>      </span><span>"appId"</span><span>: </span><span>"437dbf0e-84ff-417a-965d-ed2bb9650972"</span><span>,<br/></span><span>      </span><span>"publisher"</span><span>: </span><span>"Microsoft"</span><span>,<br/></span><span>      </span><span>"name"</span><span>: </span><span>"Base Application"</span><span>,<br/></span><span>      </span><span>"version"</span><span>: </span><span>"15.0.0.0"<br/></span><span>    }<br/></span><span>  ],<br/></span><span>  </span><span>"screenshots"</span><span>: [],<br/></span><span>  </span><span>"platform"</span><span>: </span><span>"15.0.0.0"</span><span>,<br/></span><span>  </span><span>"features"</span><span>: [<br/></span><span>    </span><span>"TranslationFile"<br/></span><span>  ],<br/></span><span>  </span><span>"idRanges"</span><span>: [<br/></span><span>    {<br/></span><span>      </span><span>"from"</span><span>: </span><span>50100</span><span>,<br/></span><span>      </span><span>"to"</span><span>: </span><span>50149<br/></span><span>    }<br/></span><span>  ],<br/></span><span>  </span><span>"contextSensitiveHelpUrl"</span><span>: </span><span>"https://PacktDemoExtension.com/help/"</span><span>,<br/></span><span>  </span><span>"runtime"</span><span>: </span><span>"4.0"<br/></span><span>}</span></pre></div>
+<p>Here, we set the extension details, such as the name, publisher, version, description, the path of the logo image, the admitted object range IDs (from 50100 to 50149), and the supported runtime version.</p>
+<p>We <span>also</span><span> </span><span>set the following option:</span></p>
+<pre>"features": [<br/>    "TranslationFile"<br/>  ]</pre>
+<p><span><span>T</span></span>he <kbd>TranslationFile</kbd> feature means that we want to have an XLIFF translation file that handles the multilanguage capabilities of this extension.</p>
+<p>We want to organize our project structure with subfolders for functionalities and then for object types. Our base project structure will be as follows:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/3ab7a209-2c6d-4bdf-9985-db65ddf18427.png" style="width:12.08em;height:33.92em;"/></p>
+<p>Here, we have an <kbd>Src</kbd> folder, and inside that, we have three main folders for functionalities:</p>
+<ul>
+<li><kbd>CustomerCategory</kbd>: This contains the implementation of the <kbd><span>Customer Category</span></kbd> requirements.</li>
+<li><kbd>Gifts</kbd>: This contains the implementation of the gift campaign requirements.</li>
+<li><kbd>VendorQuality</kbd>: This contains the implementation of the vendor quality requirements.</li>
+</ul>
+<p>Inside each of these folders, we have subfolders organized into object types.</p>
+<p>Let's start working on each of these three modules.</p>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Customer Category implementations</h1>
+                </header>
+            
+            <article>
+                
+<p>To handle the customer category management requirements, we need to do the following:</p>
+<ol>
+<li>Define the <kbd>Customer Category</kbd> table.</li>
+<li>Create the pages (user interface) that will handle the <kbd>Customer Category</kbd> entity (the <kbd>List</kbd> and <kbd>Card</kbd> pages).</li>
+<li>Add a new <kbd>Customer Category</kbd> field to the standard <kbd>Customer</kbd> table.</li>
+<li>Add the new field to the standard <kbd>Customer Card</kbd> page and add some actions to the <kbd>Customer</kbd> pages to handle some tasks.</li>
+<li>Create the business logic to handle the requirements.</li>
+</ol>
+<p>In the next sections, we'll see the definitions and implementations of the various objects in detail.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Tables definition</h1>
+                </header>
+            
+            <article>
+                
+<p>By using the <kbd>ttable</kbd> snippet, we define the <kbd>Customer Category</kbd> table as follows:</p>
+<div>
+<pre><span>t</span><span>able</span><span> </span><span>50100</span><span> "Customer Category_PKT"</span><span><br/></span><span>{<br/></span><span>     DrillDownPageId = "Customer Category List_PKT";<br/></span><span>     LookupPageId = "Customer Category List_PKT";<br/></span><span>     Caption = </span><span>'Customer Category'</span><span>;<br/><br/></span><span>     </span><span>fields<br/></span><span>     {<br/></span><span>         </span><span>field(</span><span>1</span><span>; Code; </span><span>Code</span><span>[</span><span>20</span><span>]</span><span>)<br/></span><span>         {<br/></span><span>             </span><span>DataClassification</span><span> = CustomerContent;<br/></span><span>             Caption = </span><span>'No.'</span><span>;<br/></span><span>         }<br/></span><span>         </span><span>field(</span><span>2</span><span>; Description; </span><span>Text</span><span>[</span><span>50</span><span>]</span><span>)<br/></span><span>         {<br/></span><span>             </span><span>DataClassification</span><span> = CustomerContent;<br/></span><span>             Caption = </span><span>'Description'</span><span>;<br/></span><span>         }<br/></span><span>         </span><span>field(</span><span>3</span><span>; Default; </span><span>Boolean)<br/></span><span>         {<br/></span><span>             </span><span>DataClassification</span><span> = CustomerContent;<br/></span><span>             Caption = </span><span>'Default'</span><span>;<br/></span><span>         }<br/></span><span>         </span><span>field(</span><span>4</span><span>; EnableNewsletter; </span><span>Enum</span><span> NewsletterType</span><span>)<br/></span><span>         {<br/></span><span>             Caption = </span><span>'Enable Newsletter'</span><span>;<br/></span><span>             </span><span>DataClassification</span><span> = CustomerContent;<br/></span><span>         }<br/></span><span>         </span><span>field(</span><span>5</span><span>; FreeGiftsAvailable; </span><span>Boolean)<br/></span><span>         {<br/></span><span>             </span><span>DataClassification</span><span> = CustomerContent;<br/></span><span>             Caption = </span><span>'Free Gifts Available'</span><span>;<br/></span><span>         }<br/></span><span>         </span><span>field(</span><span>6</span><span>; Blocked; </span><span>Boolean)<br/></span><span>         {<br/></span><span>             </span><span>DataClassification</span><span> = CustomerContent;<br/></span><span>             Caption = </span><span>'Blocked'</span><span>;<br/></span><span>         }<br/></span><span>         </span><span>field(</span><span>10</span><span>; TotalCustomersForCategory; </span><span>Integer)<br/></span><span>         {<br/></span><span>             </span><span>FieldClass</span><span> = FlowField;<br/></span><span>             CalcFormula = </span><span>count (</span><span>Customer </span><span>where (</span><span>"Customer Category Code_PKT" = </span><span>field (</span><span>Code</span><span>)))</span><span>;<br/></span><span>             Caption = </span><span>'No. of associated customers'</span><span>;<br/></span><span>         }<br/></span><span>     }<br/></span><span>     </span><span>keys<br/></span><span>     {<br/></span><span>         </span><span>key(</span><span>PK; Code</span><span>)<br/></span><span>         {<br/></span><span>             Clustered = true;<br/></span><span>         }<br/></span><span>         </span><span>key(</span><span>K2; Description</span><span>)<br/></span><span>         {<br/></span><span>             Unique = true;<br/></span><span>         }<br/></span><span>     }<br/><br/></span><span> </span><span>procedure</span><span> GetSalesAmount</span><span>()</span><span>: </span><span>Decimal<br/></span><span> </span><span>var<br/></span><span>     CustomerCategoryMgt: </span><span>Codeunit</span><span> "Customer Category Mgt_PKT";<br/></span><span>     </span><span>begin<br/></span><span>         </span><span>exit(</span><span>CustomerCategoryMgt</span><span>.</span><span>GetSalesAmount</span><span>(</span><span>Rec</span><span>.</span><span>Code</span><span>))</span><span>;<br/></span><span>     </span><span>end</span><span>;<br/></span><span>}</span></pre></div>
+<p>The name of the object has the registered <kbd>_PKT</kbd> suffix (to be unique across the application).</p>
+<p class="mce-root"/>
+<p>In this table definition, we have defined the following fields:</p>
+<ul>
+<li><kbd>Code</kbd>: This is the code of the category (the <kbd>key</kbd> field).</li>
+<li><kbd>Description</kbd>: This is the description of the category.</li>
+<li><kbd>Default</kbd>: This is a <kbd>Boolean</kbd> field used to set the default category.</li>
+<li><kbd>FreeGiftsAvailable</kbd>: This is a <kbd>Boolean</kbd> field used to set whether the category can be used with gift campaigns.</li>
+<li><kbd>Blocked</kbd>: This is a <kbd>Boolean</kbd> field used to set the category as blocked (cannot be used).</li>
+<li><kbd>EnableNewsletter</kbd>: This is an option field used to select the newsletter type to send for this category (commercial purposes). This field is of the <kbd>enum</kbd> <span>type</span>. As described in the previous chapter, the <kbd>enum</kbd> type allows us to have an extendable option field.</li>
+<li><kbd>TotalCustomersForCategory</kbd>: This is a calculated field (<kbd>flowfield</kbd>) used to automatically calculate the number of customers associated with the selected category.</li>
+</ul>
+<p>This table's definition has a keys section, where we have defined a primary key (the <kbd>No</kbd> field) and a secondary key with the <kbd>Description</kbd> field. This secondary key is defined with the <kbd>Unique</kbd> property set to <kbd>true</kbd>, and this ensures that you cannot have records in this table with the same value as this field:</p>
+<div>
+<pre><span>key(</span><span>K2; Description</span><span>)<br/></span><span>{<br/></span><span>     Unique = true;<br/></span><span>}</span></pre></div>
+<p>The <kbd>NewsletterType</kbd> enum is defined as follows:</p>
+<div>
+<pre><span>enum</span><span> </span><span>50100</span><span> NewsletterType<br/></span><span>{<br/></span><span> Extensible = true;<br/></span><span> </span><span>value(</span><span>0</span><span>; </span><span>None)<br/></span><span> {<br/></span><span>     Caption = </span><span>'None'</span><span>;<br/></span><span> }<br/></span><span> </span><span>value(</span><span>1</span><span>; Full</span><span>)<br/></span><span> {<br/></span><span>     Caption = </span><span>'Full'</span><span>;<br/></span><span> }<br/></span><span> </span><span>value(</span><span>2</span><span>; Limited</span><span>)<br/></span><span> {<br/></span><span>     Caption = </span><span>'Limited'</span><span>;<br/></span><span> }<br/></span><span>}</span></pre></div>
+<p>As a generic programming rule, a table acts like a class and, in the table definition, we want to expose the methods related to that class. This is why we have defined a method (procedure) <span>here </span>called <kbd>GetSalesAmount</kbd> (which is used to return the total sales amount for the selected category). The method's implementation will be on an external codeunit (which will contain our business logic).</p>
+<p>We've also defined a setup table for this extension (the <kbd>Packt Extension Setup</kbd> table, which we'll use also in the next sections) to handle all of the variable parameters needed for the company's business configuration.</p>
+<p>This setup table is defined as follows:</p>
+<div>
+<pre><span>table</span><span> </span><span>50103</span><span> "Packt Extension Setup"<br/></span><span>{<br/></span><span> </span><span>DataClassification</span><span> = CustomerContent; <br/> Caption = 'Packt Extension Setup';<br/><br/></span><span> </span><span>fields<br/></span><span> {<br/></span><span>     </span><span>field(</span><span>1</span><span>; "Primary Key"; </span><span>Code</span><span>[</span><span>10</span><span>]</span><span>)<br/></span><span>     {<br/></span><span>         </span><span>DataClassification</span><span> = CustomerContent;<br/></span><span>     }<br/></span><span>     </span><span>field(</span><span>2</span><span>; "Minimum Accepted Vendor Rate"; </span><span>Decimal)<br/></span><span>     {<br/></span><span>         Caption = </span><span>'Minimum Accepted Vendor Rate for Purchases'</span><span>;<br/></span><span>         </span><span>DataClassification</span><span> = CustomerContent;<br/></span><span>     }<br/></span><span>     </span><span>field(</span><span>3</span><span>; "Gift Tolerance Qty"; </span><span>Decimal)<br/></span><span>     {<br/></span><span>         Caption = </span><span>'Gift Tolerance Quantity for Sales'</span><span>;<br/></span><span>         </span><span>DataClassification</span><span> = CustomerContent;<br/></span><span>     }<br/></span><span> }<br/></span><span> </span><span>keys<br/></span><span> {<br/></span><span>     </span><span>key(</span><span>PK; "Primary Key"</span><span>)<br/></span><span>     {<br/></span><span>         Clustered = true;<br/></span><span>     }<br/></span><span> }<br/></span><span>}</span></pre></div>
+<p>Having a dedicated setup table for an extension is a best practice because it permits you to consolidate the settings in a single place. If possible, please avoid adding setup settings to different standard Dynamics 365 Business Central setup tables.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Pages definition</h1>
+                </header>
+            
+            <article>
+                
+<p>To handle the <kbd>Customer Category</kbd> records (insert, modify, delete, and select), we need to have a list page and a card page.</p>
+<p>By using the <kbd>tpage</kbd> snippet, we have defined a card page (<kbd>PageType = Card</kbd>) and a list page (<kbd>PageType = List</kbd>).</p>
+<p><span>The</span> list <span>page (</span><kbd>Customer Category List_PKT</kbd><span>) has an action for creating a default</span> <kbd>Customer Category</kbd> <span>record (it calls a method defined in an external codeunit because we don't want business logic on pages).</span></p>
+<p><span>The code for the list page definition is as follows:</span></p>
+<div>
+<pre><span>page</span><span> </span><span>50100</span><span> "Customer Category List_PKT"</span><span><br/></span><span>{<br/></span><span> PageType = </span><span>List</span><span>;<br/></span><span> SourceTable = "Customer Category_PKT";<br/></span><span> UsageCategory = Lists;<br/></span><span> ApplicationArea = All;<br/></span><span> CardPageId = CustomerCategoryCard_PKT;<br/></span><span> Caption = </span><span>'Customer Category List'</span><span>; <br/> AdditionalSearchTerms = 'ranking, categorization';<br/><br/></span><span> </span><span>layout<br/></span><span> {<br/></span><span>     </span><span>area(</span><span>content</span><span>)<br/></span><span>     {<br/></span><span>         </span><span>repeater(Group)<br/></span><span>         {<br/></span><span>             </span><span>field(</span><span>Code; Code</span><span>)<br/></span><span>             {<br/></span><span>                 ApplicationArea = All;<br/></span><span>             }<br/></span><span>             </span><span>field(</span><span>Description; Description</span><span>)<br/></span><span>             {<br/></span><span>                 ApplicationArea = All;<br/></span><span>             }<br/></span><span>             </span><span>field(</span><span>Default; Default</span><span>)<br/></span><span>             {<br/></span><span>                 ApplicationArea = All;<br/></span><span>             }<br/></span><span>             </span><span>field(</span><span>TotalCustomersForCategory; TotalCustomersForCategory</span><span>)<br/></span><span>             {<br/></span><span>                 ApplicationArea = All;<br/></span><span>                 ToolTip = </span><span>'Total Customers for Category'</span><span>;<br/></span><span>             }<br/></span><span>         }<br/></span><span>     }<br/></span><span> }<br/></span><span> </span><span>actions<br/></span><span> {<br/></span><span>     </span><span>area(</span><span>processing</span><span>)<br/></span><span>     {<br/></span><span>         </span><span>action(</span><span>"Create Default Category"</span><span>)<br/></span><span>         {<br/></span><span>             Image = CreateForm;<br/></span><span>             Promoted = true;<br/></span><span>             PromotedCategory = Process;<br/></span><span>             PromotedIsBig = true;<br/></span><span>             ApplicationArea = All;<br/></span><span>             ToolTip = </span><span>'Create default category'</span><span>;<br/></span><span>             Caption = </span><span>'Create default category'</span><span>;<br/><br/></span><span>             </span><span>trigger</span><span> OnAction</span><span>()</span><span>;<br/></span><span>             </span><span>var<br/></span><span>                 CustManagement: </span><span>Codeunit</span><span> "Customer Category Mgt_PKT";<br/></span><span>             </span><span>begin<br/></span><span>                 CustManagement</span><span>.</span><span>CreateDefaultCategory</span><span>()</span><span>;<br/></span><span>             </span><span>end</span><span>;<br/></span><span>          }<br/></span><span>     }<br/></span><span>   }<br/></span><span>}</span></pre></div>
+<p>As a best practice, to improve the search experience and help users to easily find the correct page by using the search feature of Dynamics 365 Business Central, we have also defined the <kbd>AdditionalSearchTerms</kbd> property. These terms will be used in addition to the <kbd>Caption</kbd> page property to find the page via the search engine.</p>
+<p class="mce-root"/>
+<p>The <span class="packt_screen">CUSTOMER CATEGORY LIST</span> page appears as follows:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/80a4f4e9-52f6-4453-a81e-d4d6069aafe6.png"/></p>
+<p>The<span> </span><kbd>card</kbd> page (<kbd>CustomerCategoryCard_PKT</kbd>) has different groups for displaying data on separate <kbd>FastTabs</kbd>. In the<span> </span><kbd>OnAfterGetRecord</kbd> trigger, we calculate the total sales amount for the category, we assign that value to a global decimal field (called<span> </span><kbd>TotalSalesAmount</kbd>), and we display this variable as a page field. The code is as follows:</p>
+<div>
+<pre><span>page</span><span> </span><span>50101</span><span> CustomerCategoryCard_PKT</span><span><br/></span><span>{<br/></span><span> PageType = Card;<br/></span><span> ApplicationArea = All;<br/></span><span> UsageCategory = Documents;<br/></span><span> SourceTable = "Customer Category_PKT";<br/></span><span> Caption = </span><span>'Customer Category Card'</span><span>;<br/></span><span> <br/></span><span> layout<br/></span><span> {<br/></span><span>     </span><span>area(</span><span>Content</span><span>)<br/></span><span>     {<br/></span><span>         </span><span>group(</span><span>General</span><span>)<br/></span><span>         {<br/></span><span>             Caption = </span><span>'General'</span><span>;<br/></span><span>             </span><span>field(</span><span>Code; Code</span><span>)<br/></span><span>             {<br/></span><span>                 ApplicationArea = All;<br/></span><span>             }<br/></span><span>             </span><span>field(</span><span>Description; Description</span><span>)<br/></span><span>             {<br/></span><span>                 ApplicationArea = All;<br/></span><span>             }<br/></span><span>             </span><span>field(</span><span>Default; Default</span><span>)<br/></span><span>             {<br/></span><span>                 ApplicationArea = All;<br/></span><span>             }<br/></span><span>             </span><span>field(</span><span>EnableNewsletter; EnableNewsletter</span><span>)<br/></span><span>             {<br/></span><span>                 ApplicationArea = All;<br/></span><span>             }<br/></span><span>             </span><span>field(</span><span>FreeGiftsAvailable; FreeGiftsAvailable</span><span>)<br/></span><span>             {<br/></span><span>                 ApplicationArea = All;<br/></span><span>             }<br/></span><span>         }<br/></span><span>         </span><span>group(</span><span>Administration</span><span>)<br/></span><span>         {<br/></span><span>             Caption = </span><span>'Administration'</span><span>;<br/></span><span>             </span><span>field(</span><span>Blocked; Blocked</span><span>)<br/></span><span>             {<br/></span><span>                 ApplicationArea = All;<br/></span><span>             }<br/></span><span>         }<br/></span><span>         </span><span>group(</span><span>Statistics</span><span>)<br/></span><span>         {<br/></span><span>             Caption = </span><span>'Statistics'</span><span>;<br/></span><span>             </span><span>field(</span><span>TotalCustomersForCategory; TotalCustomersForCategory</span><span>)<br/></span><span>             {<br/></span><span>                 ApplicationArea = All;<br/></span><span>                 Editable = false;<br/></span><span>             }<br/></span><span>             </span><span>field(</span><span>TotalSalesAmount; TotalSalesAmount</span><span>)<br/></span><span>             {<br/></span><span>                 ApplicationArea = All;<br/></span><span>                 Caption = </span><span>'Total Sales Order Amount'</span><span>;<br/></span><span>                 Editable = false;<br/></span><span>                 Style = Strong;<br/></span><span>             }<br/></span><span>         }<br/></span><span>       }<br/></span><span>     }<br/></span><span>     </span><span>var<br/></span><span>         TotalSalesAmount: </span><span>Decimal</span><span>;<br/></span><span>     </span><span>trigger</span><span> OnAfterGetRecord</span><span>()<br/></span><span>     </span><span>begin<br/></span><span>         TotalSalesAmount</span><span> := </span><span>Rec</span><span>.</span><span>GetSalesAmount</span><span>()</span><span>;<br/></span><span>     </span><span>end</span><span>;<br/></span><span>}</span></pre></div>
+<p>The ...<span class="packt_screen">CUSTOMER CATEGORY CARD</span> page looks like this:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/cbb62da8-8cf4-4fa0-9a84-9855f2944d59.png"/></p>
+<p>We've also created a page for the extension setup (called <kbd>Packt Extension Setup</kbd>), defined as follows:</p>
+<div>
+<pre><span>table</span><span> </span><span>50103</span><span> "Packt Extension Setup"<br/></span><span>{<br/></span><span> </span><span>DataClassification</span><span> = CustomerContent;<br/></span><span> Caption = </span><span>'Packt Extension Setup'</span><span>;<br/><br/></span><span> </span><span>fields<br/></span><span> {<br/></span><span>     </span><span>field(</span><span>1</span><span>; "Primary Key"; </span><span>Code</span><span>[</span><span>10</span><span>]</span><span>)<br/></span><span>     {<br/></span><span>         </span><span>DataClassification</span><span> = CustomerContent;<br/></span><span>     }<br/></span><span>     </span><span>field(</span><span>2</span><span>; "Minimum Accepted Vendor Rate"; </span><span>Decimal)<br/></span><span>     {<br/></span><span>         Caption = </span><span>'Minimum Accepted Vendor Rate for Purchases'</span><span>;<br/></span><span>         </span><span>DataClassification</span><span> = CustomerContent;<br/></span><span>     }<br/></span><span>     </span><span>field(</span><span>3</span><span>; "Gift Tolerance Qty"; </span><span>Decimal)<br/></span><span>     {<br/></span><span>         Caption = </span><span>'Gift Tolerance Quantity for Sales'</span><span>;<br/></span><span>         </span><span>DataClassification</span><span> = CustomerContent;<br/></span><span>     }<br/></span><span> }<br/><br/></span><span> </span><span>keys<br/></span><span> {<br/></span><span>     </span><span>key(</span><span>PK; "Primary Key"</span><span>)<br/></span><span>     {<br/></span><span>         Clustered = true;<br/></span><span>     }<br/></span><span>  }<br/></span><span>}</span></pre></div>
+<p>This page looks like this:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/f722db3c-e640-4c86-b330-9fe63288a840.png"/></p>
+<p><span>This</span><span> </span><span><span>will permit the users to handle the settings for our extension.</span></span></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">The tableextension definition</h1>
+                </header>
+            
+            <article>
+                
+<p>We need to create a new field in the <kbd>Customer</kbd> table to handle the <kbd>Customer Category</kbd> assignment and, in order to do that, we need to create a <kbd>tableextension</kbd> object. This can be done in AL by using the <kbd>ttableext</kbd> snippet.</p>
+<p>The <kbd>tableextension</kbd> object for the <kbd>Customer</kbd> table is defined as follows:</p>
+<div>
+<pre><span>tableextension</span><span> </span><span>50100</span><span> "CustomerTableExtensions_PKT" </span><span>extends</span><span> Customer </span><span>//18 <br/></span><span>{<br/></span><span> </span><span>fields<br/></span><span> {<br/></span><span>     </span><span>field(</span><span>50100</span><span>; "Customer Category Code_PKT"; </span><span>Code</span><span>[</span><span>20</span><span>]</span><span>)<br/></span><span>     {<br/></span><span>         TableRelation = "Customer Category_PKT"</span><span>.</span><span>No;<br/></span><span>         Caption = </span><span>'Customer Category Code'</span><span>;<br/></span><span>         </span><span>DataClassification</span><span> = CustomerContent;<br/><br/></span><span>         </span><span>trigger</span><span> OnValidate</span><span>()<br/></span><span>         </span><span>var<br/></span><span>             CustomerCategory: </span><span>Record</span><span> "Customer Category_PKT";<br/></span><span>             ErrBlocked: </span><span>Label</span><span> </span><span>'This category is Blocked.'</span><span>;<br/></span><span>         </span><span>begin<br/></span><span>             CustomerCategory</span><span>.</span><span>Get</span><span>(</span><span>"Customer Category Code_PKT"</span><span>)</span><span>;<br/></span><span>             </span><span>if</span><span> CustomerCategory</span><span>.</span><span>Blocked </span><span>then<br/></span><span>                 Error</span><span>(</span><span>ErrBlocked</span><span>)</span><span>;<br/></span><span>         </span><span>end</span><span>;<br/></span><span>     }<br/></span><span> }<br/><br/></span><span> </span><span>keys<br/></span><span> {<br/></span><span>     </span><span>key(</span><span>CustomerCategory; "Customer Category Code_PKT"</span><span>)<br/></span><span>     {<br/></span><span>     }<br/></span><span> }<br/></span><span>}</span></pre></div>
+<p>Here, we've <span>also </span>handled the <kbd>OnValidate</kbd> trigger for this field to avoid the insertion of a blocked category.</p>
+<p>We've also created a new secondary key on the <kbd>Customer</kbd> table based on this new field:</p>
+<pre>keys<br/>    {<br/>        key(CustomerCategory; "Customer Category_PKT")<br/>        {<br/>        }<br/>    }</pre>
+<p>One of the requirements for this is to <span>also</span><span> </span><span>add the</span> <kbd>Customer Category Code</kbd> <span>field to the</span> <kbd>Item Ledger Entry</kbd> <span>table (this must be written during posting for reporting purposes), so we have</span> <span>also </span><span>defined the following</span> <kbd>tableextension</kbd> <span>object:</span></p>
+<pre>tableextension 50101 "ItemLedgerEntryExtension_PKT" extends "Item Ledger Entry"<br/>{<br/>    fields<br/>    {<br/>        field(50100; "Customer Category Code_PKT"; Code[20])<br/>        {<br/>            TableRelation = "Customer Category_PKT".No;<br/>            Caption = 'Customer Category';<br/>            DataClassification = CustomerContent;<br/>        }<br/>    }<br/><br/>    keys<br/>    {<br/>        key(FK; "Customer Category Code_PKT")<br/>        {<br/>        }<br/>    }<br/>}</pre>
+<p>This new custom field will be used for statistical purposes.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">The pageextension definition</h1>
+                </header>
+            
+            <article>
+                
+<p>This newly created <kbd>Customer Category</kbd> field must be visible on the <kbd>Customer Card</kbd> and <kbd>Customer List</kbd> pages.</p>
+<p>To do that, we have defined two <kbd>pageextension</kbd> objects (by using the <kbd>tpageext</kbd> snippet). The following is the definition of the <kbd>pageextension</kbd> object for the <kbd>Customer Card</kbd> page:</p>
+<div>
+<pre><span>pageextension</span><span> </span><span>50102</span><span> "CustomerCardExtension_PKT" </span><span>extends</span><span> "Customer Card"<br/></span><span>{<br/></span><span>     </span><span>layout<br/></span><span>     {<br/></span><span>         </span><span>addlast(</span><span>General</span><span>)<br/></span><span>         {<br/></span><span>             </span><span>field(</span><span>"Customer Category PKT"; "Customer Category Code_PKT"</span><span>)<br/></span><span>             {<br/></span><span>                 ToolTip = </span><span>'Customer Category'</span><span>;<br/></span><span>                 ApplicationArea = All;<br/></span><span>             }<br/></span><span>         }<br/></span><span>     }<br/><br/></span><span>     </span><span>actions<br/></span><span>     {<br/></span><span>         </span><span>addlast(</span><span>"Functions"</span><span>)<br/></span><span>         {<br/></span><span>             </span><span>action(</span><span>"Assign default category"</span><span>)<br/></span><span>             {<br/></span><span>                 Image = ChangeCustomer;<br/></span><span>                 Promoted = true;<br/></span><span>                 PromotedCategory = Process;<br/></span><span>                 PromotedIsBig = true;<br/></span><span>                 ApplicationArea = All;<br/></span><span>                 Caption = </span><span>'Assign Default Category'</span><span>;<br/></span><span>                 ToolTip = </span><span>'Assigns Default Category to the current Customer'</span><span>;<br/></span><span>                 <br/>                </span><span>trigger</span><span> OnAction</span><span>()</span><span>;<br/></span><span>                 </span><span>var<br/></span><span>                     CustomerCategoryMgt: </span><span>Codeunit</span><span> "Customer Category Mgt_PKT";<br/></span><span>                 </span><span>begin<br/></span><span>                     CustomerCategoryMgt</span><span>.</span><span>AssignDefaultCategory</span><span>(</span><span>Rec</span><span>.</span><span>"No."</span><span>)</span><span>;<br/></span><span>                 </span><span>end</span><span>;<br/></span><span>             }<br/></span><span>         }<br/></span><span>     }<br/></span><span>}</span></pre></div>
+<p>This is the <kbd>pageextension</kbd> object definition for the <kbd>Customer List</kbd> page:</p>
+<div>
+<pre><span>pageextension</span><span> </span><span>50103</span><span> CustomerListExtension_PKT </span><span>extends</span><span> "Customer List"<br/></span><span>{<br/></span><span>     </span><span>actions<br/></span><span>     {<br/></span><span>         </span><span>addlast(</span><span>Processing</span><span>)<br/></span><span>         {<br/></span><span>             </span><span>action(</span><span>"Assign Default Category"</span><span>)<br/></span><span>             {<br/></span><span>                 Image = ChangeCustomer;<br/></span><span>                 Promoted = true;<br/></span><span>                 PromotedCategory = Process;<br/></span><span>                 PromotedIsBig = true;<br/></span><span>                 ApplicationArea = All;<br/></span><span>                 Caption = </span><span>'Assign Default Category to all Customers'</span><span>;<br/></span><span>                 ToolTip = </span><span>'Assigns the Default Category to all Customers'</span><span>;<br/></span><span>                 <br/>                 </span><span>trigger</span><span> OnAction</span><span>()</span><span>;<br/></span><span>                 </span><span>var<br/></span><span>                     CustomerCategoryMgt: </span><span>Codeunit</span><span> "Customer Category Mgt_PKT";<br/></span><span>                 </span><span>begin<br/></span><span>                     CustomerCategoryMgt</span><span>.</span><span>AssignDefaultCategory</span><span>()</span><span>;<br/></span><span>                 </span><span>end</span><span>;<br/></span><span>             }<br/></span><span>         }<br/></span><span>     }<br/><br/></span><span>     </span><span>views<br/></span><span>     {<br/></span><span>         </span><span>addlast<br/></span><span>         {<br/></span><span>             </span><span>view(</span><span>CustomersWithoutCategory</span><span>)<br/></span><span>             {<br/></span><span>                 Caption = </span><span>'Customers without Category assigned'</span><span>;<br/></span><span>                 Filters = </span><span>where (</span><span>"Customer Category Code_PKT" = </span><span>filter (</span><span>''</span><span>))</span><span>;<br/></span><span>             }<br/></span><span>         }<br/></span><span>     }<br/></span><span>}</span></pre></div>
+<p>Here, on the <kbd>Customer List</kbd> page, we've added an action to assign the category set as default to all customers. On <kbd>Customer Card</kbd>, the same action works on the currently selected record.</p>
+<p>You can see here that these two functions call a method on an external codeunit called <kbd>AssignDefaultCategory</kbd>. This method has two implementations (it is overloaded), which we'll look at later in this chapter.</p>
+<p>The standard <kbd>Customer List</kbd> page now looks like this:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/da668ba5-c50a-47f4-a193-0a27fce01d42.png"/></p>
+<p class="mce-root"/>
+<p><kbd>Customer Card</kbd> looks like this:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/0093a3a5-03ab-4e12-87ef-47114f1a8508.png"/></p>
+<p>Here, we have the newly added <kbd>Customer Category</kbd> field and the new action for assigning <kbd>Customer Category</kbd>.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Codeunit definition</h1>
+                </header>
+            
+            <article>
+                
+<p>To handle the <kbd>Customer Category</kbd> business requirements that our customer has, all of the required business logic is defined in a dedicated codeunit called <kbd>Customer Category Mgt_PKT</kbd>.</p>
+<p>The codeunit is defined as follows:</p>
+<div>
+<pre><span>codeunit</span><span> </span><span>50100</span><span> "</span><span>Customer Category Mgt_PKT"<br/></span><span>{<br/></span><span> </span><span>procedure</span><span> CreateDefaultCategory</span><span>()<br/></span><span> </span><span>var<br/></span><span>     CustomerCategory: </span><span>Record</span><span> "Customer Category_PKT";<br/></span><span> </span><span>begin<br/></span><span>     CustomerCategory</span><span>.</span><span>Code</span><span> := </span><span>'DEFAULT'</span><span>;<br/></span><span>     CustomerCategory</span><span>.</span><span>Description</span><span> := </span><span>'Default Customer Category'</span><span>;<br/></span><span>     CustomerCategory</span><span>.</span><span>Default</span><span> := </span><span>true;<br/></span><span>     </span><span>if</span><span> CustomerCategory</span><span>.</span><span>Insert </span><span>then</span><span>;<br/></span><span> </span><span>end</span><span>;<br/><br/></span><span> </span><span>procedure</span><span> AssignDefaultCategory</span><span>(</span><span>CustomerCode: </span><span>Code</span><span>[</span><span>20</span><span>]</span><span>)<br/></span><span> </span><span>var<br/></span><span>     Customer: </span><span>Record</span><span> Customer;<br/></span><span>     CustomerCategory: </span><span>Record</span><span> "Customer Category_PKT";<br/></span><span> </span><span>begin<br/></span><span>     </span><span>//Set default category for a Customer <br/></span><span>     Customer</span><span>.</span><span>Get</span><span>(</span><span>CustomerCode</span><span>)</span><span>;<br/></span><span>     CustomerCategory</span><span>.</span><span>SetRange</span><span>(</span><span>Default, true</span><span>)</span><span>;<br/></span><span>     </span><span>if</span><span> CustomerCategory</span><span>.</span><span>FindFirst</span><span>() then</span><span> </span><span>begin<br/></span><span>         Customer</span><span>.</span><span>"Customer Category Code_PKT"</span><span> := </span><span>CustomerCategory</span><span>.</span><span>Code;<br/></span><span>         Customer</span><span>.Modify()</span><span>;<br/></span><span>     </span><span>end</span><span>;<br/></span><span> </span><span>end</span><span>;<br/><br/></span><span> </span><span>procedure</span><span> AssignDefaultCategory</span><span>()<br/></span><span> </span><span>var<br/></span><span>     Customer: </span><span>Record</span><span> Customer;<br/></span><span>     CustomerCategory: </span><span>Record</span><span> "Customer Category_PKT";<br/></span><span> </span><span>begin<br/></span><span>     </span><span>//Set default category for ALL Customer <br/></span><span>     CustomerCategory</span><span>.</span><span>SetRange</span><span>(</span><span>Default, true</span><span>)</span><span>;<br/></span><span>     </span><span>if</span><span> CustomerCategory</span><span>.</span><span>FindFirst</span><span>() then</span><span> </span><span>begin<br/></span><span>         Customer</span><span>.</span><span>SetFilter</span><span>(</span><span>"Customer Category Code_PKT", </span><span>'%1'</span><span>, </span><span>''</span><span>)</span><span>;<br/>         Customer.ModifyAll("Customer Category Code_PKT", CustomerCategory.Code, true);</span><span>         </span><span><br/></span><span>     </span><span>end</span><span>;<br/></span><span> </span><span>end</span><span>;<br/></span><span> <br/></span><span> //Returns the number of Customers without an assigned Customer Category<br/></span><span> </span><span>procedure</span><span> GetTotalCustomersWithoutCategory</span><span>()</span><span>: </span><span>Integer<br/></span><span> </span><span>var<br/></span><span>     Customer: </span><span>record</span><span> Customer;<br/></span><span> </span><span>begin<br/></span><span>     Customer</span><span>.</span><span>SetRange</span><span>(</span><span>"Customer Category Code_PKT", </span><span>''</span><span>)</span><span>;<br/></span><span>     </span><span>exit(</span><span>customer</span><span>.Count())</span><span>;<br/></span><span> </span><span>end</span><span>;<br/></span><span> <br/> </span><span>procedure</span><span> GetSalesAmount</span><span>(</span><span>CustomerCategoryCode: </span><span>Code</span><span>[</span><span>20</span><span>]</span><span>)</span><span>: </span><span>Decimal<br/></span><span> </span><span>var<br/></span><span>     SalesLine: </span><span>Record</span><span> "Sales Line";<br/></span><span>     Customer: </span><span>record</span><span> Customer;<br/></span><span>     TotalAmount: </span><span>Decimal</span><span>;<br/></span><span> </span><span>begin<br/></span><span>     Customer</span><span>.</span><span>SetCurrentKey</span><span>(</span><span>"Customer Category Code_PKT"</span><span>)</span><span>;<br/></span><span>     Customer</span><span>.</span><span>SetRange</span><span>(</span><span>"Customer Category Code_PKT", CustomerCategoryCode</span><span>)</span><span>;<br/></span><span>     </span><span>if</span><span> Customer</span><span>.</span><span>FindSet</span><span>() then<br/></span><span>     </span><span>repeat<br/></span><span>         SalesLine</span><span>.</span><span>SetRange</span><span>(</span><span>"Document Type", SalesLine</span><span>.</span><span>"Document Type"::</span><span>Order)</span><span>;<br/></span><span>         SalesLine</span><span>.</span><span>SetRange</span><span>(</span><span>"Sell-to Customer No.", Customer</span><span>.</span><span>"No."</span><span>)</span><span>;<br/></span><span>         </span><span>if</span><span> SalesLine</span><span>.</span><span>FindSet</span><span>() then<br/></span><span>         </span><span>repeat<br/></span><span>             TotalAmount</span><span> += </span><span>SalesLine</span><span>.</span><span>"Line Amount";<br/></span><span>         </span><span>until</span><span> SalesLine</span><span>.</span><span>Next</span><span>() </span><span>= </span><span>0</span><span>;<br/></span><span>     </span><span>until</span><span> Customer</span><span>.</span><span>Next</span><span>() </span><span>= </span><span>0</span><span>;<br/></span><span>     </span><span>exit(</span><span>TotalAmount</span><span>)</span><span>;<br/></span><span> </span><span>end</span><span>;<br/></span><span>}</span></pre></div>
+<p>Here, we have the following functions:</p>
+<ul>
+<li><kbd>CreateDefaultCategory</kbd>: This creates an entry in the <kbd>Customer Category</kbd> table with a predefined code and with the <kbd>Default</kbd> flag set to <kbd>true</kbd>.</li>
+<li><kbd>AssignDefaultCategory</kbd>: This assigns the default category to customers. Here, we use overloading (supported in AL) and we have the same function with the following two different implementations (one without parameters and one with a <kbd>Code[20]</kbd> parameter):
+<ul>
+<li><kbd>AssignDefaultCategory(CustomerCode: Code[20])</kbd>: Works on the current customer</li>
+<li><kbd>AssignDefaultCategory()</kbd>: Works on all customers</li>
+</ul>
+</li>
+<li><kbd>GetTotalCustomersWithoutCategory</kbd>: This returns the number of customers without a category assigned.</li>
+<li><kbd>GetSalesAmount</kbd>: This returns the total amount of the sales order for the <kbd>Customer Category</kbd> selected.</li>
+</ul>
+<p>After this, we move on to implementing the gift campaign's business requirements.</p>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Gift campaign implementations</h1>
+                </header>
+            
+            <article>
+                
+<p>To handle the gift campaign requirements, we need to do the following:</p>
+<ul>
+<li>Define the <kbd>Gift Campaign</kbd> table. This table must be able to store data as follows:</li>
+</ul>
+<table style="border-collapse: collapse;width: 100%" border="1">
+<tbody>
+<tr>
+<td style="width: 148px">
+<p><strong>Customer Category</strong></p>
+</td>
+<td style="width: 54px">
+<p><strong>Item</strong></p>
+</td>
+<td style="width: 86px">
+<p><strong>Start Date</strong></p>
+</td>
+<td style="width: 90px">
+<p><strong>End Date</strong></p>
+</td>
+<td style="width: 154px">
+<p><strong>Minimum Quantity Ordered</strong></p>
+</td>
+<td style="width: 155px">
+<p><strong>Gift Quantity</strong></p>
+</td>
+</tr>
+<tr>
+<td style="width: 148px">
+<p>GOLD</p>
+</td>
+<td style="width: 54px">
+<p>ITEM1</p>
+</td>
+<td style="width: 86px">
+<p>01/01/2019</p>
+</td>
+<td style="width: 90px">
+<p>30/03/2019</p>
+</td>
+<td style="width: 154px">
+<p>5</p>
+</td>
+<td style="width: 155px">
+<p>1</p>
+</td>
+</tr>
+<tr>
+<td style="width: 148px">
+<p>GOLD</p>
+</td>
+<td style="width: 54px">
+<p>ITEM2</p>
+</td>
+<td style="width: 86px">
+<p>01/01/2019</p>
+</td>
+<td style="width: 90px">
+<p>30/03/2019</p>
+</td>
+<td style="width: 154px">
+<p>10</p>
+</td>
+<td style="width: 155px">
+<p>2</p>
+</td>
+</tr>
+<tr>
+<td style="width: 148px">
+<p>SILVER</p>
+</td>
+<td style="width: 54px">
+<p>ITEM1</p>
+</td>
+<td style="width: 86px">
+<p>01/01/2019</p>
+</td>
+<td style="width: 90px">
+<p>30/03/2019</p>
+</td>
+<td style="width: 154px">
+<p>7</p>
+</td>
+<td style="width: 155px">
+<p>1</p>
+</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>Create the page (user interface) for handling the gift campaign data (a list page).</li>
+<li>Handling the business logic for assigning gifts to a sales order is based on <kbd>Customer Category</kbd> and the active campaign for this category. This will be done in an external codeunit.</li>
+<li>Add a new function to the <kbd>Sales Order</kbd> page interface in order to permit the sales operator to automatically insert a gift line when the sales order is finished.</li>
+<li>When the sales operator inserts the <kbd>Quantity</kbd> in a sales order line, we want to check the active campaigns and alert the user if the ordered quantity is near to an active promotion.</li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Table definition</h1>
+                </header>
+            
+            <article>
+                
+<p>By using the <kbd>ttable</kbd> snippet, we define the <kbd>Gift Campaign</kbd> table as follows:</p>
+<div>
+<pre><span>table</span><span> </span><span>50101</span><span> "GiftCampaign_PKT"</span><span><br/></span><span>{<br/></span><span> </span><span>DataClassification</span><span> = CustomerContent;<br/></span><span> DrillDownPageId = "Gift Campaign List_PKT";<br/></span><span> LookupPageId = "Gift Campaign List_PKT";<br/></span><span> Caption = </span><span>'Gift Campaign'</span><span>;<br/><br/></span><span> </span><span>fields<br/></span><span> {<br/></span><span>     </span><span>field(</span><span>1</span><span>; CustomerCategoryCode; </span><span>Code</span><span>[</span><span>20</span><span>]</span><span>)<br/></span><span>     {<br/></span><span>         </span><span>DataClassification</span><span> = CustomerContent;<br/></span><span>         TableRelation = "Customer Category_PKT";<br/></span><span>         Caption = </span><span>'Customer Category Code'</span><span>;<br/></span><span>         </span><span>trigger</span><span> OnValidate</span><span>()<br/></span><span>         </span><span>var<br/></span><span>             CustomerCategory: </span><span>Record</span><span> "Customer Category_PKT";<br/></span><span>             ErrNoGifts: </span><span>Label</span><span> </span><span>'This category is not enabled for Gift Campaigns.'</span><span>;<br/></span><span>             ErrBlocked: </span><span>Label</span><span> </span><span>'This category is blocked.'</span><span>;<br/></span><span>         </span><span>begin<br/></span><span>             CustomerCategory</span><span>.</span><span>Get</span><span>(</span><span>CustomerCategoryCode</span><span>)</span><span>;<br/></span><span>             </span><span>if</span><span> CustomerCategory</span><span>.</span><span>Blocked </span><span>then<br/></span><span>                 Error</span><span>(</span><span>ErrBlocked</span><span>)</span><span>;<br/></span><span>             </span><span>if</span><span> </span><span>not</span><span> CustomerCategory</span><span>.</span><span>FreeGiftsAvailable </span><span>then<br/></span><span>                 Error</span><span>(</span><span>ErrNoGifts</span><span>)</span><span>;<br/></span><span>         </span><span>end</span><span>;<br/></span><span>     }<br/></span><span>     </span><span>field(</span><span>2</span><span>; ItemNo; </span><span>Code</span><span>[</span><span>20</span><span>]</span><span>)<br/></span><span>     {<br/></span><span>         </span><span>DataClassification</span><span> = CustomerContent;<br/></span><span>         TableRelation = Item;<br/></span><span>         Caption = </span><span>'Item No.'</span><span>;<br/></span><span>     }<br/></span><span>     </span><span>field(</span><span>3</span><span>; StartingDate; </span><span>Date)<br/></span><span>     {<br/></span><span>         </span><span>DataClassification</span><span> = CustomerContent;<br/></span><span>         Caption = </span><span>'Starting Date'</span><span>;<br/></span><span>     }<br/></span><span>     </span><span>field(</span><span>4</span><span>; EndingDate; </span><span>Date)<br/></span><span>     {<br/></span><span>         </span><span>DataClassification</span><span> = CustomerContent;<br/></span><span>         Caption = </span><span>'Ending Date'</span><span>;<br/></span><span>     }<br/></span><span>     </span><span>field(</span><span>5</span><span>; MinimumOrderQuantity; </span><span>Decimal)<br/></span><span>     {<br/></span><span>         </span><span>DataClassification</span><span> = CustomerContent;<br/></span><span>         Caption = </span><span>'Minimum Order Quantity'</span><span>;<br/></span><span>     }<br/></span><span>     </span><span>field(</span><span>6</span><span>; GiftQuantity; </span><span>Decimal)<br/></span><span>     {<br/></span><span>         </span><span>DataClassification</span><span> = CustomerContent;<br/></span><span>         Caption = </span><span>'Free Gift Quantity'</span><span>;<br/></span><span>     }<br/></span><span>     </span><span>field(</span><span>7</span><span>; Inactive; </span><span>Boolean)<br/></span><span>     {<br/></span><span>         </span><span>DataClassification</span><span> = CustomerContent;<br/></span><span>         Caption = </span><span>'Inactive'</span><span>;<br/></span><span>     }<br/></span><span> }<br/><br/></span><span> </span><span>keys<br/></span><span> {<br/></span><span>     </span><span>key(</span><span>PK; CustomerCategoryCode, ItemNo, StartingDate, EndingDate</span><span>)<br/></span><span>     {<br/></span><span>         Clustered = true;<br/></span><span>     }<br/></span><span> }<br/></span><span>}</span></pre></div>
+<p>The primary key for this table is a composite key, defined as follows:</p>
+<pre>keys<br/>    {<br/>        key(PK; CustomerCategoryCode, ItemNo, StartingDate, EndingDate)<br/>        {<br/>            Clustered = true;<br/>        }<br/>    }</pre>
+<p>Here, we've handled the <kbd>OnValidate</kbd> trigger of the <kbd>CustomerCategoryCode</kbd> field, which performs some validations:</p>
+<ul>
+<li>If the <kbd>Customer Category</kbd> <span>selected </span>is blocked, an error is thrown.</li>
+<li>If the <kbd>Customer Category</kbd> <span>selected </span>is not available for gift promotions (<kbd>FreeGiftsAvailable = false</kbd>), then an error is thrown.</li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Page definition</h1>
+                </header>
+            
+            <article>
+                
+<p>By using the <kbd>tpage</kbd> snippet, we define the <kbd>Gift Campaign List</kbd> page as follows:</p>
+<div>
+<pre><span>page</span><span> </span><span>50103</span><span> "Gift Campaign List_PKT</span><span>"<br/></span><span>{</span><span> <br/>     PageType = </span><span>List</span><span>;<br/></span><span>     SourceTable = GiftCampaign_PKT;<br/></span><span>     UsageCategory = Lists;<br/></span><span>     Caption = </span><span>'Gift Campaigns'</span><span>;<br/></span><span>     ApplicationArea = All;<br/>     AdditionalSearchTerms = 'promotions, marketing';<br/><br/></span><span>     </span><span>layout<br/></span><span>     {<br/></span><span>         </span><span>area(</span><span>content</span><span>)<br/></span><span>         {<br/></span><span>             </span><span>repeater(Group)<br/></span><span>             {<br/></span><span>                 </span><span>field(</span><span>CustomerCategoryCode; CustomerCategoryCode</span><span>)<br/></span><span>                 {<br/></span><span>                     ApplicationArea = All;<br/></span><span>                 }<br/></span><span>                 </span><span>field(</span><span>ItemNo; ItemNo</span><span>)<br/></span><span>                 {<br/></span><span>                     ApplicationArea = All;<br/></span><span>                 }<br/></span><span>                 </span><span>field(</span><span>StartingDate; StartingDate</span><span>)<br/></span><span>                 {<br/></span><span>                     ApplicationArea = All;<br/></span><span>                 }<br/></span><span>                 </span><span>field(</span><span>EndingDate; EndingDate</span><span>)<br/></span><span>                 {<br/></span><span>                     ApplicationArea = All;<br/></span><span>                 }<br/></span><span>                 </span><span>field(</span><span>MinimumOrderQuantity; MinimumOrderQuantity</span><span>)<br/></span><span>                 {<br/></span><span>                     ApplicationArea = All;<br/></span><span>                     Style = Strong;<br/></span><span>                 }<br/></span><span>                 </span><span>field(</span><span>GiftQuantity; GiftQuantity</span><span>)<br/></span><span>                 {<br/></span><span>                     ApplicationArea = All;<br/></span><span>                     Style = Strong;<br/></span><span>                 }<br/></span><span>                 </span><span>field(</span><span>Inactive; Inactive</span><span>)<br/></span><span>                 {<br/></span><span>                     ApplicationArea = All;<br/></span><span>                 }<br/></span><span>             }<br/></span><span>         }<br/></span><span>     }<br/><br/></span><span>     </span><span>views<br/></span><span>     {<br/></span><span>         </span><span>view(</span><span>ActiveCampaigns</span><span>)<br/></span><span>         {<br/></span><span>             Caption = </span><span>'Active Gift Campaigns'</span><span>;<br/></span><span>             Filters = </span><span>where (</span><span>Inactive = </span><span>const (</span><span>false</span><span>))</span><span>;<br/></span><span>         }<br/></span><span>         </span><span>view(</span><span>InactiveCampaigns</span><span>)<br/></span><span>         {<br/></span><span>             Caption = </span><span>'Inactive Gift Campaigns'</span><span>;<br/></span><span>             Filters = </span><span>where (</span><span>Inactive = </span><span>const (</span><span>true</span><span>))</span><span>;<br/></span><span>         </span><span>}<br/>     }<br/>}</span></pre></div>
+<p>When published, the page appears as follows:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/62fea46d-9cc6-432b-badc-c3ec3fc474bd.png" style="width:73.75em;height:14.75em;"/></p>
+<p>To handle the gift assignment logic in a sales order, by creating a <kbd>pageextension</kbd> object, we have added a new action to the <kbd>Sales Order</kbd> page, and from this action, we call the <kbd>AddGifts</kbd> method defined in a codeunit in the next section.</p>
+<p>The <kbd>pageextension</kbd> object is defined as follows:</p>
+<div>
+<pre><span>pageextension</span><span> </span><span>50100</span><span> SalesOrderExt_PKT </span><span>extends</span><span> "Sales Order"<br/></span><span>{<br/></span><span>     </span><span>actions<br/></span><span>     {<br/></span><span>         </span><span>addlast(</span><span>Processing</span><span>)<br/></span><span>         {<br/></span><span>             </span><span>action(</span><span>AddFreeGifts</span><span>)<br/></span><span>             {<br/></span><span>                 Caption = </span><span>'Add Free Gifts'</span><span>;<br/></span><span>                 ToolTip = </span><span>'Adds Free Gifts to the current Sales Order based on active Campaigns'</span><span>;<br/></span><span>                 ApplicationArea = All;<br/></span><span>                 Image = Add;<br/></span><span>                 Promoted = true;<br/></span><span>                 PromotedCategory = Process;<br/></span><span>                 PromotedIsBig = true;<br/></span><span>                 </span><span>trigger</span><span> OnAction</span><span>()<br/></span><span>                 </span><span>begin<br/></span><span>                     GiftManagement</span><span>.</span><span>AddGifts</span><span>(</span><span>Rec</span><span>)</span><span>;<br/></span><span>                 </span><span>end</span><span>;<br/></span><span>             }<br/></span><span>         }<br/></span><span>     }<br/><br/></span><span>     </span><span>var<br/></span><span>         GiftManagement: </span><span>Codeunit</span><span> GiftManagement_PKT;<br/></span><span>}</span></pre></div>
+<p>The <kbd>Sales Order</kbd> page (with the new action) now looks like this:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/58c20b38-2516-488f-b3b7-6b88574ac181.png" style="width:61.92em;height:29.83em;"/></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Codeunit definition</h1>
+                </header>
+            
+            <article>
+                
+<p>All of the business logic for handling the requirements is defined in a <kbd>GiftManagement</kbd> codeunit, as follows:</p>
+<div>
+<pre><span>c</span><span>odeunit</span><span> </span><span>50101</span><span> "GiftManagement_PKT"</span><span><br/></span><span>{<br/></span><span> </span><span>procedure</span><span> AddGifts</span><span>(var</span><span> SalesHeader: </span><span>Record</span><span> "Sales Header"</span><span>)<br/></span><span> </span><span>var<br/></span><span>     SalesLine: </span><span>record</span><span> "Sales Line";<br/></span><span> Handled: </span><span>Boolean</span><span>;<br/></span><span> </span><span>begin<br/></span><span>     SalesLine</span><span>.</span><span>SetRange</span><span>(</span><span>"Document Type", SalesHeader</span><span>.</span><span>"Document Type"</span><span>)</span><span>;<br/></span><span>     SalesLine</span><span>.</span><span>SetRange</span><span>(</span><span>"Document No.", SalesHeader</span><span>.</span><span>"No."</span><span>)</span><span>;<br/></span><span>     SalesLine</span><span>.</span><span>SetRange</span><span>(Type</span><span>, SalesLine</span><span>.Type</span><span>::Item</span><span>)</span><span>;<br/></span><span>     </span><span>//We exclude the generated gifts lines in order to avoid loops<br/></span><span>     SalesLine</span><span>.</span><span>SetFilter</span><span>(</span><span>"Line Discount %", </span><span>'&lt;&gt;100'</span><span>)</span><span>;</span><span> <br/></span><span>     if</span><span> SalesLine</span><span>.</span><span>FindSet</span><span>() then<br/></span><span>     </span><span>repeat<br/></span><span>         </span><span>//Integration event raised<br/></span><span>         OnBeforeFreeGiftSalesLineAdded</span><span>(</span><span>SalesLine, Handled</span><span>)</span><span>;<br/></span><span>         AddFreeGiftSalesLine</span><span>(</span><span>SalesLine, Handled</span><span>)</span><span>;<br/></span><span>         </span><span>//Integration Event raised<br/></span><span>         OnAfterFreeGiftSalesLineAdded</span><span>(</span><span>SalesLine</span><span>)</span><span>;<br/></span><span>     </span><span>until</span><span> SalesLine</span><span>.</span><span>Next</span><span>() </span><span>= </span><span>0</span><span>;<br/></span><span> </span><span>end</span><span>;<br/><br/></span><span> </span><span>local</span><span> </span><span>procedure</span><span> AddFreeGiftSalesLine</span><span>(var</span><span> SalesLine: </span><span>Record</span><span> "Sales Line"; </span><span>var</span><span> Handled: </span><span>Boolean)<br/></span><span> </span><span>var<br/></span><span>     GiftCampaign: </span><span>Record</span><span> GiftCampaign_PKT;<br/></span><span>     SalesHeader: </span><span>record</span><span> "Sales Header";<br/></span><span>     Customer: </span><span>Record</span><span> Customer;<br/></span><span>     SalesLineGift: </span><span>Record</span><span> "Sales Line";<br/></span><span>     LineNo: </span><span>Integer</span><span>;<br/></span><span> </span><span>begin<br/></span><span>     </span><span>if</span><span> Handled </span><span>then<br/></span><span>         </span><span>exit</span><span>;<br/></span><span>     SalesHeader</span><span>.</span><span>Get</span><span>(</span><span>SalesLine</span><span>.</span><span>"Document Type", SalesLine</span><span>.</span><span>"Document No."</span><span>)</span><span>;<br/></span><span>     Customer</span><span>.</span><span>Get</span><span>(</span><span>SalesLine</span><span>.</span><span>"Sell-to Customer No."</span><span>)</span><span>;<br/></span><span>     GiftCampaign</span><span>.</span><span>SetRange</span><span>(</span><span>CustomerCategoryCode, Customer</span><span>.</span><span>"Customer Category Code_PKT"</span><span>)</span><span>;<br/></span><span>     GiftCampaign</span><span>.</span><span>SetRange</span><span>(</span><span>ItemNo, SalesLine</span><span>.</span><span>"No."</span><span>)</span><span>;<br/></span><span>     GiftCampaign</span><span>.</span><span>SetFilter</span><span>(</span><span>StartingDate, </span><span>'&lt;=%1'</span><span>, SalesHeader</span><span>.</span><span>"Order Date"</span><span>)</span><span>;<br/></span><span>     GiftCampaign</span><span>.</span><span>SetFilter</span><span>(</span><span>EndingDate, </span><span>'&gt;=%1'</span><span>, SalesHeader</span><span>.</span><span>"Order Date"</span><span>)</span><span>;<br/></span><span>     GiftCampaign</span><span>.</span><span>SetRange</span><span>(</span><span>Inactive, false</span><span>)</span><span>;<br/></span><span>     GiftCampaign</span><span>.</span><span>SetFilter</span><span>(</span><span>MinimumOrderQuantity, </span><span>'&lt;= %1'</span><span>, SalesLine</span><span>.</span><span>Quantity</span><span>)</span><span>;<br/></span><span>     </span><span>if</span><span> GiftCampaign</span><span>.</span><span>FindFirst</span><span>() then</span><span> </span><span>begin<br/></span><span>         </span><span>//Active promo found. We need to insert a new Sales Line<br/></span><span>         LineNo</span><span> := </span><span>GetLastSalesDocumentLineNo</span><span>(</span><span>SalesHeader</span><span>)</span><span>;<br/></span><span>         SalesLineGift</span><span>.</span><span>init;<br/></span><span>         SalesLineGift</span><span>.</span><span>TransferFields</span><span>(</span><span>SalesLine</span><span>)</span><span>;<br/></span><span>         SalesLineGift</span><span>.</span><span>"Line No."</span><span> := </span><span>LineNo + </span><span>10000</span><span>;<br/></span><span>         SalesLineGift</span><span>.</span><span>Validate</span><span>(</span><span>Quantity, GiftCampaign</span><span>.</span><span>GiftQuantity</span><span>)</span><span>;<br/></span><span>         SalesLineGift</span><span>.</span><span>Validate</span><span>(</span><span>"Line Discount %", </span><span>100</span><span>)</span><span>;<br/></span><span>         </span><span>if</span><span> SalesLineGift</span><span>.</span><span>Insert</span><span>() then</span><span>;<br/></span><span>     </span><span>end</span><span>;<br/></span><span> </span><span>end</span><span>;<br/><br/></span><span> </span><span>local</span><span> </span><span>procedure</span><span> GetLastSalesDocumentLineNo</span><span>(</span><span>SalesHeader: </span><span>Record</span><span> "Sales Header"</span><span>)</span><span>: </span><span>Integer<br/></span><span> </span><span>var</span><span> <br/>     SalesLine: </span><span>Record</span><span> "Sales Line";<br/></span><span> </span><span>begin<br/></span><span>     SalesLine</span><span>.</span><span>SetRange</span><span>(</span><span>"Document Type", SalesHeader</span><span>.</span><span>"Document Type"</span><span>)</span><span>;<br/></span><span>     SalesLine</span><span>.</span><span>SetRange</span><span>(</span><span>"Document No.", SalesHeader</span><span>.</span><span>"No."</span><span>)</span><span>;<br/></span><span>     </span><span>if</span><span> SalesLine</span><span>.</span><span>FindLast</span><span>() then<br/></span><span>         </span><span>exit(</span><span>SalesLine</span><span>.</span><span>"Line No."</span><span>)<br/></span><span>     </span><span>else<br/></span><span>         </span><span>exit(</span><span>0</span><span>)</span><span>;<br/></span><span> </span><span>end</span><span>;<br/><br/></span><span> [EventSubscriber</span><span>(ObjectType</span><span>::</span><span>Table</span><span>, </span><span>Database</span><span>::"Sales Line", </span><span>'OnAfterValidateEvent'</span><span>, </span><span>'Quantity'</span><span>, false, false</span><span>)</span><span>]<br/></span><span> </span><span>local</span><span> </span><span>procedure</span><span> CheckGiftEligibility</span><span>(var</span><span> Rec: </span><span>Record</span><span> "Sales Line"</span><span>)<br/></span><span> </span><span>var<br/></span><span>     GiftCampaign: </span><span>Record</span><span> GiftCampaign_PKT;<br/></span><span>     Customer: </span><span>Record</span><span> Customer;<br/></span><span>     SalesHeader: </span><span>Record</span><span> "Sales Header";<br/></span><span>     Handled: </span><span>Boolean</span><span>;<br/></span><span> </span><span>begin<br/></span><span>     </span><span>if (</span><span>Rec</span><span>.Type</span><span> = Rec</span><span>.Type</span><span>::Item</span><span>) and (</span><span>Customer</span><span>.</span><span>Get</span><span>(</span><span>Rec</span><span>.</span><span>"Sell-to Customer No."</span><span>)) then</span><span> </span><span>begin<br/></span><span>     SalesHeader</span><span>.</span><span>Get</span><span>(</span><span>Rec</span><span>.</span><span>"Document Type", Rec</span><span>.</span><span>"Document No."</span><span>)</span><span>;<br/></span><span>     GiftCampaign</span><span>.</span><span>SetRange</span><span>(</span><span>CustomerCategoryCode, Customer</span><span>.</span><span>"Customer Category Code_PKT"</span><span>)</span><span>;<br/></span><span>     GiftCampaign</span><span>.</span><span>SetRange</span><span>(</span><span>ItemNo, Rec</span><span>.</span><span>"No."</span><span>)</span><span>;<br/></span><span>     GiftCampaign</span><span>.</span><span>SetFilter</span><span>(</span><span>StartingDate, </span><span>'&lt;=%1'</span><span>, SalesHeader</span><span>.</span><span>"Order Date"</span><span>)</span><span>;<br/></span><span>     GiftCampaign</span><span>.</span><span>SetFilter</span><span>(</span><span>EndingDate, </span><span>'&gt;=%1'</span><span>, SalesHeader</span><span>.</span><span>"Order Date"</span><span>)</span><span>;<br/></span><span>     GiftCampaign</span><span>.</span><span>SetRange</span><span>(</span><span>Inactive, false</span><span>)</span><span>;</span><span> GiftCampaign</span><span>.</span><span>SetFilter</span><span>(</span><span>MinimumOrderQuantity, </span><span>'&gt; %1'</span><span>,         Rec</span><span>.</span><span>Quantity</span><span>)</span><span>;<br/></span><span>     </span><span>if</span><span> GiftCampaign</span><span>.</span><span>FindFirst</span><span>() then</span><span> </span><span>begin<br/></span><span>         </span><span>//Integration event raised<br/></span><span>         OnBeforeFreeGiftAlert</span><span>(</span><span>Rec, Handled</span><span>)</span><span>;<br/></span><span>         DoGiftCheck</span><span>(</span><span>Rec, GiftCampaign, Handled</span><span>)</span><span>;<br/></span><span>         </span><span>//Integration Event raised<br/></span><span>         OnAfterFreeGiftAlert</span><span>(</span><span>Rec</span><span>)</span><span>;<br/></span><span>     </span><span>end</span><span>;<br/></span><span> </span><span>end</span><span>;<br/></span><span> </span><span>end</span><span>;<br/><br/></span><span> </span><span>local</span><span> </span><span>procedure</span><span> DoGiftCheck</span><span>(var</span><span> SalesLine: </span><span>Record</span><span> "Sales Line"; </span><span>var</span><span> GiftCampaign: </span><span>Record</span><span> GiftCampaign_PKT; </span><span>var</span><span> Handled: </span><span>Boolean)<br/></span><span> </span><span>var<br/></span><span>     PacktSetup: </span><span>record</span><span> "Packt Extension Setup";<br/></span><span>     GiftAlert: </span><span>Label</span><span> </span><span>'Attention: there is an active promotion for item %1. if you buy %2 you can have a gift of %3'</span><span>;<br/></span><span> </span><span>begin<br/></span><span>     </span><span>if</span><span> Handled </span><span>then<br/></span><span>         </span><span>exit</span><span>;<br/></span><span>     PacktSetup</span><span>.</span><span>Get</span><span>()</span><span>;<br/></span><span>     </span><span>if (</span><span>SalesLine</span><span>.</span><span>Quantity &lt; GiftCampaign</span><span>.</span><span>MinimumOrderQuantity</span><span>) and (</span><span>GiftCampaign</span><span>.</span><span>MinimumOrderQuantity - SalesLine</span><span>.</span><span>Quantity &lt;= PacktSetup</span><span>.</span><span>"Gift Tolerance Qty"</span><span>) then<br/></span><span>         Message</span><span>(</span><span>GiftAlert, SalesLine</span><span>.</span><span>"No.", Format</span><span>(</span><span>GiftCampaign</span><span>.</span><span>MinimumOrderQuantity</span><span>)</span><span>, Format</span><span>(</span><span>GiftCampaign</span><span>.</span><span>GiftQuantity</span><span>))</span><span>;<br/></span><span>     </span><span>end</span><span>;</span></pre></div>
+<p>Here, we have some procedures, some event subscribers, and some event publishers. The main procedure is called <kbd>AddGifts</kbd> and it adds the gift lines (promotions) to the sales order passed as the argument. It raises some integration events, and the main code is handled by the <kbd>AddFreeGiftSalesLine</kbd> procedure.</p>
+<p>The integration events defined in this codeunit are as follows:</p>
+<pre><span>[IntegrationEvent</span><span>(</span><span>true, false</span><span>)</span><span>]<br/></span><span> </span><span>local</span><span> </span><span>procedure</span><span> OnBeforeFreeGiftSalesLineAdded</span><span>(var</span><span> Rec: </span><span>Record</span><span> "Sales Line"; </span><span>var</span><span> Handled: </span><span>Boolean)<br/></span><span> </span><span>begin<br/></span><span> </span><span>end</span><span>;<br/><br/></span><span> [IntegrationEvent</span><span>(</span><span>true, false</span><span>)</span><span>]<br/></span><span> </span><span>local</span><span> </span><span>procedure</span><span> OnAfterFreeGiftSalesLineAdded</span><span>(var</span><span> Rec: </span><span>Record</span><span> "Sales Line"</span><span>)<br/></span><span> </span><span>begin<br/></span><span> </span><span>end</span><span>;<br/><br/></span><span> [IntegrationEvent</span><span>(</span><span>true, false</span><span>)</span><span>]<br/></span><span> </span><span>local</span><span> </span><span>procedure</span><span> OnBeforeFreeGiftAlert</span><span>(var</span><span> Rec: </span><span>Record</span><span> "Sales Line"; </span><span>var</span><span> Handled: </span><span>Boolean)<br/></span><span> </span><span>begin<br/></span><span> </span><span>end</span><span>;<br/><br/></span><span> [IntegrationEvent</span><span>(</span><span>true, false</span><span>)</span><span>]<br/></span><span> </span><span>local</span><span> </span><span>procedure</span><span> OnAfterFreeGiftAlert</span><span>(var</span><span> Rec: </span><span>Record</span><span> "Sales Line"</span><span>)<br/></span><span> </span><span>begin<br/></span><span> </span><span>end</span><span>;<br/><br/></span><span> [EventSubscriber</span><span>(ObjectType</span><span>::</span><span>Table</span><span>, </span><span>Database</span><span>::"Item Ledger Entry", </span><span>'OnAfterInsertEvent'</span><span>, </span><span>''</span><span>, false, false</span><span>)</span><span>]<br/></span><span> </span><span>local</span><span> </span><span>procedure</span><span> OnAfterItemLedgerEntryInsert</span><span>(var</span><span> Rec: </span><span>Record</span><span> "Item Ledger Entry"</span><span>)<br/></span><span> </span><span>var<br/></span><span>     Customer: </span><span>Record</span><span> Customer;<br/></span><span> </span><span>begin<br/></span><span>     </span><span>if</span><span> rec</span><span>.</span><span>"Entry Type" = rec</span><span>.</span><span>"Entry Type"::Sale </span><span>then</span><span> </span><span>begin<br/></span><span>         </span><span>if</span><span> Customer</span><span>.</span><span>Get</span><span>(</span><span>Rec</span><span>.</span><span>"Source No."</span><span>) then</span><span> </span><span>begin<br/></span><span>             Rec</span><span>.</span><span>"Customer Category Code_PKT"</span><span> := </span><span>Customer</span><span>.</span><span>"Customer Category Code_PKT";<br/></span><span>             Rec</span><span>.Modify()</span><span>;<br/></span><span>          </span><span>end</span><span>;<br/></span><span>     </span><span>end</span><span>;<br/></span><span> </span><span>end</span><span>;<br/></span><span>}</span></pre>
+<p>Here, we've implemented the <kbd>Handled</kbd> pattern (to guarantee extensibility). In this way, a dependent extension can change the gift assignment logic as needed without modifying the base code of the main extension.</p>
+<p>The <kbd>Handled</kbd> pattern implementation is as follows:</p>
+<pre>OnBeforeFreeGiftSalesLineAdded(SalesLine, Handled);<br/>AddFreeGiftSalesLine(SalesLine, Handled);<br/>OnAfterFreeGiftSalesLineAdded(SalesLine);</pre>
+<p>In this code, we have the following:</p>
+<ul>
+<li>We have a global variable called <kbd>Handled</kbd> set to <kbd>false</kbd>.</li>
+<li>We raise an integration event called <kbd>OnBeforeFreeGiftSalesLineAdded</kbd> by passing the sales line we're working on and the <kbd>Handled</kbd> variable.</li>
+<li>We implement the business logic in a procedure called <kbd>AddFreeGiftSalesLine</kbd>. In this procedure, if the event is handled, we skip the standard logic:</li>
+</ul>
+<pre style="padding-left: 60px">if Handled then<br/>   exit;</pre>
+<ul>
+<li>At the end of the process, we raise an integration event called <kbd>OnAfterFreeGiftSalesLineAdded</kbd>.</li>
+</ul>
+<p>So, why does this pattern guarantee extensibility? This is because, in a dependent extension, you can subscribe to the <kbd>OnBeforeFreeGiftSalesLineAdded</kbd> event and set the <kbd>Handled</kbd> variable to <kbd>true</kbd><em> </em>and implement your new business logic for adding gifts.<em> </em>Then, the standard business logic (<kbd>AddFreeGiftSalesLine</kbd>) is skipped.</p>
+<p>After this, you can subscribe to the <kbd>OnAfterFreeGiftSalesLineAdded</kbd> event and implement other custom business logic that must be executed after the process of adding gifts. We'll see an example of a dependent extension that alters the standard business logic of our extension in the <em>Understanding dependent extensions</em> section of this chapter.</p>
+<p class="mce-root"/>
+<p>In this codeunit, we've also created a procedure called <kbd>CheckGiftEligibility</kbd>, which is an event subscriber of the <kbd>OnAfterValidateEvent</kbd> event of the <kbd>Quantity</kbd> field of the <kbd>Sales Line</kbd> table. The following code shows this:</p>
+<pre>[EventSubscriber(ObjectType::Table, Database::"Sales Line", 'OnAfterValidateEvent', 'Quantity', false, false)]<br/>    local procedure CheckGiftEligibility(var Rec: Record "Sales Line")</pre>
+<p>In this function, we handle the business logic for the alert that must be triggered when the sales operator inserts the quantity in a sales line. As you can see in the preceding code, we've implemented <span>the </span><kbd>Handled</kbd> pattern<span> </span>again here to provide extensibility.</p>
+<p><span>In this codeunit, w</span>e've <span>also </span>handled the event subscriber for the <kbd>OnAfterInsertEvent</kbd> event of the <kbd>Item Ledger Entry</kbd> table to transfer the <kbd>Customer Category</kbd> data to the <kbd>Item Ledger Entry</kbd> field (this was one of the requested requirements):</p>
+<pre>[EventSubscriber(ObjectType::Table, Database::"Item Ledger Entry", 'OnAfterInsertEvent', '', false, false)]<br/>    local procedure OnAfterItemLedgerEntryInsert(var Rec: Record "Item Ledger Entry")</pre>
+<p>What happens when, from a sales order, you trigger the <span class="packt_screen">Add Free Gifts</span> action? Refer to the following screenshot:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/4c91fbaf-d9af-4a31-9046-d71ef5ed419d.png"/></p>
+<p class="mce-root"/>
+<p>We can see that the e<span>vents are raised, the </span><kbd>AddGifts</kbd> <span>function is executed, and the gift promotions (if any) are inserted in the </span><kbd>Sales Line</kbd><span> table (a new line with the</span> <span class="packt_screen">LINE DISCOUNT %</span> <span>field value set to <kbd>100</kbd>).</span></p>
+<p>We've now implemented all of the business requirements needed to manage the customer's gift campaigns. Now, let's move on to the vendor quality implementation details.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Vendor quality implementations</h1>
+                </header>
+            
+            <article>
+                
+<p>To handle the vendor quality management requirements, we need to do the following:</p>
+<ul>
+<li>Define a <kbd>Vendor Quality</kbd> table (related to the standard <kbd>Vendor</kbd> table) that will contain details about the quality scores for vendor and quality-related financial data.</li>
+<li>Define the relevant card page and attach it to the vendor card (this will be the quality detail card for a vendor as per our requirements).</li>
+<li>Add a new action to the standard <kbd>Vendor card</kbd> page to open <kbd>Vendor Quality card</kbd>.</li>
+<li>Define a codeunit that handles all of the business logic related to this implementation</li>
+</ul>
+<p>In the following sections, we'll see the various object implementations in detail.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Table definition</h1>
+                </header>
+            
+            <article>
+                
+<p>By using the <kbd>ttable</kbd> snippet, we define the <kbd>Vendor Quality</kbd> table as follows:</p>
+<div>
+<pre><span>table</span><span> </span><span>50102</span><span> "Vendor Quality_PKT"</span><span><br/></span><span>{<br/></span><span> Caption = </span><span>'Vendor Quality'</span><span>;<br/></span><span> </span><span>DataClassification</span><span> = CustomerContent;<br/><br/></span><span> </span><span>fields<br/></span><span> {<br/></span><span>     </span><span>field(</span><span>1</span><span>; "Vendor No."; </span><span>Code</span><span>[</span><span>20</span><span>]</span><span>)<br/></span><span>     {<br/></span><span>         Caption = </span><span>'Vendor No.'</span><span>;<br/></span><span>         DataClassification</span><span> = CustomerContent;<br/></span><span>         TableRelation = Vendor;<br/></span><span>     }<br/></span><span>     </span><span>field(</span><span>2</span><span>; "Vendor Name"; </span><span>Text</span><span>[</span><span>50</span><span>]</span><span>)<br/></span><span>     {<br/></span><span>         Caption = </span><span>'Vendor Name'</span><span>;<br/></span><span>         </span><span>FieldClass</span><span> = FlowField;<br/></span><span>         CalcFormula = </span><span>lookup (</span><span>Vendor</span><span>.</span><span>Name </span><span>where (</span><span>"No." = </span><span>field (</span><span>"Vendor No."</span><span>)))</span><span>;<br/></span><span>     }<br/></span><span>     </span><span>field(</span><span>3</span><span>; "Vendor Activity Description"; </span><span>Text</span><span>[</span><span>250</span><span>]</span><span>)<br/></span><span>     {<br/></span><span>         Caption = </span><span>'Vendor Activity Description'</span><span>;<br/></span><span>         </span><span>DataClassification</span><span> = CustomerContent;<br/></span><span>     }<br/></span><span>     </span><span>field(</span><span>4</span><span>; ScoreItemQuality; </span><span>Integer)<br/></span><span>     {<br/></span><span>         Caption = </span><span>'Item Quality Score'</span><span>;<br/></span><span>         </span><span>DataClassification</span><span> = CustomerContent;<br/></span><span>         MinValue = </span><span>1</span><span>;<br/></span><span>         MaxValue = </span><span>10</span><span>;<br/></span><span>         </span><span>trigger</span><span> OnValidate</span><span>()<br/></span><span>         </span><span>begin<br/></span><span>             UpdateVendorRate</span><span>()</span><span>;<br/></span><span>         </span><span>end</span><span>;<br/></span><span>     }<br/></span><span>     </span><span>field(</span><span>5</span><span>; ScoreDelivery; </span><span>Integer)<br/></span><span>     {<br/></span><span>         Caption = </span><span>'Delivery On Time Score'</span><span>;<br/></span><span>         </span><span>DataClassification</span><span> = CustomerContent;<br/></span><span>         MinValue = </span><span>1</span><span>;<br/></span><span>         MaxValue = </span><span>10</span><span>;<br/></span><span>         </span><span>trigger</span><span> OnValidate</span><span>()<br/></span><span>         </span><span>begin<br/></span><span>             UpdateVendorRate</span><span>()</span><span>;<br/></span><span>         </span><span>end</span><span>;<br/></span><span>     }<br/></span><span>     </span><span>field(</span><span>6</span><span>; ScorePackaging; </span><span>Integer)<br/></span><span>     {<br/></span><span>         Caption = </span><span>'Packaging Score'</span><span>;<br/></span><span>         </span><span>DataClassification</span><span> = CustomerContent;<br/></span><span>         MinValue = </span><span>1</span><span>;<br/></span><span>         MaxValue = </span><span>10</span><span>;<br/></span><span>         </span><span>trigger</span><span> OnValidate</span><span>()<br/></span><span>         </span><span>begin<br/></span><span>             UpdateVendorRate</span><span>()</span><span>;<br/></span><span>         </span><span>end</span><span>;<br/></span><span>         }<br/></span><span>     </span><span>field(</span><span>7</span><span>; ScorePricing; </span><span>Integer)<br/></span><span>     {<br/></span><span>         Caption = </span><span>'Pricing Score'</span><span>;<br/></span><span>         </span><span>DataClassification</span><span> = CustomerContent;<br/></span><span>         MinValue = </span><span>1</span><span>;<br/></span><span>         MaxValue = </span><span>10</span><span>;<br/></span><span>         </span><span>trigger</span><span> OnValidate</span><span>()<br/></span><span>         </span><span>begin<br/></span><span>             UpdateVendorRate</span><span>()</span><span>;<br/></span><span>         </span><span>end</span><span>;<br/></span><span>     }<br/></span><span>     </span><span>field(</span><span>8</span><span>; Rate; </span><span>Decimal)<br/></span><span>     {<br/></span><span>         Caption = </span><span>'Vendor Rate'</span><span>;<br/></span><span>         </span><span>DataClassification</span><span> = CustomerContent;<br/></span><span>     }<br/></span><span>     </span><span>field(</span><span>10</span><span>; UpdateDate; </span><span>DateTime)<br/></span><span>     {<br/></span><span>         Caption = </span><span>'Update Date'</span><span>;<br/></span><span>         </span><span>DataClassification</span><span> = CustomerContent;<br/></span><span>     }<br/></span><span>     </span><span>field(</span><span>11</span><span>; InvoicedYearN; </span><span>Decimal)<br/></span><span>     {<br/></span><span>         Caption = </span><span>'Invoiced for current year (N)'</span><span>;<br/></span><span>         </span><span>DataClassification</span><span> = CustomerContent;<br/></span><span>     }<br/></span><span>     </span><span>field(</span><span>12</span><span>; InvoicedYearN1; </span><span>Decimal)<br/></span><span>     {<br/></span><span>         Caption = </span><span>'Invoiced for year N-1'</span><span>;<br/></span><span>         </span><span>DataClassification</span><span> = CustomerContent;<br/></span><span>     }<br/></span><span>     </span><span>field(</span><span>13</span><span>; InvoicedYearN2; </span><span>Decimal)<br/></span><span>     {<br/></span><span>         Caption = </span><span>'Invoiced for year N-2'</span><span>;<br/></span><span>         </span><span>DataClassification</span><span> = CustomerContent;<br/></span><span>     }<br/></span><span>     </span><span>field(</span><span>14</span><span>; DueAmount; </span><span>Decimal)<br/></span><span>     {<br/></span><span>         Caption = </span><span>'Due Amount'</span><span>;<br/></span><span>         </span><span>DataClassification</span><span> = CustomerContent;<br/></span><span>     }<br/></span><span>     </span><span>field(</span><span>15</span><span>; AmountNotDue; </span><span>Decimal)<br/></span><span>     {<br/></span><span>         Caption = </span><span>'Amount to pay (not due)'</span><span>;<br/></span><span>         </span><span>DataClassification</span><span> = CustomerContent;<br/></span><span>     }<br/></span><span> }<br/><br/></span><span> </span><span>keys<br/></span><span> {<br/></span><span>     </span><span>key(</span><span>PK; "Vendor No."</span><span>)<br/></span><span>     {<br/></span><span>         Clustered = true;<br/></span><span>     }<br/></span><span> }<br/><br/></span><span> </span><span>trigger</span><span> OnInsert</span><span>()<br/></span><span> </span><span>begin<br/></span><span>     UpdateDate</span><span> := </span><span>CurrentDateTime</span><span>()</span><span>;<br/></span><span> end</span><span>;<br/></span><span> </span><span>trigger</span><span> OnModify</span><span>()<br/></span><span> </span><span>begin<br/></span><span>     UpdateDate</span><span> := </span><span>CurrentDateTime</span><span>()</span><span>;<br/></span><span> </span><span>end</span><span>;<br/></span><span> </span><span>local</span><span> </span><span>procedure</span><span> UpdateVendorRate</span><span>()<br/></span><span> var<br/></span><span>     VendorQualityMgt: </span><span>Codeunit</span><span> VendorQualityMgt_PKT;<br/></span><span> </span><span>begin<br/></span><span>     VendorQualityMgt</span><span>.</span><span>CalculateVendorRate</span><span>(</span><span>Rec</span><span>)</span><span>;<br/></span><span> </span><span>end</span><span>;<br/></span><span>}</span></pre></div>
+<p>In this table, we have the definitions of the required score fields (rating) and the required financial fields. For the score rates, we handle the <kbd>OnValidate</kbd> trigger to dynamically update the rate calculation when the user inserts values in the fields (this is done by calling the <kbd>UpdateVendorRate</kbd> function defined in the table (as a class method) but implemented in the external codeunit that we'll see later).</p>
+<p>We've also handled the table's <kbd>OnInsert</kbd> and <kbd>OnModify</kbd> triggers to save the insertion or modification date of the record (business requirements).</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Page definition</h1>
+                </header>
+            
+            <article>
+                
+<p>For our business requirements, we need to create a <kbd>Vendor Quality card</kbd> page. We create a new page of the <kbd>Card</kbd> <span>type</span><span> </span><span>by using the</span> <kbd>tpage</kbd> <span>snippet, as follows:</span></p>
+<div>
+<pre><span>page</span><span> </span><span>50102</span><span> "Vendor Quality Card_PKT"</span><span><br/></span><span>{<br/></span><span>     PageType = Card;<br/></span><span>     ApplicationArea = All;<br/></span><span>     UsageCategory = Administration;<br/></span><span>     SourceTable = "Vendor Quality_PKT";<br/></span><span>     Caption = </span><span>'Vendor Quality Card'</span><span>;<br/></span><span>     InsertAllowed = false;<br/><br/></span><span>     </span><span>layout<br/></span><span>    {<br/></span><span>         </span><span>area(</span><span>Content</span><span>)<br/></span><span>         {<br/></span><span>             </span><span>group(</span><span>General</span><span>)<br/></span><span>             {<br/></span><span>                 Caption = </span><span>'General'</span><span>;<br/></span><span>                 </span><span>field(</span><span>"Vendor No."; "Vendor No."</span><span>)<br/></span><span>                 {<br/></span><span>                     ApplicationArea = All;<br/></span><span>                     Editable = false;<br/></span><span>                 }<br/></span><span>                 </span><span>field(</span><span>"Vendor Name"; "Vendor Name"</span><span>)<br/></span><span>                 {<br/></span><span>                     ApplicationArea = All;<br/></span><span>                     Editable = false;<br/></span><span>                 }<br/></span><span>                 </span><span>field(</span><span>"Vendor Activity Description"; "Vendor Activity Description"</span><span>)<br/></span><span>                 {<br/></span><span>                     ApplicationArea = All;<br/></span><span>                 }<br/></span><span>                 </span><span>field(</span><span>Rate; Rate</span><span>)<br/></span><span>                 {<br/></span><span>                     ApplicationArea = All;<br/></span><span>                     Editable = false;<br/></span><span>                     Style = Strong;<br/></span><span>                 }<br/></span><span>                 </span><span>field(</span><span>UpdateDate; UpdateDate</span><span>)<br/></span><span>                 {<br/></span><span>                     ApplicationArea = All;<br/></span><span>                     Editable = false;<br/></span><span>                 }<br/></span><span>             }<br/></span><span>             </span><span>group(</span><span>Scoring</span><span>)<br/></span><span>             {<br/></span><span>                 Caption = </span><span>'Score'</span><span>;<br/></span><span>                 </span><span>field(</span><span>ScoreItemQuality; ScoreItemQuality</span><span>)<br/></span><span>                 {<br/></span><span>                     ApplicationArea = All;<br/></span><span>                 }<br/></span><span>                 </span><span>field(</span><span>ScoreDelivery; ScoreDelivery</span><span>)<br/></span><span>                 {<br/></span><span>                     ApplicationArea = All;<br/></span><span>                 }<br/></span><span>                 </span><span>field(</span><span>ScorePackaging; ScorePackaging</span><span>)<br/></span><span>                 {<br/></span><span>                     ApplicationArea = All;<br/></span><span>                 }<br/></span><span>                 </span><span>field(</span><span>ScorePricing; ScorePricing</span><span>)<br/></span><span>                 {<br/></span><span>                     ApplicationArea = All;<br/></span><span>                 }<br/></span><span>             }<br/></span><span>             </span><span>group(</span><span>Financials</span><span>)<br/></span><span>             {<br/></span><span>                 Caption = </span><span>'Financials'</span><span>;<br/></span><span>                 </span><span>field(</span><span>InvoicedYearN; InvoicedYearN</span><span>)<br/></span><span>                 {<br/></span><span>                     ApplicationArea = All;<br/></span><span>                     Editable = false;<br/></span><span>                 }<br/></span><span>                 </span><span>field(</span><span>InvoicedYearN1; InvoicedYearN1</span><span>)<br/></span><span>                 {<br/></span><span>                     ApplicationArea = All;<br/></span><span>                     Editable = false;<br/></span><span>                 }<br/></span><span>                 </span><span>field(</span><span>InvoicedYearN2; InvoicedYearN2</span><span>)<br/></span><span>                 {<br/></span><span>                     ApplicationArea = All;<br/></span><span>                     Editable = false;<br/></span><span>                 }<br/></span><span>                 </span><span>field(</span><span>DueAmount; DueAmount</span><span>)<br/></span><span>                 {<br/></span><span>                     ApplicationArea = All;<br/></span><span>                     Editable = false;<br/></span><span>                     Style = Attention;<br/></span><span>                 }<br/></span><span>                 </span><span>field(</span><span>AmountNotDue; AmountNotDue</span><span>)<br/></span><span>                 {<br/></span><span>                     ApplicationArea = All;<br/></span><span>                     Editable = false;<br/></span><span>                 }<br/></span><span>             }<br/></span><span>         }<br/></span><span>     }<br/><br/></span><span>     </span><span>trigger</span><span> OnOpenPage</span><span>()<br/></span><span>     </span><span>begin<br/></span><span>         </span><span>if</span><span> </span><span>not</span><span> Insert</span><span>() then</span><span>;<br/></span><span>     </span><span>end</span><span>;<br/><br/></span><span>     </span><span>trigger</span><span> OnAfterGetRecord</span><span>()<br/></span><span>     </span><span>var<br/></span><span>         VendorQualityMgt: </span><span>Codeunit</span><span> VendorQualityMgt_PKT;<br/></span><span>     </span><span>begin<br/></span><span>         VendorQualityMgt</span><span>.</span><span>UpdateVendorQualityStatistics</span><span>(</span><span>Rec</span><span>)</span><span>;<br/></span><span>     </span><span>end</span><span>;<br/></span><span>}</span></pre></div>
+<p>This page is designed by creating different groups (<kbd>FastTabs</kbd> in the UI):</p>
+<ul>
+<li><kbd>General</kbd>: Contains the general quality classification of the selected vendor, such as the name, a description of the activity, and the calculation rate</li>
+<li><kbd>Scoring</kbd>: Contains the quality scores (as assigned by the company's quality manager)</li>
+<li><kbd>Financials</kbd>: Contains the financial data required from the quality requirements</li>
+</ul>
+<p>This page has the <kbd>InsertAllowed</kbd> property set to <kbd>true</kbd> because the record here is inserted automatically when the page is opened from <kbd>Vendor card</kbd> (we handle the <kbd>OnOpenPage</kbd> trigger here) and the user can't directly insert new records from this page.</p>
+<p>We also handle the <kbd>OnAfterGetRecord</kbd> page trigger, and from here, we call a function that refreshes the financial statistics.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">The pageextension definition</h1>
+                </header>
+            
+            <article>
+                
+<p>We need a <kbd>pageextension</kbd> object to create the action of opening the previously created <kbd>Vendor Quality card</kbd> page from the standard <kbd>Vendor Card</kbd> page. By using the <kbd>tpageext</kbd> snippet, we create the following object:</p>
+<div>
+<pre><span>pageextension</span> <span>50101</span> <span>VendorCardExt_PKT</span> <span>extends</span> <span>"Vendor Card"<br/></span><span>{<br/></span><span>    actions<br/></span><span>    {<br/></span><span>        addafter(</span><span>"Comments"</span><span>)<br/></span><span>        {<br/></span><span>            action(</span><span>QualityClassification</span><span>)<br/></span><span>            {<br/></span><span>                Caption =</span> <span>'Quality Classification'</span><span>;<br/></span><span>                ApplicationArea = All;<br/></span><span>                Image = QualificationOverview;<br/></span><span>                Promoted = true;<br/></span><span>                PromotedCategory = Process;<br/></span><span>                PromotedIsBig = true;<br/></span><span>                RunObject =</span> <span>Page</span> <span>"Vendor Quality Card_PKT";<br/></span><span>                RunPageLink = "Vendor No." =</span> <span>field (</span><span>"No."</span><span>)</span><span>;<br/></span><span>            }<br/></span><span>        }<br/></span><span>    }<br/></span><span>}</span></pre></div>
+<p>Here, we have defined a <kbd>QualityClassification</kbd> action, which opens the <kbd>Vendor Quality card</kbd> page for the selected <kbd>Vendor</kbd> record (by using the <kbd>RunPageLink</kbd> property).</p>
+<p>The page action appears as follows:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/e38809fe-84d4-4ffc-a92c-7c71120423d6.png"/></p>
+<p class="mce-root"/>
+<p>When triggering the action, the <kbd>Vendor Quality Card</kbd> is opened and looks like this:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/2b1082df-0cf4-488c-b16a-b6239f2b49a8.png"/></p>
+<p>When the quality manager inserts score values, the <kbd>Vendor Rate</kbd> value is automatically calculated. Financial statistics are automatically calculated when opening the page (in real time).</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Codeunit definition</h1>
+                </header>
+            
+            <article>
+                
+<p>As usual, we define all of our business logic in an external codeunit <span>called </span><kbd>VendorQualityMgt</kbd><em> </em>using the <kbd>tcodeunit</kbd> <span>snippet</span>, defined as follows:</p>
+<div>
+<pre><span>c</span><span>odeunit</span> <span>50102</span> <span>VendorQualityMgt_PKT</span><span><br/></span><span>{<br/></span><span>    procedure</span> <span>CalculateVendorRate</span><span>(var</span> <span>VendorQuality:</span> <span>Record</span> <span>"Vendor Quality_PKT"</span><span>)<br/></span><span>    var<br/></span><span>        Handled:</span> <span>Boolean</span><span>;<br/></span><span>    begin<br/></span><span>        OnBeforeCalculateVendorRate</span><span>(</span><span>VendorQuality, Handled</span><span>)</span><span>;<br/></span><span>        //This is the company's criteria to assign the Vendor rate.<br/></span><span>        VendorRateCalculation</span><span>(</span><span>VendorQuality, Handled</span><span>)</span><span>;<br/></span><span>        OnAfterCalculateVendorRate</span><span>(</span><span>VendorQuality</span><span>)</span><span>;<br/></span><span>    end</span><span>;</span><span><br/><br/></span><span>    local</span> <span>procedure</span> <span>VendorRateCalculation</span><span>(var</span> <span>VendorQuality:</span> <span>Record</span> <span>"Vendor Quality_PKT";</span> <span>var</span>         <span>Handled:</span> <span>Boolean)<br/></span><span>    begin<br/></span><span>        if</span> <span>Handled</span> <span>then<br/></span><span>            exit</span><span>;<br/></span><span>        VendorQuality</span><span>.</span><span>Rate</span> <span>:= (</span><span>VendorQuality</span><span>.</span><span>ScoreDelivery + VendorQuality</span><span>.</span><span>ScoreItemQuality +<br/></span><span>        VendorQuality</span><span>.</span><span>ScorePackaging + VendorQuality</span><span>.</span><span>ScorePricing</span><span>)</span> <span>/</span> <span>4</span><span>;<br/></span><span>    end</span><span>;<br/><br/></span><span>    procedure</span> <span>UpdateVendorQualityStatistics</span><span>(var</span> <span>VendorQuality:</span> <span>Record</span> <span>"Vendor Quality_PKT"</span><span>)<br/></span><span>    var<br/></span><span>        Year:</span> <span>Integer</span><span>;<br/></span><span>        DW:</span> <span>Dialog</span><span>;<br/></span><span>        DialogMessage:</span> <span>Label</span> <span>'Calculating Vendor statistics...'</span><span>;<br/></span><span>    begin<br/></span><span>        DW</span><span>.</span><span>OPEN</span><span>(</span><span>DialogMessage</span><span>)</span><span>;<br/></span><span>        Year</span> <span>:=</span> <span>DATE2DMY</span><span>(</span><span>TODAY,</span> <span>3</span><span>)</span><span>;<br/></span><span>        VendorQuality</span><span>.</span><span>InvoicedYearN</span> <span>:=</span> <span>GetInvoicedAmount</span><span>(</span><span>VendorQuality</span><span>.</span><span>"Vendor No.", DMY2DATE</span><span>(</span><span>1</span><span>,</span> <span>1</span><span>,                 Year</span><span>)</span><span>, TODAY</span><span>)</span><span>;<br/></span><span>        VendorQuality</span><span>.</span><span>InvoicedYearN1</span> <span>:=</span> <span>GetInvoicedAmount</span><span>(</span><span>VendorQuality</span><span>.</span><span>"Vendor No.", DMY2DATE</span><span>(</span><span>1</span><span>,</span> <span>1</span><span>,             Year -</span> <span>1</span><span>)</span><span>, DMY2DATE</span><span>(</span><span>31</span><span>,</span> <span>12</span><span>, Year -</span> <span>1</span><span>))</span><span>;<br/></span><span>        VendorQuality</span><span>.</span><span>InvoicedYearN2</span> <span>:=</span> <span>GetInvoicedAmount</span><span>(</span><span>VendorQuality</span><span>.</span><span>"Vendor No.", DMY2DATE</span><span>(</span><span>1</span><span>,</span> <span>1</span><span>,             Year -</span> <span>2</span><span>)</span><span>, DMY2DATE</span><span>(</span><span>31</span><span>,</span> <span>12</span><span>, Year -</span> <span>2</span><span>))</span><span>;<br/></span><span>        VendorQuality</span><span>.</span><span>DueAmount</span> <span>:=</span> <span>GetDueAmount</span><span>(</span><span>VendorQuality</span><span>.</span><span>"Vendor No.", TRUE</span><span>)</span><span>;<br/></span><span>        VendorQuality</span><span>.</span><span>AmountNotDue</span> <span>:=</span> <span>GetDueAmount</span><span>(</span><span>VendorQuality</span><span>.</span><span>"Vendor No.", FALSE</span><span>)</span><span>;<br/></span><span>        DW</span><span>.</span><span>CLOSE;<br/></span><span>    end</span><span>;<br/><br/></span><span>    local</span> <span>procedure</span> <span>GetInvoicedAmount</span><span>(</span><span>VendorNo:</span> <span>Code</span><span>[</span><span>20</span><span>]; StartDate:</span> <span>Date</span><span>; EndDate:</span> <span>Date)</span><span>:</span> <span>Decimal<br/></span><span>    var<br/></span><span>        VendorLedgerEntry:</span> <span>Record</span> <span>"Vendor Ledger Entry";<br/></span><span>        Total:</span> <span>Decimal</span><span>;<br/></span><span>    begin<br/></span><span>        VendorLedgerEntry</span><span>.</span><span>SETRANGE</span><span>(</span><span>"Vendor No.", VendorNo</span><span>)</span><span>;<br/></span><span>        VendorLedgerEntry</span><span>.</span><span>SETFILTER</span><span>(</span><span>"Document Date",</span> <span>'%1..%2'</span><span>, StartDate, EndDate</span><span>)</span><span>;<br/></span><span>        if</span> <span>VendorLedgerEntry</span><span>.</span><span>FINDSET</span> <span>then<br/></span><span>        repeat<br/></span><span>            Total</span> <span>+=</span> <span>VendorLedgerEntry</span><span>.</span><span>"Purchase (LCY)";<br/></span><span>        until</span> <span>VendorLedgerEntry</span><span>.</span><span>NEXT =</span> <span>0</span><span>;<br/></span><span>        exit(</span><span>Total *</span> <span>(</span><span>-</span><span>1</span><span>))</span><span>;<br/></span><span>    end</span><span>;<br/><br/></span><span>    local</span> <span>procedure</span> <span>GetDueAmount</span><span>(</span><span>VendorNo:</span> <span>Code</span><span>[</span><span>20</span><span>]; Due:</span> <span>Boolean)</span><span>:</span> <span>Decimal<br/></span><span>    var<br/></span><span>        VendorLedgerEntry:</span> <span>Record</span> <span>"Vendor Ledger Entry";<br/></span><span>        Total:</span> <span>Decimal</span><span>;<br/></span><span>    begin<br/></span><span>        VendorLedgerEntry</span><span>.</span><span>SETRANGE</span><span>(</span><span>"Vendor No.", VendorNo</span><span>)</span><span>;<br/></span><span>        VendorLedgerEntry</span><span>.</span><span>SETRANGE</span><span>(</span><span>Open, TRUE</span><span>)</span><span>;<br/></span><span>        if</span> <span>Due</span> <span>then<br/></span><span>            VendorLedgerEntry</span><span>.</span><span>SETFILTER</span><span>(</span><span>"Due Date",</span> <span>'&lt; %1'</span><span>, TODAY</span><span>)<br/></span><span>        else<br/></span><span>            VendorLedgerEntry</span><span>.</span><span>SETFILTER</span><span>(</span><span>"Due Date",</span> <span>'&gt; %1'</span><span>, TODAY</span><span>)</span><span>;<br/></span><span>        VendorLedgerEntry</span><span>.</span><span>SETAUTOCALCFIELDS</span><span>(</span><span>VendorLedgerEntry</span><span>.</span><span>"Remaining Amt. (LCY)"</span><span>)</span><span>;<br/></span><span>        if</span> <span>VendorLedgerEntry</span><span>.</span><span>FINDSET</span> <span>then<br/></span><span>        repeat<br/></span><span>            Total</span> <span>+=</span> <span>VendorLedgerEntry</span><span>.</span><span>"Remaining Amt. (LCY)";<br/></span><span>        until</span> <span>VendorLedgerEntry</span><span>.</span><span>NEXT =</span> <span>0</span><span>;<br/></span><span>        exit(</span><span>Total *</span> <span>(</span><span>-</span><span>1</span><span>))</span><span>;<br/></span><span>    end</span><span>;<br/></span><span>    </span><span><br/></span><span>}</span></pre></div>
+<p>Here, we have defined the following functions:</p>
+<ul>
+<li><kbd>CalculateVendorRate</kbd>: This is the function that calculates the vendor rate based on the quality scores assigned by the quality manager. We want this function to be extendable to be able to change the standard rate algorithm as needed in the future. To do that, we use the HANDLE pattern:
+<ul>
+<li>We raise an <kbd>OnBeforeCalculateVendorRate</kbd> event with the current <kbd>Vendor Quality</kbd> record and the <kbd>Handled</kbd> Boolean variable as event parameters.</li>
+<li>We perform the standard rate calculation in the <kbd>VendorRateCalculation</kbd> function by checking the <kbd>Handled</kbd> parameter, and we exit from the function if we want to skip the standard calculation (by setting <kbd>Handled = true</kbd>).</li>
+<li>We raise an <kbd>OnAfterCalculateVendorRate</kbd> event for handling post calculation operations or for handling a totally new calculation.</li>
+</ul>
+</li>
+<li><kbd>UpdateVendorQualityStatistics</kbd>: This function calculates the financial statistics required by the quality manager:
+<ul>
+<li><kbd>GetInvoicedAmount</kbd>: For a given <kbd>Vendor No.</kbd> field and date period (start/end date), it calculates the invoiced amount by checking the <kbd>Vendor Ledger Entry</kbd> table (the <kbd>Purchase (LCY<span>)</span></kbd> field). The returned result is <kbd>-1</kbd> because we want the absolute value.</li>
+<li><kbd>GetDueAmount</kbd>: For a given <kbd>Vendor No.</kbd> field, it calculates the due amount (the <kbd>Due</kbd> parameter is set to <kbd>true</kbd>) or the amount to pay (the <kbd>Due</kbd> parameter is set to <kbd>false</kbd>) by checking the <kbd>Vendor Ledger Entry</kbd> table (the <kbd>Remaining Amt. (LCY)</kbd> field). The returned result is multiplied by <kbd>-1</kbd> because we want the absolute value.</li>
+</ul>
+</li>
+</ul>
+<p>The codeunits events are defined as follows:</p>
+<pre><span>[IntegrationEvent</span><span>(</span><span>true, false</span><span>)</span><span>]<br/></span><span>    local</span> <span>procedure</span> <span>OnBeforeCalculateVendorRate</span><span>(var</span> <span>VendorQuality:</span> <span>Record</span> <span>"Vendor Quality_PKT";</span> <span>var</span>         <span>Handled:</span> <span>Boolean)<br/></span><span>    begin<br/></span><span>    end</span><span>;<br/><br/></span><span>    [IntegrationEvent</span><span>(</span><span>true, false</span><span>)</span><span>]<br/></span><span>    local</span> <span>procedure</span> <span>OnAfterCalculateVendorRate</span><span>(var</span> <span>VendorQuality:</span> <span>Record</span> <span>"Vendor Quality_PKT"</span><span>)<br/></span><span>    begin<br/></span><span>    end</span><span>;</span></pre>
+<p>In this codeunit, we've also defined an event subscriber (the <kbd>teventsub</kbd> snippet) for the <kbd>OnBeforeManualReleasePurchaseDoc</kbd> standard event defined in Microsoft's <kbd>Release Purchase Document</kbd> codeunit, which is defined as follows:</p>
+<pre>[EventSubscriber(ObjectType::Codeunit, Codeunit::"Release Purchase Document", 'OnBeforeManualReleasePurchaseDoc', '', false, false)]</pre>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mceNonEditable"/>
+<p>We use this event to raise an error during the order release phase if the vendor does not meet the company's rate criteria (that is, the minimum acceptable rate) defined in the extension's setup table.</p>
+<p>The event subscriber implementation is as follows:</p>
+<pre><span>[EventSubscriber</span><span>(ObjectType</span><span>::</span><span>Codeunit</span><span>,</span> <span>Codeunit</span><span>::"Release Purchase Document",</span>         <span>'OnBeforeManualReleasePurchaseDoc'</span><span>,</span> <span>''</span><span>, false, false</span><span>)</span><span>]<br/></span><span>    local</span> <span>procedure</span> <span>QualityCheckForReleasingPurchaseDoc</span><span>(var</span> <span>PurchaseHeader:</span> <span>Record</span> <span>"Purchase                 Header"</span><span>)<br/></span><span>    var<br/></span><span>        VendorQuality:</span> <span>Record</span> <span>"Vendor Quality_PKT";<br/></span><span>        PacktSetup:</span> <span>Record</span> <span>"Packt Extension Setup";<br/></span><span>        ErrNoMinimumRate:</span> <span>Label</span> <span>'Vendor %1 has a rate of %2 and it''s under the required minimum                 value (%3)'</span><span>;<br/></span><span>    begin<br/></span><span>        PacktSetup</span><span>.</span><span>Get</span><span>()</span><span>;<br/></span><span>        if</span> <span>VendorQuality</span><span>.</span><span>Get</span><span>(</span><span>PurchaseHeader</span><span>.</span><span>"Buy-from Vendor No."</span><span>) then</span> <span>begin<br/></span><span>            if</span> <span>VendorQuality</span><span>.</span><span>Rate &lt; PacktSetup</span><span>.</span><span>"Minimum Accepted Vendor Rate"</span> <span>then<br/></span><span>                Error</span><span>(</span><span>ErrNoMinimumRate, PurchaseHeader</span><span>.</span><span>"Buy-from Vendor No.",<br/></span><span>                Format</span><span>(</span><span>VendorQuality</span><span>.</span><span>Rate</span><span>)</span><span>, Format</span><span>(</span><span>PacktSetup</span><span>.</span><span>"Minimum Accepted Vendor Rate"</span><span>))</span><span>;<br/></span><span>        end</span><span>;<br/></span><span>    end</span><span>;</span></pre>
+<p>All of the customer's business requirements are now handled by our extension. </p>
+<p>In the next section, we'll see how to enhance the customer's user experience by creating customized page views in Dynamics 365 Business Central.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Creating page views</h1>
+                </header>
+            
+            <article>
+                
+<p>Since the fall 2019 release of Dynamics 365 Business Central, you can create customized views for your list pages. These customized views can be used in a <span>dedicated section of </span>the Dynamics 365 Business Central user interface to immediately apply filters to the list.</p>
+<p class="mce-root"/>
+<p>You can create a view definition in a page object by using the <kbd>tview</kbd> snippet. In the<span> </span><span>previously </span><span>created</span><span> </span><kbd>Gift Campaign List</kbd> <span>page</span><span>, we have defined the following</span> <kbd>view</kbd> <span>objects:</span></p>
+<div>
+<pre><span>views<br/></span><span>{<br/></span><span>    view(</span><span>ActiveCampaigns</span><span>)<br/></span><span>    {<br/></span><span>        Caption =</span> <span>'Active Gift Campaigns'</span><span>;<br/></span><span>        Filters =</span> <span>where (</span><span>Inactive =</span> <span>const (</span><span>false</span><span>))</span><span>;<br/></span><span>    }<br/></span><span>    view(</span><span>InactiveCampaigns</span><span>)<br/></span><span>    {<br/></span><span>        Caption =</span> <span>'Inactive Gift Campaigns'</span><span>;<br/></span><span>        Filters =</span> <span>where (</span><span>Inactive =</span> <span>const (</span><span>true</span><span>))</span><span>;<br/></span><span>    }<br/></span><span>}</span></pre></div>
+<p>The first view (called <kbd>ActiveCampaigns</kbd>) shows all of the active gift campaigns (the <kbd>Inactive</kbd> field is set to <kbd>false</kbd>), while the second view (called <kbd>InactiveCampaigns</kbd>) shows all of the inactive gift campaigns (the <kbd>Inactive</kbd> field is set to <kbd>true</kbd>).</p>
+<p>These views in the Dynamics 365 Business Central user interface look like this:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/317615a4-6c30-4733-8565-c33d99454f72.png"/></p>
+<p>If you select the <span class="packt_screen">Active Gift Campaigns</span> view, the list is filtered accordingly (<kbd>Inactive</kbd> is set to <kbd>false</kbd>):</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/1183bc8a-9e40-42cf-8732-76051f877e02.png"/></p>
+<p class="mce-root"/>
+<p>If you select the <kbd>Inactive Gift Campaigns</kbd> view, the list is automatically filtered by <kbd>Inactive</kbd> being set to <kbd>true</kbd>:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/e63e6244-df4e-4612-b836-bc0269edea95.png"/></p>
+<p>We have also added a view to the <kbd>Customer List</kbd> page to show all of the customers who do not have an associated category.</p>
+<p>The view definition in the <kbd>Customer List pageextension</kbd> object is defined as follows:</p>
+<div>
+<pre><span>views<br/></span><span>{<br/></span><span>    addlast<br/></span><span>    {<br/></span><span>        view(</span><span>CustomersWithoutCategory</span><span>)<br/></span><span>        {<br/></span><span>            Caption =</span> <span>'Customers without Category assigned'</span><span>;<br/></span><span>            Filters =</span> <span>where (</span><span>"Customer Category_PKT" =</span> <span>filter (</span><span>''</span><span>))</span><span>;<br/></span><span>        }<br/></span><span>    }<br/></span><span>}</span></pre></div>
+<div>
+<p>We have placed this newly created view as the last of the available views for the page:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/10530861-a83c-4560-908f-62cba1d3c183.png"/></p>
+<p>As shown in the preceding screenshot, <span>this view appears in the user interface of the application and, when selected, it automatically filters all of the customers without an associated category (so <kbd>Customer Category = Blank</kbd>). In this way, our customers can immediately filter records by selecting a pre-defined view (just a click) and without reinserting the required filters.</span></p>
+<p>After this, let's move on and see how installing and upgrading codeunits works.</p>
+</div>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Installing and upgrading codeunits</h1>
+                </header>
+            
+            <article>
+                
+<p>When you create an extension, you need to check some conditions for the installation to be successful, or you need to initiate some setup tables or pre-populate other tables. To do this, you need to create <strong>Install codeunit</strong>.</p>
+<p>The extension's install logic must be written in a codeunit with the <kbd>SubType</kbd> property set to <kbd>Install</kbd>. This logic is triggered when the following is true:</p>
+<ul>
+<li>You're installing the extension for the first time.</li>
+<li>You have uninstalled the extension and then you're installing it again.</li>
+</ul>
+<p>An <kbd>Install</kbd> codeunit supports the following system triggers:</p>
+<ul>
+<li><kbd>OnInstallAppPerCompany()</kbd>: The code inside this trigger runs once for each company in the Dynamics 365 Business Central database.</li>
+<li><kbd>OnInstallAppPerDatabase()</kbd>: The code inside this trigger runs once for the entire install process.</li>
+</ul>
+<p>The same logic occurs when upgrading the extension. If you need to create a new version of your extension (the version number in the <kbd>app.json</kbd> file must be greater than the previous version number) and this version involves data modifications from previous versions, you need to create <strong>Upgrade codeunit</strong>.</p>
+<p>The extension's upgrade logic must be written in a codeunit with the <kbd>SubType</kbd> property set to <kbd>Upgrade</kbd>.</p>
+<p>An <kbd>Upgrade</kbd> codeunit supports the following system triggers:</p>
+<ul>
+<li><kbd>OnCheckPreconditionsPerCompany()</kbd>: The code inside this trigger is used to check the preconditions for the upgrade process. This code runs once for each company in the database.</li>
+<li><kbd>OnCheckPreconditionsPerDatabase()</kbd>: The code inside this trigger is used to check the preconditions for the upgrade process. This code runs once for the entire upgrade process.</li>
+<li><kbd>OnUpgradePerCompany()</kbd>: The code inside this trigger contains the upgrade logic. This code runs once for each company in the database.</li>
+<li><kbd>OnUpgradePerDatabase()</kbd>: The code inside this trigger contains the upgrade logic. This code runs once for the entire upgrade process.</li>
+<li><kbd>OnValidateUpgradePerCompany()</kbd>: The code inside this trigger is used to check the results of the upgrade process. This code runs once for each company in the database.</li>
+<li><kbd>OnValidateUpgradePerDatabase()</kbd>: The code inside this trigger is used to check the results of the upgrade process. This code runs once for the entire upgrade process.</li>
+</ul>
+<p>For our extension, we have created an <kbd>Install</kbd> codeunit as follows:</p>
+<div>
+<pre><span>codeunit</span> <span>50105</span> <span>Cu</span><span>stomerCategoryInstall_PKT<br/></span><span>{<br/></span><span>    Subtype = Install;<br/></span><span>    trigger</span> <span>OnInstallAppPerCompany</span><span>()</span><span>;<br/></span><span>    var<br/></span><span>        archivedVersion:</span> <span>Text</span><span>;<br/></span><span>        CustomerCategory:</span> <span>Record</span> <span>"Customer Category_PKT";<br/></span><span>        PacktSetup:</span> <span>Record</span> <span>"Packt Extension Setup";<br/></span><span>    begin<br/></span><span>        archivedVersion</span> <span>:=</span> <span>NavApp</span><span>.</span><span>GetArchiveVersion;<br/></span><span>        if</span> <span>archivedVersion =</span> <span>'1.0.0.0'</span> <span>then</span> <span>begin<br/></span><span>            NavApp</span><span>.</span><span>RestoreArchiveData</span><span>(Database</span><span>::"Customer Category_PKT"</span><span>)</span><span>;<br/></span><span>            NavApp</span><span>.</span><span>RestoreArchiveData</span><span>(Database</span><span>::Customer</span><span>)</span><span>;<br/></span><span>            NavApp</span><span>.</span><span>RestoreArchiveData</span><span>(Database</span><span>::"Packt Extension Setup"</span><span>)</span><span>;<br/></span><span>            NavApp</span><span>.</span><span>RestoreArchiveData</span><span>(Database</span><span>::GiftCampaign_PKT</span><span>)</span><span>;<br/></span><span>            NavApp</span><span>.</span><span>RestoreArchiveData</span><span>(Database</span><span>::"Vendor Quality_PKT"</span><span>)</span><span>;<br/></span><span>            NavApp</span><span>.</span><span>DeleteArchiveData</span><span>(Database</span><span>::"Customer Category_PKT"</span><span>)</span><span>;<br/></span><span>            NavApp</span><span>.</span><span>DeleteArchiveData</span><span>(Database</span><span>::Customer</span><span>)</span><span>;<br/></span><span>            NavApp</span><span>.</span><span>DeleteArchiveData</span><span>(Database</span><span>::"Packt Extension Setup"</span><span>)</span><span>;<br/></span><span>            NavApp</span><span>.</span><span>DeleteArchiveData</span><span>(Database</span><span>::GiftCampaign_PKT</span><span>)</span><span>;<br/></span><span>            NavApp</span><span>.</span><span>DeleteArchiveData</span><span>(Database</span><span>::"Vendor Quality_PKT"</span><span>)</span><span>;<br/></span><span>        end</span><span>;<br/></span><span>        if</span> <span>CustomerCategory</span><span>.</span><span>IsEmpty</span><span>() then<br/></span><span>            InsertDefaultCustomerCategory</span><span>()</span><span>;<br/></span><span>        if</span> <span>PacktSetup</span><span>.</span><span>IsEmpty</span><span>() then<br/></span><span>            InsertDefaultSetup</span><span>()</span><span>;<br/></span><span>    end</span><span>;<br/><br/></span><span>    // Insert the GOLD, SILVER, BRONZE reward levels<br/></span><span>    local</span> <span>procedure</span> <span>InsertDefaultCustomerCategory</span><span>()</span><span>;<br/></span><span>    begin<br/></span><span>        InsertCustomerCategory</span><span>(</span><span>'TOP'</span><span>,</span> <span>'Top Customer'</span><span>, false</span><span>)</span><span>;<br/></span><span>        InsertCustomerCategory</span><span>(</span><span>'MEDIUM'</span><span>,</span> <span>'Standard Customer'</span><span>, true</span><span>)</span><span>;<br/></span><span>        InsertCustomerCategory</span><span>(</span><span>'BAD'</span><span>,</span> <span>'Bad Customer'</span><span>, false</span><span>)</span><span>;<br/></span><span>    end</span><span>;<br/><br/></span><span>    // Create and insert a Customer Category record<br/></span><span>    local</span> <span>procedure</span> <span>InsertCustomerCategory</span><span>(</span><span>ID:</span> <span>Code</span><span>[</span><span>30</span><span>]; Description:</span> <span>Text</span><span>[</span><span>250</span><span>]; Default:</span> <span>Boolean)</span><span>;<br/></span><span>    var<br/></span><span>        CustomerCategory:</span> <span>Record</span> <span>"Customer Category_PKT";<br/></span><span>    begin<br/></span><span>        CustomerCategory</span><span>.</span><span>Init</span><span>()</span><span>;<br/></span><span>        CustomerCategory</span><span>.</span><span>Code</span> <span>:=</span> <span>ID;<br/></span><span>        CustomerCategory</span><span>.</span><span>Description</span> <span>:=</span> <span>Description;<br/></span><span>        CustomerCategory</span><span>.</span><span>Default</span> <span>:=</span> <span>Default;<br/></span><span>        CustomerCategory</span><span>.</span><span>Insert</span><span>()</span><span>;<br/></span><span>    end</span><span>;<br/><br/></span><span>    local</span> <span>procedure</span> <span>InsertDefaultSetup</span><span>()<br/></span><span>    var<br/></span><span>        PacktSetup:</span> <span>Record</span> <span>"Packt Extension Setup";<br/></span><span>    begin<br/></span><span>        PacktSetup</span><span>.</span><span>Init</span><span>()</span><span>;<br/></span><span>        PacktSetup</span><span>.</span><span>"Minimum Accepted Vendor Rate"</span> <span>:=</span> <span>6</span><span>;<br/></span><span>        PacktSetup</span><span>.</span><span>"Gift Tolerance Qty"</span> <span>:=</span> <span>2</span><span>;<br/></span><span>        PacktSetup</span><span>.</span><span>Insert</span><span>()</span><span>;<br/></span><span>    end</span><span>;<br/></span><span>}</span></pre></div>
+<p>In the <kbd>OnInstallAppPerCompany</kbd> trigger, we check whether there's an archived version of our extension (this could happen if someone has uninstalled the extension):</p>
+<pre>archivedVersion := NavApp.GetArchiveVersion;</pre>
+<p>If so, we restore the archived data from the <kbd>NavApp</kbd> system table (so the user has their old data retrieved <span>automatically</span>).</p>
+<p>If there's nothing restored, we initialize the <kbd>Customer Category</kbd> table and the extension's setup table (<kbd>Packt Extension Setup</kbd> table) with default data.</p>
+<div class="packt_infobox">More information about the <kbd>Install</kbd> and <kbd>Upgrade</kbd> codeunits can be found in <a href="076505ca-e2a0-40ab-8640-c720c9aa68ee.xhtml">Chapter 9</a>, <em>Debugging</em>, of this book and at the following links:<br/>
+<a href="https://docs.microsoft.com/en-us/dynamics365/business-central/dev-itpro/developer/devenv-extension-install-code">https://docs.microsoft.com/en-us/dynamics365/business-central/dev-itpro/developer/devenv-extension-install-code</a><a href="https://docs.microsoft.com/en-us/dynamics365/business-central/dev-itpro/developer/devenv-upgrading-extensions"> and </a><a href="https://docs.microsoft.com/en-us/dynamics365/business-central/dev-itpro/developer/devenv-upgrading-extensions">https://docs.microsoft.com/en-us/dynamics365/business-central/dev-itpro/developer/devenv-upgrading-extensions</a><a href="https://docs.microsoft.com/en-us/dynamics365/business-central/dev-itpro/developer/devenv-upgrading-extensions">.</a></div>
+<div>
+<p class="mceNonEditable"><span>When published from Visual Studio Code on Dynamics 365 Business Central, our extension appears as</span> <em>installed</em> <span>on the</span> <span class="packt_screen">EXTENSION MANAGEMENT</span><strong> </strong><span>page:</span></p>
+</div>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/2d1b194b-8d7d-4299-b41c-3bc6617635f2.png"/></p>
+<p>We have now learned how to handle the install and upgrade operations required when publishing an extension in Dynamics 365 Business Central.</p>
+<p>In the next section, we'll explore the concept of dependent extensions and learn how to use a dependency to make customizations to our previously deployed application.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Understanding a dependent extension</h1>
+                </header>
+            
+            <article>
+                
+<p>In the previous sections, we developed our extension and deployed it.</p>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mceNonEditable"/>
+<p>Imagine now that you've deployed this extension to a customer tenant and now the customer asks you for some customization:</p>
+<ul>
+<li>They want to add the <kbd>Certification No.</kbd> field to the <span class="packt_screen">Vendor Quality</span> table.</li>
+<li>They want to change the gift assignment logic by always assigning a fixed gift quantity of 2.</li>
+</ul>
+<p class="mce-root"/>
+<p>To create a customization for your customer, you should <em>never</em> directly modify your standard extension code, but instead, you should create a new extension that will be <em>dependent</em> on your base extension.</p>
+<p>To do this, we create a new extension project in Visual Studio Code called <kbd>PacktDemoDependencyExtension</kbd>. This new extension must be dependent on our previously created <kbd>PacktDemoExtension</kbd>; otherwise, we won't be able to see the objects defined in that extension.</p>
+<p>First, we need to retrieve the <kbd>appId</kbd>, <kbd>name</kbd>, <kbd>publisher</kbd>, and <kbd>version</kbd> of the base extension. Then, we have to open the <kbd>app.json</kbd> file of our new extension, go to the <kbd>dependencies</kbd> block, and insert the details of the dependent extension as follows:</p>
+<div>
+<pre><span>"dependencies"</span><span>: [<br/></span><span>    </span><span>{<br/></span><span>      </span><span>"appId"</span><span>: </span><span>"63ca2fa4-4f03-4f2b-a480-172fef340d3f"</span><span>,<br/></span><span>      </span><span>"publisher"</span><span>: </span><span>"Microsoft"</span><span>,<br/></span><span>      </span><span>"name"</span><span>: </span><span>"System Application"</span><span>,<br/></span><span>      </span><span>"version"</span><span>: </span><span>"1.0.0.0"<br/></span><span>    },<br/></span><span>    {<br/></span><span>      </span><span>"appId"</span><span>: </span><span>"437dbf0e-84ff-417a-965d-ed2bb9650972"</span><span>,<br/></span><span>      </span><span>"publisher"</span><span>: </span><span>"Microsoft"</span><span>,<br/></span><span>      </span><span>"name"</span><span>: </span><span>"Base Application"</span><span>,<br/></span><span>      </span><span>"version"</span><span>: </span><span>"15.0.0.0"<br/></span><span>    },</span><span><br/></span><span>    <strong>{<br/></strong></span><strong><span>      </span><span>"appId"</span><span>: </span><span>"dd03d28e-4dfe-48d9-9520-c875595362b6"</span><span>,<br/></span></strong><strong><span>      </span><span>"name"</span><span>: </span><span>"PacktDemoExtension"</span><span>,<br/></span></strong><strong><span>      </span><span>"publisher"</span><span>: </span><span>"SD"</span><span>,<br/></span></strong><strong><span>      </span><span>"version"</span><span>: </span><span>"1.0.0.0"<br/></span></strong><strong><span>    }<br/></span></strong><span>  ],</span></pre>
+<p class="mceNonEditable"><span>Now, if we download the symbols (</span><kbd>AL:Download Symbols</kbd><span>), you will see that the</span> symbols <span>of our dependent extension are downloaded into the</span> <kbd>.alpackages</kbd> <span>folder in our project:</span></p>
+</div>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/74be4420-7834-407d-bed8-b5316994ae0e.png"/></p>
+<p>We're now ready to create our new extension.</p>
+<p>To add the <kbd>Certification No.</kbd> field to <kbd>Vendor Quality Card</kbd>, we need to do the following:</p>
+<ul>
+<li>Extend the <kbd>Vendor Quality</kbd> table by adding a new field.</li>
+<li>Extend the <kbd>Vendor Quality Card</kbd> page to add the new field to the UI.</li>
+</ul>
+<p>We can do that because we have the symbols downloaded; otherwise, it's impossible to see the objects defined in another extension.</p>
+<p class="mce-root"/>
+<p>The <kbd>tableextension</kbd> object code that extends the <kbd>Vendor Quality</kbd> table is defined as follows:</p>
+<div>
+<pre><span>tableextension</span> <span>50120</span> <span>VendorQualityExt_PKN</span> <span>extends</span> <span>"Vendor Quality_PKT"<br/></span><span>{<br/></span><span>    fields<br/></span><span>    {<br/></span><span>        field(</span><span>50120</span><span>; "Certification No.";</span> <span>Text</span><span>[</span><span>50</span><span>]</span><span>)<br/></span><span>        {<br/></span><span>            Caption =</span> <span>'Classification No.'</span><span>;<br/></span><span>            DataClassification</span> <span>= CustomerContent;<br/></span><span>        }<br/></span><span>    }<br/></span><span>}</span></pre></div>
+<p>The <kbd>pageextension</kbd> object that extends the <kbd>Vendor Quality Card</kbd> page is defined as follows:</p>
+<div>
+<pre><span>pageextension</span> <span>50120</span> <span>VendorQualityCardExt_PKN</span> <span>extends</span> <span>"Vendor Quality Card_PKT"<br/></span><span>{<br/></span><span>    layout<br/></span><span>    {<br/></span><span>        addlast(</span><span>General</span><span>)<br/></span><span>        {<br/></span><span>            field(</span><span>"Certification No."; "Certification No."</span><span>)<br/></span><span>            {<br/></span><span>                ApplicationArea = All;<br/></span><span>            }<br/></span><span>        }<br/></span><span>    }<br/></span><span>}</span></pre></div>
+<p>The second requirement is to customize a standard business process defined in the base extension (<kbd>PacktDemoExtension</kbd><em>)</em> that creates the gifts line on a sales order if there's an active campaign (in the standard business process, the gift quantity is the quantity defined in the <kbd>Gift Campaign</kbd> table).</p>
+<p>You can do that <strong>only</strong> if the base extension has events to subscribe because you cannot directly modify the code of another extension.</p>
+<p class="mce-root"/>
+<p>To handle extensibility, we used the <kbd>Handled</kbd> pattern in our base extension. In the <kbd>PacktDemoExtension</kbd> extension, we have the <kbd>AddGifts</kbd> procedure defined as follows:</p>
+<pre>procedure AddGifts(var SalesHeader: record "Sales Header")<br/>    var<br/>        SalesLine: record "Sales Line";<br/>        Handled: Boolean;<br/>    begin<br/>        SalesLine.SetRange("Document Type", SalesHeader."Document Type");<br/>        SalesLine.SetRange("Document No.", SalesHeader."No.");<br/>        SalesLine.SetRange(Type, SalesLine.Type::Item);<br/>        if SalesLine.FindSet() then<br/>            repeat<br/>                //Integration event raised<br/>                OnBeforeFreeGiftSalesLineAdded(SalesLine, Handled);<br/>                AddFreeGiftSalesLine(SalesLine, Handled);<br/>                //Integration Event raised<br/>                OnAfterFreeGiftSalesLineAdded(SalesLine);<br/>            until SalesLine.Next() = 0;<br/>    end;</pre>
+<p>To skip the standard business process (<kbd>AddFreeGiftSalesLine</kbd>) and add a new custom gift assignment process, we do the following:</p>
+<ol>
+<li>We subscribe to the <kbd>OnBeforeFreeGiftSalesLineAdded</kbd> event, and we set the <kbd>Handled</kbd> parameter to <kbd>true</kbd>. This ensures that the standard business logic will be skipped because, in the <kbd>AddFreeGiftSalesLine</kbd> procedure, we have used the following code as the first line: </li>
+</ol>
+<pre>if Handled then<br/>    exit;</pre>
+<ol start="2">
+<li>We call our custom business logic from this event subscriber.</li>
+</ol>
+<p>All of this logic is defined in a codeunit object as follows:</p>
+<div>
+<pre><span>codeunit</span> <span>50120</span> <span>CustomGiftLogic_PKN<br/></span><span>{<br/></span><span>    [EventSubscriber</span><span>(ObjectType</span><span>::</span><span>Codeunit</span><span>,</span> <span>Codeunit</span><span>::GiftManagement_PKT,</span>         <span>'OnBeforeFreeGiftSalesLineAdded'</span><span>,</span> <span>''</span><span>, false, false</span><span>)</span><span>]<br/></span><span>    local</span> <span>procedure</span> <span>HideDefaultBehaviour</span><span>(var</span> <span>Rec:</span> <span>Record</span> <span>"Sales Line";</span> <span>var</span> <span>Handled:</span> <span>Boolean)<br/></span><span>    begin<br/></span><span>        Handled</span> <span>:=</span> <span>true;<br/></span><span>        //Here we create a custom gift line with a fixed quantity <br/>        //(override of standard behavior)<br/></span><span>        CreateCustomGiftLine</span><span>(</span><span>Rec</span><span>)</span><span>;<br/></span><span>    end</span><span>;<br/><br/></span><span>    local</span> <span>procedure</span> <span>CreateCustomGiftLine</span><span>(var</span> <span>SalesLine:</span> <span>Record</span> <span>"Sales Line"</span><span>)<br/></span><span>    var<br/></span><span>        SalesHeader:</span> <span>Record</span> <span>"Sales Header";<br/></span><span>        SalesLineGift:</span> <span>Record</span> <span>"Sales Line";<br/></span><span>        LineNo:</span> <span>Integer</span><span>;<br/></span><span>        FixedQty:</span> <span>Decimal</span><span>;<br/></span><span>    begin<br/></span><span>        FixedQty</span> <span>:=</span> <span>2</span><span>;<br/></span><span>        SalesHeader</span><span>.</span><span>Get</span><span>(</span><span>SalesLine</span><span>.</span><span>"Document Type", SalesLine</span><span>.</span><span>"Document No."</span><span>)</span><span>;<br/></span><span>        LineNo</span> <span>:=</span> <span>GetLastSalesDocumentLineNo</span><span>(</span><span>SalesHeader</span><span>)</span><span>;<br/></span><span>        SalesLineGift</span><span>.</span><span>init;<br/></span><span>        SalesLineGift</span><span>.</span><span>TransferFields</span><span>(</span><span>SalesLine</span><span>)</span><span>;<br/></span><span>        SalesLineGift</span><span>.</span><span>"Line No."</span> <span>:=</span> <span>LineNo +</span> <span>10000</span><span>;<br/></span><span>        SalesLineGift</span><span>.</span><span>Validate</span><span>(</span><span>Quantity, FixedQty</span><span>)</span><span>;<br/></span><span>        SalesLineGift</span><span>.</span><span>Validate</span><span>(</span><span>"Line Discount %",</span> <span>100</span><span>)</span><span>;<br/></span><span>        if</span> <span>SalesLineGift</span><span>.</span><span>Insert</span><span>() then</span><span>;<br/></span><span>    end</span><span>;<br/><br/></span><span>    local</span> <span>procedure</span> <span>GetLastSalesDocumentLineNo</span><span>(</span><span>SalesHeader:</span> <span>Record</span> <span>"Sales Header"</span><span>)</span><span>:</span> <span>Integer<br/></span><span>    var<br/></span><span>        SalesLine:</span> <span>Record</span> <span>"Sales Line";<br/></span><span>    begin<br/></span><span>        SalesLine</span><span>.</span><span>SetRange</span><span>(</span><span>"Document Type", SalesHeader</span><span>.</span><span>"Document Type"</span><span>)</span><span>;<br/></span><span>        SalesLine</span><span>.</span><span>SetRange</span><span>(</span><span>"Document No.", SalesHeader</span><span>.</span><span>"No."</span><span>)</span><span>;<br/></span><span>        if</span> <span>SalesLine</span><span>.</span><span>FindLast</span><span>() then<br/></span><span>            exit(</span><span>SalesLine</span><span>.</span><span>"Line No."</span><span>)<br/></span><span>        else<br/></span><span>            exit(</span><span>0</span><span>)</span><span>;<br/></span><span>    end</span><span>;<br/></span><span>}</span></pre></div>
+<p>When published, we now have two extensions installed (the standard extension and the new customization extension):</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/cc3cdd5c-f700-4285-905e-81b0b7751fec.png"/></p>
+<p>To test whether our customization works, we create a new sales order with an item that has an associated gift campaign, and then we start the gift assignment process:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/756a266d-f924-4369-8163-01b39e11eadc.png"/></p>
+<p class="mce-root"/>
+<p>So, what happens now? The <kbd>OnBeforeFreeGiftSalesLineAdded</kbd> event is raised, we skip the standard event (<kbd>Handled = true</kbd>), and then our new custom function (<kbd>CreateCustomGiftLine</kbd>) is triggered:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/e4cc8499-c1ab-4b0a-b4f5-8374e5ffba22.png"/></p>
+<p><span>As we can see in the preceding screenshot, a new gift line with a fixed quantity of 2 and a discount of 100% is inserted in our sales order.</span></p>
+<p>We have customized our gift campaign business logic without modifying the base code (our base extension), but instead by creating a new dependent extension. This should be the mandatory model to use with Dynamics 365 Business Central.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Summary</h1>
+                </header>
+            
+            <article>
+                
+<p>In this chapter, we saw the implementation of a real-world extension for Dynamics 365 Business Central. We defined the backend of our solution (tables) and we created the pages (the user interface) and the required business logic (codeunits and events) according to the initial needs of the business. We saw how to make our code extensible by using the <kbd>Handled</kbd> pattern and how to create installation and upgrade code.</p>
+<p>In the last part of this chapter, we created a new extension that modifies the standard behavior of our base extension, and we looked at the concept of dependency between extensions.</p>
+<p class="mce-root"/>
+<p>You have also learned how to create extensions with objects and events, how to use coding rules, and how to create customizations without modifying the base code of your application.</p>
+<p>In the next chapter, we'll see how to handle some advanced topics <span>with AL and the extension model, such as </span>files, media, XML and JSON objects, web services, and asynchronous programming.</p>
+
+
+            </article>
+
+            
+        </section>
+    </body></html>

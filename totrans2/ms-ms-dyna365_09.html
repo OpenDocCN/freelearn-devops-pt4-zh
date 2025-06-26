@@ -1,0 +1,1244 @@
+<html><head></head><body>
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Report Development with AL</h1>
+                </header>
+            
+            <article>
+                
+<p>In this book, we have been introduced to and analyzed a vast variety of AL language objects, and we've seen how to develop simple to complex extensions with them.</p>
+<p>In this chapter, we will deep dive into a specific object and look at its properties, triggers, and methods and how to use it proficiently. This object is <strong>the report object</strong>.</p>
+<p>An overview, with pros and cons, will be provided regarding which tool to use to design and develop datasets and layouts, such as Microsoft Word for Word layouts and Microsoft Report Builder for <strong>Report Definition Language</strong> (<strong>RDL</strong>) layouts. We will discuss the main shortcuts, tips, and tricks related to dataset development with Visual Studio Code and both Word and RDL layouts.</p>
+<p>In this chapter, we aspire to provide you with the confidence you need to develop Dynamics 365 Business Central report extensions, explain how to make them perform to their best, and help you troubleshoot the most common issues in this area.</p>
+<p>In this chapter, we will cover the following topics:</p>
+<ul>
+<li>Anatomy of the AL report object</li>
+<li>Tools to use for Word and RDL layouts</li>
+<li>Converting an existing C/AL report into AL</li>
+<li>Feature limitation when developing an RDL or Word layout report</li>
+<li>Understanding report performance considerations</li>
+</ul>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Anatomy of the AL report object</h1>
+                </header>
+            
+            <article>
+                
+<p>Requests for new reports come from every department and in many different forms. Most of the time, users have an idea in mind of how they would like the data to be shown.</p>
+<p class="mce-root"/>
+<p>Nevertheless, a report developer should <span>always</span><span> </span><span>keep in mind</span> <span>some important points</span><span>. Everything is </span><span>related to </span><span>data:</span></p>
+<ul>
+<li><strong>Retrieval</strong>: A good report developer should have a good knowledge of the business process (how data is created, modified, and deleted) and data topology (where data is stored). Data can be retrieved from heterogenous resources that cannot be directly stored in Dynamics 365 Business Central tables. As an example, you might want to run an HTTP call to a web service to gather some data outside the database and store it in a physical or temporary table before processing it.</li>
+<li><strong>Processing</strong>: Some of the data that's presented could be the result of data aggregation, could be calculated from different fields, or could even be the results from a concatenation of values from different tables. The result of data retrieval and processing generates the dataset.</li>
+<li><strong>Presentation</strong>: Datasets are sent from the application to the Report Viewer component, which takes care of data rendering and presentation. Together with the dataset, a report definition file (<kbd>Report.rdlc</kbd>) is sent to the Report Viewer to build up the content of the report. The report definition file contains the metadata structure and rules to render the report. Despite its extension (<kbd>.rdlc</kbd>), this is actually an XML-formatted flat file. Tools such as the Report Builder or Visual Studio can digest the XML file and create a presentation of the report structure in a more human-readable way. Every action that's taken in this designer has the consequence of editing and changing the XML file.</li>
+</ul>
+<p>With Dynamics 365 Business Central, it is also possible to design reports to perform <span>only</span><span> </span><span>data retrieval and processing, typically committing changes in tables as a result of the process. No data is presented to the users, hence no layout is needed, and no dataset will be created.</span></p>
+<p>Reports can be grouped into two main categories: processing only and dataset-based.</p>
+<p>Reports that are processing only do not have any layout. They <span>also </span>typically do not have any columns defined in the dataset and are only used to process data. Quite often, the same result could be achieved using codeunit objects instead since these are just simple code repositories and do not have any graphical or <strong>User Interface</strong> (<strong>UI</strong>) interaction. To give you a simple example, you could create a processing-only report with a data item that loops all the customer records and prints a flat JSON file with the customer number, name, and email. The same could be achieved by implementing a codeunit with a function that declares an <kbd>IF CustomerRec FINDSET THEN REPEAT UNTIL NEXT=0</kbd> loop. Within this loop, it is possible to write a flat JSON file with exactly the same information.</p>
+<p>The pros and cons of using a processing-only report or a codeunit have been tabulated here:</p>
+<table style="width: 100%;border-collapse: collapse" border="1">
+<tbody>
+<tr>
+<td/>
+<td><strong>Processing Only Report</strong></td>
+<td><strong>Codeunit</strong></td>
+</tr>
+<tr>
+<td><strong>Easy to Implement</strong></td>
+<td>It's faster. The data item looping construct is predefined.</td>
+<td>There's more development activity to build a loop.</td>
+</tr>
+<tr>
+<td><strong>Flexibility</strong></td>
+<td>It's limited to data item triggers.</td>
+<td>It's more flexible.</td>
+</tr>
+<tr>
+<td><strong>Performance</strong></td>
+<td>It has worse performance.</td>
+<td>It has better performance.</td>
+</tr>
+</tbody>
+</table>
+<p> </p>
+<p>A report object has the following tree structure:</p>
+<ul>
+<li><strong>Request Page</strong>:
+<ul>
+<li><strong>Columns</strong>:
+<ul>
+<li><strong>Groups</strong>:
+<ul>
+<li><strong>Fields</strong></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><strong>Actions</strong></li>
+</ul>
+</li>
+<li><strong>Dataset</strong>:
+<ul>
+<li><strong>Data items</strong>:
+<ul>
+<li><strong>Properties</strong></li>
+<li><strong>Triggers</strong></li>
+<li><strong>Columns</strong>:
+<ul>
+<li><strong>Properties</strong></li>
+<li><strong>Triggers</strong></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><strong>Labels</strong>:
+<ul>
+<li><strong>Properties</strong></li>
+</ul>
+</li>
+<li><strong>Layout</strong>:
+<ul>
+<li><strong>RDL</strong></li>
+<li><strong>Word</strong></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<p>After installing the standard <strong>AL Language extension</strong> and <strong>CRS AL Language extension tool</strong>, we could use a <kbd>treport</kbd> or <kbd>treport</kbd> (CRS) snippet to create a prototype of a report and inspect all the different items related to the main content areas: the dataset and the request page. Layouts are just references to the corresponding output (an RDL and/or Word file) within the report objects, and these are created with tools other than Visual Studio Code. We will work with them later in this chapter.</p>
+<p>After exploring the anatomy of a report object in AL, it is time to see the tools that are used in Word and RDL layouts.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Tools to use for Word and RDL layouts</h1>
+                </header>
+            
+            <article>
+                
+<p>Visual Studio Code does not have a valid extension<span>—</span>yet—that would replace the best-in-class RDL report editor, which is supported by the Dynamics 365 Business Central development team. With a release every six months, the application is always up to date and, at the time of writing, it deploys Report Viewer 2017 and the latest RDL 2016 schema-based syntax. </p>
+<p>To develop an RDL layout report, you have two choices:</p>
+<ul>
+<li><strong>Report Builder for SQL Server 2016</strong>: <a href="https://www.microsoft.com/en-us/download/details.aspx?id=53613">https://www.microsoft.com/en-us/download/details.aspx?id=53613</a></li>
+<li><strong>Visual Studio 2017 with the Microsoft RDLC Report Designer for the Visual Studio extension installed</strong>: <a href="https://marketplace.visualstudio.com/items?itemName=ProBITools.MicrosoftRdlcReportDesignerforVisualStudio-18001">https://marketplace.visualstudio.com/items?itemName=ProBITools.MicrosoftRdlcReportDesignerforVisualStudio-18001</a> </li>
+</ul>
+<p>To find out more, please visit the following official reference and this useful blog: </p>
+<ul>
+<li><a href="https://docs.microsoft.com/en-us/dynamics365/business-central/dev-itpro/deployment/system-requirement-business-central">https://docs.microsoft.com/en-us/dynamics365/business-central/dev-itpro/deployment/system-requirement-business-central </a></li>
+<li><a href="https://thinkaboutit.be/2019/01/how-do-i-configure-my-rdlc-layout-designers-for-vscode/">https://thinkaboutit.be/2019/01/how-do-i-configure-my-rdlc-layout-designers-for-vscode/</a></li>
+</ul>
+<p>The Word layout feature is built around the latest Aspose.Words (<a href="https://products.aspose.com/words">https://products.aspose.com/words</a>) component and is implemented in the application by the backend server team. Designing and editing must be done with a <span>version</span><span> of </span><span>Microsoft Word that supports XML mappings. Minimum system requirements specify that we should use</span> <strong>Microsoft Word 2016</strong> <span>or later.</span></p>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">RDL and Word layout features</h1>
+                </header>
+            
+            <article>
+                
+<p>To explain and show some of the most important RDL and Word layout features supported by Dynamics 365 Business Central, we will go through a step-by-step example.</p>
+<p>In <a href="d8553d40-bf59-4aef-983c-89519ef30e29.xhtml">C<span><span>hapte</span></span>r <span>5</span></a><span>, <em>Developing a Customized Solution for Dynamics 365 Business Central</em></span>, we extended the Item Ledger Entry table by creating the Customer Category field for statistics. It is now time to create a report that uses this extended field for sales analysis purposes. Create a new directory in your extension called <kbd>.\Src\CustomerCategory\report</kbd>. Let's learn how to do this.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Part 1 – Designing the dataset</h1>
+                </header>
+            
+            <article>
+                
+<p>The dataset is designed within the report by specifying the data item field's columns and their properties. They have a big influence from a qualitative perspective (in which format is data exported?) and from a quantitative perspective (how many rows are processed?). Both have a clear impact on report performance.</p>
+<p>A short example is represented by decimal data types. When specifying a decimal data type in a dataset, two fields are always included: the decimal data and its formatting. This means that, together with the decimal field, you always have a repeated text variable tightly bound to it. This would increase the dimension of the dataset and, consequently, influence report performance.</p>
+<p>What could be the definition of a Dynamics 365 Business Central dataset? Here's mine:</p>
+<div class="packt_quote">"A dataset is like a table in the client memory whose columns are made of all of the column fields defined in the dataset section and whose rows are all valid (not skipped) records that are processed in the DataItems."</div>
+<p><strong> </strong>Let's design/create our report dataset:</p>
+<ol>
+<li>Create a new file in the <kbd>.\Src\CustomerCategory\report</kbd> folder called <kbd>Rep50111.ItemLedegerEntryAnalysis.al</kbd>.</li>
+<li>Type <kbd>treport</kbd> or <kbd>treport</kbd> (CRS) to enable the report snippet.</li>
+<li>Add the following data item and columns:</li>
+</ol>
+<pre style="padding-left: 60px">report 50111 "Item Ledger Entry Analysis"<br/>{<br/>    Caption ='Item Ledger Entry Analysis';<br/>    UsageCategory=ReportsAndAnalysis;<br/>    ApplicationArea = All;<br/>dataset<br/>{<br/>    dataitem("Item Ledger Entry";"Item Ledger Entry")<br/>    {<br/>        column(ItemNo_ItemLedgerEntry;"Item Ledger Entry"."Item No.")<br/>        {<br/>            IncludeCaption = true;<br/>        }<br/>        column(PostingDate_ItemLedgerEntry;"Item Ledger Entry"."Posting Date")<br/>        {<br/>            IncludeCaption = true;<br/>        }<br/>        column(EntryType_ItemLedgerEntry;"Item Ledger Entry"."Entry Type")<br/>        {<br/>            IncludeCaption = true;<br/>        }<br/>        column(CustCatPKT_ItemLedgerEntry;"Item Ledger Entry"."Customer Category_PKT")<br/>        {<br/>            IncludeCaption = true;<br/>        }<br/>        column(DocumentNo_ItemLedgerEntry;"Item Ledger Entry"."Document No.")<br/>        {<br/>            IncludeCaption = true;<br/>        }<br/>        column(Description_ItemLedgerEntry;"Item Ledger Entry".Description)<br/>        {<br/>            IncludeCaption = true;<br/>        }<br/>        column(LocationCode_ItemLedgerEntry;"Item Ledger Entry"."Location Code")<br/>        {<br/>            IncludeCaption = true;<br/>        }<br/>        column(Quantity_ItemLedgerEntry;"Item Ledger Entry".Quantity)<br/>        {<br/>           IncludeCaption = true;<br/>        }<br/>        column(COMPANYNAME;CompanyName)<br/>        {<br/>        }<br/>        column(includeLogo;includeLogo)<br/>        {<br/>        }<br/>        column(CompanyInfo_Picture;CompanyInfo.Picture)<br/>        {<br/>        }<br/>    }<br/>}    </pre>
+<p style="padding-left: 60px">After this, we add the labels:</p>
+<pre style="padding-left: 60px">labels<br/>    {<br/>        PageNo = 'Page';<br/>        BCReportName ='Item Ledger Entry Analysis';<br/>    }<br/>    var<br/>        CompanyInfo: Record "Company Information";<br/>        includeLogo: Boolean;<br/>}</pre>
+<ol start="4">
+<li>Build and publish the extension as is in your online or Docker-contained sandbox.</li>
+<li>Go to <span class="packt_screen">Report Layout Selection</span> and filter for your report's ID or name.</li>
+<li>Select <span class="packt_screen">Actions | Custom Layouts</span>.</li>
+<li>Click <span class="packt_screen">New</span>, select <span class="packt_screen">Insert RDLC layout</span>, and click <span class="packt_screen">OK</span>. This will add an empty RDL layout to the report and reference the dataset structure.</li>
+<li>Choose <span class="packt_screen">Process | Export Layout</span> and save the <kbd>Default.rdl</kbd> report in the <kbd>.\Src\CustomerCategory\report</kbd> folder. You might call the report layout <kbd>Rep50111.ItemLedgerEntryAnalysis.rdl</kbd>.</li>
+<li>Bind the report to the RDL layout within the extension and make RDL the default layout by specifying the following parameter in the AL report object:</li>
+</ol>
+<pre style="padding-left: 60px">report 50111 "Item Ledger Entry Analysis"<br/>{<br/>    DefaultLayout = RDLC;<br/>    RDLCLayout = './Src/CustomerCategory/report/Report50111.ItemLedgerEntryAnalysis.rdl';<br/>  Caption = 'Item Ledger Entry Analysis';</pre>
+<p class="mce-root"/>
+<ol start="10">
+<li>In Visual Studio Code, right-click the RDL file and choose <span class="packt_screen">Open externally</span>. It will open in whichever program you selected to work with the <kbd>.rdl</kbd> file extension by default. In this example, we will work with <span class="packt_screen">Microsoft SQL Server Report Builder 2016</span>.</li>
+<li>If it's not already enabled, be sure to have the <span class="packt_screen">Report Data</span> option checked in the <span class="packt_screen">View | Show/Hide</span> ribbon menu in your Report Builder 2016 instance. In the <span class="packt_screen">Report Data</span> pane, expand <kbd>Parameters</kbd> and <kbd>DataSets</kbd>.</li>
+</ol>
+<p>You will notice that <kbd>Parameters</kbd> items are labels and field captions (specified by the <kbd>IncludeCaption=true</kbd> <span>property </span>in the dataset). <kbd>DataSet_Results</kbd> shows the entire dataset's definition transposed into the Report Builder IDE. <span>Here is a screenshot of the Report Data pane:</span></p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/cd0285fa-5e83-40e7-8df3-4e76c7def0bd.png" style="width:17.58em;height:37.00em;"/></p>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Part 2 – Creating a simple RDL layout</h1>
+                </header>
+            
+            <article>
+                
+<p>RDL layout development is one of the two layout design options you have for Dynamics 365 Business Central. Report layout design with Visual Studio 2017 (plus the Microsoft RDLC Report Designer for Visual Studio extension) has a fully-fledged development experience compared to Report Builder. An example is the Document Outline window, which shows a hierarchical view of the controls in the layout and lets you jump from one control to another quickly.</p>
+<p>Specifically targeted at RDL layout development, you may find quite exhaustive official documentation from SQL Server Reporting Services, official courseware, or third-party books. This section contains some very good development references if you would like to completely master the RDL layout for Dynamics 365 Business Central. Even if they mostly come from earlier <span>versions of </span>Dynamics NAV or SQL Server Reporting Services, they still contain great hints, and you should spare them a spot in your personal library.</p>
+<p class="CDPAlignLeft CDPAlign">Here are some RDL layout development references:</p>
+<table style="border-collapse: collapse;width: 100%" border="1">
+<tbody>
+<tr>
+<td>
+<p><em>Microsoft Dynamics NAV 2015 Professional Reporting</em></p>
+</td>
+<td>
+<p>Renders (Packt)</p>
+</td>
+</tr>
+<tr>
+<td>
+<p><em>Microsoft Dynamics NAV 2009: Professional Reporting</em></p>
+</td>
+<td>
+<p>Renders (Packt)</p>
+</td>
+</tr>
+<tr>
+<td>
+<p><em>Microsoft Dynamics NAV 2009 INSIDE Reporting</em></p>
+</td>
+<td>
+<p>Gayer (Mbst)</p>
+</td>
+</tr>
+<tr>
+<td>
+<p><em>Professional Microsoft SQL Server 2008 Reporting Services</em></p>
+</td>
+<td>
+<p>Misner (Microsoft)</p>
+</td>
+</tr>
+</tbody>
+</table>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Part 2.1 – Creating the RDL report header</h1>
+                </header>
+            
+            <article>
+                
+<p><span>In this section, we will create the report header step by step:</span></p>
+<ol>
+<li>In the <span class="packt_screen">Report Builder</span>, let's set up the report properties: right-click anywhere in the gray development area and select <span class="packt_screen">Report Properties</span>:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/b28bff9b-4308-4f0e-a9c8-b2c6b9ce5e80.png"/></p>
+<p class="mce-root"/>
+<ol start="2">
+<li>Change the <span class="packt_screen">Page Setup</span> parameters, as follows:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/10c88efa-5995-4de5-a81c-7919313f59f9.png" style="width:27.25em;height:29.50em;"/></p>
+<ol start="3">
+<li>Let's add a page header: right-click anywhere in the gray development area and select <span class="packt_screen">Add Page Header</span>.</li>
+<li>Right-click anywhere in the page header and select <span class="packt_screen">Header Properties</span>.</li>
+<li>Edit <span class="packt_screen">Page Header Properties</span> as follows:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/f1d5b3bb-42fd-4a20-b1ac-4f7bc38331b9.png" style="width:28.67em;height:22.17em;"/></p>
+<ol start="6">
+<li>Click on the body section and change the body size property as follows:
+<ul>
+<li><span class="packt_screen">Width: 7.21205in</span></li>
+<li><span class="packt_screen">Height: 1.93403in</span></li>
+</ul>
+</li>
+</ol>
+<ol start="7">
+<li>Now, let's directly add some report item control to the header. Right-click anywhere in the report header and select <span class="packt_screen">Insert | TextBox</span> in the page header. Perform this action six times. </li>
+<li>Change the following properties for the textboxes:</li>
+</ol>
+<table style="border-collapse: collapse;width: 100%" border="1">
+<thead>
+<tr>
+<td>
+<p><strong>Name</strong></p>
+</td>
+<td>
+<p><strong>Value</strong></p>
+</td>
+<td>
+<p><strong>Size</strong></p>
+</td>
+<td>
+<p><strong>Location</strong></p>
+</td>
+<td>
+<p><strong>Font</strong></p>
+</td>
+<td>
+<p><strong>Padding</strong></p>
+</td>
+<td>
+<p><strong>CanGrow</strong></p>
+</td>
+<td>
+<p><strong>TextAlign</strong></p>
+</td>
+<td>
+<p><strong>VerticalAlign</strong></p>
+</td>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<p><kbd>txtReportName</kbd></p>
+</td>
+<td>
+<p><kbd>=Parameters!BCReportName.Value</kbd></p>
+</td>
+<td>
+<p><kbd>7.5 cm; 0.423 cm</kbd></p>
+</td>
+<td>
+<p><kbd>0 cm; 0.0005 cm</kbd></p>
+</td>
+<td>
+<p><kbd>Arial; 8 pt; Default; Bold; Default</kbd></p>
+</td>
+<td>
+<p><kbd>0 pt; 0 pt; 0 pt; 0 pt</kbd></p>
+</td>
+<td>
+<p><kbd>False</kbd></p>
+</td>
+<td>
+<p><kbd>Default</kbd></p>
+</td>
+<td>
+<p><kbd>Middle</kbd></p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>txtCompanyName</kbd></p>
+</td>
+<td>
+<p><kbd>=Fields!COMPANYNAME.Value</kbd></p>
+</td>
+<td>
+<p><kbd>7.5 cm; 0.423 cm</kbd></p>
+</td>
+<td>
+<p><kbd>0 cm; 0.45878 cm</kbd></p>
+</td>
+<td>
+<p><kbd>Arial; 7 pt; Default; Default; Default</kbd></p>
+</td>
+<td>
+<p><kbd>0 pt; 0 pt; 0 pt; 0 pt</kbd></p>
+</td>
+<td>
+<p><kbd>False</kbd></p>
+</td>
+<td>
+<p><kbd>Default</kbd></p>
+</td>
+<td>
+<p><kbd>Middle</kbd></p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>txtExecutionTime</kbd></p>
+</td>
+<td>
+<p><kbd>=Globals!ExecutionTime</kbd></p>
+</td>
+<td>
+<p><kbd>3.15 cm; 0.423 cm</kbd></p>
+</td>
+<td>
+<p><kbd>15 cm; 0.0005 cm</kbd></p>
+</td>
+<td>
+<p><kbd>Arial; 7 pt; Default; Default; Default</kbd></p>
+</td>
+<td>
+<p><kbd>0 pt; 0 pt; 0 pt; 0 pt</kbd></p>
+</td>
+<td>
+<p><kbd>False</kbd></p>
+</td>
+<td>
+<p><kbd>Right</kbd></p>
+</td>
+<td>
+<p><kbd>Middle</kbd></p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>txtPageNoLabel</kbd></p>
+</td>
+<td>
+<p><kbd>=Parameters!PageNo.Value</kbd></p>
+</td>
+<td>
+<p><kbd>1.25271 cm; 0.423 cm</kbd></p>
+</td>
+<td>
+<p><kbd>16.44729 cm; 0.4235 cm</kbd></p>
+</td>
+<td>
+<p><kbd>Arial; 7 pt; Default; Default; Default</kbd></p>
+</td>
+<td>
+<p><kbd>0 pt; 0 pt; 0 pt; 0 pt</kbd></p>
+</td>
+<td>
+<p><kbd>False</kbd></p>
+</td>
+<td>
+<p><kbd>Left</kbd></p>
+</td>
+<td>
+<p><kbd>Middle</kbd></p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>txtPageNumber</kbd></p>
+</td>
+<td>
+<p><kbd>=Globals!PageNumber</kbd></p>
+</td>
+<td>
+<p><kbd>0.45 cm; 0.423 cm</kbd></p>
+</td>
+<td>
+<p><kbd>17.7 cm; 0.45878 cm</kbd></p>
+</td>
+<td>
+<p><kbd>Arial; 7 pt; Default; Default; Default</kbd></p>
+</td>
+<td>
+<p><kbd>0 pt; 0 pt; 0 pt; 0 pt</kbd></p>
+</td>
+<td>
+<p><kbd>False</kbd></p>
+</td>
+<td>
+<p><kbd>Right</kbd></p>
+</td>
+<td>
+<p><kbd>Middle</kbd></p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>txtUserID</kbd></p>
+</td>
+<td>
+<p><kbd>=User!UserID</kbd></p>
+</td>
+<td>
+<p><kbd>3.15 cm; 0.423 cm</kbd></p>
+</td>
+<td>
+<p><kbd>14.8868 cm; 0.91298 cm</kbd></p>
+</td>
+<td>
+<p><kbd>Arial; 7 pt; Default; Default; Default</kbd></p>
+</td>
+<td>
+<p><kbd>0 pt; 0 pt; 0 pt; 0 pt</kbd></p>
+</td>
+<td>
+<p><kbd>False</kbd></p>
+</td>
+<td>
+<p><kbd>Right</kbd></p>
+</td>
+<td>
+<p><kbd>Middle</kbd></p>
+</td>
+</tr>
+</tbody>
+</table>
+<p> </p>
+<p>This is what it should look like in the report header section:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/6f7908a0-4890-4689-9d5a-2550b6eb5182.png"/></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Part 2.2 – Adding a table control to the RDLC report body</h1>
+                </header>
+            
+            <article>
+                
+<p>In this section, we will add a table control in the report body to display data in a tabular format:</p>
+<ol>
+<li>Right-click somewhere in the middle of the report body and choose <span class="packt_screen">Insert</span>. Select the <span class="packt_screen">Table</span> control from the menu. Keep the table small since we will need to add some extra columns and resize the width manually.</li>
+<li>Select the last table column, right-click and select <span class="packt_screen">Insert Column</span>, and choose <span class="packt_screen">Right</span>:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/ae36b7b4-645c-4026-ad0c-d4d8c8750c67.png" style="width:38.75em;height:11.67em;"/></p>
+<ol start="3">
+<li>Repeat <em>step 2</em> three more times so that we have seven columns in total.</li>
+<li>Keep the table aligned by changing the following table properties:
+<ul>
+<li><span class="packt_screen">Location: 0.02584 in; 0.18403in</span></li>
+<li><span class="packt_screen"><span class="packt_screen">Size: 7.06693 in; 0.48958in</span></span></li>
+</ul>
+</li>
+<li>Change the column width property for each column, from left to right, as follows:</li>
+</ol>
+<table style="border-collapse: collapse;width: 100%" border="1">
+<thead>
+<tr>
+<td>
+<p><strong>Column</strong></p>
+</td>
+<td>
+<p><strong>1</strong></p>
+</td>
+<td>
+<p><strong>2</strong></p>
+</td>
+<td>
+<p><strong>3</strong></p>
+</td>
+<td>
+<p><strong>4</strong></p>
+</td>
+<td>
+<p><strong>5</strong></p>
+</td>
+<td>
+<p><strong>6</strong></p>
+</td>
+<td>
+<p><strong>7</strong></p>
+</td>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<p>Width (cm)</p>
+</td>
+<td>
+<p>1,905</p>
+</td>
+<td>
+<p>2,222</p>
+</td>
+<td>
+<p>2,593</p>
+</td>
+<td>
+<p>2,990</p>
+</td>
+<td>
+<p>3,373</p>
+</td>
+<td>
+<p>2,620</p>
+</td>
+<td>
+<p>1,798</p>
+</td>
+</tr>
+</tbody>
+</table>
+<p style="padding-left: 60px" class="CDPAlignLeft CDPAlign">This should be the current layout result:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/c9b5410b-12ed-4799-b084-aa6e433ecf27.png"/></p>
+<ol start="6">
+<li>It is now time to set the table properties appropriately and bind them to the Dynamics 365 Business Central dataset. Select the table (once you have clicked on the table, a gray column/row area appears, and in a Microsoft Excel-like style, just click in the top left of this area to select the whole table).</li>
+<li>In the <span class="packt_screen">Properties</span> window, click the <span class="packt_screen">Property Pages</span> button.</li>
+<li>Change the values in the <span class="packt_screen">General</span> tab as follows and click <span class="packt_screen">OK</span>:
+<ul>
+<li><span class="packt_screen">Name:</span> <kbd>tableItemLedgerEntry</kbd></li>
+<li><span class="packt_screen">Dataset name:</span> <kbd>Dataset_Result</kbd></li>
+</ul>
+</li>
+</ol>
+<p style="padding-left: 60px">Now, the table is bound to the appropriate dataset and it has a self-explanatory name. Giving an appropriate name to every single control in the RDL layout is useful because you can find out <span>the purpose of the control and where it is located </span>at a glance. Now, let's bind every table control to the dataset caption and field values.</p>
+<ol start="9">
+<li>For every single text box in the first row of the table (the table header row), <span>open the <span class="packt_screen">Property Pages</span> window</span> and change the <span class="packt_screen">Value</span> property of the first seven table header textboxes, as follows:</li>
+</ol>
+<table style="border-collapse: collapse;width: 100%" border="1">
+<tbody>
+<tr>
+<td>
+<p><kbd>txtItemNoCap</kbd></p>
+</td>
+<td>
+<p><kbd>=Parameters!ItemNo_ItemLedgerEntryCaption.Value</kbd></p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>txtPostingDateCap</kbd></p>
+</td>
+<td>
+<p><kbd>=Parameters!PostingDate_ItemLedgerEntryCaption.Value</kbd></p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>txtCustCatPKTCap</kbd></p>
+</td>
+<td>
+<p><kbd>=Parameters!CustCatPKT_ItemLedgerEntryCaption.Value</kbd></p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>txtDocumentNoCap</kbd></p>
+</td>
+<td>
+<p><kbd>=Parameters!DocumentNo_ItemLedgerEntryCaption.Value</kbd></p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>txtDescriptionCap</kbd></p>
+</td>
+<td>
+<p><kbd>=Parameters!Description_ItemLedgerEntryCaption.Value</kbd></p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>txtLocationCodeCap</kbd></p>
+</td>
+<td>
+<p><kbd>=Parameters!LocationCode_ItemLedgerEntryCaption.Value</kbd></p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>txtQuantityCap</kbd></p>
+</td>
+<td>
+<p><kbd>=Parameters!Quantity_ItemLedgerEntryCaption.Value</kbd></p>
+</td>
+</tr>
+</tbody>
+</table>
+<ol start="10">
+<li>Let's bind table body text box controls to the dataset fields. For every text box in the second row of the table (the table body), <span>open the <span class="packt_screen">Property Pages</span> window</span> and change the following properties:</li>
+</ol>
+<table style="border-collapse: collapse;width: 100%" border="1">
+<tbody>
+<tr>
+<td>
+<p><strong>Name</strong></p>
+</td>
+<td>
+<p><strong>Value</strong></p>
+</td>
+<td>
+<p><strong>Format</strong></p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>txtItemNo</kbd></p>
+</td>
+<td>
+<p><kbd>=Fields!ItemNo_ItemLedgerEntry.Value</kbd></p>
+</td>
+<td>
+<p> </p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>txtPostingDate</kbd></p>
+</td>
+<td>
+<p><kbd>=Fields!PostingDate_ItemLedgerEntry.Value</kbd></p>
+</td>
+<td>
+<p> </p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>txtCustCatPKT</kbd></p>
+</td>
+<td>
+<p><kbd>=Fields!CustCatPKT_ItemLedgerEntry.Value</kbd></p>
+</td>
+<td>
+<p> </p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>txtDocumentNo</kbd></p>
+</td>
+<td>
+<p><kbd>=Fields!DocumentNo_ItemLedgerEntry.Value</kbd></p>
+</td>
+<td>
+<p> </p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>txtDescription</kbd></p>
+</td>
+<td>
+<p><kbd>=Fields!Description_ItemLedgerEntry.Value</kbd></p>
+</td>
+<td>
+<p> </p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>txtLocationCode</kbd></p>
+</td>
+<td>
+<p><kbd>=Fields!LocationCode_ItemLedgerEntry.Value</kbd></p>
+</td>
+<td>
+<p> </p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>txtQuantity</kbd></p>
+</td>
+<td>
+<p><kbd>=Fields!Quantity_ItemLedgerEntry.Value</kbd></p>
+</td>
+<td>
+<p><kbd>=Fields!Quantity_ItemLedgerEntryFormat.Value</kbd></p>
+</td>
+</tr>
+</tbody>
+</table>
+<ol start="11">
+<li>Create an alternate line color to make it easier to read. In the table details, select the seven textboxes mentioned in the previous table and add the following values to the following properties in each of these textboxes:
+<ul>
+<li><span class="packt_screen">Background Color</span>: <kbd>=iif(RowNumber(Nothing) mod 2, "AliceBlue", "White")</kbd></li>
+<li><span class="packt_screen">TextAlign</span>: <span class="packt_screen">Right</span></li>
+</ul>
+</li>
+<li>Conditionally format the <span class="packt_screen">Color</span> property for the <kbd>txtQuantity</kbd> text box. Select <kbd>txtQuantity</kbd> and change the <span class="packt_screen">Color</span> property as follows:
+<ul>
+<li><span class="packt_screen">Color</span>: <kbd>=iif(Fields!Quantity_ItemLedgerEntry.Value &lt;= 0,"Red","Black")</kbd></li>
+</ul>
+</li>
+<li>Enable the ability to display the table header at the beginning of every page to improve report readability. Click on the small down arrow in <span class="packt_screen">Column Groups</span> and enable <span class="packt_screen">Advanced Mode</span>.</li>
+<li>Select the <span class="packt_screen">(Static)</span> group in <span class="packt_screen">Row Groups</span>:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/944df101-012d-4af3-a704-401f853db6e4.png"/></p>
+<p style="padding-left: 30px">Change the properties for the <span class="packt_screen">(Static)</span> group as follows:</p>
+<ul>
+<li><span class="packt_screen">KeepTogether</span>: <span class="packt_screen">True</span></li>
+<li><span class="packt_screen">RepeatOnNewPage</span>: <span class="packt_screen">True</span></li>
+</ul>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Part 3 – Understanding grouping</h1>
+                </header>
+            
+            <article>
+                
+<p>With the term <strong>grouping</strong>, we mean the capacity of aggregate result sets based on one or more discriminant elements. Grouping is typically used to show totals per group and/or aggregate and calculate totals (typically using sum formulas). The grouping feature is used typically within controls that implement the data region scope, such as table, matrix, list, chart, and gauge.</p>
+<p>In this section, we will create group totals for the table control of our report:</p>
+<ol>
+<li>In the <span class="packt_screen">Row Groups</span> section, right-click on the <span class="packt_screen">(Details)</span> static row group and select <span class="packt_screen">Add Group</span>. Choose <span class="packt_screen">Parent Group…</span>.</li>
+<li>A pop-up window should appear, asking you to provide a grouping element. Select the <span class="packt_screen">[</span><span class="packt_screen">ItemNo_ItemLedgerEntry]</span> field value and choose to add both a group header and a group footer. Then, click <span class="packt_screen">OK</span>:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/32963939-7ab1-4f44-b2cd-f7652c6cee19.png"/></p>
+<ol start="3">
+<li>Select the group we've just created (typically named <kbd>ItemNo_ItemLedgerEntry</kbd> by default), right-click, and select <span class="packt_screen">Group Properties…</span>.</li>
+<li>In the <span class="packt_screen">Group Properties</span> window, change the name to <kbd>ItemNoGroup</kbd> and click <span class="packt_screen">OK</span>.</li>
+<li>Select <span class="packt_screen">ItemNoGroup</span>, right-click, and select <span class="packt_screen">Add Group</span> and <span class="packt_screen">Child Group…</span>.</li>
+</ol>
+<p> </p>
+<ol start="6">
+<li>A pop-up window appears, asking you to provide a grouping element. Select <span class="packt_screen">CustCatPKT_ItemLedgerEntry</span>, choose to add just the group header (no group footer), and click <span class="packt_screen">OK</span>.</li>
+<li>Select the group we've just created, right-click, and select <span class="packt_screen">Group Properties…</span>.</li>
+<li>In the <span class="packt_screen">Group Properties</span> window, change the <span class="packt_screen">Name</span> to <kbd>CustCatPKTNoGroup</kbd>. Then, go to the <span class="packt_screen">Advanced</span> tab and set <span class="packt_screen">CustCatPKT_ItemLedgerEntry</span> in the <span class="packt_screen">Recursive Parent</span> box. Click <span class="packt_screen">OK</span> to confirm this:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/0741b61b-daeb-47b3-9715-49efb70a0d9f.png" style="width:30.42em;height:19.33em;"/></p>
+<ol start="9">
+<li>All of these operations should have created, by default, two extra unwanted columns in the table to display grouping elements. Select the first two columns and then right-click and choose <span class="packt_screen">Delete Column</span><strong><em>s</em></strong>.</li>
+<li>The automatic action of adding two extra columns should have automatically enlarged the <span class="packt_screen">Report Body</span>: bring this back to its original size. Set the following value:
+<ul>
+<li><span class="packt_screen"><span class="packt_screen">Size: 7.21205in; 1.93403in</span></span></li>
+</ul>
+</li>
+</ol>
+<ol start="11">
+<li>Let's add group caption labels. Select the first text box in the <span class="packt_screen">ItemNoGroup</span> header row, as shown in the following screenshot:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/79c73257-43a3-4553-952a-813d6ed4ea3f.png" style="width:16.67em;height:19.42em;"/></p>
+<p style="padding-left: 60px">Change its properties as follows:</p>
+<ul>
+<li style="list-style-type: none">
+<ul>
+<li><strong>Name</strong>: <kbd>txtItemNoGroup</kbd></li>
+<li><strong>Value</strong>: <kbd>=Fields!ItemNo_ItemLedgerEntry.Value</kbd></li>
+<li><strong>BackgroundColor</strong>: <kbd>LightBlue</kbd></li>
+</ul>
+</li>
+</ul>
+<ol start="12">
+<li>Select the third text box in the <kbd>SourceNoGroup</kbd> header column and change its properties as follows:
+<ul>
+<li><strong>Name</strong>: <kbd>txtCustCatPKTGroup</kbd></li>
+<li><strong>Value</strong>: <kbd>=Fields!CustCatPKT_ItemLedgerEntry.Value</kbd></li>
+<li><strong>BackgroundColor</strong>: <kbd>LightSteelBlue</kbd></li>
+</ul>
+</li>
+<li>Select the last text box in the bottom right, in the <kbd>ItemNoGroup</kbd> footer row, and change its properties as follows:
+<ul>
+<li><strong>Name</strong>: <kbd>txtSumQuantity</kbd></li>
+<li><strong>Value</strong>: <kbd>=Sum(Fields!Quantity_ItemLedgerEntry.Value)</kbd></li>
+<li><strong>Color</strong>: <kbd>=iif(Sum(Fields!Quantity_ItemLedgerEntry.Value) &lt;= 0,"Red","Black")</kbd></li>
+<li><strong>Font</strong>: <kbd>Arial; 10pt; Default; Bold; Default</kbd></li>
+<li><strong>Format</strong>: <kbd><kbd>=Fields!Quantity_ItemLedgerEntryFormat.Value</kbd></kbd></li>
+</ul>
+</li>
+<li>Now, for the rest of the textboxes in all the grouping rows (both headers and footers), remove the <kbd>BackgroundColor</kbd> formula, <kbd>=iif(RowNumber(Nothing) mod 2, "AliceBlue", "White")</kbd>, that has been automatically copied from the details group. When the formula is deleted from the <span class="packt_screen">Properties</span> window, <span class="packt_screen">BackGroundColor</span> will default to <span class="packt_screen">No Color</span>.</li>
+<li>We are almost finished with groupings. Let's add the last touch to the totals. Select the sixth text box in the <span class="packt_screen">ItemNoGroup</span> footer row, click on the <span class="packt_screen">Property Pages</span> pop-up window for this text box, and change the <span class="packt_screen">Border</span> properties, as shown in the following screenshot:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/f1432618-b757-4802-950d-ea474f97b5de.png"/></p>
+<ol start="16">
+<li>Repeat <em>step 15</em> for the seventh text box (<kbd>txtSumQuantity</kbd>)<span>.</span> </li>
+<li>Enable the ability to display the table header if there is more than one page to be rendered. Click on the small down arrow in <span class="packt_screen">Column Groups</span> and enable <span class="packt_screen">Advanced Mode</span>. Select the <span class="packt_screen">(Static)</span> group in <span class="packt_screen">Row Groups</span> and change the properties of the Static member, as follows:</li>
+</ol>
+<ul>
+<li style="list-style-type: none">
+<ul>
+<li><strong><strong>KeepTogether<span>: </span><kbd>True</kbd></strong></strong></li>
+<li><strong>KeepWithGroup</strong>: <kbd>After</kbd></li>
+<li><strong>RepeatOnNewPage</strong>: <kbd>True</kbd></li>
+</ul>
+</li>
+</ul>
+<p class="mce-root"/>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Part 4 – Building a simple request page</h1>
+                </header>
+            
+            <article>
+                
+<p>If report objects have been set with <kbd>UseRequestPage = true;</kbd> (the default value), then a request page will be shown to the user so that they can set filters, gather user information, and populate AL variables or parameters that influence the <span>processing</span><span> </span><span>and</span><span> </span><span>output of the </span><span>report</span><span>.</span></p>
+<p>Within a request page, you can also add actions to perform some extra activities before running the report. Typical examples include a shortcut to run a page to check for some specific setup or an action that performs preprocessing tasks before setting request page variables.</p>
+<p><span>In Visual Studio Code, add (or change, if you have used the <kbd>treport</kbd></span> <span>snippet) the <kbd>requestpage</kbd> section and the <kbd>OnPreReport()</kbd> trigger section</span><span>.</span> Consider the following code:</p>
+<pre>requestpage<br/>{<br/>    layout<br/>    {<br/>        area(content)<br/>        {<br/>            group(Options)<br/>            {<br/>                Caption = 'Options';<br/>                field(includeLogo;includeLogo)<br/>                {<br/>                    Caption = 'Include company logo';<br/>                }<br/>            }<br/>        }<br/>    }<br/>    actions<br/>    {<br/>    }<br/>}<br/>trigger OnPreReport()<br/>begin<br/>    if includeLogo then begin<br/>    CompanyInfo.Get;  //Get Company Information record           <br/>    CompanyInfo.CalcFields(Picture);  //Retrieve company logo<br/>    end;<br/>end;</pre>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mceNonEditable"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Part 5 – Adding database images</h1>
+                </header>
+            
+            <article>
+                
+<p>In this section, we will add the ability to display images at runtime <span>to our report</span>:</p>
+<ol>
+<li>Go back to <span class="packt_screen">Report Builder</span> and the RDL layout. In the center of the report header, right-click and select <span class="packt_screen">Insert | Image</span>.</li>
+<li>The <span class="packt_screen">Image Properties</span> pop-up window will load. In the <span class="packt_screen">General</span> tab, change the <span class="packt_screen">Name</span> to <kbd>imgCompanyLogo</kbd> and input the parameters shown in the following screenshot:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/3ce9d348-3a78-4439-bc54-a7efea6dcbe7.png"/></p>
+<ol start="3">
+<li>In the <span class="packt_screen">Visibility</span> tab, change the display option to <span class="packt_screen">Show or hide based on an expression</span> and add the following formula:</li>
+</ol>
+<pre style="padding-left: 60px">=iif(Fields!includeLogo.Value,iif(Len(Convert.ToString(Fields!CompanyInfo_Picture.Value))&gt;0,False,True),True)</pre>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mceNonEditable"/>
+<p style="padding-left: 60px">This expression sets the visibility of the image control if the user has chosen to include the company logo and if the conversion from binary format into text returns values greater than 0 bytes (in short, if there is image data in the dataset).</p>
+<ol start="4">
+<li>Click <span class="packt_screen">OK</span> to confirm the modifications you've made.</li>
+<li>Set the image control's location and size as follows:
+<ul>
+<li><span class="packt_screen">Location: 3,29875in; 0in</span></li>
+<li><span class="packt_screen">Size: 2,42708in; 0,56578in</span></li>
+</ul>
+</li>
+</ol>
+<p>                The final report layout should now look like this:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/8fb06638-46c7-45be-ba58-c43b3b483e7b.png"/></p>
+<p>The RDL report and its layout are now ready to be deployed. Compile the extension (<em>Ctrl</em> + <em>Shift</em> + <em>B</em>) and deploy the package into your online or containerized sandbox (<em>F5</em>). Once the web client is loading, just search (<em>Alt</em> + <em>Q</em>) for the Item Ledger Entry Analysis report and fill in the request page if you want to include the company logo in the <span>report's output</span>:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/090a6a56-5bb2-4496-bdca-48feddb83f77.png" style="width:19.92em;height:9.75em;"/></p>
+<p class="mce-root"/>
+<p>If you click <span class="packt_screen">Preview</span>, the output should look as follows:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/8bd9612d-895d-404c-aa22-22057e1c942a.png"/></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Part 6 – Adding a Word layout</h1>
+                </header>
+            
+            <article>
+                
+<p>In this section, together with the RDL layout, we will also add a Word layout to our report:</p>
+<ol start="1">
+<li>Go to <span class="packt_screen">Report Layout Selection</span> and filter for report ID <span class="packt_screen">50111</span>.</li>
+<li>Select <span class="packt_screen">Actions | Custom Layouts</span>.</li>
+<li>Click <span class="packt_screen">New</span>, select <span class="packt_screen">Insert Word layout</span>, and click <span class="packt_screen">OK</span>. This will add an empty Word layout to the report and reference the dataset structure as an XML mapping.</li>
+<li>Choose <span class="packt_screen">Process | Export Layout</span> and save the <kbd>Default.docx</kbd> report into the <kbd>.\Src\CustomerCategory\report</kbd> folder. You might call the report layout <kbd>Rep50111.ItemLedgerEntryAnalysis.docx</kbd>.</li>
+<li>Bind the report to the RDL layout within the extension, change the default layout <span>to Word, </span>and change record sorting by specifying the following report properties in the AL report object. Consider the following code:</li>
+</ol>
+<pre style="padding-left: 60px">report 50111 "Item Ledger Entry Analysis"<br/>{<br/>DefaultLayout = Word;<br/>RDLCLayout = './Src/CustomerCategory/report/Rep50111.ItemLedgerEntryAnalysis.rdl';<br/>WordLayout = './Src/CustomerCategory/report/Rep50111.ItemLedgerEntryAnalysis.docx';<br/>Caption = 'Item Ledger Entry Analysis';<br/>UsageCategory = ReportsAndAnalysis;<br/>ApplicationArea = All;<br/>dataset<br/>{<br/>dataitem("Item Ledger Entry";"Item Ledger Entry")<br/>{<br/> DataItemTableView=SORTING("Item No.") ORDER(Ascending);</pre>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mceNonEditable"/>
+<ol start="6">
+<li>In Visual Studio Code, right-click the DOCX file and choose <span class="packt_screen">Open externally</span>. This will open Microsoft Word. </li>
+<li>If you haven't already, be sure that you have the <span class="packt_screen">Developer</span> tab enabled. Click on <span class="packt_screen">File | Options | Customize Ribbon</span>. In the main tab, check the <span class="packt_screen">Developer (custom)</span> ribbon option and click <span class="packt_screen">OK</span>:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/16916810-f51c-4084-b48f-cdb8c00cd5c8.png"/></p>
+<ol start="8">
+<li>Back in the Word layout, select the <span class="packt_screen">Developer</span> tab and click on the XML Mapping pane.</li>
+<li>In the <span class="packt_screen">Custom XML Part</span> box, select the last entry from the drop-down menu and expand the <span class="packt_screen">Labels</span> and <span class="packt_screen">Item_Ledger_Entry</span> nodes from the <span class="packt_screen">NavWorldReportXMLPart</span> root.</li>
+</ol>
+<p>It should look like this:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/0704991b-dcb7-4dd9-80fd-82e1699d3f36.png" style="width:28.42em;height:34.58em;"/></p>
+<p>Let's add a Word layout list report to our extension:</p>
+<ol>
+<li>Right-click in the <span class="packt_screen">XML Mapping</span> pane, select <span class="packt_screen">Item_Ledger_Entry</span> the drop-down menu, and choose <span class="packt_screen">CompanyInformation_Picture</span>. Right-click on it and select <span class="packt_screen">Insert Content Control | Picture</span>. This will add a placeholder for the company information logo in the Word layout.</li>
+<li>Add an extra line. Right-click in the <span class="packt_screen">XML Mapping</span> pane, select <span class="packt_screen">Labels</span>, and choose <span class="packt_screen">BCReportName</span><strong>.</strong> Right-click on it and select <span class="packt_screen">Insert Content Control | Plain Text</span>.</li>
+</ol>
+<p> </p>
+<ol start="3">
+<li>Add an extra line. Right-click in the <span class="packt_screen">XML Mapping</span> <span>pane</span>, select the <span class="packt_screen">Item_Ledger_Entry</span> <span>drop-down menu, </span>and choose <span class="packt_screen">COMPANYNAME</span>. Right-click on it and select <span class="packt_screen">Insert Content Control | Plain Text</span>.</li>
+<li>Add an extra line. In the Word ribbon, click on <span class="packt_screen">Insert | Table</span> and create a 7-row x 2-column table.</li>
+<li>In the first row, for each cell, place the cursor in the <span class="packt_screen">XML Mapping</span> pane, select <span class="packt_screen">Labels</span>, right-click in each caption element, and select <span class="packt_screen">Insert Content Control | Plain Text</span>. Here is a list of the column captions:
+<ul>
+<li><span class="packt_screen">ItemNo_ItemLedgerEntryCaption</span></li>
+<li><span class="packt_screen">PostingDate_ItemLedgerEntryCaption</span></li>
+<li><span class="packt_screen">CustCatPKT_ItemLedgerEntryCaption</span></li>
+<li><span class="packt_screen">DocumentNo_ItemLedgerEntryCaption</span></li>
+<li><span class="packt_screen">Description_ItemLedgerEntryCaption</span></li>
+<li><span class="packt_screen">LocationCode_ItemLedgerEntryCaption</span></li>
+<li><span class="packt_screen">Quantity_ItemLedgerEntryCaption</span></li>
+</ul>
+</li>
+</ol>
+<ol start="6">
+<li>Select the second row of the table. In the <span class="packt_screen">XML Mapping</span> pane, select <span class="packt_screen">Item_Ledger_Entry</span> element, right-click on it, and select <span class="packt_screen">Insert Content Control | Repeating</span>. This will make the line elements repeat for every record in the Item Ledger Entry dataset.</li>
+<li>In the second row, inside the repeater element, place the cursor in every cell in the <span class="packt_screen">XML Mapping</span> pane, expand the <span class="packt_screen">Item_Ledger_Entry</span> <span>drop-down menu</span>, right-click in the field element, and select <span class="packt_screen">Insert Content Control | Plain Text</span>. Here is a list of the column fields:
+<ul>
+<li><span class="packt_screen">ItemNo_ItemLedgerEntry</span></li>
+<li><span class="packt_screen">PostingDate_ItemLedgerEntry</span></li>
+<li><span class="packt_screen">CustCatPKT_ItemLedgerEntry</span></li>
+<li><span class="packt_screen">DocumentNo_ItemLedgerEntry</span></li>
+<li><span class="packt_screen">Description_ItemLedgerEntry</span></li>
+<li><span class="packt_screen">LocationCode_ItemLedgerEntry</span></li>
+<li><span class="packt_screen">Quantity_ItemLedgerEntry</span></li>
+</ul>
+</li>
+</ol>
+<p class="mce-root"/>
+<p>This will be the result:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/7005be50-9cef-4320-92dc-1305e328c1a8.png"/></p>
+<p>Save and close the Word file.</p>
+<p>The Word layout is now ready to be deployed. Build the extension (<em>Ctrl</em> + <em>Shift</em> + <em>B</em>) and deploy the package into your online or containerized sandbox (<em>F5</em>). Once the web client is loading, search (<em>Alt</em> + <em>Q</em>) for <span class="packt_screen">Report Layout Selection</span>, filter for the current report, and change the selected layout to <span class="packt_screen">Word (built-in)</span>, as shown here:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/a09b9ef2-c6c0-4d45-86e3-98ec419c76f5.png" style="width:45.83em;height:8.75em;"/></p>
+<p>After searching for the <span class="packt_screen">Item Ledger Entry Analysis</span> report, choose to include the company logo in the <span><span>report output</span></span> and print it to Microsoft Word. Here is the outcome:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/dc497d0b-22f8-4d8d-ba17-8a6273a564a3.png" style="width:49.50em;height:29.25em;"/></p>
+<p><span>This concludes this section, where we created and beautified a report from scratch. In the next section, we will have a look at the most common task for a developer: copying and refactoring an existing report to cope with customer feature requirements.</span></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Converting an existing C/AL report into AL</h1>
+                </header>
+            
+            <article>
+                
+<p>Making small modifications to an existing report is a very common task. Together with creating new pages and codeunits, this is probably one of the most repetitive and frequent jobs for a developer.</p>
+<p class="mce-root"/>
+<p>Let's say that we would like to make the following changes to the standard sales order report:</p>
+<ul>
+<li>Show the Customer Category field in the sales order header</li>
+<li>Print <em>GIFT</em> in the sales lines for item lines with 100% discount</li>
+</ul>
+<p>The current version of the AL Language extension does not have any artifact such as the <kbd>ReportExtension</kbd> object that could be used to modify or merge existing reports. Therefore, it is always required to create a brand new report from scratch, even if we need to make very small modifications to the dataset and/or layout.</p>
+<p>The easiest way to accomplish this task, then, is to copy and give a different ID to an existing report after converting it from C/AL into AL. </p>
+<p>The first part of the task (copy an existing report) is pretty straightforward with the Dynamics 365 Business Central October 2019 update since all of the legacy C/AL reports have been transformed into their equivalent AL objects and included in the base application extension.</p>
+<p>With the on-premises version, you can find them in the DVD installation folder in the <kbd>\Applications\BaseApp\Source</kbd><em><strong> </strong></em><span>directory</span>. Just unzip the file named <kbd>Base Application.Source.zip</kbd> and search for the standard report you need to make a copy of, together with its <kbd>.rdl</kbd> and <kbd>.docx</kbd> files.</p>
+<p>If you are using a Docker-contained sandbox, you might think of using a powerful cmdlet implemented in the <kbd>NavContainerHelper</kbd> library that is specifically intended for the Dynamics 365 Business Central October 2019 update: <kbd>Create-AlProjectFolderFromBcContainer</kbd>. This cmdlet will unpack the base application source code in a local folder of your choice. Here is a very simple code snippet:</p>
+<pre>#Set local variables<br/>#####################<br/>$alFolder = 'C:\APP\BaseApp'<br/>$existingContainerName = "BC15ITCU1"<br/><br/><br/>#Extract Base Application into a folder of your choice<br/>############################################################<br/>Create-ALProjectFolderFromBcContainer -containerName $existingContainerName `<br/>-useBaseLine<span> </span><span>`<br/></span>-useBaseAppProperties</pre>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mceNonEditable"/>
+<p class="mceNonEditable"/>
+<p>In <kbd>$alFolder</kbd>, you can pick up the AL report items that you need and renumber and customize them.</p>
+<p>With the Dynamics 365 Business Central April 2019 update or earlier, Microsoft provides a very useful—and powerful<span>—</span>command-line tool called <kbd>txt2al.exe</kbd>, which helps to convert C/AL objects into AL syntax. But there is more.</p>
+<p>The <kbd>New-NavContainer</kbd> cmdlet contained in the <kbd>NavContainerHelper</kbd> PowerShell library, which we discussed in <a href="8b032c15-9adb-4170-bf03-50a1abad1aa9.xhtml">Chapter 3</a>, <em>Online and Container-Based Sandboxes</em>, <span>also </span>implements a useful switch (<kbd>-includeAL</kbd>) that extracts all of the C/AL objects in TXT format from a container and converts them one by one using <kbd>txt2.al.exe</kbd>.</p>
+<div class="packt_infobox">Since the Dynamics 365 Business Central October 2019 update, Microsoft discontinued the C/AL and CSIDE development environment, hence <kbd>txt2al.exe</kbd> is <span>only </span>present in deployments based on the Dynamics 365 Business Central April 2019 update or earlier versions.</div>
+<p>Here is a very useful script that converts all of the standard base C/AL objects into their AL equivalents:</p>
+<div>
+<pre>#Set local variables<br/>#####################<br/>$mylicense = 'C:\DOCKER\LICENSE\BC14.flf'<br/>$imageName = "mcr.microsoft.com/businesscentral/sandbox:1904"<br/>$containerName = "BC14W1-LATEST"<br/>#Create a Docker sandbox container with converted AL objects<br/>############################################################<br/>New-NavContainer -accept_eula `<br/>-imageName $imageName `<br/>-containerName $containerName `<br/>-licenseFile $mylicense `<br/>-auth NavUserPassword `<br/>-shortcuts None `<br/>-includeAL</pre></div>
+<p>Here's a snippet of the PowerShell standard output that shows what is happening when the <kbd>-includeAL</kbd> switch is enabled:</p>
+<pre>…<br/><em>Export Objects with filter 'Id=1..1999999999' (new syntax) to C:\ProgramData\NavContainerHelper\Extensions\Original-14.1.33107.0-W1-newsyntax\objects.txt (container path)<br/></em><em>Split C:\ProgramData\NavContainerHelper\Extensions\Original-14.1.33107.0-W1-newsyntax\objects.txt to C:\ProgramData\NavContainerHelper\Extensions\Original-14.1.33107.0-W1-newsyntax (container paths)<br/></em><em>Converting objects file from OEM(437) to UTF8 before splitting<br/></em><em>Converting object files from UTF8 to OEM(437) after splitting<br/></em><em>Converting files in C:\ProgramData\NavContainerHelper\Extensions\Original-14.1.33107.0-W1-newsyntax to .al files in C:\ProgramData\NavContainerHelper\Extensions\Original-14.1.33107.0-W1-al with startId 50100 (container paths)<br/></em><em>Converting my delta files from OEM(437) to UTF8 before converting<br/></em><em>txt2al.exe --source="C:\ProgramData\NavContainerHelper\Extensions\Original-14.1.33107.0-W1-newsyntax" --target="C:\ProgramData\NavContainerHelper\Extensions\Original-14.1.33107.0-W1-al" --rename --extensionStartId=50100 --dotNetAddInsPackage="C:\ProgramData\NavContainerHelper\Extensions\BC14W1-LATEST\coredotnetaddins.al"<br/></em><em>Converting my delta files from UTF8 to OEM(437) after converting<br/></em><em>Creating .net Assembly Reference Folder for VS Code<br/></em><em>Copying DLLs from C:\Windows\assembly to assemblyProbingPath<br/></em><em>Copying DLLs from C:\Program Files\Microsoft Dynamics NAV\140\Service to assemblyProbingPath<br/></em><em>Copying DLLs from C:\Program Files (x86)\Microsoft Dynamics NAV\140\RoleTailored Client to assemblyProbingPath<br/></em><em>Copying DLLs from C:\Program Files (x86)\Open XML SDK to assemblyProbingPath<br/></em>…</pre>
+<p>The output files are located in the <kbd>C:\ProgramData\NavContainerHelper\Extensions\Original-&lt;ApplicationVersion&gt;-&lt;localization&gt;-al</kbd> <span>directory.</span></p>
+<p>In this directory, we have to search for the converted AL standard object for order confirmation. Just type <kbd>Standard Sales Order</kbd> into the file explorer search field and three objects will be available to be copied and renamed:</p>
+<ul>
+<li><kbd>Report 1305 - Standard Sales – Order Conf..al</kbd></li>
+<li><kbd>Standard Sales – Order Conf..docx</kbd></li>
+<li><kbd><kbd>Standard Sales – Order Conf..rdlc</kbd></kbd></li>
+</ul>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p>The following screenshot shows this:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/0e5f656c-2357-49e7-8650-f293354a5b78.png"/></p>
+<p>Copy these files into the <kbd>.\Src\CustomerCategory\report</kbd> <span>directory </span>and rename them as follows:</p>
+<ul>
+<li><kbd>Rep50115.PacktSalesOrderConf.al</kbd></li>
+<li><kbd>Rep50115.PacktSalesOrderConf.docx</kbd></li>
+<li><kbd>Rep50115.PacktSalesOrderConf.rdl</kbd></li>
+</ul>
+<p>The next step is to renumber the AL report within the allowed customization range to avoid duplicate <span>object </span>IDs and then change its properties to use the appropriate <kbd>.docx</kbd> and <kbd>.rdl</kbd> files.</p>
+<p>Edit <kbd>Rep50115.PacktSalesOrderConf.al</kbd> in Visual Studio Code and change the name and properties, as shown in the following code:</p>
+<pre>report 50115 "Packt Sales - Order Conf."<br/>{<br/>    WordLayout = './Src/CustomerCategory/report/Rep50115.PacktSalesOrderConf.docx';<br/>    RDLCLayout = './Src/CustomerCategory/report/Rep50115.PacktSalesOrderConf.rdl';<br/>    Caption = 'Packt Sales-Confirmation';<br/>    UsageCategory=ReportsAndAnalysis;<br/>    ApplicationArea=All;<br/>    AdditionalSearchTerms='Packt Sales Order report';<br/><br/>    DefaultLayout = Word;<br/>    PreviewMode = PrintLayout;<br/>    WordMergeDataItem = Header;</pre>
+<p>Now, we have to let the application understand that every time standard report 1305 is invoked, it should be substituted with custom report 50115 instead. This is easily done by subscribing to a specific event called <kbd>OnAfterSubstituteReport</kbd>, which is published through the <kbd>ReportManagement</kbd> codeunit.</p>
+<p>Edit the <kbd>Cod50100.CustomerCategoryMgt_PKT.al</kbd> file, which is contained in <kbd>.\Src\CustomerCategory\codeunit</kbd>, and add the following code:</p>
+<pre>[EventSubscriber(ObjectType::Codeunit, Codeunit::ReportManagement, 'OnAfterSubstituteReport', '', false, false)]<br/>local procedure OnAfterSubstituteReport(ReportId: Integer; var NewReportId: Integer)<br/>begin<br/>    if ReportId = Report::"Standard Sales - Order Conf." then<br/>        NewReportId := Report::"Packt Sales - Order Conf.";<br/>    end;</pre>
+<div class="packt_infobox">At this stage, if you build (<em>Ctrl</em> + <em>Shift</em> + <em>B</em>) and publish (<em>F5</em>) the extension, the whole (code and layouts) standard sales order report will <span>automatically </span>be replaced behind the scenes with the custom one.</div>
+<p>Now, it is time to make the appropriate changes to the custom sales order report code and Word layout to print out the Customer Category field in the document header and print out GIFT for every item line that has a 100% discount.</p>
+<p>Edit <kbd>Rep50115.PacktSalesOrderConf.al</kbd> in Visual Studio Code and add the following columns in the dataset section of the Header data item:</p>
+<pre>column(CustomerCategory_PKT;Cust."Customer Category_PKT")<br/>{<br/>}           <br/>column(CustomerCategory_PKT_Lbl;Cust.FIELDCAPTION("Customer Category_PKT"))<br/>{<br/>}</pre>
+<p class="mce-root"/>
+<p>Add a label for the gift description:</p>
+<pre>GiftLbl: Label 'GIFT';</pre>
+<p>Then, change the IF conditional statement related to the discount percentage in the <kbd>OnAfterGetRecord</kbd> trigger for the <kbd>Line</kbd> data item:</p>
+<pre>if "Line Discount %" = 0 then<br/>    LineDiscountPctText := ''<br/>else<br/>    LineDiscountPctText := StrSubstNo('%1%',-Round("Line Discount %",0.1));<br/>Replace the preceding code with the following case statement:<br/>case "Line Discount %" OF<br/>    0    : LineDiscountPctText := '';<br/>    100  : LineDiscountPctText := GiftLbl;<br/>    ELSE<br/>    LineDiscountPctText := StrSubstNo('%1%',-Round("Line Discount %",0.1));<br/>END;</pre>
+<p>Everything is now ready to work as expected. We simply need to display the Customer Category column in the report layout.</p>
+<p>Just build the app (<em>Ctrl</em> + <em>Shift</em> + <em>B</em>) and publish (<em>F5</em>) it in the online sandbox.</p>
+<p>Go to <span class="packt_screen">Report Layout Selections</span>, filter the list for report <span class="packt_screen">50115</span>, and click on <span class="packt_screen">Custom Layouts</span><em>.</em> The following screenshot shows the filtered report layout selections:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/27b2fc9f-32b5-4686-9180-cade66f4a819.png" style="width:40.25em;height:13.33em;"/></p>
+<p>Create a new layout and choose <span class="packt_screen">Insert Word layout</span>:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/0ac56c82-df7e-499b-935e-82bcb3d7bb2c.png" style="width:31.17em;height:14.08em;"/></p>
+<p>Export the custom Word layout we just created. In the Word layout, remove the <kbd>CustomerAddress8</kbd> field and instead, add the following:</p>
+<ul>
+<li><span class="packt_screen">CustomerCategory_PKT_Lbl</span> as plaintext</li>
+<li>A space, a colon (:), and another space</li>
+<li><span class="packt_screen">CustomerCategory_PKT</span> as plaintext</li>
+</ul>
+<p>This is how it appears:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/53f9eda1-6c54-4d8b-b0b9-4283d33b2ff7.png" style="width:23.25em;height:11.08em;"/></p>
+<p>Save the layout and import it back into the customer layout record.</p>
+<div class="packt_tip">You could also use this Word layout in the standard extension and replace the original report 50115 <kbd>.docx</kbd> file with this one if you intend to use this version as part of your standard extension deployment.</div>
+<p>Run any sales order that has a gift line and customer category assigned to inspect the result. It should look like this:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/82220419-63d0-4f13-a06f-5acff256a1db.png" style="width:47.00em;height:35.33em;"/></p>
+<p>This concludes our section related to converting a C/AL report into AL. Next, let's learn how feature limitation works on RDL and Word reports.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Feature limitation when developing an RDL or Word layout report</h1>
+                </header>
+            
+            <article>
+                
+<p>Basically—and historically<span>—</span>professional report development could/should be done by developing RDL report layouts with Visual Studio and the RDLC report extension installed. The Word document layout has more limitations than RDL and its main advantage is that it is quite popular and easy to adopt by power users.</p>
+<p>The major pain points you might find when developing layouts are typically related to documents. The most commonly known ones are as follows:</p>
+<ul>
+<li><strong>Header and footer space is always retained</strong>: <span>Report headers and footers have static content, and they have been engineered so that they are always displayed on every page if they are present. </span>Nevertheless, with RDL, you could use the typical <kbd>SetData</kbd> function in the body and the <kbd>GetData</kbd> function in the header. An example of this trick can be found in the standard object 206 Sales Invoice RDL layout.</li>
+<li><strong>There's no easy way to mimic the</strong> <kbd>PlaceInBottom</kbd> <strong>property for a document report from the old classic client report</strong><span>: When developing a document, you might be asked to generate an entire document, but the totals (VAT, totals per group, and so on) must be always printed at the bottom, always in the same place, only on the last page. This problem arises because a Dynamics 365 Business Central document report could be considered as <em>a batch of multiple documents and multiple copies</em> rather than a single report. This implies that the breakdown for renumbering pages must be done for every document number and copy number. An example is the</span> <em>report 205 Sales Order</em><span>.<br/></span>In standard document reports, totals are never placed at the bottom of the page; they are printed right after the last document line. This means that they could be printed anywhere on a page, or even be on an extra page. There is no feasible way to print a batch of the document and the totals printed at the bottom of the last page for every document and copy.</li>
+<li><strong>Complexity in implementing running totals</strong>: <span>Typically, with documents, you would like to implement running totals at the bottom of the page that are reported at the top of the next page, such as <span class="packt_screen">To be Continued</span> and <span class="packt_screen">continue</span> labels when printing the ledger or some transactional entries.<br/></span>With the old classic client report designer, you could resolve this by adding a <kbd>transheader</kbd>/<kbd>transfooter</kbd>. These artifacts no longer exist with RDL or Word layout reports. With a Word layout report, there is no feasible solution. With RDL, you might implement running totals, but only with header and footer sections. This is an old but useful development reference: <a href="https://blogs.msdn.microsoft.com/nav/2011/06/06/transfooter-and-transheader-functionality-in-rdlcssrs-reports-revisited/">https://blogs.msdn.microsoft.com/nav/2011/06/06/transfooter-and-transheader-functionality-in-rdlcssrs-reports-revisited/</a>.</li>
+</ul>
+<p class="mce-root"/>
+<p>Considering Word layouts only, the design limitations you might also frequently hit are as follows:</p>
+<ul>
+<li><strong>No conditional formatting</strong>: If you need to set the visibility of a control, change a field value within the layout, or set any conditional formatting, this is not possible with Word. A typical example is when you need to print a blank character instead of zero. This must be done in the dataset, and values have to be sent to the document already formatted as strings (blank or with a numeric value).</li>
+<li><strong>No totaling formulas</strong>: There is no equivalent to RDL <kbd>=SUM</kbd> functions or similar. <span>Value calculations must be done through AL code and the result added to the dataset</span>.</li>
+<li><strong>Having nested repeaters in the same table is a challenge</strong>: Since it is not possible to conditionally trigger the visibility of a table line, there is a tradeoff between a good-looking layout and different data items in the same table. A typical example is comment lines under a sales line or an additional description/barcode line under a sales shipment line.<br/>
+These might be achieved by adding a nested table structure repeater within the lines repeater, which maps the extra additional information. The nested table structure can be freely defined, as long as it spans a set of merged cells in the outer table. When you develop this, be aware that if there is no extra additional information, at least one empty instance of the nested structure will be included.</li>
+</ul>
+<div class="packt_tip">The best solution would be to use a buffer table in the dataset and create the exact line structure as it has to be printed in the layout.</div>
+<p>If you come across one or more of these limitations, then probably the best and easiest solution is to develop an RDL layout report instead.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Understanding report performance considerations</h1>
+                </header>
+            
+            <article>
+                
+<p>With Dynamics 365 Business Central online, there are performance considerations that need to be taken into account.</p>
+<p class="mce-root"/>
+<p>Currently, both Word and RDL built-in layouts are rendered in the same application domain process when they run with <kbd>SAVEASPDF</kbd> or <kbd>SAVEAS</kbd> statements.</p>
+<p>Since RDL layouts might enable some external code artifacts that may potentially affect data within the same application domain, it has been decided to run every custom RDL report layout in isolated mode. It's worth noticing that if you develop a report and declare <kbd>DefaultLayout</kbd> as RDL and the <kbd>RDLLayout</kbd> property, this is considered a built-in layout and should render in the same application domain.</p>
+<p>Word layouts, no matter whether they are built-in or custom-made, do not run in isolation.</p>
+<p>Enabling application domain isolation for custom RDL layouts provides a more secure and reliable processing environment. However, the drawback is that it could considerably increase the rendering time.</p>
+<p>Whenever you develop RDL reports for Dynamics 365 Business Central online, you must also test performance with the <kbd>SAVEASPDF</kbd> or <kbd>SAVEAS</kbd> statements within an online sandbox or a Docker-contained sandbox with the <kbd>customsettings.config</kbd> file server parameter, <span class="packt_screen">ReportAppDomainIsolation</span>, set to <kbd>true</kbd>.</p>
+<p>Other performance considerations that are valid for both Word and RDL report layouts are based on dataset optimization.</p>
+<p>These are the equations to keep in mind when developing the data structure of the AL report. Let's consider that the dataset is an in-memory table (<kbd>X axis = columns</kbd> and <kbd>Y axis = rows</kbd>):</p>
+<pre><strong>Smaller Dataset = Better Performance</strong><br/><strong>Smaller Dataset = Reduce X axis (columns) + Reduce Y axis (rows)</strong><br/><strong>Better Performance = Optimize (reduce) the number of columns in Dataset + Optimize (reduce) the number of records processed in DataItems</strong></pre>
+<p>You can use the following links to optimize standard reports or your own custom reports:</p>
+<ul>
+<li><a href="https://blogs.msdn.microsoft.com/nav/2014/03/09/rdlc-report-and-performance-in-microsoft-dynamics-nav/">https://blogs.msdn.microsoft.com/nav/2014/03/09/rdlc-report-and-performance-in-microsoft-dynamics-nav/</a></li>
+<li><a href="https://blogs.msdn.microsoft.com/nav/2016/05/20/rdlc-report-and-performance-in-microsoft-dynamics-nav-2015-and-2016/">https://blogs.msdn.microsoft.com/nav/2016/05/20/rdlc-report-and-performance-in-microsoft-dynamics-nav-2015-and-2016/</a></li>
+<li><a href="https://blogs.msdn.microsoft.com/nav/2015/03/17/a-couple-of-rdlc-performance-optimization-tips/">https://blogs.msdn.microsoft.com/nav/2015/03/17/a-couple-of-rdlc-performance-optimization-tips/</a></li>
+</ul>
+<p class="mce-root"/>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Summary</h1>
+                </header>
+            
+            <article>
+                
+<p>In this chapter, we have learned which tools to use to develop reports with AL. We saw how to create RDL and Word layouts and which tools are supported. <span>We got a better understanding of the creation of reports and how to use them. </span>We have also explained how to use <kbd>txt2al.exe</kbd> to convert a C/AL report into an AL report and refactor it to be reused within the standard application with a practical example.</p>
+<p><span><span>In the end, we learned that there are some reporting</span></span> <span><span>limitations, a few workarounds, and some performance considerations that can help you become a master in AL report development.</span></span></p>
+<p>In the next chapter, we'll learn how to build an automated test for Dynamics 365 Business Central to check for application business process consistency and improve the robustness of our development solutions.</p>
+
+
+            </article>
+
+            
+        </section>
+    </body></html>

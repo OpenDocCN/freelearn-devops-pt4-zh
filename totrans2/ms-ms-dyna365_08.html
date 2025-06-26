@@ -1,0 +1,831 @@
+<html><head></head><body>
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Advanced AL Development</h1>
+                </header>
+            
+            <article>
+                
+<p>In the previous chapter, we developed a complete extension for Dynamics 365 Business Central, and during development, we looked at many aspects of AL programming.</p>
+<p>In this chapter, we'll focus on other development topics that you need to manage when developing real-world solutions for Dynamics 365 Business Central. These topics are important and useful, especially for improving the user experience and when you need to handle integrations with external services from AL.</p>
+<p><span>This chapter will cover the following topics:</span></p>
+<ul>
+<li><span>Understanding i</span>mmutable keys</li>
+<li>Handling files with AL</li>
+<li>Handling BLOBs</li>
+<li>Handling XMLports</li>
+<li>Handling XML and JSON objects with AL</li>
+<li>Creating and extending Role Centers and headlines</li>
+<li>Consuming web services and APIs from AL code</li>
+<li>Using Azure functions from AL code</li>
+<li>Using Isolated Storage to handle sensitive data</li>
+<li>Creating control add-ins for Dynamics 365 Business Central</li>
+<li>Handling notifications</li>
+<li>Page background tasks and asynchronous programming</li>
+</ul>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Understanding immutable keys</h1>
+                </header>
+            
+            <article>
+                
+<p>With the Dynamics 365 Business Central wave 2 release, all tables <span>now </span>have a (unique) immutable key (a <kbd>GUID</kbd> field) that can be used for integration scenarios and for replacing the old <kbd>RECORDID</kbd> property. This new field is called <kbd>SystemId</kbd> and it's a GUID data type field that specifies a unique, immutable (read-only) identifier for records in a table.</p>
+<p>The new <kbd>SystemId</kbd> field (identified with the field number <kbd>2000000000</kbd> on every table object) has the following characteristics:</p>
+<ul>
+<li>It has a value for every record in a table.</li>
+<li>You can assign a value at insert time; otherwise, the platform automatically assigns one.</li>
+<li>Once <kbd>SystemId</kbd> has been set, it cannot be changed.</li>
+<li>There is always a unique secondary key in the <kbd>SystemId</kbd> field.</li>
+</ul>
+<p>As a platform rule, modifying <kbd>SystemId</kbd> of an existing record is not allowed. The <kbd>INSERT</kbd> function now has a new override:</p>
+<pre>Record.Insert([RunTrigger: Boolean[, InsertWithSystemId: Boolean]])</pre>
+<p><kbd>SystemId</kbd> can be manually specified when inserting a new record, as in the following example:</p>
+<pre>myRec.SystemId := '{B6667654-F4B2-B945-8567-006DD6B6775E}';<br/>myRec.Insert(true,true);</pre>
+<p>You can now use the <kbd>GetBySystemId</kbd> function to retrieve a record via its <kbd>SystemId</kbd>, as in the following example:</p>
+<div>
+<pre><span>var<br/></span><span>    Customer: </span><span>Record</span><span> Customer;<br/>    </span><span>Text000: </span><span>Label</span><span> </span><span>'Customer was found.'</span><span>;<br/>    </span><span>begin<br/>    </span><span>if</span><span> Customer</span><span>.</span><span>GetBySystemId</span><span>(</span><span>'{B6667654-F4B2-B945-8567-006DD6B6775E}'</span><span>) then<br/></span><span>         Message</span><span>(</span><span>Text000</span><span>)</span><span>;<br/></span><span>end</span><span>;</span></pre></div>
+<p>You can also set table relations by using the new <kbd>SystemId</kbd> field, as in the following code:</p>
+<div>
+<pre>field(1; EntryID; GUID)<br/>{<br/>    DataClassification = CustomerContent;<br/>    TableRelation = Item.SystemId;<br/>}</pre></div>
+<p>The <kbd>Integration Record</kbd> table before version 15 has GUIDs for records. The upgrade process to Dynamics 365 Business Central version 15 will use these values to initialize the new <kbd>SystemId</kbd> field. In the future, the <kbd>Integration Record</kbd> table will be declared obsolete. The <kbd>SystemID</kbd> field is also useful on API pages.</p>
+<p>In the next section, we'll see how to handle files with AL in an <strong>s</strong><span><strong>oftware as a service</strong> (</span><strong>SaaS</strong>) environment.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Handling files with AL</h1>
+                </header>
+            
+            <article>
+                
+<p>Working with files is one of the tricky points with Dynamics 365 Business Central. While in the on-premises version you have full access to your local resources and a filesystem, in the SaaS version of Dynamics 365 Business Central, things are different. Here, you don't have a filesystem and you don't have access to local resources (all processes runs in Microsoft's data centers).</p>
+<p>If you create a function, you declare a <kbd>File</kbd> variable and then you invoke one of the common file management methods (such as <kbd>Create</kbd>, which creates and opens an ASCII or binary file), and this is the error that Visual Studio Code spits out:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/673d3d70-d729-454e-b741-8d80612ab5af.png"/></p>
+<p class="mce-root"/>
+<p>This error occurs because the extension you're trying to create targets the Dynamics 365 Business Central SaaS environment <span>by default </span><span>(</span><kbd>"target": "Extension"</kbd> <span>in the </span><kbd>app.json</kbd> <span>file).</span></p>
+<p>If you add <kbd>"target": "Internal"</kbd> to your <kbd>app.json</kbd> file (in this way, you're declaring that your extension is for the on-premise world only), then the error disappears and you can use the classic <kbd>File</kbd> object methods, as follows:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/e0741ea7-a5a7-43c5-a2a0-7260d3971332.png" style="width:41.50em;height:18.92em;"/></p>
+<p>The same thing happens if you use the <kbd>File Management</kbd> codeunit to handle files. Some of its methods cannot be used in an SaaS extension:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/f295c1a4-93fd-49af-afaf-241d370b9fe1.png" style="width:41.17em;height:20.08em;"/></p>
+<p class="mce-root"/>
+<p>To handle files in the cloud environment, you need to use <strong>Streams</strong> (the <kbd>InStream</kbd> and <kbd>OutStream</kbd> objects).</p>
+<p>The <kbd>InStream</kbd> and <kbd>OutStream</kbd> data types are generic stream objects used for reading from or writing to files and BLOBs.</p>
+<div class="packt_infobox">More information about these objects can be found at the following links:<br/>
+<a href="https://docs.microsoft.com/en-us/dynamics365/business-central/dev-itpro/developer/methods-auto/instream/instream-data-type">https://docs.microsoft.com/en-us/dynamics365/business-central/dev-itpro/developer/methods-auto/instream/instream-data-type<br/></a><a href="https://docs.microsoft.com/en-us/dynamics365/business-central/dev-itpro/developer/methods-auto/outstream/outstream-data-type">https://docs.microsoft.com/en-us/dynamics365/business-central/dev-itpro/developer/methods-auto/outstream/outstream-data-type</a></div>
+<p>To upload a file from the client computer to a server-side stream object, you need to call the <kbd>UploadIntoStream</kbd> method:</p>
+<pre>[Ok := ]  File.UploadIntoStream(DialogTitle: String, FromFolder: String, FromFilter: String, var FromFile: Text, var InStream: InStream)</pre>
+<p>The method's parameters are the following:</p>
+<ul>
+<li><kbd>DialogTitle</kbd> (string): This is the text displayed in the title bar of the file selection dialog box. This parameter is not supported by the web client (the title is determined by the user's browser).</li>
+<li><kbd>FromFolder</kbd> (string): This is the path of the folder that is displayed in the file selection dialog box. This is the default folder, but the user can browse to any available location. This parameter is not supported by the web client (by default, the browser uses the folder that was last accessed).</li>
+<li><kbd>FromFilter</kbd> (string): This is the type of file that can be uploaded to the server. In the Windows client, the type is displayed in the upload dialog box, so the user can only select files of the specified type. For the web client, this filter is not supported in the user interface. The user can try to upload any file type but an error occurs if the file is not as the specified type.</li>
+<li><kbd>FromFile</kbd> (text): This is the default file to upload to the service. The user can change the file. This parameter is not supported by the web client.</li>
+<li><kbd>InStream</kbd>: This is the <kbd>InStream</kbd> object to load data in.</li>
+</ul>
+<div class="packt_infobox">More details about the method can be found at <a href="https://docs.microsoft.com/en-us/dynamics365/business-central/dev-itpro/developer/methods-auto/file/file-uploadintostream-method">https://docs.microsoft.com/en-us/dynamics365/business-central/dev-itpro/developer/methods-auto/file/file-uploadintostream-method</a>.</div>
+<p>As an example, this is a function that loads an image file from the client side (using an <kbd>InStream</kbd> object and <kbd>UploadIntoStream</kbd> to load the client file into the <kbd>InStream</kbd> object) and adds it as an <kbd>Item</kbd> object:</p>
+<pre>procedure ImportItemPicture(Item: Record Item)<br/>    var<br/>        FileInstream: InStream;<br/>        FileName: Text;<br/>    begin<br/>        if UploadIntoStream('', '', '', FileName, FileInstream) then<br/>        begin<br/>            Clear(Item.Picture);<br/>            Item.Picture.ImportStream(FileInstream,FileName);<br/>            Item.Modify(true);<br/>        end;<br/>    end;</pre>
+<p>As another example, this is a function that reads a CSV file that contains <kbd>Item</kbd> details into an <kbd>InStream</kbd> object, loads its content into the <kbd>CSV Buffer</kbd> table, and then updates the <kbd>Item</kbd> fields accordingly:</p>
+<pre>local procedure UploadCSV()<br/>  var<br/>        CSVInStream : InStream;<br/>        UploadResult : Boolean;<br/>        TempBlob : Codeunit "Temp Blob";<br/>        DialogCaption : Text;<br/>        CSVFileName : Text;<br/>        CSVBuffer: Record "CSV Buffer";<br/>        Item: Record Item;<br/>    begin<br/>        UploadResult := UploadIntoStream(DialogCaption,'','',CSVFileName,CSVInStream);<br/>        CSVBuffer.DeleteAll;<br/>        CSVBuffer.LoadDataFromStream(CSVInStream,';'); <br/>        if CSVBuffer.FindSet() then<br/>        repeat<br/>         if (CSVBuffer."Field No." = 1) then<br/>            Item.Init();<br/>            case CSVBuffer."Field No." of<br/>                1: Item.Validate("No.",CSVBuffer.Value);<br/>                2: Item.Validate(Description,CSVBuffer.Value);<br/>                3: Item.Validate("Item Category Code",CSVBuffer.Value);<br/>                4: if not Item.Insert() then Item.Modify();<br/>           end;<br/>        until CSVBuffer.Next()=0;<br/>    end;</pre>
+<p>To download a file from the server side (the SaaS environment) to the client side (the user machine), you need to use the <kbd>DownloadFromStream</kbd> method:</p>
+<pre>[Ok := ]  File.DownloadFromStream(InStream: InStream, DialogTitle: String, ToFolder: String, ToFilter: String, var ToFile: Text)</pre>
+<p>The method's parameters are as follows:</p>
+<ul>
+<li><kbd>InStream</kbd>: The <kbd>InStream</kbd> object (<a href="https://docs.microsoft.com/en-us/dynamics365/business-central/dev-itpro/developer/methods-auto/instream/instream-data-type">https://docs.microsoft.com/en-us/dynamics365/business-central/dev-itpro/developer/methods-auto/instream/instream-data-type</a>) contains the file data.</li>
+<li><kbd>DialogTitle</kbd> string (<a href="https://docs.microsoft.com/en-us/dynamics365/business-central/dev-itpro/developer/methods-auto/string/string-data-type">https://docs.microsoft.com/en-us/dynamics365/business-central/dev-itpro/developer/methods-auto/string/string-data-type</a>): This is the title that you want to display in the dialog box for downloading the file. This parameter is not supported by the web client (here, the title is determined by the end user's browser).</li>
+<li><kbd>ToFolder</kbd> string (<a href="https://docs.microsoft.com/en-us/dynamics365/business-central/dev-itpro/developer/methods-auto/string/string-data-type">https://docs.microsoft.com/en-us/dynamics365/business-central/dev-itpro/developer/methods-auto/string/string-data-type</a>): This is the default folder in which to save the downloaded file. The folder name is displayed in the dialog box for the download, and the folder can be changed by the user. This parameter is not supported by the web client (because default files are saved to the default download location that is configured in the end user's browser).</li>
+<li><kbd>ToFilter</kbd> string (<a href="https://docs.microsoft.com/en-us/dynamics365/business-central/dev-itpro/developer/methods-auto/string/string-data-type">https://docs.microsoft.com/en-us/dynamics365/business-central/dev-itpro/developer/methods-auto/string/string-data-type</a>): This is the type of file that can be downloaded to the client. The type is displayed in the dialog box for downloading the file. This parameter is not supported by the web client.</li>
+<li><kbd>ToFile</kbd> text (<a href="https://docs.microsoft.com/en-us/dynamics365/business-central/dev-itpro/developer/methods-auto/text/text-data-type">https://docs.microsoft.com/en-us/dynamics365/business-central/dev-itpro/developer/methods-auto/text/text-data-type</a>): This is the name assigned to the downloaded file. This value can be changed by the user.</li>
+</ul>
+<div class="packt_infobox">More information about this method can be found at <a href="https://docs.microsoft.com/en-us/dynamics365/business-central/dev-itpro/developer/methods-auto/file/file-downloadfromstream-method">https://docs.microsoft.com/en-us/dynamics365/business-central/dev-itpro/developer/methods-auto/file/file-downloadfromstream-method</a>.</div>
+<p>As an example, this code exports the images associated with an <kbd>Item</kbd> card as the <kbd>MediaSet</kbd> type. It uses <kbd>DownloadFromStream</kbd> to download the file to the client. The images are retrieved from the <kbd>Tenant Media</kbd> table and saved with a filename made up of <kbd>Item Number</kbd>, the image index, and the image extension (the <kbd>GetImageExtension</kbd> function retrieves the image file extension according to its <kbd>Mime Type</kbd>):</p>
+<pre>procedure ExportItemPicture(Item: Record Item)<br/>    var<br/>        FileInStream: InStream;<br/>        FileName: Text;<br/>        i: Integer;<br/>        TenantMedia: Record "Tenant Media";<br/>        ErrMsg: Label 'No images stored for the selected item.';<br/>    begin<br/>        if Item.Picture.Count() = 0 then<br/>            Error(ErrMsg);<br/>        for i := 1 to Item.Picture.Count() do begin<br/>            if TenantMedia.Get(Item.Picture.MediaId()) then begin<br/>                TenantMedia.CalcFields(Content);<br/>                if TenantMedia.Content.HasValue() then begin<br/>                    FileName := Item."No." + '_' + Format(i) + GetImageExtension(TenantMedia);<br/>                    TenantMedia.Content.CreateInStream(FileInStream);<br/>                    DownloadFromStream(FileInStream, '', '', '', FileName);<br/>                end;<br/>            end;<br/>        end;<br/>    end;<br/><br/>    procedure GetImageExtension(var TenantMedia: record "Tenant Media"): Text   <br/>    begin<br/>        case TenantMedia."Mime Type" of<br/>        'image/jpeg': exit('.jpg');<br/>        'image/bmp': exit('.bmp');<br/>        'image/png': exit('.png');<br/>        'image/gif': exit('.gif');<br/>        'image/tiff': exit('.tiff');<br/>        'image/wmf': exit('.wmf');<br/>        end<br/>    end;</pre>
+<p>If you need to create a file from Dynamics 365 Business Central, you need to create it on the server side using the new <kbd>Temp Blob</kbd> codeunit defined in the <kbd>System Application</kbd> and <kbd>OutStream</kbd> objects.</p>
+<p>This is an example of an AL function that receives a filename as input, creates a text file with three lines, and downloads it to the client side:</p>
+<pre>procedure CreateTextFile(FileName: Text)<br/>var<br/>    InStr: InStream;<br/>    OutStr: OutStream;<br/>    TempBlob: Codeunit "Temp Blob";<br/>    CR: char;<br/>    LF: char;<br/>begin<br/>    CR := 13;<br/>    LF := 10;<br/>    TempBlob.CreateOutStream(OutStr);        <br/>    OutStr.WriteText('First line'+ CR + LF);<br/>    OutStr.WriteText('Second line'+ CR + LF);<br/>    OutStr.WriteText('Third line'+ CR + LF);        <br/>    TempBlob.CreateInStream(InStr);<br/>    DownloadFromStream(InStr, '', '', '', FileName); <br/>end;</pre>
+<p>With Dynamics 365 Business Central, you cannot directly save a file to a local folder (a local machine or network folder). To perform this action, you need to use something different, such as Azure Functions (we'll see that later in this chapter).</p>
+<div class="packt_infobox">With the Dynamics 365 Business Central wave 2 release, the old <kbd>TempBlob</kbd> table is deprecated and has been replaced by some system codeunits (<kbd>Temp Blob</kbd>, <kbd>Persistent Blob</kbd>, and <kbd>Temp Blob List</kbd>).</div>
+<p>In this section, you saw how to use streams to handle files in Dynamics 365 Business Central. In the next section, we'll see how to handle attachments to documents and entities in Dynamics 365 Business Central.</p>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Handling attachments</h1>
+                </header>
+            
+            <article>
+                
+<p>Attachments are files that you can link to entities or documents in Dynamics 365 Business Central. Two main tables are used to store attachments:</p>
+<ul>
+<li>Document attachment (<kbd>ID = 1173</kbd>)</li>
+<li>Attachment (<kbd>ID = 5062</kbd>)</li>
+</ul>
+<p>To store an attachment in these tables and then download an attachment from these tables, you need to use the previously mentioned <kbd>UploadIntoStream</kbd> and <kbd>DownloadFromStream</kbd> methods and load the BLOB field by using <kbd>Streams</kbd>.</p>
+<p>An example of a function that uploads a file to the <kbd>Attachment</kbd> table is as follows:</p>
+<pre>procedure UploadAttachment()<br/>    var<br/>        Attachment: Record Attachment;<br/>        outStr: OutStream;<br/>        inStr: InStream;<br/>        tempfilename: text;<br/>        FileMgt: Codeunit "File Management";<br/>        DialogTitle: Label 'Please select a File...';<br/>    begin<br/>        if UploadIntoStream(DialogTitle, '', 'All Files (*.*)|*.*', tempfilename, inStr) then <br/>        begin<br/>            Attachment.Init();<br/>            Attachment.Insert(true);<br/>            Attachment."Storage Type" := Attachment."Storage Type"::Embedded;<br/>            Attachment."Storage Pointer" := '';<br/>            Attachment."File Extension" := FileMgt.GetExtension(tempfilename);<br/>            Attachment."Attachment File".CreateOutStream(outStr);<br/>            CopyStream(outStr, inStr);<br/>            Attachment.Modify(true);<br/>        end;<br/>    end;</pre>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mceNonEditable"/>
+<p>An example of a function that downloads a file from the <kbd>Attachment</kbd> table is as follows:</p>
+<pre>procedure OpenAttachment(AttachmentEntryNo: Integer)<br/>    var<br/>        Attachment: record Attachment;<br/>        inStr: InStream;<br/>        tempfilename: text;<br/>        ErrorAttachment: Label 'File not available.';<br/>    begin<br/>        if Attachment.get(AttachmentEntryNo) then<br/>            if Attachment."Attachment File".HasValue then begin<br/>                Attachment.CalcFields("Attachment File");<br/>                Attachment."Attachment File".CreateInStream(inStr);<br/>                tempfilename := CreateGuid() + '.' + Attachment."File Extension";<br/>                DOWNLOADFROMSTREAM(inStr, 'Save file', '', 'All Files (*.*)|*.*', <br/>                   tempfilename);<br/>            end<br/>            else<br/>                Error(ErrorAttachment);<br/>    end;</pre>
+<p>We can use the same process for the <kbd>Document Attachment</kbd> table; you've only to add the reference to the <kbd>attachment</kbd> record <span>to the document itself</span>.</p>
+<p>We've seen how to handle attachments (a useful feature to add to your extensions). In the next section, we'll see how to read and write data to and from BLOB fields.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Reading and writing text data to and from BLOB fields</h1>
+                </header>
+            
+            <article>
+                
+<p>To read data from and write text data to a BLOB field, you need to use the <kbd>InStreams</kbd> and <kbd>OutStreams</kbd> objects as previously described.</p>
+<p class="mce-root"/>
+<p>The two methods in the following code read and write text data from and to a <kbd>BLOB</kbd> field defined in a custom table:</p>
+<pre>table 50120 MyBlobTable<br/>{<br/>    DataClassification = CustomerContent;   <br/>    fields<br/>    {<br/>        field(1;ID; Integer)<br/>        {<br/>            DataClassification = CustomerContent;           <br/>        }<br/><br/>        field(2; BlobField; Blob)<br/>        {<br/>            DataClassification = CustomerContent;<br/>        }<br/>    }<br/>   <br/>    keys<br/>    {<br/>        key(PK; ID)<br/>        {<br/>            Clustered = true;<br/>        }<br/>    }<br/>   <br/>    procedure SetBlobValue(value: Text)<br/>    var<br/>        outStr: OutStream;<br/>    begin<br/>        BlobField.CreateOutStream(outStr);<br/>        outStr.WriteText(value);<br/>    end;<br/><br/>    procedure GetBlobValue(value: Text)<br/>    var<br/>        inStr: InStream;<br/>    begin<br/>        CalcFields(BlobField);<br/>        if BlobField.HasValue() then<br/>        begin<br/>            BlobField.CreateInStream(inStr);<br/>            inStr.ReadText(value);<br/>        end<br/>        else<br/>            value := 'No value on the BLOB field';<br/>    end;   <br/>}</pre>
+<p>Here, we have defined a table with a BLOB field and we have created two methods for reading and writing data to this BLOB field:</p>
+<ul>
+<li>The <kbd>SetBlobValue</kbd> function writes data (passed as input) to a BLOB field.</li>
+<li><span>The</span><span> </span><kbd>GetBlobValue</kbd> function reads data from a BLOB field.</li>
+</ul>
+<p>With these two methods, we've achieved the goal to read and write text to our BLOB field. In the next section, we'll see how to use XMLports from AL.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Using XMLports in AL code</h1>
+                </header>
+            
+            <article>
+                
+<p>As we said in <a href="215c2304-db18-4145-bb3f-8c10cdca949d.xhtml">Chapter 2</a>, <em>Mastering a Modern Development Environment</em>, <strong>XMLports</strong> are objects used to import and export data between Dynamics 365 Business Central and external data sources (this is managed by the <kbd>Direction</kbd> property, which can be set to <kbd>Import</kbd>, <kbd>Export</kbd>, or <kbd>Both</kbd>). Data can be imported or exported in XML or CSV (text) format (the <kbd>Format</kbd> property can be set to <kbd>Xml</kbd>, <kbd>Variable Text</kbd>, or <kbd>Fixed Text</kbd>).</p>
+<div class="packt_tip">XMLport properties are detailed at <a href="https://docs.microsoft.com/en-us/dynamics-nav/xmlport-properties">https://docs.microsoft.com/en-us/dynamics-nav/xmlport-properties</a>.<a href="https://docs.microsoft.com/en-us/dynamics-nav/xmlport-properties"><br/></a>XMLport triggers are detailed at <a href="https://docs.microsoft.com/en-us/dynamics-nav/xmlport-triggers">https://docs.microsoft.com/en-us/dynamics-nav/xmlport-triggers</a>.</div>
+<p>Now, consider the sample XMLport defined in <a href="a5f2cdb5-019d-4b63-bc12-4b51b3c617f2.xhtml">Chapter 4</a>, <em>Extension Development Fundamentals</em>:</p>
+<pre>xmlport 50100 MyXmlportImportCustomer<br/>{<br/>    Direction = Import;<br/>    Format = VariableText;<br/>    FieldSeparator = ';';<br/>    RecordSeparator = '&lt;LF&gt;';<br/>    schema<br/>    {<br/>        textelement(NodeName1)<br/>        {<br/>            tableelement(Customer; Customer)<br/>            {<br/>                fieldattribute(No; Customer."No.")<br/>                {                   <br/>                }<br/>                fieldattribute(Name; Customer.Name)<br/>                {<br/>                }<br/>                fieldattribute(Address;Customer.Address)<br/>                {<br/>                }<br/>                fieldattribute(City;Customer.City)<br/>                {<br/>                }<br/>                fieldattribute(Country;Customer."Country/Region Code")<br/>                {<br/>                    trigger OnAfterAssignField()                   <br/>                    begin<br/>                      //Executed after a field has been assigned a value and before it is validated and imported.   <br/>                    end;<br/>                }<br/>            }<br/>        }<br/>    }<br/>}</pre>
+<p>To execute an XMLport in Dynamics 365 Business Central, you need to run it from a page or a codeunit object (you cannot directly run it). XMLport request pages (used to set filters or insert parameters) in the Dynamics 365 Business Central web client are not supported.</p>
+<p>To execute an XMLport in Dynamics 365 Business Central to import data from a file, you need to use the following code:</p>
+<pre>procedure RunXMLportImport()<br/>    var<br/>        FileInstream: InStream;<br/>        FileName: Text;<br/>    begin<br/>        UploadIntoStream('','','',FileName,FileInstream);<br/>        Xmlport.Import(Xmlport::MyXmlportImportCustomer,FileInStream);<br/>        Message('Import Done successfully.');<br/>    end;</pre>
+<p>Here, the file is loaded into an <kbd>InStream</kbd> object and then the XMLport is executed by passing the <kbd>InStream</kbd> object as input.</p>
+<p>To execute an XMLport in Dynamics 365 Business Central to export data to a file, you need to use the following code:   </p>
+<pre>procedure RunXMLportExport()<br/>    var<br/>        TempBlob: Codeunit "Temp Blob";<br/>        FileName: Text;<br/>        FileOutStream: OutStream;<br/>        FileInStream: InStream;<br/>        outputFileName: Text;<br/>    begin<br/>        TempBlob.CREATEOUTSTREAM(FileOutStream);<br/>        Xmlport.Export(Xmlport::MyXmlportImportCustomer, FileOutStream);<br/>        TempBlob.CREATEINSTREAM(FileInStream);<br/>        outpu<span>tFileName := 'MyOutputFile.xml';<br/></span>        DownloadFromStream(FileInStream,'','','',outputFileName); <br/>       //The output is saved in the default browser's Download folder<br/>    end;</pre>
+<p>Here, we have seen how to use XMLports from AL code to import or export data. In the next section, we'll see how to create and extend Role Centers in Dynamics 365 Business Central.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Creating and extending Role Centers</h1>
+                </header>
+            
+            <article>
+                
+<p>When a user logs in to Dynamics 365 Business Central, they are presented with a page that shows information and actions tailored to their role inside the company. This page is called a <strong>Role Center</strong>, and it's an integral part of the role-tailored experience of the application.</p>
+<p>Dynamics 365 Business Central offers about 20 Role Centers out of the box (as standard) that you can extend and customize, and you can create new Role Centers.</p>
+<p>A Role Center is a page that has the <kbd>PageType</kbd> property set to <kbd>RoleCenter</kbd>. The page structure is as follows:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/5a4e6a9b-83ab-4ca0-ab67-00a4a3b89e22.png" style="width:48.42em;height:42.50em;"/></p>
+<p>In the structure diagram, the sections are as follows:</p>
+<ul>
+<li>Section 1 is the <strong>Navigation Menu</strong> area (one or more items that, when clicked, show other sub-menus). This is used to provide access to the relevant entities for the role to which this Role Center page is assigned.</li>
+<li>Section 2 is the <strong>Navigation Bar</strong> area, which displays a list of links to other pages that will be opened in the Content area. This is normally used to add links to the user's most useful entities for their business role.</li>
+<li>Section 3 is the <strong>Action</strong> area, used to add links for running the most important tasks for this role (links to pages, reports, or codeunits).</li>
+<li>Section 4 is the <strong>Headline</strong> area, used to display dynamically generated information about the business. We'll see more details about this area in the <em>Customizing the Headline</em> section of this chapter.</li>
+<li>Section 5 is the <strong>Wide Cue</strong> area, a set of cues that display numerical values about the business. This area is created with a <kbd>cuegroup</kbd> control on a page with <kbd>PageType = CardPart</kbd> and with the <kbd>Layout</kbd> property set to <kbd>wide</kbd>.</li>
+<li>Section 6 is the <strong>Data Cue</strong> area, used to provide a visual representation of aggregated business data (such as KPIs). This part is created with a <kbd>cuegroup</kbd> control on a page with<span> </span><kbd>PageType = CardPart</kbd>.</li>
+<li>Section 7 is the <kbd>Action Cue</kbd> area, which shows tiles that link to some business tasks. This area is created with a <kbd>cuegroup</kbd> control on a page with<span> </span><kbd>PageType = CardPart</kbd>.</li>
+<li>Section 8 is the <strong>Chart</strong> area, used to show information as charts (custom business chart control add-ins or embedded Power BI reports).</li>
+<li>Section 9 is the <strong>CardPart or ListPart page</strong> area, used to display data from the application with a card or a list layout.</li>
+<li>Section 10 is the <em>C</em><strong>ontrol add-in</strong> area, used for displaying custom content using HTML-based control add-ins (written in JavaScript).</li>
+</ul>
+<p>A Role Center page can be created in AL using the following code:</p>
+<pre>page 50101 "My Role Center"<br/>{<br/>    PageType = RoleCenter;<br/>   <br/>    layout<br/>    {<br/>        area(rolecenter)<br/>        {<br/>            part(SalesPerformance; "Sales Performance")<br/>            {<br/>                ApplicationArea = All;<br/>                Visible = true;<br/>            }<br/><br/>            part(MyCustomers; "My Customers")<br/>            {<br/>                ApplicationArea = All;<br/>                Visible = true;<br/>            }<br/><br/>            part(News;"Headline RC Business Manager")<br/>            {<br/>                ApplicationArea = All;<br/>                Visible = true;<br/>            }<br/>        }<br/>    }   <br/>}</pre>
+<p>Here, we have created a Role Center page with three <strong>parts</strong> (sub-pages). </p>
+<p>You can customize an existing Role Center page by creating a <kbd>pageextension</kbd> object:</p>
+<pre>pageextension 50100 SalesManagerRoleCenterExt_SD extends "Sales Manager Role Center"<br/>{<br/>    layout<br/>    {<br/>        addlast(Content)<br/>        {<br/>            part(MyNews; MyRoleCenterHeadline)<br/>            {<br/>                ApplicationArea = All;<br/>                Visible = true;<br/>            }<br/>        }<br/>    }<br/>   <br/>    actions<br/>    {   <br/>         addlast(Sections)<br/>         {<br/>            group("My Customers")<br/>            {               <br/>                 action("Customer Ledger Entries")<br/>                {<br/>                    RunObject = page "Customer Ledger Entries";<br/>                    ApplicationArea = All;<br/>                }<br/>            }<br/>         }<br/>    }         <br/>}</pre>
+<p>Here, we have extended the <kbd>Sales Manager Role Center</kbd> page by adding a new custom headline part to the content and a new action to open the <kbd>Customer Ledger Entries</kbd> page.</p>
+<p class="mce-root"/>
+<p>Customizing or creating Role Centers is important because it gives<span> </span><span>your users</span><span> a better user experience.</span></p>
+<p>In the next section, we'll see how we can customize the Headline part of a Role Center.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Customizing the Headline</h1>
+                </header>
+            
+            <article>
+                
+<p>As described earlier, the <strong>Headline</strong> is a new part introduced with the Dynamics 365 Business Central web client that's used to dynamically display important information about your business. Consider the following screenshot:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/d3747504-fd2b-4e09-9379-39a75b7dbf73.png"/></p>
+<p>This is an important part of the Dynamics 365 Business Central role-tailored user experience, and it's recommended to use and customize it to give<span> </span><span>your users</span><span> a better experience.</span></p>
+<p>A Headline is essentially a page that contains one or more fields (each field is a headline line) and with <kbd>PageType</kbd> set as <kbd>HeadlinePart</kbd>. This page is only visible inside a Role Center page.</p>
+<p>Dynamics 365 Business Central has nine standard headlines available:</p>
+<ul>
+<li>Headline RC Business Manager</li>
+<li>Headline RC Order Processor</li>
+<li>Headline RC Accountant</li>
+<li>Headline RC Project Manager</li>
+<li>Headline RC Relationship Management</li>
+<li>Headline RC Administrator</li>
+<li>Headline RC Team Member</li>
+<li>Headline RC Production Planner</li>
+<li>Headline RC Service Dispatcher</li>
+</ul>
+<p>You can also create your own Headlines by using AL and Visual Studio Code.</p>
+<p>A Headline page can be defined in AL as follows:</p>
+<pre>page 50100 "MyRoleCenterHeadline"<br/>{<br/>    PageType = HeadLinePart;<br/>    layout<br/>    {<br/>        area(content)<br/>        {<br/>            field(Headline1; text001)<br/>            {<br/>                ApplicationArea = all;<br/>            }<br/><br/>            field(Headline2; text002)<br/>            {<br/>                ApplicationArea = all;<br/>                trigger OnDrillDown()<br/>                var<br/>                    DrillDownURL: Label 'http://www.demiliani.com';<br/>                begin<br/>                    Hyperlink(DrillDownURL)<br/>                end;<br/>            }<br/><br/>            field(Headline3; text003)<br/>            {<br/>                ApplicationArea = all;<br/>            }<br/><br/>            field(Headline4; text004)<br/>            {<br/>                ApplicationArea = all;<br/>                // Determines visibility while the page is open (custom criteria)<br/>                Visible=showHeadline4;<br/>            }       <br/>        }<br/>    }<br/><br/>    var<br/>        text001: Label 'This is Headline 1';<br/>        text002: Label 'This is Headline 2 (click for details)';<br/>        text003: Label 'This is Headline 3';<br/>        text004: Label 'This is Headline 4';<br/>        showHeadline4: Boolean;<br/><br/>        trigger OnOpenPage()<br/>        var<br/>           myInt: Integer;<br/>        begin<br/>            showHeadline4 := true;<br/>        end;<br/>}</pre>
+<p>Here, we have defined a Headline page with four text fields that appears in the Dynamics 365 Business Central UI with the appropriate text.</p>
+<p>In the second headline, we have handled the <kbd>OnDrillDown</kbd> event, and if you click on the second headline in this example, you're redirected to a URL. By handling this event, you can have a clickable headline that shows business details (for example, it can open a Dynamics 365 Business Central detail page). A headline page can also be hidden and visibility can be programmatically set by code (as in Headline 4 in the previous example).</p>
+<p>The text displayed on a headline page can be formatted according to the following <kbd>Expression</kbd> property:</p>
+<table style="border-collapse: collapse;width: 100%" border="1">
+<tbody>
+<tr>
+<td>
+<p><strong>Expression TAG</strong></p>
+</td>
+<td>
+<p><strong>Description</strong></p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>&lt;qualifier&gt;&lt;/qualifier&gt;</kbd></p>
+</td>
+<td>
+<p>This specifies the title that appears above the headline. If it's not present, the text <kbd>HEADLINE</kbd> will be used by default.</p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>&lt;payload&gt;&lt;/payload&gt;</kbd></p>
+</td>
+<td>
+<p>This specifies the displayed headline text.</p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>&lt;emphasize&gt;&lt;/emphasize&gt;</kbd></p>
+</td>
+<td>
+<p>The text on this tag is displayed with the biggest size.</p>
+</td>
+</tr>
+</tbody>
+</table>
+<p> </p>
+<p>To modify an existing headline, you need to create a <kbd>pageextension</kbd> object and extend it. As an example, here we are modifying the standard <kbd>Headline RC Business Manager</kbd> page by adding a new headline panel with dynamically created content:</p>
+<pre>pageextension 50101 MyNewBCHeadline extends "Headline RC Business Manager"<br/>{<br/>    layout<br/>    {<br/>        addafter(Control4)<br/>        {<br/>            field(newHeadlineText;newHeadlineText)<br/>            {<br/>                ApplicationArea = all;<br/>            }<br/>        }<br/>    }<br/>          <br/>    var<br/>        newHeadlineText: Text;<br/><br/>        trigger OnOpenPage()<br/>        var<br/>            HeadlineMgt : Codeunit "Headline Management";<br/>        begin<br/>            //Set Headline text           <br/>            newHeadlineText := 'This is my new Business Central Headline for ' + HeadlineMgt.Emphasize('Packt Publishing');<br/>        end;<br/>       <br/>}</pre>
+<p>Here, we've added a new field called <kbd>newHeadlineText</kbd>, and this field is populated in the <kbd>OnOpenPage</kbd> trigger of the Headline page with the information that we want to display to our users.</p>
+<p><span><span>This section has explained how to customize the Headline of a Role Center page and how to show relevant business information to our users.</span></span></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Handling XML and JSON files with the AL language</h1>
+                </header>
+            
+            <article>
+                
+<p>The AL language extension has native support for handling XML and JSON documents.</p>
+<p>An XML document is represented by using the <kbd>XmlDocument</kbd> data type, as explained at <a href="https://docs.microsoft.com/en-us/dynamics365/business-central/dev-itpro/developer/methods-auto/xmldocument/xmldocument-data-type">https://docs.microsoft.com/en-us/dynamics365/business-central/dev-itpro/developer/methods-auto/xmldocument/xmldocument-data-type</a>.</p>
+<p>The following code shows how you can import an XML file and load it into an <kbd>XmlDocument</kbd> object:</p>
+<pre>local procedure ImportXML()<br/>    var<br/>        TempBlob : Codeunit "Temp Blob";<br/>        TargetXmlDoc : XmlDocument;<br/>        XmlDec : XmlDeclaration;<br/>        Instr: InStream;<br/>        filename: Text;<br/>    begin<br/>        // Create the Xml Document<br/>        TargetXmlDoc := XmlDocument.Create;<br/>        xmlDec := xmlDeclaration.Create('1.0','UTF-8','');<br/>        TargetXmlDoc.SetDeclaration(xmlDec);<br/><br/>        // Create an Instream object &amp; upload the XML file into it              <br/>        TempBlob.CreateInStream(Instr);<br/>        filename := 'data.xml';       <br/>        UploadIntoStream('Import XML','','',filename,Instr);<br/><br/>        // Read stream into new xml document       <br/>        Xmldocument.ReadFrom(Instr, TargetXmlDoc);    <br/>    end;</pre>
+<p>Here, we have created an <kbd>XmlDocument</kbd> object with an XML declaration, then we have created an <kbd>InStream</kbd> object to load the XML file, and we have read the <kbd>InStream</kbd> content into the <kbd>XmlDocument</kbd> object.</p>
+<p>If you reference the <kbd>TargetXmlDoc</kbd> object, you see all of the available methods for handling and manipulating the XML file:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/b535351e-ec2e-4b12-9e01-23c1a6b8a1d6.png" style="width:19.17em;height:16.00em;"/></p>
+<p class="mce-root"/>
+<p>To create an XML document directly from AL code, you can use the <kbd>XmlDocument</kbd> and <kbd>XmlElement</kbd> classes:</p>
+<pre>local procedure XMLDocumentCreation()<br/>    var<br/>        xmldoc: XmlDocument;<br/>        xmlDec: XmlDeclaration;<br/>        node1: XmlElement;<br/>        node2: XmlElement;<br/>    begin<br/>        xmldoc := XmlDocument.Create();<br/>        xmlDec := xmlDeclaration.Create('1.0','UTF-8','');<br/>        xmlDoc.SetDeclaration(xmlDec);<br/>        node1:= XmlElement.Create('node1');<br/>        xmldoc.Add(node1);<br/>        node2 := XmlElement.Create('node2');<br/>        node2.SetAttribute('ID','3');<br/>        node1.Add(node2);<br/>    end;</pre>
+<p><span>This code creates an XML document with a root node (called</span> <kbd>node1</kbd><span>) and a child node (called</span> <kbd>node2</kbd><span>) with an ID attribute that has a value of <kbd>3</kbd> (</span><kbd>&lt;node2 ID="3"&gt;</kbd><span>).</span></p>
+<p>Native support for JSON documents is provided by using the <kbd>JsonObject</kbd> and <kbd>JsonArray</kbd> data types. Each of these data types contains the methods for handling a JSON file (both reading and writing) and for manipulating the JSON data (tokens).</p>
+<div class="packt_infobox">A detailed explanation of all of the available methods for these data types can be found at the following links:<br/>
+<a href="https://docs.microsoft.com/en-us/dynamics365/business-central/dev-itpro/developer/methods-auto/jsonobject/jsonobject-data-type">https://docs.microsoft.com/en-us/dynamics365/business-central/dev-itpro/developer/methods-auto/jsonobject/jsonobject-data-type<br/></a><a href="https://docs.microsoft.com/en-us/dynamics365/business-central/dev-itpro/developer/methods-auto/jsonarray/jsonarray-data-type">https://docs.microsoft.com/en-us/dynamics365/business-central/dev-itpro/developer/methods-auto/jsonarray/jsonarray-data-type</a></div>
+<p>The following code shows an example of how to create a JSON representation of a sales order document:</p>
+<pre>procedure CreateJsonOrder(OrderNo: Code[20])<br/>    var<br/>        JsonObjectHeader: JsonObject;<br/>        JsonObjectLines: JsonObject;<br/>        JsonOrderArray: JsonArray;<br/>        JsonArrayLines: JsonArray;<br/>        SalesHeader: Record "Sales Header";<br/>        SalesLines: Record "Sales Line";<br/><br/>    begin<br/>        //Retrieves the Sales Header<br/>        SalesHeader.Get(SalesHeader."Document Type"::Order,OrderNo);<br/>        //Creates the JSON header details<br/>        JsonObjectHeader.Add('sales_order_no', SalesHeader."No.");<br/>        JsonObjectHeader.Add(' bill_to_customer_no', SalesHeader."Bill-to Customer No.");     <br/>        JsonObjectHeader.Add('bill_to_name', SalesHeader."Bill-to Name");<br/>        JsonObjectHeader.Add('order_date', SalesHeader."Order Date");<br/>        JsonOrderArray.Add(JsonObjectHeader);<br/><br/>        //Retrieves the Sales Lines<br/>        SalesLines.SetRange("Document Type", SalesLines."Document Type"::Order);<br/>        SalesLines.SetRange("Document No.", SalesHeader."No.");<br/>        if SalesLines.FindSet then<br/>        // JsonObject Init<br/>        JsonObjectLines.Add('line_no', '');<br/>        JsonObjectLines.Add('item_no', '');<br/>        JsonObjectLines.Add('description', '');<br/>        JsonObjectLines.Add('location_code', '');<br/>        JsonObjectLines.Add('quantity', '');<br/>        repeat<br/>            JsonObjectLines.Replace('line_no', SalesLines."Line No.");<br/>            JsonObjectLines.Replace('item_no', SalesLines."No.");            <br/>            JsonObjectLines.Replace('description', SalesLines.Description);<br/>            JsonObjectLines.Replace('location_code', SalesLines."Location Code");<br/>            JsonObjectLines.Replace('quantity', SalesLines.Quantity);<br/>            JsonArrayLines.Add(JsonObjectLines);<br/>        until SalesLines.Next() = 0;<br/>        JsonOrderArray.Add(JsonArrayLines);<br/>    end;</pre>
+<p>This procedure receives an order number as input, retrieves the <kbd>Sales Header</kbd> and <kbd>Sales Line</kbd> details, and creates a JSON representation. The final result is as follows:</p>
+<pre>[<br/>    {<br/>        "sales_order_no": "SO1900027",<br/>        "bill_to_customer_no": "C001435",<br/>        "bill_to_name": "Packt Publishing",<br/>        "order_date": "2019-03-23"<br/>    },<br/>    [<br/>        {<br/>            "line_no": "10000",<br/>            "item_no": "IT00256",<br/>            "description": "Dynamics 365 Business Central Development Guide",<br/>            "location_code": "MAIN",<br/>            "quantity": 30<br/>        },<br/>        {<br/>            "line_no": "20000",<br/>            "item_no": "IT03465",<br/>            "description": "Mastering Dynamics 365 Business Central",<br/>            "location_code":"MAIN",                                 <br/>            "quantity": 27<br/>        }<br/>    ]<br/>]</pre>
+<p>Obviously, you can also receive a JSON representation as input (for example, as a response from an API call) and handle it using the same data types.</p>
+<p>Here, we have seen how to handle JSON documents in AL by using the native JSON types.</p>
+<p>In the next section, we'll see a complete example on how to call an API, receive a JSON response, parse it, and save data to a Dynamics 365 Business Central entity.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Consuming web services and APIs from AL</h1>
+                </header>
+            
+            <article>
+                
+<p>The AL <kbd>HttpClient</kbd> object provides a base class for handling HTTP requests and responses from web resources (identified by a URI). With the <kbd>HttpClient</kbd> class, you can send <kbd>GET</kbd>, <kbd>DELETE</kbd>, <kbd>POST</kbd>, and <kbd>PUT</kbd> HTTP request messages (<kbd>HttpRequestMessage</kbd> with <kbd>HttpHeaders</kbd> and <kbd>HttpContent</kbd>) and receive an <kbd>HttpResponseMessage</kbd> object as a result of this request (including the status code and the response data).</p>
+<div class="packt_tip">You can find more details about all of the exposed methods at the following link: <a href="https://docs.microsoft.com/en-us/dynamics365/business-central/dev-itpro/developer/methods-auto/httpclient/httpclient-data-type">https://docs.microsoft.com/en-us/dynamics365/business-central/dev-itpro/developer/methods-auto/httpclient/httpclient-data-type</a>.</div>
+<p class="mce-root"/>
+<p>As an example, in the following code, we create an extension that permits you to pull customers' address details by calling a service called <kbd>Fullcontact</kbd> (<a href="https://www.fullcontact.com">https://www.fullcontact.com</a>). When you are registered for the free account, <kbd>Fullcontact</kbd> gives you an API with an access key that you can use to retrieve customer details by providing the customer's name.</p>
+<p>What we want is the following: if you insert the domain name of a company in the <kbd>Name</kbd> field of the Customer Card (for example, <a href="https://www.packtpub.com/">packt.com</a>), the system must call the API and retrieve the customer' details for this domain name.</p>
+<p>We create a <kbd>pageextension</kbd> object by extending the Customer Card, and in the <kbd>OnAfterValidate</kbd> trigger of the <kbd>Name</kbd> field, we call a custom method (called <kbd>LookupAddressInfo</kbd> and defined in a codeunit called <kbd>TranslationManagement</kbd>) to handle the data retrieval logic:</p>
+<pre>pageextension 50100 CustomerCardExt extends "Customer Card"<br/>{<br/>    layout<br/>    {<br/>        modify(Name)<br/>        {<br/>            trigger OnAfterValidate()<br/>            var<br/>                TranslationManagement: Codeunit TranslationManagement;<br/>            begin<br/>                if Name.EndsWith('.com') then begin<br/>                    if Confirm('Do you want to retrieve company details?', false) then<br/>                        TranslationManagement.LookupAddressInfo(Name, Rec);<br/>                end;<br/>            end;<br/>        }<br/>    }<br/>}</pre>
+<p>The <kbd>TranslationManagement</kbd> codeunit is defined as follows:</p>
+<pre>codeunit 50100 TranslationManagement<br/>{<br/>    procedure LookupAddressInfo(Name: Text; var Customer: Record Customer)<br/>    var<br/>        Client: HttpClient;<br/>        Content: HttpContent;<br/>        ResponseMessage: HttpResponseMessage;<br/>        Result: Text;<br/>        JContent: JsonObject;<br/>        JDetails: JsonObject;<br/>        JLocations: JsonArray;<br/>        JLocation: JsonObject;<br/>        JPhones: JsonArray;<br/>        JPhone: JsonObject;<br/>    begin<br/>        Content.WriteFrom('{domain":"' + Name + '"}');<br/>        Client.DefaultRequestHeaders().Add('Authorization', 'Bearer &lt;YOUR KEY&gt;');<br/>        Client.Post('https://api.fullcontact.com/v3/company.enrich', Content, ResponseMessage);<br/>        if not ResponseMessage.IsSuccessStatusCode() then<br/>            Error('Error connecting to the Web Service.');        <br/>        ResponseMessage.Content().ReadAs(Result);<br/>       <br/>        if not JContent.ReadFrom(Result) then<br/>            Error('Invalid response from Web Service');<br/>        JDetails := GetTokenAsObject(JContent, 'details', 'Invalid response from Web Service');<br/>        JLocations := GetTokenAsArray(JDetails, 'locations', 'No locations available');<br/>        JLocation := GetArrayElementAsObject(JLocations, 0, 'Location not available');<br/>        JPhones := GetTokenAsArray(JDetails, 'phones', '');<br/>        JPhone := GetArrayElementAsObject(JPhones, 0, '');<br/>        Customer.Name := GetTokenAsText(JContent, 'name', '');<br/>        Customer.Address := GetTokenAsText(JLocation, 'addressLine1', '');<br/>        Customer.City := GetTokenAsText(JLocation, 'city', '');<br/>        Customer."Post Code" := GetTokenAsText(JLocation, 'postalCode', '');<br/>        Customer."Country/Region Code" := GetTokenAsText(JLocation, 'countryCode', '');<br/>        Customer.County := GetTokenAsText(JLocation, 'country', '');<br/>        Customer."Phone No." := GetTokenAsText(JPhone, 'value', '');<br/>    end;<br/><br/>    procedure GetTokenAsText(JsonObject: JsonObject; TokenKey: Text; Error: Text): Text;<br/>    var<br/>        JsonToken: JsonToken;<br/>    begin<br/>        if not JsonObject.Get(TokenKey, JsonToken) then begin<br/>            if Error &lt;&gt; '' then<br/>                Error(Error);<br/>            exit('');<br/>        end;<br/>        exit(JsonToken.AsValue.AsText);<br/>    end;<br/><br/>    procedure GetTokenAsObject(JsonObject: JsonObject; TokenKey: Text; Error: Text): JsonObject;<br/>    var<br/>        JsonToken: JsonToken;<br/>    begin<br/>        if not JsonObject.Get(TokenKey, JsonToken) then<br/>            if Error &lt;&gt; '' then<br/>                Error(Error);<br/>        exit(JsonToken.AsObject());<br/>    end;<br/><br/>    procedure GetTokenAsArray(JsonObject: JsonObject; TokenKey: Text; Error: Text): JsonArray;<br/>    var<br/>        JsonToken: JsonToken;<br/>    begin<br/>        if not JsonObject.Get(TokenKey, JsonToken) then<br/>            if Error &lt;&gt; '' then<br/>                Error(Error);<br/>        exit(JsonToken.AsArray());<br/>    end;<br/><br/>    procedure GetArrayElementAsObject(JsonArray: JsonArray; Index: Integer; Error: Text): JsonObject;<br/>    var<br/>        JsonToken: JsonToken;<br/>    begin<br/>        if not JsonArray.Get(Index, JsonToken) then<br/>            if Error &lt;&gt; '' then<br/>                Error(Error);<br/>        exit(JsonToken.AsObject());<br/>    end; <br/>}</pre>
+<p>Here, the <kbd>LookupAddressInfo</kbd> procedure calls the <kbd>Fullcontact</kbd> API (with an authorization header that contains the key provided by the API registration) by using the <kbd>HttpClient</kbd> object and sending a <kbd>POST</kbd> request to the provided URL by passing the <kbd>HttpContent</kbd> to the call (this content contains the name to check in the format as per API specifications).</p>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p>The HTTP request returns an <kbd>HttpResponseMessage</kbd> object that contains the response message. If the HTTP response is successful, we read the content of the HTTP response message (which is a JSON string). Then, we parse this JSON string by using some helper methods (which you can see defined in the previous code) that permit us to read JSON tokens and retrieve their values in a specified format (or return an error string or a default value if the token data is not available).</p>
+<p>With the <kbd>HttpClient</kbd> class, you can handle authentication to your web service or the API that you want to call. For example, this is how you can use basic authentication with <kbd>HttpClient</kbd>:</p>
+<div>
+<pre><span>var<br/></span><span> </span><span> RequestMessage : </span><span>HttpRequestMessa</span><span>ge</span><span>;<br/></span><span>  Headers : </span><span>HttpHeaders</span><span>;<br/></span><span>  base64Convert: </span><span>Codeunit</span><span> "Base64 Convert";<br/></span><span>  AuthenticationString: </span><span>Text</span><span>;<br/></span><span>begin<br/></span><span>  RequestMessage</span><span>.</span><span>GetHeaders</span><span>(</span><span>Headers</span><span>)</span><span>;<br/></span><span>  AuthenticationString</span><span> := </span><span>StrSubstNo</span><span>(</span><span>'%1:%2'</span><span>,YOURUSERNAME,YOURPASSWORD</span><span>)</span><span>; <br/></span><span>  Headers</span><span>.</span><span>Add</span><span>(</span><span>'Authorization'</span><span>, StrSubstNo</span><span>(</span><span>'Basic %1'</span><span>,base64Convert</span><span>.</span><span>ToBase64</span><span>(</span><span>AuthenticationString</span><span>)))</span><span>;<br/></span><span>end</span></pre></div>
+<p>In this section, we saw how to consume web services and APIs from AL and how to handle requests, responses, and authentication. In the next section, we'll see how to <span>automatically </span>publish objects as web services in Dynamics 365 Business Central when installing an extension.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Publishing Dynamics 365 Business Central objects as web services from AL</h1>
+                </header>
+            
+            <article>
+                
+<p>When developing extensions, you may need to automatically publish a Dynamics 365 Business Central object as a web service instance for external applications.</p>
+<p>There are essentially two different ways t<span>o automate this process</span>:</p>
+<ul>
+<li>Create an <kbd>Install</kbd> codeunit and, in this codeunit, create the web service instance by inserting a record in the <kbd>Tenant Web Service</kbd> table via AL code.</li>
+<li>Create an XML file with a <kbd>TenantWebService</kbd> definition.</li>
+</ul>
+<p class="mce-root"/>
+<p>With the first method, you define an <kbd>Install</kbd> codeunit, and (for example, in the <kbd>OnInstallAppPerCompany</kbd> trigger) you can create the web service definition by creating a new entry in the <kbd>Tenant Web Service</kbd> table, as follows:</p>
+<pre>codeunit 50104 TestInstallCodeunit<br/>{<br/>    Subtype = Install;<br/>    trigger OnInstallAppPerCompany()<br/><br/>    var<br/>        TenantWebService: Record "Tenant Web Service";<br/>    begin<br/>        TenantWebService.Init();<br/>        TenantWebService."Object Type" := TenantWebService."Object Type"::Page;<br/>        TenantWebService."Object ID" := 26;  //Vendor Card<br/>        TenantWebService."Service Name" := 'VendorCardWS';<br/>        TenantWebService.Published := true;<br/>        TenantWebService.Insert(true);<br/>    end;<br/>}</pre>
+<p>Here, we have published the <kbd>Vendor Card</kbd> page as a web service with a <span class="packt_screen">SERVICE NAME</span> of <kbd>VendorCardWS</kbd>. This web service will be visible in the <kbd>Web Services</kbd> page in Dynamics 365 Business Central, as follows:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/5bf79e34-81ed-429b-a08e-f5ff06032d20.png"/></p>
+<p>With the second method, you can use the <kbd>twebservices</kbd> snippet to create a <kbd>TenantWebService</kbd> XML definition file. The following screenshot shows this:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/c460768d-a07d-48f5-bb73-b2f16bfa313b.png" style="width:39.08em;height:6.08em;"/></p>
+<p class="mce-root"/>
+<p>With the XML definition file, to publish the <kbd>Vendor Card</kbd> page as a web service, you have to write the following:</p>
+<pre>&lt;?xml version="1.0" encoding="UTF-8"?&gt;<br/>&lt;ExportedData&gt;<br/>    &lt;TenantWebServiceCollection&gt;<br/>        &lt;TenantWebService&gt;<br/>            &lt;ObjectType&gt;Page&lt;/ObjectType&gt;<br/>            &lt;ServiceName&gt;VendorCardWS&lt;/ServiceName&gt;<br/>            &lt;ObjectID&gt;26&lt;/ObjectID&gt;<br/>            &lt;Published&gt;true&lt;/Published&gt;<br/>        &lt;/TenantWebService&gt;<br/>    &lt;/TenantWebServiceCollection&gt;<br/>&lt;/ExportedData&gt;</pre>
+<p>This XML definition file will be part of your AL project extension's code.</p>
+<p>The two methods described here have the same effect when installing the extension: your web service will be published and visible on the <kbd>Web Services</kbd> page in Dynamics 365 Business Central. But what happens when you uninstall the extension?</p>
+<p>When you uninstall the extension, if the web service is published using the XML definition file, it is automatically removed from the <kbd>Tenant Web Service</kbd> table, while if the web service is published directly via AL code, it's not removed from that table. If you need to automatically publish a web service from an extension at the installation phase, it's recommended to use the <kbd>TenantWebService</kbd> XML definition file.</p>
+<p>In the next section, we'll see how to use Azure Functions to execute serverless processes in the cloud and to replace standard .NET code.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Using Azure Functions to replace .NET code</h1>
+                </header>
+            
+            <article>
+                
+<p>With Dynamics 365 Business Central, usage of .NET assemblies (the <kbd>DotNet</kbd> variable type) is supported only in an on-premise scenario. With Dynamics 365 Business Central in the cloud (SaaS), you cannot use DotNet objects (for security reasons) and the official way to replace a <kbd>DotNet</kbd> variable is by using an HTTP call to an <strong>Azure function</strong>.</p>
+<p><strong>Azure Functions</strong> is a serverless compute service offered by the Azure platform that permits you to run code in the cloud without managing the infrastructure. We'll talk about Azure Functions in <span>more depth </span>in <a href="3d538864-81c5-4077-9596-2a17aace1e3a.xhtml">Chapter 14</a>, <em>Monitoring, Scaling, and CI/CD with Azure Functions</em>, so here we'll not see how to create an Azure function from scratch, but only how to call it from your extension's code.</p>
+<p>Now, imagine having an Azure function called <kbd>PostCodeValidator</kbd> that validates post codes. This function (of the <kbd>HttpTrigger</kbd> function type) receives a post code via a query string, validates it, and the function returns a JSON response with a Boolean value that indicates whether the post code is valid or not.</p>
+<p>The Azure function can be called via a query string with the following URL:</p>
+<pre>http://postcodevalidator.azurewebsites.net/api/postcodevalidator?code=POSTCODE</pre>
+<p>Here, <kbd>POSTCODE</kbd> is the post code to validate.</p>
+<p>The JSON response message from the Azure function is as follows:</p>
+<pre>{"Isvalid":false}</pre>
+<p>For this example, we want to call this function in the <kbd>OnAfterValidate</kbd> event of the <kbd>Post Code</kbd> field of the <kbd>Customer</kbd> table:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/a088d968-4deb-4ce9-b78e-a2a2849d558e.png" style="width:38.50em;height:24.42em;"/></p>
+<p class="mce-root"/>
+<p>The code to call the Azure function from AL is as follows:</p>
+<pre>[EventSubscriber(ObjectType::Table, Database::Customer, 'OnAfterValidateEvent', 'Post Code', false, false)]<br/>    local procedure ValidatePostCodeViaAzureFunction(var Rec: Record Customer)<br/>    var<br/>        Client: HttpClient;<br/>        Response: HttpResponseMessage;<br/>        json: Text;<br/>        jsonObj: JsonObject;<br/>        token: JsonToken;<br/>        FunctionURL: Label 'http://postcodevalidator.azurewebsites.net/api/postcodevalidator?code=';<br/>        InvalidResponseError: Label 'Invalid Response from Azure Function.';<br/>        InvalidCodeError: Label 'Invalid Post Code. Please reinsert.';<br/>        TokenNotFoundError: Label 'Token not found in Json.';<br/><br/>    begin<br/>        client.Get(FunctionURL + rec."Post Code", Response);<br/>        //Reads the response content from the Azure Function<br/>        Response.Content().ReadAs(json);<br/>        if not jsonObj.ReadFrom(json) then<br/>            Error(InvalidResponseError);<br/>        //Retrieves the JSon token from the response<br/>        if not jsonObj.Get('IsValid',token) then<br/>            Error(TokenNotFoundError);<br/>        //Convert the Json token to a Boolean value. is TRUE the post code is valid.<br/>        if not token.AsValue().AsBoolean() then<br/>            Error(InvalidCodeError);<br/>    end;</pre>
+<p>Here, by using the <kbd>HttpClient</kbd> object, we send an HTTP <kbd>GET</kbd> request to the Azure function URI by passing the requested code function's parameter with the value of the <kbd>Post Code</kbd> field to validate. Then, we read the <kbd>HttpResponseMessage</kbd> content returned by the Azure function (which is a JSON object) with the following:</p>
+<pre>Response.Content().ReadAs(json);</pre>
+<p class="mce-root"/>
+<p>This method loads the <kbd>json</kbd> text variable from the HTTP response content. After that, we search for the <kbd>IsValid</kbd> token in the JSON object:</p>
+<pre>jsonObj.Get('IsValid',token)</pre>
+<p>If the token is found, its value is saved into the <kbd>token</kbd> variable. We read its Boolean value and if it's false, an error is raised (<kbd>InvalidCodeError</kbd>).</p>
+<p>We have seen how to call an Azure function and then how to read and handle its response. We'll talk in more depth about Azure Functions in <a href="45e3cb96-0df4-43be-89d0-697822f4b159.xhtml">Chapter 13</a>, <em>Serverless Business Processes with Business Central and Azure</em>.</p>
+<p>In the next section, we'll see how to use the Isolated Storage feature to handle and secure sensitive data from a Dynamics 365 Business Central extension.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Understanding Isolated Storage</h1>
+                </header>
+            
+            <article>
+                
+<p><strong>Isolated Storage</strong> is key-value-based storage that provides data isolation between extensions. Isolated Storage can be used to store data that must be preserved inside the extension scope, and this data is accessible via AL code. The <kbd>DataScope</kbd> option type identifies the scope of stored data in Isolated Storage.</p>
+<p><kbd>DataScope</kbd> is an optional parameter and <span><span>the default value is</span></span> <kbd>Module</kbd>. All possible values are listed in the following table:</p>
+<table style="border-collapse: collapse;width: 100%" border="1">
+<tbody>
+<tr>
+<td>
+<p><strong>Member</strong></p>
+</td>
+<td>
+<p><strong>Description</strong></p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>Module</kbd></p>
+</td>
+<td>
+<p>It indicates that the record is available in the scope of the app context.</p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>Company</kbd></p>
+</td>
+<td>
+<p>It indicates that the record is available in the scope of the company within the app context.</p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>User</kbd></p>
+</td>
+<td>
+<p>It indicates that the record is available for a user within the app context.</p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>CompanyAndUser</kbd></p>
+</td>
+<td>
+<p>It indicates that the record is available for a user and specific company within the app context.</p>
+</td>
+</tr>
+</tbody>
+</table>
+<p>To manage data in Isolated Storage, you have the following methods:</p>
+<table style="border-collapse: collapse;width: 100%" border="1">
+<tbody>
+<tr>
+<td>
+<p><strong>Method</strong></p>
+</td>
+<td>
+<p><strong>Description</strong></p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>[Ok := ] IsolatedStorage.<strong>Set</strong>(Key: String, Value: String, [DataScope: DataScope])</kbd></p>
+</td>
+<td>
+<p>This sets the value associated with the specified key within the extension. The optional <kbd>DataScope</kbd> parameter is the scope of the stored data.</p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>[Ok := ] IsolatedStorage.<strong>Get</strong>(Key: String, [DataScope: DataScope], var Value: Text)</kbd></p>
+</td>
+<td>
+<p>This gets the value associated with the specified key within the extension. The optional <kbd>DataScope</kbd> parameter is the scope of the data to retrieve.</p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>HasValue :=  IsolatedStorage.<strong>Contains</strong>(Key: String, [DataScope: DataScope])</kbd></p>
+</td>
+<td>
+<p>This determines whether the storage contains a value with the specified key within the extension. The optional <kbd>DataScope</kbd> parameter is the scope to check for the existence of the value with the given key.</p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>[Ok := ] IsolatedStorage.<strong>Delete</strong>(Key: String, [DataScope: DataScope])</kbd></p>
+</td>
+<td>
+<p>This deletes the value with the specified key from the Isolated Storage within the extension. The optional <kbd>DataScope</kbd> parameter is the scope to remove the value with the given key.</p>
+</td>
+</tr>
+</tbody>
+</table>
+<p> </p>
+<p>Isolated Storage is useful for storing sensitive data, user options, and license keys.</p>
+<p>Let's consider the following example:</p>
+<pre>local procedure IsolatedStorageTest()<br/>    var<br/>        keyValue: Text;<br/>    begin<br/>        IsolatedStorage.Set('mykey','myvalue',DataScope::Company);<br/>        if IsolatedStorage.Contains('mykey',DataScope::Company) then<br/>        begin<br/>            IsolatedStorage.Get('mykey',DataScope::Company,keyValue);<br/>            Message('Key value retrieved is %1', keyValue);<br/>        end;<br/>        IsolatedStorage.Delete('mykey',DataScope::Company);<br/>    end;</pre>
+<p class="mce-root"/>
+<p>From the preceding code, we get the following:</p>
+<ol>
+<li>In the first step, we save, in Isolated Storage, a key called <kbd>mykey</kbd> with a value of <kbd>myvalue</kbd> and <kbd>DataScope</kbd> set to <kbd>Company</kbd>. The key is visible in the scope of the company within the app context, so no other extensions can access this key.</li>
+<li>In the second step, we check whether a key called <kbd>mykey</kbd> <span>is saved in Isolated Storage with </span><kbd>DataScope</kbd> set to <kbd>Company</kbd><span>. If a match is found (key and scope), the key is retrieved (with the</span> <kbd>Get</kbd> <span>method) and the value is returned in the</span> <kbd>keyValue</kbd> <span>text variable.</span></li>
+<li>In the last step, we delete the key for this <kbd>DataScope</kbd>.</li>
+</ol>
+<p>As previously said, you could <span>also</span><span> </span><span>use Isolated Storage to save license keys or license details for your extension. The following code shows how to export the records of a table called</span> <kbd>License</kbd> <span>to JSON, then how to encrypt the JSON value, and finally how to store the encrypted text in Isolated Storage:</span></p>
+<pre>local procedure StoreLicense()<br/>    var<br/>        StorageKey: Text;<br/>        LicenseText: Text;<br/>        EncryptManagement: Codeunit "Cryptography Management";<br/>        License: Record License temporary;<br/><br/>    begin<br/>        StorageKey := GetStorageKey();<br/>        LicenseText := License.WriteLicenseToJson();<br/>        if EncryptManagement.IsEncryptionEnabled() and EncryptManagement.IsEncryptionPossible() then<br/>            LicenseText := EncryptManagement.Encrypt(LicenseText);<br/>        if IsolatedStorage.Contains(StorageKey, DataScope::Module) then<br/>            IsolatedStorage.Delete(StorageKey);<br/>        IsolatedStorage.Set(StorageKey, LicenseText, DataScope::Module);<br/>    end;<br/><br/>    local procedure GetStorageKey(): Text<br/>    var<br/>        //Returns a GUID<br/>        StorageKeyTxt: Label 'dd03d28e-4acb-48d9-9520-c854495362b6', Locked = true;<br/>    begin<br/>        exit(StorageKeyTxt);<br/>    end;<br/><br/>    local procedure ReadLicense()<br/>    var<br/>        StorageKey: Text;<br/>        LicenseText: Text;<br/>        EncryptManagement: Codeunit "Cryptography Management";<br/>        License: Record License temporary;<br/>    begin<br/>        StorageKey := GetStorageKey();<br/>        if IsolatedStorage.Contains(StorageKey, DataScope::Module) then<br/>            IsolatedStorage.Get(StorageKey, DataScope::Module, LicenseText);<br/>        if EncryptManagement.IsEncryptionEnabled() and EncryptManagement.IsEncryptionPossible() then<br/>            LicenseText := EncryptManagement.Decrypt(LicenseText);<br/>        License.ReadLicenseFromJson(LicenseText);<br/>    end;</pre>
+<p><span>Here, the</span> <kbd>License</kbd> <span>table is declared as a temporary table. In this way, the data is isolated into the calling codeunit.</span></p>
+<p>With the Dynamics 365 Business Central wave 2 release, there are some changes related to secret management with Isolated Storage. Here are the details:</p>
+<ul>
+<li>In Dynamics 365 Business Central SaaS, sensitive data stored in Isolated Storage is always encrypted.</li>
+<li>In Dynamics 365 Business Central on-premise, encryption is controlled by the end user (via the <span class="packt_screen">Data Encryption Management</span> page):
+<ul>
+<li>If encryption is turned on, a secret stored in the Isolated Storage is automatically encrypted.</li>
+<li>A secret that was inserted while encryption was turned off will remain unencrypted if encryption is turned on.</li>
+<li>If you turn off encryption, the secret will be decrypted.</li>
+</ul>
+</li>
+</ul>
+<p>According to these changes, if you have an extension that works for Dynamics 365 Business Central SaaS and on-premise and you're using Isolated Storage to store secrets, you need to check whether encryption is enabled (which is always true for SaaS) and then save the secret accordingly.</p>
+<p>So, a function that saves a license key to Isolated Storage and that works for Dynamics 365 Business Central SaaS and on-premise will be as follows:</p>
+<pre>local procedure StoreLicense()<br/>var<br/>   licenseKeyValue: Text;<br/>begin<br/>   if not EncryptionEnabled() then<br/>       IsolatedStorage.Set('LicenseKey',licenseKeyValue,DataScope::Module)<br/>   else         <br/>      IsolatedStorage.SetEncrypted('LicenseKey',licenseKeyValue,DataScope::Module)<br/>end;</pre>
+<p>With the <kbd>SetEncrypted</kbd> method, you can now automatically save a secret by using encryption (no more calls to the <kbd>Cryptography Management</kbd> codeunit).</p>
+<p><span>We have seen how to use Isolated Storage to improve data security in our extensions. In the next section, we'll see how to create control add-ins.</span></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Working with control add-ins</h1>
+                </header>
+            
+            <article>
+                
+<p><strong>Control add-in</strong> objects are a way to add custom functionalities (functions or UI customizations) to the Dynamics 365 Business Central client. A control add-in can interact with Dynamics 365 Business Central events and can raise events for your AL code.</p>
+<p>A control add-in can be defined in AL code by using the <kbd>tcontroladdin</kbd> snippet, which has the following structure:</p>
+<pre>controladdin MyControlAddIn<br/>{<br/>    RequestedHeight = 300;<br/>    MinimumHeight = 300;<br/>    MaximumHeight = 300;<br/>    RequestedWidth = 700;<br/>    MinimumWidth = 700;<br/>    MaximumWidth = 700;<br/>    VerticalStretch = true;<br/>    VerticalShrink = true;<br/>    HorizontalStretch = true;<br/>    HorizontalShrink = true;<br/>    Scripts =<br/>        'script1.js',<br/>        'script2.js';<br/>    StyleSheets =<br/>        'style.css';<br/>    StartupScript = 'startupScript.js';<br/>    RecreateScript = 'recreateScript.js';<br/>    RefreshScript = 'refreshScript.js';<br/>    Images =<br/>        'image1.png',<br/>        'image2.png';<br/>   <br/>    event MyEvent()<br/>   <br/>    procedure MyProcedure()<br/>}</pre>
+<p>As you can see from the code snippet, when you define a <kbd>controladdin</kbd> object, you need to set the <kbd>Scripts</kbd> property to include the scripts of your control add-in (in a JavaScript file). These scripts can be local <kbd>.js</kbd> files or external files referenced via HTTP or HTTPS.</p>
+<p>The <kbd>StartupScript</kbd> property permits you to call a script that must be executed when the page that hosts the <kbd>controladdin</kbd> object is loaded. You can style your <kbd>controladdin</kbd> object by using the <kbd>StyleSheet</kbd> property (which permits you to reference a CSS file) and the <kbd>Images</kbd> property (which permits you to load images into your add-in).</p>
+<div class="packt_tip">When defining the style of a <kbd>controladdin</kbd> object in Dynamics 365 Business Central, please always refer to the <em>Control Add-in Style Guide</em> at the following link: <a href="https://docs.microsoft.com/en-us/dynamics365/business-central/dev-itpro/developer/devenv-control-addin-style">https://docs.microsoft.com/en-us/dynamics365/business-central/dev-itpro/developer/devenv-control-addin-style</a>.</div>
+<p>As a basic example, here we create a control add-in object that will be placed in a Dynamics 365 Business Central page (specifically, an Item Card).</p>
+<p>The <kbd>controladdin</kbd> object is composed of two JavaScript files:</p>
+<ul>
+<li><kbd>Start.js</kbd>, which contains the startup script and is loaded when the Dynamics 365 Business Central object that contains the add-in starts</li>
+<li><kbd>Main.js</kbd>, which contains the add-in business logic</li>
+</ul>
+<p>The <kbd>Start.js</kbd> JavaScript file is defined as follows:</p>
+<pre>init();<br/>var controlAddin = document.getElementById('controlAddIn');<br/>controlAddin.innerHTML = 'This is our D365BC control addin';<br/>Microsoft.Dynamics.NAV.InvokeExtensibilityMethod("ControlReady", []);</pre>
+<p>Here, we initialize the add-in object, we print some HTML text inside the add-in, and we use the <kbd>InvokeExtensibilityMethod</kbd> method to invoke the AL trigger on the page that contains the add-in.</p>
+<p class="mce-root"/>
+<div class="packt_infobox">More information about the <kbd>InvokeExtensibilityMethod</kbd> method can be found at <a href="https://docs.microsoft.com/en-us/dynamics365/business-central/dev-itpro/developer/methods/devenv-invokeextensibility-method">https://docs.microsoft.com/en-us/dynamics365/business-central/dev-itpro/developer/methods/devenv-invokeextensibility-method</a>.</div>
+<p>The <kbd>Main.js</kbd> JavaScript file is defined as follows:</p>
+<pre>function init()<br/>{<br/>    window.alert('INIT');<br/>}<br/><br/>function HelloWorld()<br/>{<br/>    window.alert('HELLO WORLD FROM D365BC ADDIN');<br/>}</pre>
+<p>Now, in Visual Studio Code, we create the <kbd>controladdin</kbd> object, as follows:</p>
+<pre>controladdin DemoD365BCAddin<br/>{<br/>    RequestedHeight = 300;<br/>    MinimumHeight = 300;<br/>    MaximumHeight = 300;<br/>    RequestedWidth = 700;<br/>    MinimumWidth = 250;<br/>    MaximumWidth = 700;<br/>    VerticalStretch = true;<br/>    VerticalShrink = true;<br/>    HorizontalStretch = true;<br/>    HorizontalShrink = true;<br/>    Scripts = 'Scripts/main.js';<br/>    StyleSheets = 'CSS/stylesheet.css';<br/>    StartupScript = 'Scripts/start.js';<br/>   <br/>    Images = 'Images/Avatar.png';<br/>    event ControlReady()<br/>    procedure HelloWorld()<br/>}</pre>
+<p>In the preceding code, we can see the following:</p>
+<ul>
+<li><kbd>VerticalStretch</kbd> specifies that the add-in can be enlarged vertically.</li>
+<li><kbd>VerticalShrink</kbd> specifies that the add-in can be made smaller vertically.</li>
+<li><kbd>HorizontalStretch</kbd> specifies that the add-in can be enlarged horizontally.</li>
+<li><kbd>HorizontalShrink</kbd> specifies that the add-in can be made smaller horizontally.</li>
+<li><kbd>MinimumHeight</kbd>/<kbd>MaximumHeight</kbd> specifies the minimum/maximum height that the control add-in can be shrunk or stretched to.</li>
+<li><kbd>MinimumWidth</kbd>/<kbd>MaximumWidth</kbd> specifies the minimum/maximum width that the control add-in can be <span>shrunk or stretched</span> to.</li>
+<li><kbd>RequestedHeight</kbd> and <kbd>RequestedWidth</kbd> specify the height and width of the add-in control inside the page.</li>
+</ul>
+<p>The <kbd>controladdin</kbd> object references the previously described scripts, and it can reference a stylesheet (CSS) file, where you can handle the appearance of the add-in. In this example, we have used a simple stylesheet:</p>
+<pre>#controlAddIn<br/>{<br/>    width: 300px;<br/>    margin-top: 25px;<br/>    border: 2px;<br/>    background-color: lightcoral;<br/>    box-sizing: border-box;<br/>    border: 2px solid red;<br/>}</pre>
+<p>To add the <kbd>controladdin</kbd> object to the Item Card page, we create a <kbd>pageextension</kbd> object, and here we add a <kbd>usercontrol</kbd> field as follows:</p>
+<pre>pageextension 50100 ItemCardExt extends "Item Card"<br/>{<br/>    layout<br/>    {<br/>        addlast(Item)<br/>        {<br/>            group(AddinGroup)<br/>            {<br/>                Caption = 'Control Add-in';<br/>                usercontrol(DemoAddin; DemoD365BCAddin)<br/>                {<br/>                    ApplicationArea = All;<br/>                    trigger ControlReady()<br/>                    begin<br/>                        CurrPage.DemoAddin.HelloWorld();<br/>                    end;<br/>                }<br/>            }<br/>        }<br/>    }<br/>}</pre>
+<p>The <kbd>usercontrol</kbd> field triggers the <kbd>ControlReady</kbd> event, and from this event, we call the <kbd>HelloWord</kbd> method (defined in the <kbd>main.js</kbd> file).</p>
+<p>The final result is the following. When the page is loaded, the <kbd>INIT</kbd> method is triggered:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/73cca272-0aba-4758-8abb-16eb7b22efc8.png"/></p>
+<p>This is the HTML of the Dynamics 365 Business Central page, where you can see the control add-in in the <kbd>div</kbd> element:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/2ccd5464-6207-4138-a801-a0cb0d87720c.png"/></p>
+<p class="mce-root"/>
+<p>Then, the add-in triggers the <kbd>ControlReady</kbd> event and our JavaScript <kbd>HelloWorld</kbd> function is executed:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/06f2037b-6f76-4db4-844c-16ecc5a92a0e.png"/></p>
+<p>We have seen how to create visual control add-ins and how to use them inside a Dynamics 365 Business Central page. In the next section, we'll see how to create and use a timer-based control add-in.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Creating a timer-based control add-in</h1>
+                </header>
+            
+            <article>
+                
+<p>Control add-ins are useful also for creating timer-based logic inside a Dynamics 365 Business Central page (which is called <strong>ping-pong</strong> logic) to execute business logic every <em>N</em> times.</p>
+<p>In our AL project, we define our <kbd>controladdin</kbd> object as follows:</p>
+<pre>controladdin D365BCPingPong<br/>{<br/>    Scripts = 'Scripts/pingpong.js';<br/>    StartupScript = 'Scripts/start.js';<br/>    HorizontalShrink = true;<br/>    HorizontalStretch = true;<br/>    MinimumHeight = 1;<br/>    MinimumWidth = 1;<br/>    RequestedHeight = 1;<br/>    RequestedWidth = 1;<br/>    VerticalShrink = true;<br/>    VerticalStretch = true;<br/><br/>    procedure SetTimerInterval(milliSeconds: Integer);<br/>    procedure StartTimer();<br/>    procedure StopTimer();<br/><br/>    event ControlAddInReady();<br/>    event PingPongError();<br/>    event TimerElapsed();<br/>}</pre>
+<p>The <kbd>start.js</kbd> file contains the add-in initialization:</p>
+<pre>$(document).ready(function()<br/>{<br/>    initializeControlAddIn('controlAddIn');<br/>});</pre>
+<p>The <kbd>pingpong.js</kbd> file contains the JavaScript business logic of our add-in:</p>
+<pre>"use strict"<br/>var timerInterval;<br/>var timerObject;<br/>function initializeControlAddIn(id) {<br/>    var controlAddIn = document.getElementById(id);<br/>    controlAddIn.innerHTML =<br/>        '&lt;div id="ping-pong"&gt;' +<br/>        '&lt;/div&gt;';<br/>    pageLoaded();<br/>    Microsoft.Dynamics.NAV.InvokeExtensibilityMethod('ControlAddInReady', null);<br/>}<br/><br/>function pageLoaded() {<br/>}<br/><br/>function SetTimerInterval(milliSeconds) {<br/>    timerInterval = milliSeconds;<br/>}<br/><br/>function StartTimer() {<br/>    if (timerInterval == 0 || timerInterval == null) {<br/>        Microsoft.Dynamics.NAV.InvokeExtensibilityMethod('PingPongError', ['No timer interval was set.']);<br/>        return;<br/>    }<br/>    timerObject = window.setInterval(ExecuteTimer, timerInterval);<br/>}<br/><br/>function StopTimer() {<br/>    clearInterval(timerObject);<br/>}<br/><br/>function ExecuteTimer() {<br/>    Microsoft.Dynamics.NAV.InvokeExtensibilityMethod('TimerElapsed', null);<br/>}</pre>
+<p>We can now insert our add-in object to a Dynamics 365 Business Central page (for example, the Item Card) and from here, we can call the add-in methods, as follows:</p>
+<pre>pageextension 50100 ItemCardExt extends "Item Card"<br/>{<br/>    layout<br/>    {<br/>        addlast(Item)<br/>        {<br/>            group(userControlTimer)<br/>            {<br/>                usercontrol(D365BCPingPong; D365BCPingPong)<br/>                {<br/>                    ApplicationArea = All;<br/><br/>                    trigger TimerElapsed()<br/>                    begin<br/>                        //Stops the timer when the timer has elapsed<br/>                        CurrPage.D365BCPingPong.StopTimer();<br/>                        //Here you can have your code that must be executed every tick<br/>                        Message('Run your timer-based code here');<br/>                        CurrPage.D365BCPingPong.StartTimer();<br/>                    end;<br/>                }<br/>            }<br/>        }<br/>    }<br/><br/>    trigger OnAfterGetCurrRecord()<br/>    begin<br/>        //Sets a timer interval every 10 seconds<br/>        CurrPage.D365BCPingPong.SetTimerInterval(10000);<br/>        CurrPage.D365BCPingPong.StartTimer();<br/>   end;<br/>}</pre>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mceNonEditable"/>
+<p>Here, we set a timer interval (for example, 10 seconds) and start the timer. When the timer tick has elapsed, the <kbd>TimerElapsed</kbd> trigger is called and your custom business logic is executed. When the <kbd>TimerElapsed</kbd> trigger is raised, it's important to stop the timer to avoid raising a new event while the message is still displayed (as you can see, we stop the timer, run the custom code, and then restart the timer).</p>
+<div class="packt_tip packt_infobox">More information about <strong>control add-in</strong> objects and properties can be found at <a href="https://docs.microsoft.com/en-us/dynamics365/business-central/dev-itpro/developer/devenv-control-addin-object">https://docs.microsoft.com/en-us/dynamics365/business-central/dev-itpro/developer/devenv-control-addin-object</a>.</div>
+<p>A timer-based add-in is useful for executing timer-based operations or <span>refreshing </span>pages. </p>
+<p>In the next section, we'll see how to use notifications in Dynamics 365 Business Central to better handle errors and messages in the standard UI.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Notifications inside Dynamics 365 Business Central</h1>
+                </header>
+            
+            <article>
+                
+<p>Dynamics 365 Business Central permits you to programmatically send non-intrusive notifications to your users inside the web client user interface to display information, messages, or error notifications. These notifications are non-modal, so they don't require your users to stop working and perform some action on the notification message immediately. They can also be dismissed if necessary.</p>
+<p>Notifications appear in the <strong>notification bar</strong> at the top of the page in which the user is currently working. The application can send multiple notifications to the user, and they will all appear in the notification bar in chronological order. They will remain in the notification bar until the user takes action on them, dismisses them or for the duration of the page instance.</p>
+<p>As a developer, you can programmatically create notifications by using the <kbd>Notification</kbd> and <kbd>NotificationScope</kbd> AL objects.</p>
+<p>As an example of how to use <kbd>Notifications</kbd> inside Dynamics 365 Business Central, we will create a notification in the <kbd>Purchase Order</kbd> page that appears if the selected <kbd>Vendor</kbd> has a balance due.</p>
+<p class="mce-root"/>
+<p>The <kbd>pageextension</kbd> object is defined as follows:</p>
+<div>
+<pre><span>pageextension</span><span> </span><span>50100</span><span> PurchaseOrderExt </span><span>extends</span><span> "Purchase Order"<br/></span><span>{<br/></span><span>    </span><span>trigger</span><span> OnOpenPage</span><span>()<br/></span><span>    </span><span>var<br/></span><span>        Vendor: </span><span>Record</span><span> Vendor;<br/></span><span>        VendorNotification: </span><span>Notification</span><span>;<br/></span><span>        OpenVendor: </span><span>Text</span><span>;<br/></span><span>        TextNotification: </span><span>Label</span><span> </span><span>'This Vendor has a Balance due. Please check before sending orders.'</span><span>;<br/></span><span>        TextNotificationAction: </span><span>Label</span><span> </span><span>'Check balance due'</span><span>;<br/></span><span>    </span><span>begin<br/></span><span>        Vendor</span><span>.</span><span>Get</span><span>(</span><span>"Buy-from Vendor No."</span><span>)</span><span>;<br/></span><span>        Vendor</span><span>.</span><span>CalcFields</span><span>(</span><span>"Balance Due"</span><span>)</span><span>;<br/></span><span>        </span><span>if</span><span> Vendor</span><span>.</span><span>"Balance Due" &gt; </span><span>0</span><span> </span><span>then</span><span> </span><span>begin<br/></span><span>            VendorNotification</span><span>.</span><span>Message</span><span>(</span><span>TextNotification</span><span>)</span><span>;<br/></span><span>            VendorNotification</span><span>.</span><span>Scope</span><span> := NotificationScope</span><span>::LocalScope;<br/></span><span>            VendorNotification</span><span>.</span><span>SetData</span><span>(</span><span>'VendorNo'</span><span>, Vendor</span><span>.</span><span>"No."</span><span>)</span><span>;<br/></span><span>           VendorNotification</span><span>.</span><span>AddAction</span><span>(</span><span>TextNotificationAction, </span><span>Codeunit</span><span>::ActionHandler, </span><span>'OpenVendor'</span><span>)</span><span>;<br/></span><span>           VendorNotification</span><span>.</span><span>Send</span><span>()</span><span>;<br/></span><span>       </span><span>end</span><span>;<br/></span><span>   </span><span>end</span><span>;<br/></span><span>}</span></pre></div>
+<p>We are checking whether the vendor has a balance due. If so, a <kbd>Notification</kbd> object is created. A <kbd>Notification</kbd> object has a <kbd>Message</kbd> property (that defines the content of the notification that will appear in the UI) and <kbd>Scope</kbd>. Now, <kbd>Scope</kbd> defines where the message will appear to the user, and it could be one of the following:</p>
+<ul>
+<li><kbd>LocalScope</kbd> (default): The notification will appear on the user's current page.</li>
+<li><kbd>GlobalScope</kbd> (not currently supported): The notification will appear regardless of which page the user is working on.</li>
+</ul>
+<p>When defining the <kbd>Notification</kbd> object, we use the <kbd>SetData</kbd> method to set a data property value to the notification (in this case, the <kbd>Vendor</kbd> number) and we use the <kbd>AddAction</kbd> method to add an action to the notification message (we want an action that immediately opens the <kbd>Vendor Card</kbd> page). The <kbd>AddAction</kbd> method starts a method called <kbd>OpenVendor</kbd>, defined in a codeunit called <kbd>ActionHandler</kbd>.</p>
+<p class="mce-root"/>
+<p>The codeunit object for this is defined as follows:</p>
+<div>
+<pre><span>codeunit</span><span> </span><span>50100</span><span> ActionHandler<br/></span><span>{  <br/></span><span>    </span><span>procedure</span><span> OpenVendor</span><span>(</span><span>VendorNotification: </span><span>Notification)<br/></span><span>    </span><span>var<br/></span><span>        VendorCode: </span><span>Text</span><span>;<br/></span><span>        Vendor: </span><span>Record</span><span> Vendor;<br/></span><span>        VendorCard: </span><span>Page</span><span> "Vendor Card";<br/></span><span>    </span><span>begin<br/></span><span>        VendorCode</span><span> := </span><span>VendorNotification</span><span>.</span><span>GetData</span><span>('</span><span>VendorNo'</span><span>)</span><span>;<br/></span><span>        </span><span>if</span><span> Vendor</span><span>.</span><span>Get</span><span>(</span><span>VendorCode</span><span>) then</span><span> </span><span>begin<br/></span><span>            VendorCard</span><span>.</span><span>SetRecord</span><span>(</span><span>Vendor</span><span>)</span><span>;<br/></span><span>            VendorCard</span><span>.</span><span>Run</span><span>()</span><span>;<br/></span><span>        </span><span>end</span><span>;<br/></span><span>    </span><span>end</span><span>;<br/></span><span>}</span></pre></div>
+<p>Here, when the action inside the notification is clicked, the code retrieves the <kbd>VendorNo</kbd> parameter from the <kbd>Notification</kbd> object, retrieves the <kbd>Vendor</kbd> record, and opens the <kbd>Vendor Card</kbd> by passing the retrieved record.</p>
+<p>When you open a Purchase Order from Dynamics 365 Business Central and the selected vendor has a balance due, you will now see the following notification:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/21afe6f0-1557-49d1-bb79-81ab85c265b7.png" style="width:38.42em;height:26.00em;"/></p>
+<p class="mce-root"/>
+<p>If you click on the <span class="packt_screen">Check balance due</span> action inside the notification, the <kbd>Vendor Card</kbd> page with the selected vendor record is opened and the user can act accordingly.</p>
+<p>Notifications are extremely important to use when you create extensions for Dynamics 365 Business Central because they will permit you to give a better experience to your users.</p>
+<p>In the next section, we'll see how to use asynchronous programming inside Dynamics 365 Business Central.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Understanding page background tasks</h1>
+                </header>
+            
+            <article>
+                
+<p>Dynamics 365 Business Central version 15 introduces a new feature to handle asynchronous programming called <strong>page background tasks</strong>. </p>
+<p><strong>Page background tasks</strong> permit you to define a read-only and long-running process <span>on a page </span><span>that can be executed</span> <span>asynchronously </span><span>in a background thread (isolated from the parent session). You can start the task and continue working on the page without waiting for the task to complete. The following diagram (provided by Microsoft) shows the flow of a background task:</span></p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/4d170a66-b44b-4fad-bd3c-236a9668ee30.png"/></p>
+<p class="mce-root"/>
+<p>A page background task has the following properties:</p>
+<ul>
+<li>It's a read-only session (it cannot write or lock the database).</li>
+<li>It can be canceled and it has a default and maximum timeout.</li>
+<li>Its lifetime is controlled by the current record (it is canceled when the current record is changed, the page is closed, or the session ends).</li>
+<li>Completion triggers are invoked on the page session (such as updating page records and refreshing the UI).</li>
+<li>It can be queued up.</li>
+<li><span>The parameters passed to and returned from page background tasks are in the form of a <kbd>Dictionary&lt;string,string&gt;</kbd> object.</span></li>
+<li><span>The callback triggers cannot execute operations on the UI, except notifications and control updates.</span></li>
+<li><span>There is a limit on the number of background tasks per session (if the limit is reached, the tasks are queued).</span></li>
+</ul>
+<p>To create a page background task, the basic steps are as follows:</p>
+<ul>
+<li>Create a codeunit that contains the business logic to execute in the background.</li>
+<li>On the page where the task must be started, do the following:
+<ul>
+<li>Add code that creates the background task (<kbd>EnqueueBackgroundTask</kbd>).</li>
+<li>Handle the task completion results by using the <kbd>OnPageBackgroundTaskCompleted</kbd> trigger (this is where you can update the page UI).</li>
+<li>You can also use the <kbd>OnPageBackgroundTaskError</kbd> trigger to handle possible task errors.</li>
+</ul>
+</li>
+</ul>
+<p>Here is an example of how to implement the preceding logic. In the Customer Card, we want to execute a background task that calculates some sales statistics values for the selected customer without blocking the UI (in a more complex scenario, imagine retrieving this data from an external service).</p>
+<p class="mce-root"/>
+<p class="mce-root">Our calling page (<kbd>Customer Card</kbd>) passes a <kbd>Dictionary&lt;string,string&gt;</kbd> object (a key-value pair) to the background task with the key set to <kbd>CustomerNo</kbd> and the value set to the <kbd>No.</kbd> field of our selected <span class="packt_screen">Customer</span> record. The task codeunit retrieves the <kbd>CustomerNo</kbd> value, calculates the total sales amount for this customer, the number of items sold, and the number of items shipped and returns a <kbd>Dictionary&lt;string&gt;&lt;string&gt;</kbd> <span>object with the key set to </span><kbd>TotalSales</kbd> <span>and a value that is the calculated sales amount.</span></p>
+<p>The task codeunit is defined as follows:</p>
+<div>
+<div>
+<pre><span>codeunit</span><span> </span><span>50105</span><span> TaskCodeunit<br/></span><span>{<br/></span><span>    </span><span>trigger</span><span> OnRun</span><span>()<br/></span><span>    </span><span>var<br/></span><span>        Result: </span><span>Dictionary</span><span> </span><span>of</span><span> [</span><span>Text</span><span>, </span><span>Text</span><span>];<br/></span><span>        CustomerNo: </span><span>Code</span><span>[</span><span>20</span><span>];<br/></span><span>        CustomerSalesValue: </span><span>Text</span><span>;<br/></span><span>        NoOfSalesValue: </span><span>Text</span><span>;<br/></span><span>        NoOfItemsShippedValue: </span><span>Text</span><span>;<br/></span><span>    </span><span>begin<br/></span><span>        CustomerNo</span><span> := Page.</span><span>GetBackgroundParameters</span><span>().</span><span>Get</span><span>(</span><span>'CustomerNo'</span><span>)</span><span>;<br/></span><span>        </span><span>if</span><span> CustomerNo = </span><span>''</span><span> </span><span>then<br/></span><span>            Error</span><span>(</span><span>'Invalid parameter CustomerNo'</span><span>)</span><span>;<br/></span><span>        </span><span>if</span><span> CustomerNo &lt;&gt; </span><span>''</span><span> </span><span>then</span><span> </span><span>begin<br/></span><span>            CustomerSalesValue</span><span> := </span><span>Format</span><span>(</span><span>GetCustomerSalesAmount</span><span>(</span><span>CustomerNo</span><span>))</span><span>;<br/></span><span>            NoOfSalesValue</span><span> := </span><span>Format</span><span>(</span><span>GetNoOfItemsSales</span><span>(</span><span>CustomerNo</span><span>))</span><span>;<br/></span><span>            NoOfItemsShippedValue</span><span> := </span><span>Format</span><span>(</span><span>GetNoOfItemsShipped</span><span>(</span><span>CustomerNo</span><span>))</span><span>;<br/></span><span>            </span><span>//sleep for demo purposes<br/></span><span>            Sleep</span><span>((</span><span>Random</span><span>(</span><span>5</span><span>)) </span><span>* </span><span>1000</span><span>)</span><span>;<br/></span><span>        </span><span>end</span><span>;<br/></span><span>        Result</span><span>.</span><span>Add</span><span>(</span><span>'TotalSales'</span><span>, CustomerSalesValue</span><span>)</span><span>;<br/></span><span>        Result</span><span>.</span><span>Add</span><span>(</span><span>'NoOfSales'</span><span>, NoOfSalesValue</span><span>)</span><span>;<br/></span><span>        Result</span><span>.</span><span>Add</span><span>(</span><span>'NoOfItemsShipped'</span><span>, NoOfItemsShippedValue</span><span>)</span><span>;<br/></span><span>        </span><span>Page.</span><span>SetBackgroundTaskResult</span><span>(</span><span>Result</span><span>)</span><span>;<br/></span><span>    </span><span>end</span><span>;<br/><br/></span><span>    </span><span>local</span><span> </span><span>procedure</span><span> GetCustomerSalesAmount</span><span>(</span><span>CustomerNo: </span><span>Code</span><span>[</span><span>20</span><span>]</span><span>)</span><span>: </span><span>Decimal<br/></span><span>    </span><span>var<br/></span><span>        SalesLine: </span><span>Record</span><span> "Sales Line";<br/></span><span>        amount: </span><span>Decimal</span><span>;<br/></span><span>    </span><span>begin<br/></span><span>        SalesLine</span><span>.</span><span>SetRange</span><span>(</span><span>"Document Type", SalesLine</span><span>.</span><span>"Document Type"::</span><span>Order)</span><span>;<br/></span><span>        SalesLine</span><span>.</span><span>SetRange</span><span>(</span><span>"Sell-to Customer No.", CustomerNo</span><span>)</span><span>;<br/></span><span>        </span><span>if</span><span> SalesLine</span><span>.</span><span>FindSet</span><span>() then<br/></span><span>            </span><span>repeat<br/></span><span>                amount</span><span> += </span><span>SalesLine</span><span>.</span><span>"Line Amount";<br/></span><span>            </span><span>until</span><span> SalesLine</span><span>.</span><span>Next</span><span>() </span><span>= </span><span>0</span><span>;<br/></span><span>        </span><span>exit(</span><span>amount</span><span>)</span><span>;<br/></span><span>    </span><span>end</span><span>;<br/><br/></span><span>    </span><span>local</span><span> </span><span>procedure</span><span> GetNoOfItemsSales</span><span>(</span><span>CustomerNo: </span><span>Code</span><span>[</span><span>20</span><span>]</span><span>)</span><span>: </span><span>Decimal<br/></span><span>    </span><span>var<br/></span><span>        SalesLine: </span><span>Record</span><span> "Sales Line";<br/></span><span>        total: </span><span>Decimal</span><span>;<br/></span><span>    </span><span>begin<br/></span><span>        SalesLine</span><span>.</span><span>SetRange</span><span>(</span><span>"Document Type", SalesLine</span><span>.</span><span>"Document Type"::</span><span>Order)</span><span>;<br/></span><span>        SalesLine</span><span>.</span><span>SetRange</span><span>(</span><span>"Sell-to Customer No.", CustomerNo</span><span>)</span><span>;<br/></span><span>        SalesLine</span><span>.</span><span>SetRange</span><span>(Type</span><span>, SalesLine</span><span>.Type</span><span>::Item</span><span>)</span><span>;<br/></span><span>        </span><span>if</span><span> SalesLine</span><span>.</span><span>FindSet</span><span>() then<br/></span><span>            </span><span>repeat<br/></span><span>                total</span><span> += </span><span>SalesLine</span><span>.</span><span>Quantity;<br/></span><span>            </span><span>until</span><span> SalesLine</span><span>.</span><span>Next</span><span>() </span><span>= </span><span>0</span><span>;<br/></span><span>        </span><span>exit(</span><span>total</span><span>)</span><span>;<br/></span><span>    </span><span>end</span><span>;<br/><br/></span><span>    </span><span>local</span><span> </span><span>procedure</span><span> GetNoOfItemsShipped</span><span>(</span><span>CustomerNo: </span><span>Code</span><span>[</span><span>20</span><span>]</span><span>)</span><span>: </span><span>Decimal<br/></span><span>    </span><span>var<br/></span><span>        SalesShiptmentLine: </span><span>Record</span><span> "Sales Shipment Line";<br/></span><span>        total: </span><span>Decimal</span><span>;<br/></span><span>    </span><span>begin<br/></span><span>        SalesShiptmentLine</span><span>.</span><span>SetRange</span><span>(</span><span>"Sell-to Customer No.", CustomerNo</span><span>)</span><span>;<br/></span><span>        SalesShiptmentLine</span><span>.</span><span>SetRange</span><span>(Type</span><span>, SalesShiptmentLine</span><span>.Type</span><span>::Item</span><span>)</span><span>;<br/></span><span>        </span><span>if</span><span> SalesShiptmentLine</span><span>.</span><span>FindSet</span><span>() then<br/></span><span>        </span><span>repeat<br/></span><span>            total</span><span> += </span><span>SalesShiptmentLine</span><span>.</span><span>Quantity<br/></span><span>        </span><span>until</span><span> SalesShiptmentLine</span><span>.</span><span>Next</span><span>() </span><span>= </span><span>0</span><span>;<br/></span><span>        </span><span>exit(</span><span>total</span><span>)</span><span>;<br/></span><span>    </span><span>end</span><span>;<br/></span><span>}</span></pre></div>
+</div>
+<p>Then, we create a <kbd>pageextension</kbd> object to extend the Customer Card to add the new <kbd>SalesAmount</kbd>, <kbd>NoOfSales</kbd>, and <kbd>NoOfItemsShipped</kbd> fields (calculated by the background task) and to add code to start the task and read the results. The <kbd>pageextension</kbd> object is defined as follows:</p>
+<div>
+<pre><span>pageextension</span><span> </span><span>50105</span><span> CustomerCardExt </span><span>extends</span><span> "Customer Card"<br/></span><span>{<br/></span><span>    </span><span>layout<br/></span><span>    {<br/></span><span>        </span><span>addlast(</span><span>General</span><span>)<br/></span><span>        {<br/></span><span>            </span><span>field(</span><span>SalesAmount; SalesAmount</span><span>)<br/></span><span>            {<br/></span><span>                ApplicationArea = All;<br/></span><span>                Caption = </span><span>'Sales Amount'</span><span>;<br/></span><span>                Editable = false;<br/></span><span>            }<br/></span><span>            </span><span>field(</span><span>NoOfSales; NoOfSales</span><span>)<br/></span><span>            {<br/></span><span>                ApplicationArea = All;<br/></span><span>                Caption = </span><span>'No. of Sales'</span><span>;<br/></span><span>                Editable = false;<br/></span><span>            }<br/></span><span>            </span><span>field(</span><span>NoOfItemsShipped; NoOfItemsShipped</span><span>)<br/></span><span>            {<br/></span><span>                ApplicationArea = All;<br/></span><span>                Caption = </span><span>'Total of Items Shipped'</span><span>;<br/></span><span>                Editable = false;<br/></span><span>            }<br/></span><span>        }<br/></span><span>    }<br/></span><span>    </span><span>var<br/></span><span>        </span><span>// Global variable used for the TaskID<br/></span><span>        TaskSalesId: </span><span>Integer</span><span>;<br/></span><span>        </span><span>// Variables for the sales amount field (calculated from the background task) <br/></span><span>        SalesAmount: </span><span>Decimal</span><span>;<br/></span><span>        NoOfSales: </span><span>Decimal</span><span>;<br/></span><span>        NoOfItemsShipped: </span><span>Decimal</span><span>;<br/><br/></span><span>    </span><span>trigger</span><span> OnAfterGetCurrRecord</span><span>()<br/></span><span>    </span><span>var<br/></span><span>        TaskParameters: </span><span>Dictionary</span><span> </span><span>of</span><span> [</span><span>Text</span><span>, </span><span>Text</span><span>];<br/></span><span>    </span><span>begin<br/></span><span>        TaskParameters</span><span>.</span><span>Add</span><span>(</span><span>'CustomerNo'</span><span>, Rec</span><span>.</span><span>"No."</span><span>)</span><span>;<br/></span><span>        CurrPage</span><span>.</span><span>EnqueueBackgroundTask</span><span>(</span><span>TaskSalesId, </span><span>50105</span><span>, TaskParameters, </span><span>20000</span><span>, PageBackgroundTaskErrorLevel::Warning</span><span>)</span><span>;<br/></span><span>    </span><span>end</span><span>;<br/><br/></span><span>    </span><span>trigger</span><span> OnPageBackgroundTaskCompleted</span><span>(</span><span>TaskId: </span><span>Integer</span><span>; Results: </span><span>Dictionary</span><span> </span><span>of</span><span> [</span><span>Text</span><span>, </span><span>Text</span><span>]</span><span>)<br/></span><span>    </span><span>var<br/></span><span>        PBTNotification: </span><span>Notification</span><span>;<br/></span><span>    </span><span>begin<br/></span><span>        </span><span>if (</span><span>TaskId = TaskSalesId</span><span>) then</span><span> </span><span>begin<br/></span><span>            Evaluate</span><span>(</span><span>SalesAmount, Results</span><span>.</span><span>Get</span><span>(</span><span>'TotalSales'</span><span>))</span><span>;<br/></span><span>            Evaluate</span><span>(</span><span>NoOfSales, Results</span><span>.</span><span>Get</span><span>(</span><span>'NoOfSales'</span><span>))</span><span>;<br/></span><span>            Evaluate</span><span>(</span><span>NoOfItemsShipped, Results</span><span>.</span><span>Get</span><span>(</span><span>'NoOfItemsShipped'</span><span>))</span><span>;<br/></span><span>            PBTNotification</span><span>.</span><span>Message</span><span>(</span><span>'Sales Statistics updated.'</span><span>)</span><span>;<br/></span><span>            PBTNotification</span><span>.</span><span>Send</span><span>()</span><span>;<br/></span><span>        </span><span>end</span><span>;<br/></span><span>    </span><span>end</span><span>;<br/><br/></span><span>    </span><span>trigger</span><span> OnPageBackgroundTaskError</span><span>(</span><span>TaskId: </span><span>Integer</span><span>; ErrorCode: </span><span>Text</span><span>; ErrorText: </span><span>Text</span><span>; ErrorCallStack: </span><span>Text</span><span>; </span><span>var</span><span> IsHandled: </span><span>Boolean)<br/></span><span>    </span><span>var<br/></span><span>        PBTErrorNotification: </span><span>Notification</span><span>;<br/></span><span>    </span><span>begin<br/></span><span>        </span><span>if (</span><span>ErrorText = </span><span>'Invalid parameter CustomerNo'</span><span>) then</span><span> </span><span>begin<br/></span><span>            IsHandled</span><span> := </span><span>true;<br/></span><span>            PBTErrorNotification</span><span>.</span><span>Message</span><span>(</span><span>'Something went wrong. Invalid parameter CustomerNo.'</span><span>)</span><span>;<br/></span><span>            PBTErrorNotification</span><span>.</span><span>Send</span><span>()</span><span>;<br/></span><span>        </span><span>end<br/></span><span>        </span><span>else<br/></span><span>            </span><span>if (</span><span>ErrorText = </span><span>'Child Session task was terminated because of a timeout.'</span><span>) then</span><span> </span><span>begin<br/></span><span>                IsHandled</span><span> := </span><span>true;<br/></span><span>               PBTErrorNotification</span><span>.</span><span>Message</span><span>(</span><span>'It took to long to get results. Try again.'</span><span>)</span><span>;<br/></span><span>               PBTErrorNotification</span><span>.</span><span>Send</span><span>()</span><span>;<br/></span><span>            </span><span>end<br/></span><span>    </span><span>end</span><span>;<br/></span><span>}</span></pre></div>
+<p>In the <kbd>OnAfterGetCurrRecord</kbd> trigger, we add the parameters required to start our background task and call the <kbd>EnqueueBackgroundTask</kbd> <span>method. </span>The <kbd>EnqueueBackgroundTask</kbd> method<em> </em><span>creates and queues a background task that runs the specified codeunit (without a UI) in a read-only child session of the page session. If the task completes successfully, the </span><kbd>OnPageBackgroundTaskCompleted</kbd> <span>trigger is invoked. If an error occurs, the </span><kbd>OnPageBackgroundTaskError</kbd> <span>trigger is invoked. If the page is closed before the task completes, or the page record ID on the task changed, the task is canceled.</span></p>
+<p class="mce-root"/>
+<p>In the <kbd>OnPageBackgroundTaskCompleted</kbd> <span>trigger, we retrieve the</span> <kbd>TotalSales</kbd> <span>parameter from the dictionary and the UI (the relative field on the page) is updated accordingly.</span></p>
+<p>We have seen how to use the new asynchronous programming features inside Dynamics 365 Business Central pages. This is an important feature that improves general application performance in many scenarios.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Summary</h1>
+                </header>
+            
+            <article>
+                
+<p>In this chapter, we covered a lot of advanced topics and saw some tricks for implementing particular tasks with the AL language extension, especially h<span>ow to handle files and pictures,</span><span> using XMLports,</span> <span>creating and extending Role Centers and headlines,</span> <span>handling XML and JSON serializations,</span> <span>consuming web services and APIs via AL code, and publishing a web service from an extension. Apart from this, we can</span><span> use Isolated Storage to store sensitive data in an extension and we learned h</span><span>ow to create control add-ins, how to handle notifications, and how to use asynchronous programming features (page background tasks) in your extensions.</span></p>
+<p>After reading this chapter, you're now able to create advanced customizations to improve general user experience and to handle different business tasks.</p>
+<p>In the next chapter, we'll see how to customize, develop, and publish reports for Dynamics 365 Business Central.</p>
+
+
+            </article>
+
+            
+        </section>
+    </body></html>

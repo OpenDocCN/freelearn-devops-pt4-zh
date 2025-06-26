@@ -1,0 +1,652 @@
+<html><head></head><body>
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Dynamics 365 Business Central APIs</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">In the previous chapter, we saw how we can use DevOps techniques with Dynamics 365 Business Central projects, and we focused on aspects such as source control management and CI/CD pipelines.</p>
+<p>In this chapter, we'll see how to integrate Dynamics 365 Business Central with external applications by using the RESTful APIs exposed by the platform, and the focus will be on the following topics:</p>
+<ul>
+<li>Comparing OData and RESTful APIs</li>
+<li>Using the Dynamics 365 Business Central standard</li>
+<li>Creating custom APIs with Dynamics 365 Business Central for new and existing entities</li>
+<li>Creating applications that use Dynamics 365 Business Central APIs</li>
+<li>Using bound actions</li>
+<li><span>Using</span> <span>Dynamics 365 Business Central</span> webhooks </li>
+<li><span>Working with Dynamics 365 Business Central APIs in Microsoft Graph automation APIs</span></li>
+</ul>
+<p>By the end of this chapter, you will be able to create RESTful APIs for Dynamics 365 Business Central and use them to integrate with external applications.</p>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Comparing OData and APIs in Dynamics 365 Business Central</h1>
+                </header>
+            
+            <article>
+                
+<p>Every client that can make HTTP calls can consume RESTful APIs. Using the GET, POST, PATCH, and DELETE verbs of the HTTP protocol, entities can be <strong>Created, Read, Updated, and Deleted</strong> (<strong>CRUD</strong>). To make integrations with Dynamics 365 Business Central, OData and RESTful APIs are the recommended tools to work with.</p>
+<p><strong>Open Data Protocol</strong> (<strong>OData</strong>) is a web protocol that permits you to perform <span>CRUD operations </span><span>on tabular data with HTTP calls by using URIs for resource identification. Exposing an object as OData in Dynamics 365 Business Central is quite simple: open the</span> <span class="packt_screen">WEB SERVICES</span> <span>page, insert a new record with the</span> <span class="packt_screen">Page </span><span>type</span><span>, select the page you want to expose, and click on</span> <em><span class="packt_screen">Publish</span></em><span>.</span></p>
+<p>Dynamics 365 Business Central automatically assigns to the published entity an OData and OData V4 URL, and then you can use this published entity (our page) as a web service by performing HTTP REST calls (GET, POST, PUT, DELETE, and PATCH) to the provided endpoints (as you can see in the following screenshot):</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/c98816aa-87ea-4ec0-a24b-4abc52287ad5.png"/></p>
+<p>When calling an OData endpoint, you can apply filters, use grouping, use Flow Filters, and call business logic by using bound actions (we'll discuss them later in this chapter, in the <em>Using bound actions</em> section).</p>
+<p class="mce-root"/>
+<p>APIs in Dynamics 365 Business Central use the same OData stack under the hood, but they have three main advantages when we talk about integration:</p>
+<ul>
+<li>They have <strong>versioning</strong> (one of the most important things when doing service integration, because you will need a stable contract).</li>
+<li>They are <strong>webhook supported</strong> (you can publish your API page and then call <kbd>/api/microsoft/runtime/beta/webhookSupportedResources</kbd> to verify that the entity is supported by webhooks).</li>
+<li>They have <strong>namespaces </strong>so you can isolate and group your APIs according to their scope or functional area: <kbd>{{shortUrl}}/api/APIPublisher/APIGroup/v1.0/mycustomers('01121212')</kbd>.</li>
+</ul>
+<p>The fixed contract is the main reason that Microsoft prevents the opportunity to extend standard API pages. If you try to extend a standard API page (for example, the <kbd>Customer Entity</kbd> page), Visual Studio Code throws an error:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/28547ffb-41b7-41f4-aebb-843e11dc5951.png"/></p>
+<p>For more information on how to use RESTful APIs in general, I recommend the following link: <a href="https://www.odata.org/getting-started/basic-tutorial/">https://www.odata.org/getting-started/basic-tutorial/</a>.</p>
+<p>Now that we have explained the main differences between OData web services and RESTful APIs, in the next sections, we'll see how to use the Dynamics 365 Business Central APIs in your applications.</p>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Using Dynamics 365 Business Central standard APIs</h1>
+                </header>
+            
+            <article>
+                
+<p><span>The Dynamics 365 Business Central platform exposes some standard entities as RESTful APIs. The entities exposed are summarized in the following table:</span></p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/7bf5d66c-9ea0-40de-a991-ef4d309a4521.png"/></p>
+<p class="mce-root"/>
+<p>Dynamics 365 Business Central API endpoints have the following format:</p>
+<table style="border-collapse: collapse;width: 100%" border="1">
+<tbody>
+<tr>
+<td>
+<p><strong>Endpoint URL section</strong></p>
+</td>
+<td>
+<p><strong>Description</strong></p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>https://api.businesscentral.dynamics.com</kbd></p>
+</td>
+<td>
+<p>Dynamics 365 Business Central base URL (the same for standard and custom APIs)</p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>/v2.0</kbd></p>
+</td>
+<td>
+<p>API version</p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>/your tenant domain</kbd></p>
+</td>
+<td>
+<p>Domain name or ID of the Dynamics 365 Business Central tenant</p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>/environment name</kbd></p>
+</td>
+<td>
+<p>Name of the environment (production, sandbox, and so on). This can be retrieved from the Dynamics 365 Business Central Admin portal</p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>/api</kbd></p>
+</td>
+<td>
+<p>Fixed value</p>
+</td>
+</tr>
+<tr>
+<td>
+<p><kbd>/beta </kbd></p>
+</td>
+<td>
+<p>Indicates the version of the API in use</p>
+</td>
+</tr>
+</tbody>
+</table>
+<p> </p>
+<p>At the time of writing, Dynamics 365 Business Central APIs are on endpoint version 2.0, and API <kbd>version_number = 1.0</kbd>.</p>
+<p>The tenant ID is needed when using basic authentication. This is how you do it:</p>
+<pre>GET https://api.businesscentral.dynamics.com/v2.0/{tenant Id}/{environment name}/api/v1.0/$metadata</pre>
+<p>If you're using OAuth authentication, the tenant ID is not needed:</p>
+<pre>GET https://api.businesscentral.dynamics.com/v2.0/{environment name}/api/v1.0/$metadata</pre>
+<p>Version 1.0 of the Dynamics 365 Business Central APIs <span>only </span>supports production and primary sandbox environments. If you need to use the APIs in a sandbox environment that's different than the default one (which is called <kbd>Sandbox</kbd>) or in a different production environment, you need to use version 2.0 of the APIs, as shown in the following endpoint:</p>
+<pre>https://api.businesscentral.dynamics.com/v2.0/{tenant Id}/OtherSandboxName/api/</pre>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p>When using APIs, the first thing you have to do is use a specific company ID. To retrieve the list of available companies on your Dynamics 365 Business Central tenant, you need to send an <span>HTTP </span>GET request to the <kbd>/companies</kbd> API endpoint. An example of this API call is as follows:</p>
+<pre>GET https://api.businesscentral.dynamics.com/v2.0/&lt;tenantID&gt;/production/api/beta/companies<br/>Content-Type: application/x-www-form-urlencoded<br/>Authorization: Basic sdemiliani &lt;YourWebServiceAccessKey&gt;</pre>
+<p>This is the response we receive:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/45abce03-adfd-4ed1-a570-4907b6cfb9fd.png" style="width:38.42em;height:37.75em;"/></p>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p>If we want to retrieve the list of <kbd>Customer</kbd> records for a specific company (for example, <kbd>Cronus IT</kbd>), we need to send an HTTP GET request to the following API endpoint:</p>
+<pre>GET https://api.businesscentral.dynamics.com/v2.0/&lt;tenantID&gt;/production/api/beta/companies(80d28ea6-02a3-4ec3-98f7-936c2000c7b3)/customers<br/>Content-Type: application/x-www-form-urlencoded<br/>Authorization: Basic sdemiliani &lt;YourWebServiceAccessKey&gt;</pre>
+<p>This is the response we receive from it:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/ed085ecb-7366-49a5-82a0-f1cc76497d3d.png" style="width:46.25em;height:42.17em;"/></p>
+<p class="mce-root"/>
+<p>You can also apply filters when calling the APIs. For example, here, we retrieve all <kbd>Item</kbd> records where <kbd>unitPrice</kbd> is greater than 100:</p>
+<pre>GET https://api.businesscentral.dynamics.com/v2.0/&lt;tenantID&gt;/production/api/beta/companies(80d28ea6-02a3-4ec3-98f7-936c2000c7b3)/items?$filter=unitPrice%20gt%20100<br/>Content-Type: application/x-www-form-urlencoded<br/>Authorization: Basic sdemiliani &lt;YourWebServiceAccessKey&gt;</pre>
+<p>This is the response:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/7acfdb8a-14f2-41f9-a0c8-e2854ed360e0.png" style="width:45.58em;height:42.33em;"/></p>
+<p>Dynamics 365 Business Central standard APIs also support features such as <strong>expand</strong>, in which, in a single call, you can expand the relationships between entities, and retrieve the main entity along with the related entities. For example, to retrieve a sales invoice and all of its sales invoice line records in a single HTTP call, you can perform an HTTP GET call to the following API endpoint:</p>
+<pre>GET https://api.businesscentral.dynamics.com/v2.0/&lt;tenantID&gt;/production/api/beta/companies(80d28ea6-02a3-4ec3-98f7-936c2000c7b3)/salesInvoices(034a122b-962b-4007-b3d1-00718c2f21ff)?$expand=salesInvoiceLines<br/>Content-Type: application/x-www-form-urlencoded<br/>Authorization: Basic sdemiliani &lt;YourWebServiceAccessKey&gt;</pre>
+<p>As a result, you have a single JSON response object with the sales invoice header and its related sales invoice line detail. Here is the header object:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/243dead6-3fab-4545-96da-cc2af0bb7d3b.png" style="width:39.58em;height:36.58em;"/></p>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p>Also, here is the related line's details:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/fce0475a-103f-454d-95dd-389552a2c1cc.png" style="width:44.83em;height:45.00em;"/></p>
+<p>You can now parse this JSON object and use its data as per your needs.</p>
+<p>In the next section, we will see how to create a custom API page for a new entity added to Dynamics 365 Business Central and how to create a new API page for an existing entity.</p>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Creating a custom API in Dynamics 365 Business Central</h1>
+                </header>
+            
+            <article>
+                
+<p>With Dynamics 365 Business Central extensions, you can create custom entities and you can expose a custom entity as a RESTful API.</p>
+<p>To create a new API in Dynamics 365 Business Central, you need to define a new <kbd>Page</kbd> object with <kbd>PageType = API</kbd>. To do this, you can use the <kbd>tpage</kbd> snippet and then select <span class="packt_screen">Page of type API</span>, as follows: </p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/fc9eed41-f330-4ba8-8278-91dc7b5074e8.png"/></p>
+<p>When creating API pages, remember the following:</p>
+<ul>
+<li>Fields must have a name in the REST-API-compliant format (only alphanumeric values, and no spaces or special characters (<kbd>camelCase</kbd>)).</li>
+<li>You should use the ID of the entity (<kbd>SystemId</kbd>).</li>
+<li>When you insert modify, or delete an entity through APIs, triggers on the underlying table are not executed. You need to call the table's trigger by handling the corresponding triggers at the page level.</li>
+<li>In the <kbd>OnModify</kbd> trigger of the API page, you need to handle the possibility of renaming a record (an API call via a record ID can issue a primary key rename).</li>
+</ul>
+<p class="mce-root"/>
+<p>Here, we'll see two main scenarios:</p>
+<ul>
+<li>How to implement an API for a custom entity (assuming that there's an extension that adds the <kbd>Car</kbd> entity to Dynamics 365 Business Central for managing car details inside the ERP)</li>
+<li>How to implement a new API for an existing entity</li>
+</ul>
+<p>We will look into each of these scenarios in the following sections.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Implementing a new API for a custom entity</h1>
+                </header>
+            
+            <article>
+                
+<p>In this example, we will be creating a new entity in Dynamics 365 Business Central to handle the details of <kbd>Cars</kbd>, and this entity will also be exposed as an API for external applications:</p>
+<ol>
+<li>To do this, we first create a new <kbd>Car</kbd> table, as follows:</li>
+</ol>
+<pre style="padding-left: 60px">table 50111 Car<br/>{<br/>    DataClassification = CustomerContent;<br/>    Caption = 'Car';<br/>    LookupPageId = "Car List";<br/>    DrillDownPageId = "Car List";<br/>    fields<br/>    {<br/>        field(1; ModelNo; Code[20])<br/>        {<br/>            Caption = 'Model No.';<br/>            DataClassification = CustomerContent;<br/>        }<br/>        field(2; Description; Text[100])<br/>        {<br/>            Caption = 'Description';<br/>            DataClassification = CustomerContent;<br/>        }<br/>        field(3; Brand; Code[20])<br/>        {<br/>            Caption = 'Brand';<br/>            DataClassification = CustomerContent;<br/>        }<br/>        field(4; Power; Integer)<br/>        {<br/>            Caption = 'Power (CV)';<br/>            DataClassification = CustomerContent;<br/>        }<br/>        field(5; "Engine Type"; Enum EngineType)<br/>        {<br/>            Caption = 'Engine Type';<br/>            DataClassification = CustomerContent;<br/>        }<br/>        field(10; ID; Guid)<br/>        {<br/>            Caption = 'ID';<br/>            DataClassification = CustomerContent;<br/>        }<br/>    }<br/><br/>    keys<br/>    {<br/>        key(PK; ModelNo)<br/>        {<br/>            Clustered = true;<br/>        }<br/>    }<br/><br/>    trigger OnInsert()<br/>    begin<br/>        ID := CreateGuid();<br/>    end;<br/>}</pre>
+<p style="padding-left: 60px">The <kbd>Car</kbd> table has the required fields, and it has an <kbd>ID</kbd> field defined as <kbd>Guid</kbd> that is automatically assigned in the <kbd>OnInsert</kbd> trigger.</p>
+<ol start="2">
+<li>The <kbd>Engine Type</kbd> field is of the <kbd>Enum EngineType</kbd> <span>type, </span>and the <kbd>enum</kbd> is defined as follows:</li>
+</ol>
+<pre style="padding-left: 60px">enum 50111 EngineType<br/>{<br/>    Extensible = true;<br/>    value(0; Petrol)<br/>    {<br/>        Caption = 'Petrol';<br/>    }<br/>    value(1; Diesel)<br/>    {<br/>        Caption = 'Diesel';<br/>    }<br/>    value(2; Electric)<br/>    {<br/>        Caption = 'Electric';<br/>    }<br/>    value(3; Hybrid)<br/>    {<br/>        Caption = 'Hybrid';<br/>    }<br/>}</pre>
+<ol start="3">
+<li>We also create a <kbd>Car List</kbd> page (a standard list page) for managing <kbd>Car</kbd> data in Dynamics 365 Business Central. The <kbd>Car List</kbd> page is defined as follows:</li>
+</ol>
+<pre style="padding-left: 60px">page 50112 "Car List"<br/>{   <br/>    PageType = List;<br/>    SourceTable = Car;<br/>    Caption = 'Car List';<br/>    ApplicationArea = All;<br/>    UsageCategory = Lists;<br/>   <br/>    layout<br/>    {<br/>        area(content)<br/>        {<br/>            repeater(General)<br/>            {<br/>                field(ModelNo;ModelNo)<br/>                {<br/>                    ApplicationArea = All;<br/>                }<br/>                field(Description;Description)<br/>                {<br/>                    ApplicationArea = All;<br/>                }<br/>                field(Brand;Brand)<br/>                {<br/>                    ApplicationArea = All;<br/>                }<br/>                field("Engine Type";"Engine Type")<br/>                {<br/>                    ApplicationArea = All;<br/>                }<br/>                field(Power;Power)<br/>                {<br/>                    ApplicationArea = All;<br/>                }<br/>            }<br/>        }<br/>    }   <br/>}</pre>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mceNonEditable"/>
+<p class="mceNonEditable"/>
+<ol start="4">
+<li>Now, we need to create the API page (by using the <kbd>tpage</kbd> snippet and then selecting the <span class="packt_screen">Page of type API</span>). The <kbd>CarAPI</kbd> page is defined as follows:</li>
+</ol>
+<pre style="padding-left: 60px">page 50111 CarAPI<br/>{<br/>    PageType = API;<br/>    Caption = 'CarAPI';<br/>    APIPublisher = 'sd';<br/>    APIGroup = 'custom';<br/>    APIVersion = 'v1.0';<br/>    EntityName = 'car';<br/>    EntitySetName = 'cars';<br/>    SourceTable = Car;<br/>    DelayedInsert = true;<br/>    ODataKeyFields = ID;<br/><br/>    layout<br/>    {<br/>        area(Content)<br/>        {<br/>            repeater(GroupName)<br/>            {<br/>                field(id; ID)<br/>                {<br/>                    Caption = 'id', Locked = true;<br/>                }<br/>                field(modelno; ModelNo)<br/>                {<br/>                    Caption = 'modelNo', Locked = true;<br/>                }<br/>                field(description; Description)<br/>                {<br/>                    Caption = 'description', Locked = true;<br/>                }<br/>                field(brand; Brand)<br/>                {<br/>                    Caption = 'brand', Locked = true;<br/>                }<br/>                field(engineType; "Engine Type")<br/>                {<br/>                    Caption = 'engineType', Locked = true;<br/>                }<br/>                field(power; Power)<br/>                {<br/>                    Caption = 'power', Locked = true;<br/>                }<br/>            }<br/>        }<br/>    }<br/><br/>    trigger OnInsertRecord(BelowxRec: Boolean): Boolean<br/>    begin<br/>        Insert(true);<br/>        Modify(true);<br/>        exit(false);<br/>    end;<br/><br/>    trigger OnModifyRecord(): Boolean<br/>    var<br/>        Car: Record Car;<br/>    begin<br/>        Car.SetRange(ID, ID);<br/>        Car.FindFirst();<br/>        if ModelNo &lt;&gt; Car.ModelNo then begin<br/>            Car.TransferFields(Rec, false);<br/>            Car.Rename(ModelNo);<br/>            TransferFields(Car);<br/>        end;<br/>    end;<br/><br/>    trigger OnDeleteRecord(): Boolean<br/>    begin<br/>        Delete(true);<br/>    end;<br/>}</pre>
+<p style="padding-left: 60px">This page exposes the fields that we want to have in our API by applying the naming rules according to the OData specifications.</p>
+<p style="padding-left: 60px">We then handle the <kbd>OnInsertRecord</kbd>, <kbd>OnModifyRecord</kbd>, and <kbd>OnDeleteRecord</kbd> page triggers to call the table's triggers and to handle renaming a record.</p>
+<ol start="5">
+<li>Now, press <em>F5</em> in Visual Studio Code and publish your extension. When it's published, search for <kbd>Car List</kbd> <span>and then insert some example</span> <kbd>Car</kbd> <span>records, such as the following:</span></li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/f9446d19-55fe-43da-9e9f-4852b6171b75.png"/></p>
+<p class="mce-root"/>
+<ol start="6">
+<li>Now, we can test our custom API. When published in a SaaS tenant, a custom API endpoint has the following format:</li>
+</ol>
+<div>
+<pre style="padding-left: 60px">{BaseURL}/<strong>v2.0</strong>/&lt;your tenant id&gt;/&lt;environment name&gt;/api/<strong>&lt;api publisher&gt;</strong>/<strong>&lt;api group&gt;</strong>/<strong>&lt;api version&gt;</strong></pre></div>
+<p style="padding-left: 60px">If you're testing it on a Docker-based sandbox (for example, on an Azure VM as I'm doing here), the API endpoint is like this:</p>
+<div>
+<pre style="padding-left: 60px">{BaseServerUrl:ODATA_Port}/{ServerInstance}/api//<strong>&lt;api publisher&gt;</strong>/<strong>&lt;api group&gt;</strong>/<strong>&lt;api version&gt;</strong></pre></div>
+<p style="padding-left: 60px">You can check the metadata for the published API with the following URL (here, <kbd>d365bcita0918vm</kbd> is the name of my Azure VM that's hosting the container):</p>
+<pre style="padding-left: 60px">https://d365bcita0918vm.westeurope.cloudapp.azure.com:7048/BC/api/sd/custom/v1.0/$metadata</pre>
+<p style="padding-left: 60px">The APIs are invoked per company. To have the list of companies on your database, you have to send a GET request to the following URL:</p>
+<pre style="padding-left: 60px">{baseUrl}/{D365BCInstance}/api/sd/custom/v1.0/companies</pre>
+<p style="padding-left: 60px">To have the list of cars for the selected company, you need to send a GET request to the following URL (by passing the company ID that was retrieved with the preceding call):</p>
+<pre>{baseUrl}/{D365BCInstance}/api/sd/custom/v1.0/companies({id})/cars</pre>
+<p style="padding-left: 60px">In our environment, the URL is as follows:</p>
+<pre style="padding-left: 60px">GET https://d365bcita0918vm.westeurope.cloudapp.azure.com:7048/BC/api/sd/custom/v1.0/companies(ecdc7cd0-ab75-4d40-8d0e-80d2471c4378)/cars</pre>
+<p class="mce-root"/>
+<p style="padding-left: 60px">This is the response that we get:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/65185f83-17be-4343-b409-7e877dd30d9f.png" style="width:55.33em;height:35.58em;"/></p>
+<p>As you can see, we have the JSON representation of the inserted records, and every field (JSON token) has the name that we assigned in our API definition.</p>
+<p>To insert a new <kbd>Car</kbd> record via our previously published custom <kbd>cars</kbd> API, you need to send a POST request to the following URL by passing the JSON record to create in the body:</p>
+<pre>{baseUrl}/{D365BCInstance}/api/sd/custom/v1.0/companies({id})/cars</pre>
+<p>This is the HTTP request we send:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/4d187f52-ab3c-4746-be53-37356fafb782.png"/></p>
+<p class="mce-root"/>
+<p>The response received is as follows:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/f222ec68-ee03-4ede-99e4-8085818b81a2.png"/></p>
+<p>We receive <kbd>HTTP/1.1 201 Created</kbd> and the JSON details of the <kbd>Car</kbd> record are added to Dynamics 365 Business Central.</p>
+<p>If you look at <kbd>Car List</kbd> in Dynamics 365 Business Central, you can see that the new record has been created:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/b90a5159-d150-49a2-b03b-35e1b46e8954.png"/></p>
+<p class="mce-root"/>
+<div class="packt_infobox">When sending a POST request, remember to correctly set the content type of the request to <kbd>application/json</kbd><em>.</em> Otherwise, you can receive a quite confusing error <span>in the response message, such as</span> <kbd>{"error":{"code":"BadRequest","message":"Cannot create an instance of an interface."}}</kbd>.</div>
+<p>To retrieve the details of a specific car record, just send a GET request to the following URL:</p>
+<pre>{baseUrl}/{D365BCInstance}/api/sd/custom/v1.0/companies({id})/cars({id})</pre>
+<p>This is done by passing the GUID of the car record to retrieve.</p>
+<p>In our example, if we want to retrieve the details of the Mercedes record, we have to send an HTTP GET request to the following URL:</p>
+<pre>https://d365bcita0918vm.westeurope.cloudapp.azure.com:7048/BC/api/sd/custom/v1.0/companies(ecdc7cd0-ab75-4d40-8d0e-80d2471c4378)/cars(0237f4af-3422-41b3-94aa-81196346460e)</pre>
+<p>This is the response we receive:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/c9094066-a3b3-4b6b-8f95-5bea016a5324.png"/></p>
+<p>As you can see, we have <span>retrieved </span><span>the JSON representation of the</span> <kbd>Car</kbd> <span>record.</span></p>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Implementing a new API for an existing entity</h1>
+                </header>
+            
+            <article>
+                
+<p>As we discussed in the <em>Comparing OData and APIs in Dynamics 365 Business Central</em> section, you cannot extend an existing standard Dynamics 365 Business Central API page. If you need to retrieve new fields for a standard Dynamics 365 Business Central entity, you need to create a new API page in your namespace.</p>
+<p>For example, here, I am creating a simple new API that retrieves a customer's details, which are not natively exposed in the standard <kbd>Customer</kbd> API. The API page is defined as follows:</p>
+<pre>page 50115 MyCustomerAPI<br/>{<br/>    PageType = API;<br/>    Caption = 'customer';<br/>    APIPublisher = 'SD';<br/>    APIVersion = 'v1.0';<br/>    APIGroup = 'customapi';<br/>    EntityName = 'customer';<br/>    EntitySetName = 'customers';<br/>    SourceTable = Customer;<br/>    DelayedInsert = true;<br/>    ODataKeyFields = SystemId;<br/>    //URL: https://api.businesscentral.dynamics.com/v2.0/TENANTID/sandbox/api/SD/customapi/v1.0/customers<br/><br/>    layout<br/>    {<br/>        area(Content)<br/>        {<br/>            repeater(GroupName)<br/>            {<br/>                field(no; "No.")<br/>                {<br/>                    Caption = 'no', Locked = true;<br/>                }<br/>                field(name; Name)<br/>                {<br/>                    Caption = 'name', Locked = true;<br/>                }<br/>                field(Id; SystemId)<br/>                {<br/>                    Caption = 'Id', Locked = true;<br/>                }<br/>                field(balanceDue; "Balance Due")<br/>                {<br/>                    Caption = 'balanceDue', Locked = true;<br/>                }<br/>                field(creditLimit; "Credit Limit (LCY)")<br/>                {<br/>                    Caption = 'creditLimit', Locked = true;<br/>                }<br/>                field(currencyCode; "Currency Code")<br/>                {<br/>                    Caption = 'currencyCode', Locked = true;<br/>                }<br/>                field(email; "E-Mail")<br/>                {<br/>                    Caption = 'email', Locked = true;<br/>                }<br/>                field(fiscalCode; "Fiscal Code")<br/>                {<br/>                    Caption = 'fiscalCode', Locked = true;<br/>                }<br/>                field(balance; "Balance (LCY)")<br/>                {<br/>                    Caption = 'balance', Locked = true;<br/>                }<br/>                field(countryRegionCode; "Country/Region Code")<br/>                {<br/>                    Caption = 'countryRegionCode', Locked = true;<br/>                }<br/>                field(netChange; "Net Change")<br/>                {<br/>                    Caption = 'netChange', Locked = true;<br/>                }<br/>                field(noOfOrders; "No. of Orders")<br/>                {<br/>                    Caption = 'noOfOrders', Locked = true;<br/>                }<br/>                field(noOfReturnOrders; "No. of Return Orders")<br/>                {<br/>                    Caption = 'noOfReturnOrders', Locked = true;<br/>                }<br/>                field(phoneNo; "Phone No.")<br/>                {<br/>                    Caption = 'phoneNo', Locked = true;<br/>                }<br/>                field(salesLCY; "Sales (LCY)")<br/>                {<br/>                    Caption = 'salesLCY', Locked = true;<br/>                }<br/>                field(shippedNotInvoiced; "Shipped Not Invoiced")<br/>                {<br/>                    Caption = 'shippedNotInvoiced', Locked = true;<br/>                }<br/>            }<br/>        }<br/>    }   <br/>}</pre>
+<p>When this is published on our Dynamics 365 Business Central tenant, we can reach this API at the following endpoint:</p>
+<pre>{baseUrl}/{D365BCInstance}/api/sd/customapi/v1.0/companies({id})/customers</pre>
+<p>If we send an HTTP GET request to this endpoint to retrieve the <kbd>Customer</kbd> records, we get the following API response:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/17137bef-cc4f-46de-ae38-2f43c92d18e5.png"/></p>
+<p>As you can see, the custom API shows all of the <kbd>Customer</kbd> fields we have added to our API page (the <kbd>Normal</kbd> and <kbd>Flowfields</kbd> fields).</p>
+<p>In the next section, we'll see how to use Dynamics 365 Business Central APIs from an external application.</p>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Creating an application that uses Dynamics 365 Business Central APIs</h1>
+                </header>
+            
+            <article>
+                
+<p>As we've mentioned in this chapter, APIs are extremely useful for integrating external applications with Dynamics 365 Business Central (they permit us to use simple HTTP calls to manage ERP entities and business logic). As an example, here, we will create a C# .NET application that creates <kbd>Customer</kbd> records in a Dynamics 365 Business Central SaaS tenant.</p>
+<div class="packt_tip">This scenario is very useful for implementing custom data loading procedures. By using APIs, you can create very powerful data transfer routines that permit you to load tons of data by avoiding standard tools such as configuration packages.</div>
+<p>This application is a .NET Console application that does the following:</p>
+<ul>
+<li>Connects to a Dynamics 365 Business Central tenant by using basic authentication (a username and a web service access key)</li>
+<li>Reads the company in this tenant and retrieves the company IDs</li>
+<li>Creates a JSON object that represents a <kbd>Customer</kbd> record</li>
+<li>Sends a POST request to the <kbd>Customer</kbd> API endpoint by passing the JSON of the <kbd>Customer</kbd> record to create</li>
+</ul>
+<p>The complete source code is on the GitHub repository of this book.</p>
+<p>The main function of this application is defined as follows:</p>
+<pre>static HttpClient client = new HttpClient();<br/>static string baseURL, user, key;<br/>static string workingCompanyID;<br/><br/>static void Main(string[] args)<br/>{<br/>   GetSettingsParameters();<br/>   RunAsync().GetAwaiter().GetResult();<br/>}<br/><br/>static async Task RunAsync()<br/>{<br/>   client.BaseAddress = new Uri(baseURL);<br/>   client.DefaultRequestHeaders.Accept.Clear();<br/>   client.DefaultRequestHeaders.Accept.Add(<br/>        new MediaTypeWithQualityHeaderValue("application/json"));<br/>   string userAndPasswordToken =<br/>        Convert.ToBase64String(Encoding.UTF8.GetBytes(user + ":" + key));<br/>   client.DefaultRequestHeaders.TryAddWithoutValidation("Authorization",<br/>        $"Basic {userAndPasswordToken}");<br/>   try<br/>   {               <br/>      //Reads D365BC tenant companies<br/>      await GetCompanies(baseURL);<br/>      //Creates a D365BC customer<br/>      await CreateCustomer(baseURL, workingCompanyID);<br/>   }<br/>   catch (Exception e)<br/>   {<br/>      Console.WriteLine(e.Message);<br/>   }<br/>   Console.ReadLine();<br/>}</pre>
+<p>In the <kbd>Main</kbd> method, we read the application settings parameters by calling the <kbd>GetSettingsParameters</kbd><em> </em>function, and then we asynchronously start the tasks that read the companies (<kbd>GetCompanies</kbd>) and create the <kbd>Customer</kbd> record (<kbd>CreateCustomer</kbd>) via the API.</p>
+<p>The <kbd>GetSettingsParameters</kbd> function defines the mandatory parameters for using the Dynamics 365 Business Central APIs (such as tenant ID, API URL, user, and access key), and it's defined as follows:</p>
+<pre>static void GetSettingsParameters()<br/>{<br/>   string tenantID = "&lt;YourTenantIDHere&gt;";<br/>   baseURL = "https://api.businesscentral.dynamics.com/v2.0/" + tenantID +    <br/>      "/production/api/beta";<br/>   user = "&lt;YourUsernameHere&gt;";<br/>   key = "&lt;YourUserWebServiceAccessKeyHere&gt;";<br/>}</pre>
+<p>We invoke the Dynamics 365 Business Central APIs in the <kbd>GetCompanies</kbd> and <kbd>CreateCustomer</kbd> methods.</p>
+<p>In the <kbd>GetCompanies</kbd> method, we send an HTTP GET request to the following endpoint:</p>
+<pre>https://api.businesscentral.dynamics.com/v2.0/{tenantID}/production/api/{APIversion}/companies</pre>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mceNonEditable"/>
+<p>Then, we retrieve the list of companies in the specified tenant. The response is in JSON format, so we need to parse it (we are retrieving the <kbd>id</kbd> and <kbd>name</kbd> tokens). The code for this is as follows:</p>
+<pre>static async Task GetCompanies(string baseURL)<br/>{<br/>   HttpResponseMessage response = await client.GetAsync(baseURL + "/companies");<br/>   JObject companies = JsonConvert.DeserializeObject&lt;JObject&gt;   <br/>         (response.Content.ReadAsStringAsync().Result);<br/>   JObject o = JObject.Parse(companies.ToString());<br/>   foreach (JToken jt in o.Children())<br/>   {<br/>      JProperty jProperty = jt.ToObject&lt;JProperty&gt;();<br/>      string propertyName = jProperty.Name;<br/>      if (propertyName == "value")<br/>      {<br/>         foreach (JToken jt1 in jProperty.Children())<br/>         {<br/>            JArray array = new JArray(jt1.Children());<br/>            for (int i = 0; i &lt; array.Count; i++)<br/>            {<br/>               string companyID = array[i].Value&lt;string&gt;("id");<br/>               string companyName = array[i].Value&lt;string&gt;("name");<br/>               Console.WriteLine("Company ID: {0}, Name: {1}", companyID, companyName);<br/>               if (companyName == "CRONUS IT")<br/>               {<br/>                  workingCompanyID = companyID;<br/>               }<br/>            }<br/>         }<br/>      }<br/>   }<br/>}</pre>
+<p><span>Here, we want to work with a specific company, so we save the desired company ID in a global variable called </span><kbd>workingCompanyID</kbd><span> to use that company ID on the entire application. </span></p>
+<p>In the <kbd>CreateCustomer</kbd> method, we send a POST request to the following API endpoint:</p>
+<pre>https://api.businesscentral.dynamics.com/v2.0/{tenantID}/production/api/{APIversion}/customers</pre>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mceNonEditable"/>
+<p>This is done by passing a JSON object in the request body. This object is a JSON representation of a <kbd>Customer</kbd> record (the request's content type must be <kbd>application/json</kbd>). Then, the API response is read.</p>
+<p>The <kbd>CreateCustomer</kbd><em> </em>method's code is as follows:</p>
+<pre>static async Task CreateCustomer(string baseURL, string companyID)<br/>{                       <br/>   JObject customer = new JObject(           <br/>      new JProperty("displayName", "Stefano Demiliani API"),<br/>      new JProperty("type", "Company"),<br/>      new JProperty("email", "demiliani@outlook.com"),<br/>      new JProperty("website", "www.demiliani.com"),<br/>      new JProperty("taxLiable", false),<br/>      new JProperty("currencyId", "00000000-0000-0000-0000-000000000000"),<br/>      new JProperty("currencyCode", "EUR"),<br/>      new JProperty("blocked", " "),<br/>      new JProperty("balance", 0),<br/>      new JProperty("overdueAmount", 0),<br/>      new JProperty("totalSalesExcludingTax", 0),<br/>      new JProperty("address",<br/>         new JObject(<br/>            new JProperty("street", "Viale Kennedy 87"),<br/>            new JProperty("city", "Borgomanero"),<br/>            new JProperty("state", "Italy"),<br/>            new JProperty("countryLetterCode", "IT"),<br/>            new JProperty("postalCode", "IT-28021")<br/>            )<br/>       )<br/>   );<br/>   HttpContent httpContent = new StringContent(customer.ToString(), Encoding.UTF8,    <br/>       "application/json");<br/>   HttpResponseMessage response = await client.PostAsync(baseURL + <br/>       "/companies("+companyID+")/customers", httpContent);<br/>   if (response.Content != null)<br/>   {<br/>      var responseContent = await response.Content.ReadAsStringAsync();<br/>      Console.WriteLine("Response: " + responseContent);<br/>   }<br/>}</pre>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mceNonEditable"/>
+<p>Here, we create a JSON object that represents a <kbd>Customer</kbd> entity, we send (asynchronously) this JSON object as the body of an HTTP POST request to the Dynamics 365 Business Central <kbd>/customers</kbd> API, and we read the API response. When this is invoked, the <kbd>Customer</kbd> record is created in Dynamics 365 Business Central.</p>
+<p>Remember that Dynamics 365 Business Central limits the number of simultaneous API calls that you can perform in a certain sliding window. If you have an external service that performs too many requests on a tenant, you could receive an HTTP 429 error (<kbd>Too Many Requests</kbd>):</p>
+<pre>{<br/>   "error":<br/>   {<br/>     "code": "Application_TooManyRequests",<br/>     "message": "Too many requests reached. Actual (101). Maximum (100)."<br/>   }<br/>}</pre>
+<p>The purpose of this is mainly to avoid things such as <strong>Denial-of-Service</strong> (<strong>DoS</strong>) attacks and insufficient resources in the tenant.</p>
+<p>The actual permitted maximum number of requests per minute is as follows:</p>
+<ul>
+<li>Sandbox environment: 300 requests/minute for OData (5 requests per second), and 300 requests/minute for SOAP</li>
+<li>Production environment: 600 requests/minute for OData (10 requests per second), and 600 requests/minute for SOAP</li>
+</ul>
+<p>To avoid this situation, you should handle how you perform requests to a Dynamics 365 Business Central API endpoint and, if you receive this error, you should adopt something such as a retry policy on the API calls in your external application.</p>
+<p>This is an example of how you can use Dynamics 365 Business Central APIs on your custom applications. The example provided uses .NET and C#, but you can use the APIs on every platform and with every language that supports HTTP calls.</p>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Using bound actions</h1>
+                </header>
+            
+            <article>
+                
+<p>We can use <strong>bound actions</strong> to use RESTful APIs not only to perform CRUD operations but also to invoke standard business logic defined in the application (both custom and standard code).</p>
+<p>Bound actions can be used in the OData V4 endpoint (as described at <a href="https://demiliani.com/2019/06/12/dynamics-365-business-central-using-odata-v4-bound-actions/">https://demiliani.com/2019/06/12/dynamics-365-business-central-using-odata-v4-bound-actions/</a>) and standard Dynamics 365 Business Central APIs.</p>
+<p>Imagine you have a codeunit (<span><span>in the example described here, it's </span></span>called <kbd>CustomerWSManagement</kbd>) that defines a business logic (a set of functions) to work on the <kbd>Customer</kbd> entity and you want to call some of these methods from APIs. Our codeunit has two business functions:</p>
+<ul>
+<li><kbd>CloneCustomer</kbd>: This creates a new customer based on an existing customer record.</li>
+<li><kbd>GetSalesAmount</kbd>: This gives the total sales amount for a given customer.</li>
+</ul>
+<p>The <kbd><span>CustomerWSM</span><span>anagement</span></kbd><em><span> </span></em>codeunit code is defined as follows:</p>
+<div>
+<pre><span>codeunit</span><span> </span><span>50102</span><span> CustomerWSManagement<br/></span><span>{<br/></span><span>   </span><span>procedure</span><span> CloneCustomer</span><span>(</span><span>CustomerNo: </span><span>Code</span><span>[</span><span>20</span><span>]</span><span>)<br/></span><span>   </span><span>var<br/></span><span>      Customer: </span><span>Record</span><span> Customer;<br/></span><span>      NewCustomer: </span><span>Record</span><span> Customer;<br/></span><span>   </span><span>begin<br/></span><span>      Customer</span><span>.</span><span>Get</span><span>(</span><span>CustomerNo</span><span>)</span><span>;<br/></span><span>      NewCustomer</span><span>.</span><span>Init</span><span>()</span><span>;<br/></span><span>      NewCustomer</span><span>.</span><span>TransferFields</span><span>(</span><span>Customer, false</span><span>)</span><span>;<br/></span><span>      NewCustomer</span><span>.</span><span>Name</span><span> := </span><span>'CUSTOMER BOUND ACTION'</span><span>;<br/></span><span>      NewCustomer</span><span>.</span><span>Insert</span><span>(</span><span>true</span><span>)</span><span>;<br/></span><span>   </span><span>end</span><span>;<br/><br/></span><span>   </span><span>procedure</span><span> GetSalesAmount</span><span>(</span><span>CustomerNo: </span><span>Code</span><span>[</span><span>20</span><span>]</span><span>)</span><span>: </span><span>Decimal<br/></span><span>   </span><span>var<br/></span><span>      SalesLine: </span><span>Record</span><span> "Sales Line";<br/></span><span>      total: </span><span>Decimal</span><span>;<br/></span><span>   </span><span>begin<br/></span><span>      SalesLine</span><span>.</span><span>SetRange</span><span>(</span><span>"Document Type", SalesLine</span><span>.</span><span>"Document Type"::</span><span>Order)</span><span>;<br/></span><span>      SalesLine</span><span>.</span><span>SetRange</span><span>(</span><span>"Sell-to Customer No.", CustomerNo</span><span>)</span><span>;<br/></span><span>      SalesLine</span><span>.</span><span>SetFilter</span><span>(Type</span><span>, </span><span>'&lt;&gt;%1'</span><span>, SalesLine</span><span>.Type</span><span>::" "</span><span>)</span><span>;<br/></span><span>   </span><span>   </span><span>if</span><span> SalesLine</span><span>.</span><span>FindSet</span><span>() then<br/></span><span>      </span><span>repeat<br/></span><span>         total</span><span> += </span><span>SalesLine</span><span>.</span><span>"Line Amount";<br/></span><span>      </span><span>until</span><span> SalesLine</span><span>.</span><span>Next</span><span>() </span><span>= </span><span>0</span><span>;<br/></span><span>      </span><span>exit(</span><span>total</span><span>)</span><span>;<br/></span><span>   </span><span>end</span><span>;<br/></span><span>}</span></pre></div>
+<p><span>To use OData V4 bound actions, you need to declare a function in a page, and this function must have the </span><kbd>[ServiceEnabled]</kbd><span> attribute.</span></p>
+<div class="packt_infobox">
+<p>If you declare a <kbd>[ServiceEnabled]</kbd><em> </em>function in a <kbd>pageextension</kbd> object and you try to access the metadata of the OData endpoint (<kbd>baseurl/ODataV4/$metadata</kbd>), you will not see the action published.</p>
+</div>
+<p><span>To publish your action attached to the </span><kbd>Customer</kbd><span> entity, you need to create a new page like the following and then publish it as a web service:</span></p>
+<div>
+<pre><span>page</span><span> </span><span>50102</span><span> "My Customer Card"<br/></span><span>{<br/></span><span>   PageType = Card;<br/></span><span>   ApplicationArea = All;<br/></span><span>   UsageCategory = Administration;<br/></span><span>   SourceTable = Customer;<br/></span><span>   ODataKeyFields = "No.";<br/></span><span>   </span><span>layout<br/></span><span>   {<br/></span><span>      </span><span>area(</span><span>Content</span><span>)<br/></span><span>      {<br/></span><span>         </span><span>group(</span><span>GroupName</span><span>)<br/></span><span>         {<br/></span><span>            </span><span>field(</span><span>Id; Id</span><span>)<br/></span><span>            {<br/></span><span>               ApplicationArea = All;<br/></span><span>            }<br/></span><span>            </span><span>field(</span><span>"No."; "No."</span><span>)<br/></span><span>            {<br/></span><span>               ApplicationArea = All;<br/></span><span>            }<br/></span><span>            </span><span>field(</span><span>Name; Name</span><span>)<br/></span><span>            {<br/></span><span>               ApplicationArea = All;<br/></span><span>            }<br/></span><span>         }<br/></span><span>      }<br/></span><span>   }<br/></span>}</pre></div>
+<p>Here, the <kbd>ODataKeyFields</kbd> property specifies the field to use as the key when calling the OData endpoint (I want the <kbd>No.</kbd> field of the <kbd>Customer</kbd> record).</p>
+<p>Inside this page, I am declaring two procedures to call the two methods defined in our AL codeunit:</p>
+<div>
+<pre><span>[ServiceEnabled]<br/></span>procedure<span> CloneCustomer</span><span>(var</span><span> actionContext: </span><span>WebServiceActionContext)<br/></span><span>var<br/></span>   CustomerWSMgt: <span>Codeunit</span><span> CustomerWSManagement;<br/></span><span>begin<br/></span>   CustomerWSMgt<span>.</span><span>CloneCustomer</span><span>(</span><span>Rec</span><span>.</span><span>"No."</span><span>)</span><span>;<br/></span>   actionContext<span>.</span><span>SetObjectType</span><span>(ObjectType</span><span>::</span><span>Page)</span><span>;<br/></span>   actionContext<span>.</span><span>SetObjectId</span><span>(Page</span><span>::"My Customer Card"</span><span>)</span><span>;<br/></span>   actionContext<span>.</span><span>AddEntityKey</span><span>(</span><span>Rec</span><span>.</span><span>FIELDNO</span><span>(</span><span>"No."</span><span>)</span><span>, Rec</span><span>.</span><span>"No."</span><span>)</span><span>;<br/></span><span>   //Set the result code to inform the caller that the record is created<br/></span>   actionContext<span>.</span><span>SetResultCode</span><span>(WebServiceActionResultCode</span><span>::Created</span><span>)</span><span>;<br/></span><span>end</span><span>;<br/><br/></span>[ServiceEnabled]<br/><span>procedure</span><span> GetSalesAmount</span><span>(</span><span>CustomerNo: </span><span>Code</span><span>[</span><span>20</span><span>]</span><span>)</span><span>: </span><span>Decimal<br/></span><span>var<br/></span>   actionContext: <span>WebServiceActionContext</span><span>;<br/></span>   CustomerWSMgt: <span>Codeunit</span><span> CustomerWSManagement;<br/></span>   total: <span>Decimal</span><span>;<br/></span><span>begin<br/></span>   actionContext<span>.</span><span>SetObjectType</span><span>(ObjectType</span><span>::</span><span>Page)</span><span>;<br/></span>   actionContext<span>.</span><span>SetObjectId</span><span>(Page</span><span>::"My Customer Card"</span><span>)</span><span>;<br/></span>   actionContext<span>.</span><span>AddEntityKey</span><span>(</span><span>Rec</span><span>.</span><span>FIELDNO</span><span>(</span><span>"No."</span><span>)</span><span>, rec</span><span>.</span><span>"No."</span><span>)</span><span>;<br/></span>   total<span> := </span><span>CustomerWSMgt</span><span>.</span><span>GetSalesAmount</span><span>(</span><span>CustomerNo</span><span>)</span><span>;<br/></span><span>   //Set the result code to inform the caller that the result is retrieved<br/></span>   actionContext<span>.</span><span>SetResultCode</span><span>(WebServiceActionResultCode</span><span>::Get</span><span>)</span><span>;<br/></span><span>   exit(</span><span>total</span><span>)</span><span>;<br/></span><span>end</span><span>;</span></pre></div>
+<p>From the preceding code, we can see the following:</p>
+<ul>
+<li><kbd>CloneCustomer</kbd><em> </em>is a procedure called without parameters. It takes the context of the call and calls the <kbd>CloneCustomer</kbd> method defined in our codeunit.</li>
+<li><kbd>GetSalesAmount</kbd><em> </em>is a procedure that takes a code parameter, calls the <kbd>GetSalesAmount</kbd> procedure defined in our codeunit, and returns the result as a response.</li>
+</ul>
+<p class="mce-root"/>
+<p>What happens with these procedure definitions when we publish the <kbd>MyCustomerCard</kbd> page as a web service (called <kbd>MyCustomerCardWS</kbd> here)?</p>
+<p>If we go to the OData V4 metadata endpoint, we can <span>now </span>see that the actions are published:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/54407ba0-e13e-4710-af02-9f5790219f56.png"/></p>
+<p>Now, we can try to call our bound actions via OData. As the first step, we want to call the <kbd>CloneCustomer</kbd> function. To do this, we need to send an HTTP POST request to the following endpoint:</p>
+<pre>https://yourbaseurl/ODataV4/Company('CRONUS%20IT')/MyCustomerCardWS('10000')/NAV.CloneCustomer</pre>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mceNonEditable"/>
+<p>The following is the output we get after the call:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/f6c96e77-d604-4184-9eaa-29d7926d6a7d.png"/></p>
+<p>The code in our codeunit is called and a <kbd>Customer</kbd> record has been created (that is, cloned by the customer with <kbd>"No." = 10000</kbd> as the input):</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/0e86665c-2142-4e3f-8819-8a9e91cdf4c9.png"/></p>
+<p>Our second function to call (<kbd>GetSalesAmount</kbd>) wants a <kbd>Code[20]</kbd> parameter as input (it's not strictly necessary; it's only to show how to pass parameters to a bound action). We need to send a POST request to the following endpoint:</p>
+<pre>https://yourbaseurl/ODataV4/Company('CRONUS%20IT')/MyCustomerCardWS('10000')/NAV.GetSalesAmount</pre>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mceNonEditable"/>
+<p>As we can see, it is done by passing a JSON body with the required parameter.</p>
+<p>This is the POST request that was sent:</p>
+<div>
+<pre><span>POST </span><span>https://d365bcita0918vm.westeurope.cloudapp.azure.com:7048/NAV/ODataV4/Company('CRONUS%20IT')/MyCustomerCardWS('10000')/NAV.GetSalesAmount<br/></span><span>Content-Type: </span><span>application/json<br/></span><span>Authorization: </span><span>Basic admin Z1JkubB/3epQOtfnBph04rcNgyFpaEuB9OVTnrd0VPs=<br/><br/></span><span>{<br/></span><span> </span><span>"customerno"</span><span>: </span><span>"10000"<br/></span><span>}</span></pre></div>
+<p><span> The following</span><span> is the response received from the POST request:</span></p>
+<div>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/049d1b71-05f1-44fe-a357-ed84b08ebdac.png"/></p>
+<p>As you can see, the response is a JSON object with the value of the total sales amount for the given customer (retrieved by calling our codeunit method).</p>
+</div>
+<div class="packt_infobox">
+<p>The name of the <span>parameter </span>to pass in the JSON object must match the OData metadata, not your function's parameters.</p>
+</div>
+<p>In the next section, we'll examine the concept of webhooks inside Dynamics 365 Business Central and we'll explore how to subscribe to notifications sent from a Dynamics 365 Business Central entity.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Using Dynamics 365 Business Central webhooks</h1>
+                </header>
+            
+            <article>
+                
+<p><strong>Webhooks</strong> are a way to create event-driven service integrations: instead of polling another system to check whether there are any changes in entities with webhooks, a client subscribes to events that will be pushed to it from the source system. Dynamics 365 Business Central supports webhooks, so a client can subscribe to a webhook notification (event) and will <span>then</span><span> </span><span>automatically receive notifications if an entity in Dynamics 365 Business Central changes.</span></p>
+<p>To use webhooks with Dynamics 365 Business Central, we need to perform the following steps:</p>
+<ol>
+<li>A subscriber must register the webhook subscription with Dynamics 365 Business Central by making a POST request to the <strong>subscription</strong> API and by passing a notification URL in the request body. The endpoint URL is as follows: </li>
+</ol>
+<pre style="padding-left: 60px">https://api.businesscentral.dynamics.com/v2.0/TENANTID/production/api/v1.0/subscriptions</pre>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mceNonEditable"/>
+<p style="padding-left: 60px">The request body to establish a subscription is the following (here, we're using the <kbd>customers</kbd> entity as an example):</p>
+<pre style="padding-left: 60px">{<br/>  "notificationUrl": "YourAplicationUrl",<br/>  "resource": "https://api.businesscentral.dynamics.com/v2.0/TENANTID/production/api/v1.0/companies(COMPANYID)/customers",<br/>  "clientState": "SomeSharedSecretForTheNotificationUrl"<br/>}</pre>
+<ol start="2">
+<li>Dynamics 365 Business Central returns a validation token to the subscriber.</li>
+<li>The subscriber needs to return the validation token in the response body and provide status code <kbd>200</kbd> (this is the mandatory handshake phase).</li>
+<li>If Dynamics 365 Business Central receives the validation token in the response body, the subscription is registered and notifications will be sent to the notification URL.</li>
+</ol>
+<p>When a subscription is established, the subscriber receives a notification for every update on the subscribed entity. Webhook subscriptions expire after 3 days if they are not renewed before that.</p>
+<p>To renew a webhook subscription, a subscriber must send a PATCH request to the subscription endpoint (this request requires the handshake phase too). The request endpoint to renew a webhook subscription is as follows:</p>
+<pre>https://api.businesscentral.dynamics.com/v2.0/TENANTID/production/api/v1.0/subscriptions('SUBSCRIPTIONID')</pre>
+<div class="packt_infobox">To renew a webhook subscription, you need to pass the <kbd>@odata.etag</kbd> tag of your previously established subscription as an <kbd>If-Match</kbd> block in the PATCH request header.</div>
+<p>This is the HTTP response that you receive when the subscription is established:</p>
+<p class="CDPAlignCenter CDPAlign"><img style="font-size: 1em;" src="assets/6aaa518f-cb30-4b05-b385-957769f38583.png"/></p>
+<p class="mce-root"/>
+<p>If you try to issue a subscription request again to the same endpoint where an active subscription has been established, you receive the following error:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/9ec3d49a-e51b-4296-9700-d54fb05fb7f7.png"/></p>
+<p>When a subscription is established, a subscriber can receive notifications when the subscribed entities in Dynamics 365 Business Central are modified. This is an example of a notification sent to a subscriber (the notification is a JSON object that contains all of the modified entities):</p>
+<pre>{<br/>  "value": [<br/>    {<br/>      "subscriptionId": "customers",<br/>      "clientState": "someClientState",<br/>      "expirationDateTime": "2019-07-20T07:52:31Z",<br/>      "resource": "api/beta/companies(80d28ea6-02a3-4ec3-98f7-<br/>                   936c2000c7b3)/customers(26814998-936a-401c-81c1-0e848a64971d)",<br/>      "changeType": "updated",<br/>      "lastModifiedDateTime": "2019-07-19T12:54:20.467Z"<br/>    },<br/>    {<br/>      "subscriptionId": "webhookCustomersId",<br/>      "clientState": "someClientState",<br/>      "expirationDateTime": "2019-07-20T07:52:31Z",<br/>      "resource": "api/beta/companies(80d28ea6-02a3-4ec3-98f7-<br/>                   936c2000c7b3)/customers(130bbd17-dbb9-4790-9b12-2b0e9c9d22c3)",<br/>      "changeType": "created",<br/>      "lastModifiedDateTime": "2019-07-19T12:54:26.057Z"<br/>    }<br/>  ]<br/>}</pre>
+<p>Webhooks are also exposed for custom objects in our extensions. A page with <kbd>PageType = API</kbd> will expose webhooks with the following limitations (these also apply to standard API pages):</p>
+<ul>
+<li>The page cannot have composite keys.</li>
+<li>The page cannot use temporary tables or system tables as <kbd>SourceTable</kbd>.</li>
+</ul>
+<p>A subscription to a webhook can be deleted by sending a DELETE request to the <kbd>/subscriptions({id})</kbd> endpoint. Also, to delete a subscription, you need to send a request with the <kbd>If-Match</kbd> header containing <kbd>@odata.etag</kbd> of the subscription to delete.</p>
+<p>For more information about Dynamics 365 Business Central webhooks, I recommend checking this post:</p>
+<p><a href="http://demiliani.com/2019/12/10/webhooks-with-dynamics-365-business-central/">http://demiliani.com/2019/12/10/webhooks-with-dynamics-365-business-central/</a></p>
+<p><span>In this section, you saw how webhooks work in Dynamics 365 Business Central. In the next section, we'll see how to use Microsoft Graph APIs with Dynamics 365 Business Central.</span></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Working with Dynamics 365 Business Central APIs in Microsoft Graph</h1>
+                </header>
+            
+            <article>
+                
+<p style="background: white;margin: 0cm 0cm 15.0pt 0cm"><span><strong>Microsoft Graph</strong> (<a href="https://graph.microsoft.io/">https://graph.microsoft.io/</a>) is an interesting platform that provides a unique gateway for RESTful APIs that spans multiple Microsoft services.</span> <span>Dynamics 365 Business Central</span><span> is now one of the endpoints available in Microsoft Graph.</span></p>
+<p class="mce-root"/>
+<p style="background: white;text-align: start;margin: 0cm 0cm 15.0pt 0cm"><span>To work with </span>Dynamics 365 Business Central in Graph<span>, you first need to change your Dynamics 365 Business Central user's permission in Graph and then enable the </span><span class="packt_screen">Financials.ReadWrite.All </span><span>permission scope. You can do that by using the</span><span class="packt_screen"> Graph Explorer</span><span> tool:</span></p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/f1ba0a01-dbda-42f8-a12d-2ee0bf59c4f2.png"/></p>
+<p style="background: white;margin: 0cm 0cm 15.0pt 0cm"><span>After setting the permissions, you can start using the Dynamics 365 Business Central APIs available in Graph (actually, you need to use the </span><span class="packt_screen">BETA </span><span>API endpoint).</span></p>
+<p style="background: white;text-align: start;margin: 0cm 0cm 15.0pt 0cm"><span>As an example, to retrieve the available companies in your Dynamics 365 Business Central tenant, you need to send an HTTP GET request to</span> <kbd>https://graph.microsoft.com/beta/financials/companies</kbd>, as follows:</p>
+<p class="mce-root"/>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/e6d0b09c-38bf-4fe4-892b-cc7b08c2a2da.png"/></p>
+<p style="background: white;margin: 0cm 0cm 15.0pt 0cm"><span>You can parse this JSON response and retrieve the company's ID, which you will use in all of the next API calls.</span></p>
+<p style="background: white;text-align: start;margin: 0cm 0cm 15.0pt 0cm"><span>To retrieve the list of <kbd>Customer</kbd> records for a given company, you need to send an HTTP GET request to the following URL (by passing the company's ID):</span></p>
+<pre>https://graph.microsoft.com/beta/financials/companies('80d28ea6-02a3-4ec3-98f7-936c2000c7b3')/customers</pre>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mceNonEditable"/>
+<p style="background: white;text-align: start;margin: 0cm 0cm 15.0pt 0cm"><span>As a response, you will get some JSON data with the list of all of your customers:</span></p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/27873133-374d-4a8c-b164-e4102fdc68f6.png"/></p>
+<p style="background: white;margin: 0cm 0cm 15.0pt 0cm"><span>To retrieve</span> <kbd>general ledger entries</kbd><span> for a given company ordered by descending</span> <kbd>posting date</kbd><span>, you can perform an HTTP GET request to the following URL:</span></p>
+<pre>https://graph.microsoft.com/beta/financials/companies('80d28ea6-02a3-4ec3-98f7-936c2000c7b3')/generalLedgerEntries?$orderby=postingDate desc</pre>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mceNonEditable"/>
+<p class="mceNonEditable"/>
+<p class="mceNonEditable"/>
+<p>This is the response received from the API:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/33417869-e843-41ed-b143-976cfe626fb5.png"/></p>
+<p style="background: white;margin: 0cm 0cm 15.0pt 0cm"><span>To retrieve, for example, the details for a certain <kbd>Currency</kbd> (for example, USD), you need to send an HTTP GET request to the following URL:</span></p>
+<pre>https://graph.microsoft.com/beta/financials/companies('80d28ea6-02a3-4ec3-98f7-936c2000c7b3')/currencies?$filter=code eq 'USD'</pre>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mceNonEditable"/>
+<p>The response retrieved will be like the following:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/25e76ca5-e2a1-49a5-818c-930b366c855a.png"/></p>
+<p style="background: white;margin: 0cm 0cm 15.0pt 0cm"><span>From this response, we can retrieve the ID of the currency because we can use it later to create a new <kbd>Customer</kbd> record in Dynamics 365 Business Central by using Graph APIs.</span></p>
+<p style="background: white;text-align: start;margin: 0cm 0cm 15.0pt 0cm"><span>To create a </span><kbd>Customer </kbd><span>record in a company with <kbd>Currency</kbd></span> <kbd>Code</kbd><span> set to USD, you need to send an HTTP POST request to the following endpoint and set</span> <kbd>Content-type</kbd><span> to </span><kbd>application/json</kbd><span>:</span></p>
+<pre>https://graph.microsoft.com/beta/financials/companies('80d28ea6-02a3-4ec3-98f7-936c2000c7b3')/customers</pre>
+<p>The request body of this POST request must be JSON content with the customer's details that we want to create, as in the following:</p>
+<pre>{<br/> "displayName": "Graph Customer",<br/> "type": "Company",<br/> "address": {<br/> "street": "V.le Kennedy 8",<br/> "city": "Novara",<br/> "state": "IT",<br/> "countryLetterCode": "IT",<br/> "postalCode": "28021"<br/> },<br/> "phoneNumber": "",<br/> "email": "graph@packtpub.com",<br/> "website": "",<br/> "currencyId": "12902bb7-4938-41b9-8617-33492bcac8b3",<br/> "currencyCode": "USD",<br/> "blocked": " ",<br/> "overdueAmount": 0<br/>}</pre>
+<p style="background: white;margin: 0cm 0cm 15.0pt 0cm"><span>As a response, we get some JSON data with the created <kbd>Customer</kbd> record:</span></p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/95c529a6-fd84-474a-9d21-3fa9c7dab93a.png"/></p>
+<p class="mce-root"/>
+<p style="background: white;margin: 0cm 0cm 15.0pt 0cm"><span>If you now open Dynamics 365 Business Central, you will see that the new <kbd>Customer</kbd> record has been created:</span></p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/b3d8d45c-005e-419f-878d-06e2f1a164ed.png"/></p>
+<p style="background: white;text-align: start;margin: 0cm 0cm 15.0pt 0cm"><span>The Dynamics 365 Business Central APIs available in Graph are listed at</span> <a href="https://docs.microsoft.com/en-us/graph/api/resources/dynamics-graph-reference?view=graph-rest-beta"><span>https://docs.microsoft.com/en-us/graph/api/resources/dynamics-graph-reference?view=graph-rest-beta</span></a>.</p>
+<p style="background: white;text-align: start;margin: 0cm 0cm 15.0pt 0cm"><span>Consider them as beta versions for now, as they will be improved in the future.</span></p>
+<p>We've covered how to use Graph APIs to interact with Dynamics 365 Business Central. In the next section, we'll get an overview of the automation APIs.</p>
+<p class="mce-root"/>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Automation APIs in Dynamics 365 Business Central</h1>
+                </header>
+            
+            <article>
+                
+<p>Dynamics 365 Business Central also exposes APIs for automating tenant-related tasks, such as the following:</p>
+<ul>
+<li>Creating companies</li>
+<li>Managing users, groups, and permissions</li>
+<li>Handling extensions (the installation/uninstallation of per-tenant extensions)</li>
+<li>Importing and applying configuration packages</li>
+</ul>
+<p>Automation APIs are under the <kbd>/microsoft/automation</kbd> namespace. For example, to create a company in a Dynamics 365 Business Central tenant, you can send an HTTP POST request to the following endpoint:</p>
+<pre>POST https://api.businesscentral.dynamics.com/v2.0/api/microsoft/automation/{apiVersion}/companies({companyId})/automationCompanies<br/>Authorization: Bearer {token}<br/>Content-type: application/json<br/>{<br/>    "name": "PACKT PUB",<br/>    "displayName": "PACKT Publishing",<br/>    "evaluationCompany": false,<br/>    "businessProfileId": ""<br/>}</pre>
+<p>To retrieve users on your tenant, you need to send a GET request to the following endpoint:</p>
+<pre>GET https://api.businesscentral.dynamics.com/v1.0/api/microsoft/automation/beta/companies({id})/users</pre>
+<p>When you have retrieved your user's details, to assign a permission set to a user via an automation API, you need to send a POST request to the following endpoint:</p>
+<pre>POST https://api.businesscentral.dynamics.com/v1.0/api/microsoft/automation/{apiVersion}/companies({companyId})//users({userSecurityId})/userGroupMembers<br/>Authorization: Bearer {token}<br/><br/>{ <br/>  "code": "D365 EXT. ACCOUNTANT",<br/>  "companyName" :"CRONUS IT"<br/>}</pre>
+<p>To modify the details of a Dynamics 365 Business Central user, you need to send an HTTP PATCH request to the following endpoint:</p>
+<pre>PATCH https://api.businesscentral.dynamics.com/v1.0/api/microsoft/automation/beta/companies({id})/users({userSecurityId})<br/>Content-type: application/json<br/>If-Match:*<br/>{<br/> "state": "Enabled",<br/> "expiryDate": "2021-01-01T21:00:53.444Z"<br/>}</pre>
+<p>To get a list of the extensions <span>installed </span>on a tenant, you can send a GET request to the following endpoint:</p>
+<pre>GET https://api.businesscentral.dynamics.com/v1.0/api/microsoft/automation/{apiVersion}/companies({{companyid}})/extensions</pre>
+<p>To handle the installation and uninstallation of extensions, you can send a POST request to the following bound actions:</p>
+<ul>
+<li><kbd><span>Microsoft.NAV.install</span></kbd></li>
+<li><kbd><span>Microsoft.NAV.uninstall</span></kbd></li>
+</ul>
+<p>For example, to uninstall a previously installed extension, you can send a POST request to the following endpoint:</p>
+<pre>POST https://api.businesscentral.dynamics.com/v1.0/api/microsoft/automation/{apiVersion}/companies({companyId})//extensions({extensionId})/Microsoft.NAV.uninstall<br/>Authorization: Bearer {token}</pre>
+<p>AppSource extensions must be previously installed on the tenant; then, you can install/uninstall them via the automation API.</p>
+<p class="mce-root"/>
+<p>If you have a per-tenant extension, you can upload and install it on the SaaS tenant by sending a PATCH request to the following endpoint:</p>
+<pre>PATCH https://api.businesscentral.dynamics.com/v1.0/api/microsoft/automation/beta/companies({companyId})/extensionUpload(0)/content<br/>Authorization : Bearer {token}<br/>Content-type : application/octet-stream<br/>If-Match:-*</pre>
+<p>Here, the request body content must have the <kbd>.app</kbd> package file (binary) to upload on the tenant. With automation APIs, authentication must be OAuth 2.0 Authorization (Bearer Token).</p>
+<p>More information about Dynamics 365 Business Central APIs can be found at <a href="https://docs.microsoft.com/en-us/dynamics365/business-central/dev-itpro/administration/itpro-introduction-to-automation-apis">https://docs.microsoft.com/en-us/dynamics365/business-central/dev-itpro/administration/itpro-introduction-to-automation-apis</a>.</p>
+<p>Automation APIs are extremely important and powerful if you need to activate a CI/CD pipeline and if you need to hydrate tenants.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Summary</h1>
+                </header>
+            
+            <article>
+                
+<p>In this chapter, we gave an overview of how to use the OData stack (and RESTful APIs, in particular) for integration with Dynamics 365 Business Central. We saw how to use standard APIs, create custom APIs, create applications that use Dynamics 365 Business Central APIs, and use advanced concepts such as webhooks and Graph APIs. Then, we gave an overview of automation APIs.</p>
+<p>At the end of this chapter, you were given a complete overview of how to expose Dynamics 365 Business Central business logic and entities and how to handle integrations with external applications by using REST HTTP calls. APIs are the future of Dynamics 365 Business Central integrations, and here, you have learned how to use them on your applications and extensions.</p>
+<p>In the next chapter, we'll see how to use Azure Functions and other serverless services with Dynamics 365 Business Central extensions.</p>
+
+
+            </article>
+
+            
+        </section>
+    </body></html>

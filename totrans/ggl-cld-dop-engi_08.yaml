@@ -1,81 +1,114 @@
 - en: '*Chapter 6*: Building Code Using Cloud Build, and Pushing to Container Registry'
+  id: totrans-0
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: '*第六章*：使用 Cloud Build 构建代码，并推送到容器注册表'
 - en: The last chapter focused on managing source code using **Cloud Source Repositories**
     (**CSR**). CSR provides a fully managed private Git repository, provides one-way
     sync with GitHub and Bitbucket, and integrates with GCP services. This is the
     first step in the **Continuous Integration** (**CI**) flow.
+  id: totrans-1
   prefs: []
   type: TYPE_NORMAL
+  zh: 上一章集中讲解了如何使用**Cloud Source Repositories**（**CSR**）管理源代码。CSR 提供了一个完全托管的私有 Git
+    仓库，支持与 GitHub 和 Bitbucket 的单向同步，并与 GCP 服务集成。这是**持续集成**（**CI**）流程的第一步。
 - en: This chapter will focus on the constructs required to build code, create image
     artifacts using Cloud Build and manage artifacts using GCP's Container Registry.
     This forms the crux of the CI workflow as the code is continuously built, artifacts
     are continuously created and stored in the registry, and application code is continuously
     deployed as containers.
+  id: totrans-2
   prefs: []
   type: TYPE_NORMAL
+  zh: 本章将重点介绍构建代码、使用 Cloud Build 创建镜像工件以及使用 GCP 的容器注册表管理工件所需的构造。这构成了 CI 工作流的核心，因为代码不断构建，工件不断创建并存储在注册表中，应用程序代码也在不断地作为容器进行部署。
 - en: 'In this chapter, we''re going to cover the following main topics:'
+  id: totrans-3
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本章中，我们将涵盖以下主要内容：
 - en: '**Key terminology** – Quick insights into the terminology around Docker and
     containers'
+  id: totrans-4
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**关键术语** – Docker 和容器相关术语的快速概述'
 - en: '**Understanding the need for automation** – Understanding the need for automation
     by exploring the Docker life cycle'
+  id: totrans-5
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**理解自动化的必要性** – 通过探索 Docker 生命周期来理解自动化的必要性'
 - en: '**Building and creating container images** – Cloud Build essentials such as
     cloud builders and build configuration files, building code, storing and viewing
     build logs, managing access controls, and best practices to optimize the build
     speed'
+  id: totrans-6
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**构建和创建容器镜像** – Cloud Build 必备内容，如云构建器和构建配置文件、构建代码、存储和查看构建日志、管理访问控制以及优化构建速度的最佳实践'
 - en: '**Managing container artifacts** – CSR essentials to push and pull images,
     manage access controls, configure authentication methods, and CI/CD integrations
     with CSR'
+  id: totrans-7
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**管理容器工件** – CSR 必须掌握的内容，包括推送和拉取镜像、管理访问控制、配置身份验证方法，以及与 CSR 的 CI/CD 集成。'
 - en: '**Hands-on lab** – Step-by-step instructions to deploy an application to Cloud
     Run when a code change is pushed to the master branch'
+  id: totrans-8
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**实践实验** – 当代码更改推送到主分支时，逐步指导如何将应用程序部署到 Cloud Run'
 - en: Technical requirements
+  id: totrans-9
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 技术要求
 - en: 'There are three main technical requirements:'
+  id: totrans-10
   prefs: []
   type: TYPE_NORMAL
+  zh: 有三个主要的技术要求：
 - en: 'A valid **Google Cloud Platform** (**GCP**) account to go hands-on with GCP
     services: [https://cloud.google.com/free](https://cloud.google.com/free).'
+  id: totrans-11
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 拥有有效的**Google Cloud Platform**（**GCP**）账户以便进行 GCP 服务的实际操作：[https://cloud.google.com/free](https://cloud.google.com/free)。
 - en: 'Install Google Cloud SDK: [https://cloud.google.com/sdk/docs/quickstart](https://cloud.google.com/sdk/docs/quickstart).'
+  id: totrans-12
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 安装 Google Cloud SDK：[https://cloud.google.com/sdk/docs/quickstart](https://cloud.google.com/sdk/docs/quickstart)。
 - en: 'Install Git: [https://git-scm.com/book/en/v2/Getting-Started-Installing-Git](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git).'
+  id: totrans-13
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 安装 Git：[https://git-scm.com/book/en/v2/Getting-Started-Installing-Git](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git)。
 - en: Key terminology (prerequisites)
+  id: totrans-14
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 关键术语（前提条件）
 - en: 'There are several key terminologies that are important to understand while
     trying to build, deploy, and maintain a distributed application that runs on containers.
     The following is a quick insight into some of those critical terminologies when
     dealing with containers:'
+  id: totrans-15
   prefs: []
   type: TYPE_NORMAL
+  zh: 在尝试构建、部署和维护一个运行在容器上的分布式应用程序时，有几个关键术语是非常重要的。以下是一些处理容器时需要理解的关键术语的快速概述：
 - en: '**Operating system** – An **Operating System** (**OS**) is system software
     that is critical to control a computer''s hardware and software requirements across
     multiple applications, such as memory, CPU, storage, and so on. The OS coordinates
@@ -83,79 +116,108 @@
     consists of a kernel and software. The kernel is responsible for interacting with
     the hardware and the software is responsible for running the UI, drivers, file
     managers, compilers, and so on.'
+  id: totrans-16
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**操作系统** – **操作系统**（**OS**）是控制计算机硬件和软件需求的系统软件，涉及多个应用程序，如内存、CPU、存储等。操作系统协调任务，以确保每个应用程序能够获得其成功运行所需的资源。操作系统由内核和软件组成。内核负责与硬件交互，而软件则负责运行
+    UI、驱动程序、文件管理器、编译器等。'
 - en: '**Virtualization** – Virtualization is the act of doing more with less by creating
     a virtual or software-based version of compute, storage, a network, and so on.
     It allows you to run multiple applications on the same physical hardware. Each
     application and its associated OS can run on a separate, completely isolated,
     software-based machine called a **virtual machine** or **VM**.'
+  id: totrans-17
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**虚拟化** – 虚拟化是通过创建计算、存储、网络等的虚拟或软件版本来以更少的资源做更多的事情。它允许在同一物理硬件上运行多个应用程序。每个应用程序及其关联的操作系统可以在单独的、完全隔离的、基于软件的机器上运行，这种机器被称为**虚拟机**或**VM**。'
 - en: '**Hypervisor** – A hypervisor is software that creates and runs VMs, and essentially
     implements the concept of virtualization. A hypervisor allows one host computer
     to support multiple guest VMs by virtually sharing resources such as memory, storage,
     processing, and so on, and is responsible for giving every VM the required resources
     for peak performance.'
+  id: totrans-18
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**虚拟机监控器** – 虚拟机监控器是一种软件，用于创建和运行虚拟机（VM），并实现虚拟化的概念。虚拟机监控器允许一台主机计算机支持多个客户虚拟机，通过虚拟化共享内存、存储、处理能力等资源，并负责为每个虚拟机提供所需的资源以达到最佳性能。'
 - en: '**Container** – A container is a unit of software that packages code and all
     its dependencies, which include libraries and configuration files. This enables
     applications to run quickly and reliably across computing environments. Containers
     use low-level OS constructs that allow you to specify unique system users, hostnames,
     IP addresses, filesystem segments, RAM, and CPU quotas.'
+  id: totrans-19
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**容器** – 容器是一种软件单元，打包了代码及其所有依赖项，包括库和配置文件。这使得应用程序能够在各种计算环境中快速且可靠地运行。容器使用低级操作系统构造，允许你指定独特的系统用户、主机名、IP
+    地址、文件系统段、内存和 CPU 配额。'
 - en: '**Docker** – Docker is an open source platform for developing, building, deploying,
     and managing containerized applications. Docker uses OS-level virtualization to
     deploy or deliver software in packages called containers, providing the flexibility
     to run anywhere. Docker can also run any flavor of OS if the underlying OS kernel
     is Linux. As an example, containers can run different flavors of the Linux OS,
     such as Debian, CentOS, Fedora, and so on.'
+  id: totrans-20
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**Docker** – Docker 是一个开源平台，用于开发、构建、部署和管理容器化应用程序。Docker 使用操作系统级虚拟化技术，将软件打包成容器，从而提供在任何地方运行的灵活性。Docker
+    也可以运行任何操作系统，只要底层操作系统内核是 Linux。例如，容器可以运行不同版本的 Linux 操作系统，如 Debian、CentOS、Fedora
+    等等。'
 - en: '**Docker daemon** – The Docker daemon represents the server that runs one or
     more containers. It is the service that runs the host OS. Additionally, the CLI
     represents the client, and the combination with the Docker daemon forms a client-server
     architecture.'
+  id: totrans-21
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**Docker 守护进程** – Docker 守护进程表示运行一个或多个容器的服务器。它是运行主机操作系统的服务。此外，命令行界面（CLI）表示客户端，CLI
+    与 Docker 守护进程的结合形成了客户端-服务器架构。'
 - en: '**Dockerfile** – A Dockerfile is a text document that contains a series or
     list of commands that can be executed from a command line in order to potentially
     assemble an image. A Dockerfile is the input for Docker to build images. The process
     automates the execution of a series of instructions or commands.'
+  id: totrans-22
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**Dockerfile** – Dockerfile 是一个文本文件，包含一系列可以从命令行执行的命令，用于可能地构建镜像。Dockerfile 是
+    Docker 用来构建镜像的输入文件。该过程自动化了执行一系列指令或命令。'
 - en: '**Docker layers** – A Docker layer represents an intermediate image that is
     created by executing each instruction in a Dockerfile. The link between the instruction
     and the intermediate image is stored in the build cache. A Docker container is
     essentially an image that has a readable/writable Docker layer built on top of
     multiple read-only images.'
+  id: totrans-23
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**Docker 层** – Docker 层表示通过执行 Dockerfile 中的每个指令创建的中间镜像。指令与中间镜像之间的关联存储在构建缓存中。Docker
+    容器本质上是一个镜像，其上建立了一个可读/写的 Docker 层，且基于多个只读镜像。'
 - en: '**Docker images** – A Docker image consists of multiple Docker layers that
     are used to execute code in one or more containers. Essentially, a Docker image
     represents a plan that needs to be executed or, in other words, deployed.'
+  id: totrans-24
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**Docker 镜像** – Docker 镜像由多个 Docker 层组成，这些层用于在一个或多个容器中执行代码。本质上，Docker 镜像代表着一个需要执行的计划，或者换句话说，是需要部署的计划。'
 - en: The next section illustrates the Docker life cycle and emphasizes one of the
     key **Site Reliability Engineering** (**SRE**) objectives, which is to eliminate
     toil by investing in automation.
+  id: totrans-25
   prefs: []
   type: TYPE_NORMAL
+  zh: 下一节将说明 Docker 生命周期，并强调**网站可靠性工程**（**SRE**）的一个关键目标，即通过投资自动化来消除繁琐工作。
 - en: Understanding the need for automation
+  id: totrans-26
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 理解自动化的必要性
 - en: Once code is checked into a source code repository, the next step in a CI process
     is to build code and create artifacts as per the requirements to run the application.
     Once the artifacts are created, the artifacts are further stored in a repository
@@ -163,52 +225,73 @@
     the application. Given that the running theme in this book is to work with containers,
     Docker forms a key role as the OS-level virtualization platform to deploy applications
     in containers.
+  id: totrans-27
   prefs: []
   type: TYPE_NORMAL
+  zh: 一旦代码提交到源代码仓库，CI 流程中的下一步是根据运行应用程序的需求构建代码并创建工件。一旦工件创建完成，它们将进一步存储在仓库中，并由**持续部署/交付（CD）**过程在后续运行应用程序。鉴于本书的主题是与容器一起工作，Docker
+    作为操作系统级虚拟化平台，在容器中部署应用程序时起着关键作用。
 - en: 'Following is an illustration of the Docker life cycle that highlights the multiple
     steps involved in creating container images to actually deploy containers that
     run the actual application:'
+  id: totrans-28
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下是 Docker 生命周期的示意图，突出显示了从创建容器镜像到实际部署运行应用程序的容器所涉及的多个步骤：
 - en: The developer hosts code in a source code repository. The code can be changed
     during the development or enhancement process.
+  id: totrans-29
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 开发者将代码托管在源代码仓库中。代码可以在开发或增强过程中进行更改。
 - en: The source code repository can be set up to have trigger points, such as raising
     a pull request or merging code into a specific branch. The trigger points can
     be tied to initiate the code build process.
+  id: totrans-30
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 可以设置源代码仓库，以便在特定触发点，如提交拉取请求或将代码合并到特定分支时触发。这些触发点可以与代码构建过程挂钩。
 - en: The code build process will look for a Dockerfile, which is essentially a set
     of instructions to create an application along with its dependencies.
+  id: totrans-31
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 代码构建过程会查找一个 Dockerfile，它本质上是一组指令，用于创建应用程序及其依赖项。
 - en: A Dockerfile is used to create the build artifact – the container image, using
     `docker build`.
+  id: totrans-32
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 使用 Dockerfile 创建构建工件——容器镜像，命令是 `docker build`。
 - en: The created image can be pushed to an artifact repository to store container
     images, such as Docker Hub or GCP's Container Registry, and so on.
+  id: totrans-33
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 创建的镜像可以推送到工件仓库中存储容器镜像，例如 Docker Hub 或 GCP 的容器注册表等。
 - en: The application is created by downloading the container image from the repository
     into a compute environment and subsequently building a container, which essentially
     is a package that contains code, libraries, and dependencies.
+  id: totrans-34
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 应用程序是通过将容器镜像从仓库下载到计算环境中并随后构建一个容器来创建的，该容器本质上是一个包含代码、库和依赖项的包。
 - en: 'If the preceding steps are converted into actual commands, then it will look
     like the following snippet:'
+  id: totrans-35
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果将上述步骤转换为实际命令，它将如下所示：
 - en: '[PRE0]'
+  id: totrans-36
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE0]'
 - en: The steps mentioned as part of the Docker workflow are steps that need to be
     executed and in sequence. If there is a code fix or an incremental code change,
     then the steps need to be repeated in order to build, push, and deploy the code.
@@ -216,8 +299,10 @@
     for developers. This is because the more manual steps there are, the greater the
     chance of human error. This qualifies as toil, since the steps are manual, repetitive
     in nature, devoid of any value, and can be automated.
+  id: totrans-37
   prefs: []
   type: TYPE_NORMAL
+  zh: Docker 工作流中提到的步骤是需要按顺序执行的步骤。如果需要修复代码或进行增量代码更改，那么必须重复这些步骤，以便重新构建、推送和部署代码。这就形成了一个重复或甚至是无限循环，给开发者带来了很多痛苦和困扰。这是因为手动步骤越多，出错的机会就越大。这符合繁琐工作的定义，因为这些步骤是手动的、重复性的、没有价值的，并且可以自动化。
 - en: Given that SRE's objective is to eliminate toil through automation, this forms
     a feasible approach to eliminate the infinite loop of pain and suffering. In addition,
     the preceding steps need to be executed in an environment that would need special
@@ -226,8 +311,11 @@
     and storage requirements to run the preceding steps in a repeated fashion. The
     machine also needs to be scaled if there are multiple parallel builds that are
     initiated at once.
+  id: totrans-38
   prefs: []
   type: TYPE_NORMAL
+  zh: 鉴于 SRE 的目标是通过自动化消除繁琐工作，这构成了一种可行的方法来消除痛苦和困扰的无限循环。此外，上述步骤需要在一个需要特别关注或设置的环境中执行。例如，需要设置
+    Docker 来执行上述命令。此外，机器需要具备足够的计算能力和存储要求，以便以重复的方式运行这些步骤。如果同时发起多个并行构建，机器还需要进行扩展。
 - en: GCP offers a service called **Cloud Build**, an automation engine that plays
     a key part in the CI/CD workflow. Cloud Build can import the source code, build
     in a managed workspace, and create artifacts such as Docker images, Java packages,
@@ -238,70 +326,103 @@
     at the time of container deployment. CloudBuild is capable of automating all these
     steps into a declarative syntax; also known as the build configuration file, which
     can be effectively run as many times as needed.
+  id: totrans-39
   prefs: []
   type: TYPE_NORMAL
+  zh: GCP 提供了一项名为 **Cloud Build** 的服务，它是一个自动化引擎，在 CI/CD 工作流中扮演着关键角色。Cloud Build 可以导入源代码，在受管理的工作区中构建，并创建如
+    Docker 镜像、Java 包、二进制文件等工件。Cloud Build 实际上可以将构建、标记和推送容器镜像的步骤合并为一个配置文件。由 Cloud Build
+    创建的容器工件可以被推送并存储在另一个 GCP 服务——**容器注册表（Container Registry）** 中。在容器部署时，容器镜像可以从容器注册表中拉取。Cloud
+    Build 能够将所有这些步骤自动化为声明式语法；也称为构建配置文件，可以根据需要有效地多次执行。
 - en: 'The upcoming sections will go into the details of the following:'
+  id: totrans-40
   prefs: []
   type: TYPE_NORMAL
+  zh: 接下来的部分将详细介绍以下内容：
 - en: Cloud Build as the GCP service to build and create container images
+  id: totrans-41
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: Cloud Build 作为 GCP 服务来构建和创建容器镜像
 - en: Container Registry as the GCP service to manage container artifacts
+  id: totrans-42
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 容器注册表作为 GCP 服务来管理容器工件
 - en: Building and creating container images – Cloud Build
+  id: totrans-43
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 构建和创建容器镜像 – Cloud Build
 - en: 'Cloud Build is a service to build and create artifacts based on the commits
     made to source code repositories. The artifacts produced by Cloud Build can either
     be container or non-container artifacts. Cloud Build can integrate with GCP''s
     CSR as well as popular external repositories such as GitHub and Bitbucket. Key
     features of Cloud Build include the following:'
+  id: totrans-44
   prefs: []
   type: TYPE_NORMAL
+  zh: Cloud Build 是一个基于源代码库提交构建和创建工件的服务。Cloud Build 生成的工件可以是容器或非容器工件。Cloud Build 可以与
+    GCP 的 CSR 以及流行的外部代码库如 GitHub 和 Bitbucket 集成。Cloud Build 的主要特点包括以下几点：
 - en: '**Serverless platform**: Cloud Build removes the need to pre-provision servers
     or pay in advance for computing power or storage required to build the code and
     produce artifacts. Based on the number of commits being made in parallel, scaling
     up or scaling down is an inherent process and doesn''t require manual intervention.'
+  id: totrans-45
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**无服务器平台**：Cloud Build 消除了预先配置服务器或为构建代码和生成工件所需的计算能力或存储付费的需求。根据并行提交的数量，扩展或缩减是一个内建的过程，不需要人工干预。'
 - en: '**Access to builder images**: Cloud Build provides cloud builders, which are
     pre-baked ready-to-use container images with support for multiple common languages
     and tools installed. For example, Docker Cloud Builders run the Docker tool.'
+  id: totrans-46
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**访问构建器镜像的能力**：Cloud Build 提供了云构建器，它们是预先配置好的、可以立即使用的容器镜像，支持多种常见语言和工具。例如，Docker
+    Cloud Builders 运行 Docker 工具。'
 - en: '**The ability to add custom build steps**: Cloud Build requires a build config
     file where the list of steps can be explicitly specified by the user. The user
     can also specify the order of execution and include any dependencies as needed.'
+  id: totrans-47
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**添加自定义构建步骤的能力**：Cloud Build 需要一个构建配置文件，用户可以在其中明确指定步骤的列表。用户还可以指定执行顺序，并根据需要包含任何依赖关系。'
 - en: '**A focus on security**: Cloud Build supports vulnerability scanning and provides
     the ability to define policies that can block the deployment of vulnerable images.'
+  id: totrans-48
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**专注于安全性**：Cloud Build 支持漏洞扫描，并提供定义策略的能力，可以阻止有漏洞的镜像被部署。'
 - en: The foundation for these Cloud Build features is based upon certain key elements
     that will be discussed in the upcoming sub-sections.
+  id: totrans-49
   prefs: []
   type: TYPE_NORMAL
+  zh: 这些 Cloud Build 特性所基于的基础是一些关键要素，接下来的子部分将会讨论这些要素。
 - en: Cloud Build essentials
+  id: totrans-50
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: Cloud Build 基础知识
 - en: There are two key essential concepts with respect to Cloud Build, cloud builders
     and the build configuration.
+  id: totrans-51
   prefs: []
   type: TYPE_NORMAL
+  zh: 关于 Cloud Build，有两个关键的基本概念，分别是云构建器和构建配置。
 - en: Cloud builders
+  id: totrans-52
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: Cloud 构建器
 - en: Cloud builders are container images that run the build process. The build process
     within a cloud builder is essentially a set of pre-defined build steps. In addition,
     a cloud builder can also include custom build steps. Cloud builder images are
@@ -309,12 +430,17 @@
     commands inside the builder containers within the context of cloud builders. Cloud
     builders can either be Google-managed, community-contributed, or public Docker
     Hub images.
+  id: totrans-53
   prefs: []
   type: TYPE_NORMAL
+  zh: 云构建器是运行构建过程的容器镜像。云构建器中的构建过程本质上是一组预定义的构建步骤。此外，云构建器还可以包括自定义构建步骤。云构建器镜像包含了常见的编程语言和工具。Cloud
+    Build 可用于在云构建器的构建容器内运行特定命令。云构建器可以是 Google 管理的、社区贡献的，或是公共的 Docker Hub 镜像。
 - en: Google-managed builders
+  id: totrans-54
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: Google 管理的构建器
 - en: Google provides managed pre-built images that can be used to execute one or
     more build steps. These pre-built images are in Google's Container Registry. Popular
     examples include docker builder (to perform `docker build`, `docker tag`, and
@@ -322,12 +448,20 @@
     deploy against a Google service such as Cloud Run), gke-deploy builder (to deploy
     in a GKE cluster), and so on. The complete list of Google-managed builders can
     be found at [https://github.com/GoogleCloudPlatform/cloud-builders](https://github.com/GoogleCloudPlatform/cloud-builders).
+  id: totrans-55
   prefs: []
   type: TYPE_NORMAL
+  zh: Google 提供了可以用于执行一个或多个构建步骤的托管预构建镜像。这些预构建镜像存储在 Google 的容器注册表中。常见的示例包括 docker builder（执行
+    `docker build`、`docker tag` 和 `docker push` 命令）、gcloud builder（执行 `docker run`
+    命令以部署到 Google 服务，如 Cloud Run）、gke-deploy builder（在 GKE 集群中进行部署）等。Google 管理的构建器完整列表可以在
+    [https://github.com/GoogleCloudPlatform/cloud-builders](https://github.com/GoogleCloudPlatform/cloud-builders)
+    查找。
 - en: Community-contributed builders
+  id: totrans-56
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 社区贡献的构建器
 - en: Community-contributed builders are open source builders and are managed by the
     Cloud Build developer community. These are not pre-built images and, instead,
     only source code is made available by the developer community. Individual adaptations
@@ -335,23 +469,35 @@
     (to manage the Kubernetes package), Packer (to automate the creation of images),
     and so on. The complete list of community-contributed builders can be found at
     [https://github.com/GoogleCloudPlatform/cloud-builders-community](https://github.com/GoogleCloudPlatform/cloud-builders-community).
+  id: totrans-57
   prefs: []
   type: TYPE_NORMAL
+  zh: 社区贡献的构建器是开源构建器，由 Cloud Build 开发者社区管理。这些不是预构建的镜像，而是由开发者社区提供源代码。个别适配者需要构建源代码并创建镜像。常见示例包括
+    Helm（用于管理 Kubernetes 包）、Packer（用于自动化创建镜像）等。社区贡献构建器的完整列表可以在 [https://github.com/GoogleCloudPlatform/cloud-builders-community](https://github.com/GoogleCloudPlatform/cloud-builders-community)
+    查找。
 - en: Public Docker Hub builders
+  id: totrans-58
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 公共 Docker Hub 构建器
 - en: Public Docker Hub builders refers to publicly available Docker images that can
     be used to execute a set of build tasks. From a thought process standpoint, these
     builders are very similar to Google-managed builders but the images are not stored
     in Google Container Registry and are instead stored in Docker Hub. The complete
     list of public Docker Hub builders can be found at [https://hub.docker.com/search?q=&type=image](https://hub.docker.com/search?q=&type=image).
+  id: totrans-59
   prefs: []
   type: TYPE_NORMAL
+  zh: 公共 Docker Hub 构建器指的是可以用来执行一组构建任务的公开可用的 Docker 镜像。从思维方式角度来看，这些构建器与 Google 管理的构建器非常相似，但这些镜像不存储在
+    Google 容器注册表中，而是存储在 Docker Hub 中。公共 Docker Hub 构建器的完整列表可以在 [https://hub.docker.com/search?q=&type=image](https://hub.docker.com/search?q=&type=image)
+    查找。
 - en: The build configuration
+  id: totrans-60
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 构建配置
 - en: The build configuration is a configuration file that encapsulates the steps
     to perform build-related tasks. A build configuration file can be written in JSON
     or YAML format. The configuration steps specifically make use of cloud builders,
@@ -363,316 +509,462 @@
     and Gulp. An example of a build config file can contain instructions to build,
     package, and push Docker images to a container registry of choice. The structure
     of such a file will be detailed in the next sub-section.
+  id: totrans-61
   prefs: []
   type: TYPE_NORMAL
+  zh: 构建配置是一个配置文件，封装了执行与构建相关任务的步骤。构建配置文件可以采用 JSON 或 YAML 格式编写。配置步骤特别使用云构建器，这些构建器可以是预构建的镜像（由
+    Google 管理或公共 Docker 镜像）或由开发者社区维护的代码构建的镜像，基本上代表了可以重用的模板化步骤，并且可以选择传递显式参数。这些模板化步骤可以用来获取依赖项、执行单元和集成测试，以及使用构建工具（如
+    Docker、Gradle、Maven、Bazel 和 Gulp）创建工件。例如，一个构建配置文件可能包含构建、打包并将 Docker 镜像推送到选定容器注册表的指令。该文件的结构将在下一小节中详细介绍。
 - en: Structure
+  id: totrans-62
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 结构
 - en: 'A build config file consists of various fields or options. The most important
     of them is the build step (refer to *Figure 6.1*). There could be one or more
     build steps defined to reflect tasks required for the build process. Each build
     step essentially executes a Docker container and provides the flexibility to include
     multiple options:'
+  id: totrans-63
   prefs: []
   type: TYPE_NORMAL
+  zh: 一个构建配置文件包含多个字段或选项。其中最重要的是构建步骤（参见 *图 6.1*）。可以定义一个或多个构建步骤，以反映构建过程中所需的任务。每个构建步骤本质上执行一个
+    Docker 容器，并提供灵活性以包含多个选项：
 - en: '**Name**: Specifies a cloud builder that is a container image running common
     tools.'
+  id: totrans-64
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**Name**：指定一个云构建器，它是一个运行常用工具的容器镜像。'
 - en: '`args` will be used as arguments to that entry point; otherwise, the first
     element in `args` will be used as the entry point, and the remainder will be used
     as arguments.'
+  id: totrans-65
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`args` 将用作该入口点的参数；如果未指定，`args` 中的第一个元素将用作入口点，其余部分将用作参数。'
 - en: '**Env**: Takes a list of environment variables in the form of a key-value pair.'
+  id: totrans-66
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**Env**：接受一个以键值对形式列出的环境变量列表。'
 - en: '`/workspace`) or a specific absolute path.'
+  id: totrans-67
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`/workspace`）或特定的绝对路径。'
 - en: '**id**: Used to set a unique identifier for a build step.'
+  id: totrans-68
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**id**：用于为构建步骤设置唯一标识符。'
 - en: '**waitFor**: Used if a specific build step is required to run prior. If not
     specified, then all prior steps need to be completed prior to the current build
     step.'
+  id: totrans-69
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**waitFor**：如果需要某个特定的构建步骤先于其他步骤运行，则使用此选项。如果未指定，则需要完成所有前置步骤后，当前构建步骤才能执行。'
 - en: '**entrypoint**: Used to override the default entry point provided by the cloud
     builder.'
+  id: totrans-70
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**entrypoint**：用于覆盖云构建器提供的默认入口点。'
 - en: '**secretEnv**: Allows you to define a list of environment variables encrypted
     by Cloud KMS.'
+  id: totrans-71
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**secretEnv**：允许您定义由 Cloud KMS 加密的环境变量列表。'
 - en: '**volumes**: Represents a Docker container volume that is mounted into build
     steps to persist artifacts across build steps.'
+  id: totrans-72
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**volumes**：表示一个 Docker 容器卷，该卷被挂载到构建步骤中，以便在构建步骤之间持久化工件。'
 - en: '**timeout**: To specify the amount of time that a build can run. The default
     value is 10 minutes and the maximum allowed is 24 hours. Time should be specified
     in seconds.'
+  id: totrans-73
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**timeout**：指定构建可以运行的时间。默认值为 10 分钟，最大允许值为 24 小时。时间应以秒为单位指定。'
 - en: '*Figure 6.1* shows the skeleton structure of a build configuration file that
     could consist of one or more build steps:'
+  id: totrans-74
   prefs: []
   type: TYPE_NORMAL
+  zh: '*图 6.1* 显示了一个构建配置文件的骨架结构，该文件可能由一个或多个构建步骤组成：'
 - en: '![Figure 6.1 – Build steps in a build configuration file'
+  id: totrans-75
   prefs: []
   type: TYPE_NORMAL
+  zh: '![图 6.1 – 构建配置文件中的构建步骤'
 - en: '](img/B15597_06_01.jpg)'
+  id: totrans-76
   prefs: []
   type: TYPE_NORMAL
+  zh: '](img/B15597_06_01.jpg)'
 - en: Figure 6.1 – Build steps in a build configuration file
+  id: totrans-77
   prefs: []
   type: TYPE_NORMAL
+  zh: 图 6.1 – 构建配置文件中的构建步骤
 - en: Apart from the options that form the build steps of a build configuration file,
     additional possible options along with their details can be found at [https://cloud.google.com/cloud-build/docs/build-config](https://cloud.google.com/cloud-build/docs/build-config).
+  id: totrans-78
   prefs: []
   type: TYPE_NORMAL
+  zh: 除了构建配置文件中构建步骤所包含的选项外，更多的可能选项及其详细信息可以在[https://cloud.google.com/cloud-build/docs/build-config](https://cloud.google.com/cloud-build/docs/build-config)找到。
 - en: Building code using Cloud Build
+  id: totrans-79
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 使用 Cloud Build 构建代码
 - en: 'The combination of cloud builders and build configuration files forms the core
     of Cloud Build. When Cloud Build is initiated, the following steps happen in the
     background:'
+  id: totrans-80
   prefs: []
   type: TYPE_NORMAL
+  zh: 云构建器和构建配置文件的结合构成了 Cloud Build 的核心。当 Cloud Build 启动时，后台会执行以下步骤：
 - en: The application code, Dockerfile, and other assets in a given directory are
     compressed.
+  id: totrans-81
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 将应用代码、Dockerfile 和其他资源压缩成一个文件。
 - en: The compressed code is then uploaded to a Cloud Storage bucket, which is either
     the default bucket created by Cloud Build on a per-project basis or a user-supplied
     Cloud Storage bucket.
+  id: totrans-82
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 压缩后的代码然后会被上传到 Cloud Storage 存储桶，这可以是 Cloud Build 在每个项目基础上创建的默认存储桶，也可以是用户提供的
+    Cloud Storage 存储桶。
 - en: A build is initiated with the uploaded files as input and the output of the
     build is a container image that is tagged with the provided image name.
+  id: totrans-83
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 构建以上传的文件作为输入启动，构建的输出是一个带有提供的镜像名称的容器镜像。
 - en: The container image is then pushed to Container Registry or a destination registry
     of choice.
+  id: totrans-84
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 然后，容器镜像会被推送到容器注册表或选择的目标注册表。
 - en: There are multiple approaches to invoke the build process via Cloud Build manual
     invocation and automatic builds using triggers.
+  id: totrans-85
   prefs: []
   type: TYPE_NORMAL
+  zh: 有多种方法可以通过 Cloud Build 手动调用构建过程，并使用触发器进行自动构建。
 - en: Cloud Build – manual invocation via the gcloud CLI
+  id: totrans-86
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: Cloud Build – 通过 gcloud CLI 手动调用
 - en: 'There are two ways to initiate a build manually through Cloud Build using the
     `gcloud` command-line tool, which essentially uses the Cloud Build API:'
+  id: totrans-87
   prefs: []
   type: TYPE_NORMAL
+  zh: 有两种方法可以通过 `gcloud` 命令行工具手动启动 Cloud Build，这基本上使用了 Cloud Build API：
 - en: Using a Dockerfile
+  id: totrans-88
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 使用 Dockerfile
 - en: Using Cloud Build – build configuration file
+  id: totrans-89
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 使用 Cloud Build – 构建配置文件
 - en: The upcoming sub-sections go into the details of the preceding two ways to initiate
     a build through Cloud Build.
+  id: totrans-90
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下小节将详细介绍通过 Cloud Build 启动构建的两种方法。
 - en: Cloud Build – a manual build using a Dockerfile
+  id: totrans-91
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: Cloud Build – 使用 Dockerfile 进行手动构建
 - en: 'The Dockerfile should contain all the information required to build a Docker
     image using Cloud Build. The following command will initiate the build process
     manually. This command should be run from the directory that contains the application
     code, Dockerfile, and any other required assets:'
+  id: totrans-92
   prefs: []
   type: TYPE_NORMAL
+  zh: Dockerfile 应包含使用 Cloud Build 构建 Docker 镜像所需的所有信息。以下命令将手动启动构建过程。此命令应从包含应用代码、Dockerfile
+    和任何其他所需资源的目录运行：
 - en: '[PRE1]'
+  id: totrans-93
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE1]'
 - en: Once the build is complete, the build ID will be displayed on the terminal or
     shell from where the `build` command was invoked. The build ID can be used to
     filter through the builds displayed in the Cloud Build console and is subsequently
     useful to view the build logs. Additionally, the newly created image will be pushed
     to Container Registry as per the preceding example.
+  id: totrans-94
   prefs: []
   type: TYPE_NORMAL
+  zh: 一旦构建完成，构建 ID 将显示在终端或 shell 中，`build` 命令从中被调用。该构建 ID 可以用于过滤 Cloud Build 控制台中显示的构建，并且后续可以用于查看构建日志。此外，新的镜像将根据前面的示例推送到容器注册表。
 - en: Cloud Build – a manual build using a build configuration file
+  id: totrans-95
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: Cloud Build – 使用构建配置文件手动构建
 - en: Another approach to initiate a manual build through Cloud Build is to use a
     build configuration file. The build configuration file uses cloud builders, which
     essentially are critical to minimize the manual steps in a templated specification
     file.
+  id: totrans-96
   prefs: []
   type: TYPE_NORMAL
+  zh: 另一种通过 Cloud Build 启动手动构建的方法是使用构建配置文件。构建配置文件使用云构建器，这些构建器在模板化规格文件中至关重要，能够最小化手动步骤。
 - en: 'The following is an example build configuration file that uses docker cloud
     builder to build code and push an image to Container Registry. The name of the
     container image used here is `builder-myimage` and the name of the configuration
     file is `cloudbuild.yaml`:'
+  id: totrans-97
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下是一个示例构建配置文件，使用 docker 云构建器来构建代码并将镜像推送到容器注册表。这里使用的容器镜像名称是 `builder-myimage`，配置文件的名称是
+    `cloudbuild.yaml`：
 - en: '[PRE2]'
+  id: totrans-98
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE2]'
 - en: 'The following command will initiate the Cloud Build process by using the build
     configuration file (which is `cloudbuild.yaml` in this case) as the input, along
     with the path to the source code:'
+  id: totrans-99
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下命令将使用构建配置文件（在本例中是 `cloudbuild.yaml`）以及源代码路径作为输入，启动 Cloud Build 过程：
 - en: '[PRE3]'
+  id: totrans-100
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE3]'
 - en: Cloud Build – automatic build using triggers
+  id: totrans-101
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: Cloud Build – 使用触发器自动构建
 - en: The manual invocation of Cloud Build does not fit into the CI/CD workflow as
     it adds toil. The preferred approach is to automatically build code whenever a
     qualified event is detected. Cloud Build facilitates this feature by using the
     option of triggers.
+  id: totrans-102
   prefs: []
   type: TYPE_NORMAL
+  zh: 手动调用 Cloud Build 不适用于 CI/CD 工作流，因为它增加了额外的工作量。推荐的方法是每当检测到合适的事件时自动构建代码。Cloud Build
+    通过触发器选项来支持此功能。
 - en: 'The user can create a trigger that could be invoked on one of the following
     qualifying events:'
+  id: totrans-103
   prefs: []
   type: TYPE_NORMAL
+  zh: 用户可以创建一个触发器，该触发器可以在以下合格事件之一发生时被触发：
 - en: Push to a branch.
+  id: totrans-104
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 推送到一个分支。
 - en: Push a new tag.
+  id: totrans-105
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 推送一个新的标签。
 - en: A pull request (GitHub app only).
+  id: totrans-106
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 拉取请求（仅限 GitHub 应用）。
 - en: The trigger continuously monitors for the configured event against the configured
     repository. If the event occurs, the trigger initiates the build process using
     either the Dockerfile or Cloud Build configuration file (as configured on the
     trigger) and subsequently, the build process will result in build artifacts. A
     step-by-step hands-on lab is illustrated toward the end of this chapter.
+  id: totrans-107
   prefs: []
   type: TYPE_NORMAL
+  zh: 该触发器持续监控配置的仓库中的事件。如果该事件发生，触发器将使用 Dockerfile 或 Cloud Build 配置文件（如触发器上所配置的）启动构建过程，随之而来的是生成构建工件。本章节末尾将展示一个逐步的实操实验。
 - en: Dockerfile versus cloudbuild.yaml
+  id: totrans-108
   prefs: []
   type: TYPE_NORMAL
+  zh: Dockerfile 与 cloudbuild.yaml
 - en: A Dockerfile allows you to build and compose a Docker container image using
     the `docker build` command. A Dockerfile also allows you to incorporate build
     steps using bash commands; they could include commands specific to Google Cloud;
     after specifying the installation of Google Cloud SDK as one of the steps.
+  id: totrans-109
   prefs: []
   type: TYPE_NORMAL
+  zh: Dockerfile 允许你使用 `docker build` 命令构建和组合 Docker 容器镜像。Dockerfile 还允许你通过 bash 命令将构建步骤合并在一起；这些步骤可以包括特定于
+    Google Cloud 的命令；例如，在某个步骤中指定安装 Google Cloud SDK。
 - en: On the contrary to using a Dockerfile, `Cloudbuild.yaml` also allows you to
     build and compose a Docker container image and to utilize Google-managed or community-managed
     builders that come with pre-built images and offer more customization. The choice
     between the two comes to intent, choice of cloud platform, and ease of customization.
+  id: totrans-110
   prefs: []
   type: TYPE_NORMAL
+  zh: 与使用 Dockerfile 相反，`Cloudbuild.yaml` 也允许你构建和组合 Docker 容器镜像，并利用 Google 管理的或社区管理的构建工具，这些工具带有预构建的镜像，并提供更多定制化选项。选择两者之间的区别在于用途、所选云平台和定制化的便利性。
 - en: This concludes the sub-section on how a build can be initiated through Cloud
     Build. The next sub-section focuses on details related to storing and viewing
     build logs.
+  id: totrans-111
   prefs: []
   type: TYPE_NORMAL
+  zh: 这部分内容讲解了如何通过 Cloud Build 发起构建。接下来的小节将关注存储和查看构建日志的相关细节。
 - en: Storing and viewing build logs
+  id: totrans-112
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 存储和查看构建日志
 - en: Cloud Build creates a log trail for actions performed as part of a build process.
     This log information is stored in Cloud Logging. Additionally, Cloud Build stores
     the log information in a Cloud Storage bucket. In fact, a default Cloud Storage
     bucket is created on a per-project basis, once the Cloud Build API is enabled.
     The bucket is named in the format `<project-id_cloudbuild>`. The logs related
     to every build are compressed and stored in the storage bucket.
+  id: totrans-113
   prefs: []
   type: TYPE_NORMAL
+  zh: Cloud Build 会为作为构建过程一部分执行的操作创建日志记录。这些日志信息会存储在 Cloud Logging 中。此外，Cloud Build
+    还会将日志信息存储在 Cloud Storage 存储桶中。实际上，在启用 Cloud Build API 后，会为每个项目创建一个默认的 Cloud Storage
+    存储桶。该存储桶的命名格式为`<project-id_cloudbuild>`。与每个构建相关的日志会被压缩并存储在存储桶中。
 - en: 'So, the default option to store the Cloud Build logs is both in Cloud Logging
     as well as a Cloud Storage bucket. However, it is possible to choose either of
     the two options specifically in the build configuration file by using the *logging*
     field:'
+  id: totrans-114
   prefs: []
   type: TYPE_NORMAL
+  zh: 因此，存储 Cloud Build 日志的默认选项是同时存储在 Cloud Logging 和 Cloud Storage 存储桶中。不过，你可以在构建配置文件中通过使用*logging*字段明确选择这两者之一。
 - en: If set to `CLOUD_LOGGING_ONLY`, then logs are written only to Cloud Logging.
+  id: totrans-115
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 如果设置为`CLOUD_LOGGING_ONLY`，则日志只会写入 Cloud Logging。
 - en: If set to `GCS_ONLY`, then logs are written only to the Cloud Storage bucket.
     The default bucket will be used unless a Cloud Storage bucket is explicitly specified
     using the **logsBucket** option.
+  id: totrans-116
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 如果设置为`GCS_ONLY`，则日志只会写入 Cloud Storage 存储桶。除非显式指定 Cloud Storage 存储桶，否则将使用默认存储桶，方法是使用**logsBucket**选项。
 - en: It's possible that the user will go with an option other than the default options
     either due to cost constraints or it's possible that logs are ingested to another
     logging framework with the Cloud Storage bucket being the source.
+  id: totrans-117
   prefs: []
   type: TYPE_NORMAL
+  zh: 用户可能会选择除默认选项以外的其他选项，可能是由于成本限制，或者可能是将日志引入到另一个日志框架中，而 Cloud Storage 存储桶则作为数据源。
 - en: 'The following is a code snippet that demonstrates the usage of the *logging*
     option as part of the build configuration file:'
+  id: totrans-118
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下是一个代码示例，演示了在构建配置文件中使用*logging*选项的方法：
 - en: '[PRE4]'
+  id: totrans-119
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE4]'
 - en: Logs can be viewed using the Cloud Logging console. If logs need to be viewed
     at an individual build level, it is preferred to view the logs from the Cloud
     Build console. The information in the Cloud Build console will be derived from
     the Cloud Storage bucket (either the default or the explicit bucket). In order
     to view the logs, the user should either have the *Storage Object Viewer* role
     or the *Project Viewer* role.
+  id: totrans-120
   prefs: []
   type: TYPE_NORMAL
+  zh: 可以通过 Cloud Logging 控制台查看日志。如果需要查看单个构建级别的日志，建议通过 Cloud Build 控制台查看日志。Cloud Build
+    控制台中的信息将来源于 Cloud Storage 存储桶（无论是默认存储桶还是显式存储桶）。为了查看日志，用户应该拥有*Storage Object Viewer*
+    角色或 *Project Viewer* 角色。
 - en: 'To view the build logs, follow these steps:'
+  id: totrans-121
   prefs: []
   type: TYPE_NORMAL
+  zh: 查看构建日志，请按照以下步骤操作：
 - en: Navigate to **Cloud Build** in the GCP Console (by default, the user will be
     taken to the **Build History** page).
+  id: totrans-122
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在 GCP 控制台中导航到**Cloud Build**（默认情况下，用户将被带到**构建历史**页面）。
 - en: Select a build to view its respective logs (builds that succeeded will be in
     green, and in red otherwise).
+  id: totrans-123
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 选择一个构建以查看其相应的日志（成功的构建会显示为绿色，否则为红色）。
 - en: 'The user can view the build log per build step. In addition, execution details
     and the storage locations of any relevant build artifacts are also displayed.
     Optionally, the source of the cloud logs is also shown (refer to *Figure 6.2*):'
+  id: totrans-124
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 用户可以查看每个构建步骤的构建日志。此外，执行详细信息和任何相关构建工件的存储位置也会显示。可选地，还会显示云日志的来源（请参见*图 6.2*）：
 - en: '![Figure 6.2 – Build log from Cloud Build'
+  id: totrans-125
   prefs: []
   type: TYPE_NORMAL
+  zh: '![图 6.2 – 来自 Cloud Build 的构建日志'
 - en: '](img/B15597_06_02.jpg)'
+  id: totrans-126
   prefs: []
   type: TYPE_NORMAL
+  zh: '](img/B15597_06_02.jpg)'
 - en: Figure 6.2 – Build log from Cloud Build
+  id: totrans-127
   prefs: []
   type: TYPE_NORMAL
+  zh: 图 6.2 – 来自 Cloud Build 的构建日志
 - en: If a need arises to delete the build logs, then logs cannot be deleted from
     a Google-created log bucket. However, logs can be deleted from a user-created
     log bucket or by deleting the user-created bucket itself that contains one or
@@ -680,287 +972,424 @@
     a file – through Cloud Storage; specifically, the role Storage Admin or Storage
     Object Admin (depending upon whether the intention is to delete the entire user-created
     bucket or the specific build log file respectively).
+  id: totrans-128
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果需要删除构建日志，则无法从 Google 创建的日志存储桶中删除日志。但是，可以从用户创建的日志存储桶中删除日志，或者通过删除包含一个或多个构建日志的用户创建的存储桶来删除日志。这需要用户具有访问
+    Cloud Storage 的权限以删除文件——通过 Cloud Storage，具体来说是需要具有 Storage Admin 或 Storage Object
+    Admin 角色（具体取决于删除整个用户创建的存储桶还是删除特定的构建日志文件）。
 - en: Managing access controls
+  id: totrans-129
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 管理访问控制
 - en: A build can be triggered either by a user or by an application. As per Google's
     recommended practices, if an application needs access to a service, then it can
     be possible through a service account. So, to be precise, access control to Cloud
     Build can either be managed via **end user IAM roles** or through a **Cloud Build
     service account**.
+  id: totrans-130
   prefs: []
   type: TYPE_NORMAL
+  zh: 构建可以由用户或应用程序触发。根据 Google 的推荐做法，如果应用程序需要访问某项服务，则可以通过服务账户进行访问。因此，准确来说，Cloud Build
+    的访问控制可以通过**终端用户 IAM 角色**或**Cloud Build 服务账户**来管理。
 - en: End user IAM roles
+  id: totrans-131
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 终端用户 IAM 角色
 - en: Cloud Build has a set of predefined IAM roles that can provide granular access
     and can also align to a specific job role. This prevents unwanted access and allows
     you to implement the principle of least privilege.
+  id: totrans-132
   prefs: []
   type: TYPE_NORMAL
+  zh: Cloud Build 提供了一组预定义的 IAM 角色，可以提供精细的访问控制，并且可以与特定的工作角色对齐。这可以防止不必要的访问，并允许你实施最小权限原则。
 - en: 'The following table summarizes the critical IAM roles required to access or
     perform actions on Cloud Build:'
+  id: totrans-133
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下表格总结了访问或执行 Cloud Build 操作所需的关键 IAM 角色：
 - en: '![](img/B15597_06_Table_01.jpg)'
+  id: totrans-134
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/B15597_06_Table_01.jpg)'
 - en: Cloud Build service accounts
+  id: totrans-135
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: Cloud Build 服务账户
 - en: Google recommends using a **service account (SA)** when a task needs to be performed
     by an application or on behalf of a user. A service account is a special kind
     of account that is used by an application or a VM to make authorized API calls
     but not by an individual. The regular practice in such scenarios is to create
     a SA and assign the necessary permissions to the SA so that the application with
     that SA can perform the necessary actions.
+  id: totrans-136
   prefs: []
   type: TYPE_NORMAL
+  zh: Google 推荐在任务需要由应用程序执行或代表用户执行时使用**服务账户（SA）**。服务账户是一种特殊类型的账户，应用程序或虚拟机（VM）可以使用它来进行授权的
+    API 调用，但个人用户不能使用。在这种情况下的常规做法是创建一个 SA，并为该 SA 分配必要的权限，以便拥有该 SA 的应用程序可以执行必要的操作。
 - en: Cloud Build instead creates a specific Cloud Build SA for a project when the
     Cloud Build API is enabled on the project. The Cloud Build SA has a minimal number
     of permissions assigned to it, for example, Cloud Storage. If you want to use
     other services, the SA needs to be updated to reflect the desired permissions.
+  id: totrans-137
   prefs: []
   type: TYPE_NORMAL
+  zh: Cloud Build 会在启用 Cloud Build API 时为项目创建一个特定的 Cloud Build SA。此 Cloud Build SA
+    被分配了最小权限，例如 Cloud Storage。如果您希望使用其他服务，则需要更新 SA 以反映所需的权限。
 - en: 'The set of pre-assigned permissions for the Cloud Build SA will essentially
     allow Cloud Build to perform the following actions on behalf of the user:'
+  id: totrans-138
   prefs: []
   type: TYPE_NORMAL
+  zh: 为 Cloud Build SA 预先分配的权限集将基本允许 Cloud Build 代表用户执行以下操作：
 - en: Create, list, get, or cancel builds.
+  id: totrans-139
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 创建、列出、获取或取消构建。
 - en: Create, patch, delete, or run a build trigger.
+  id: totrans-140
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 创建、修补、删除或运行构建触发器。
 - en: Pull source code from CSR.
+  id: totrans-141
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 从 CSR 中拉取源代码。
 - en: Store images in and get images from Container Registry.
+  id: totrans-142
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 在 Container Registry 中存储镜像并获取镜像。
 - en: Store artifacts in and get artifacts from Cloud Storage.
+  id: totrans-143
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 在 Cloud Storage 中存储工件并获取工件。
 - en: Store artifacts in and get artifacts from Artifact Registry.
+  id: totrans-144
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 在 Artifact Registry 中存储工件并获取工件。
 - en: Create build logs in Cloud Logging.
+  id: totrans-145
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 在 Cloud Logging 中创建构建日志。
 - en: Store build logs in a user-created logs bucket.
+  id: totrans-146
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 将构建日志存储在用户创建的日志存储桶中。
 - en: Push build updates to Pub/Sub.
+  id: totrans-147
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 将构建更新推送到 Pub/Sub。
 - en: Get project information and list projects.
+  id: totrans-148
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 获取项目信息并列出项目。
 - en: This concludes the topic on managing access controls, giving insights into the
     required IAM roles. The upcoming topic focuses on best practices while executing
     the build process, which could essentially reduce the build execution time.
+  id: totrans-149
   prefs: []
   type: TYPE_NORMAL
+  zh: 本文结束了关于访问控制管理的主题，提供了所需的 IAM 角色的见解。接下来的主题将专注于执行构建过程时的最佳实践，旨在有效减少构建执行时间。
 - en: Cloud Build best practices – optimizing builds
+  id: totrans-150
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: Cloud Build 最佳实践 – 优化构建
 - en: 'Decreasing the build time helps in optimizing the build process. Given that
     the focus is on handling containers, there are two common strategies to increase
     the build speed:'
+  id: totrans-151
   prefs: []
   type: TYPE_NORMAL
+  zh: 减少构建时间有助于优化构建过程。考虑到重点是处理容器，提升构建速度有两种常见策略：
 - en: '**Building Leaner Containers**: As a part of this strategy, the size of a container
     can be reduced if files related to build-time dependencies and any intermediate
     files are not included in the container image.'
+  id: totrans-152
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**构建更精简的容器**：作为该策略的一部分，如果不将构建时依赖相关文件和任何中间文件包含在容器镜像中，则可以减少容器的大小。'
 - en: '`--cache-from` argument and can be used for subsequent builds as the starting
     point. The cached image will be retrieved from a registry. A cached Docker image
     is only supported for Docker builds and is not supported by cloud builders.'
+  id: totrans-153
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`--cache-from` 参数可以作为后续构建的起点使用。缓存的镜像将从注册中心检索。缓存的 Docker 镜像仅支持 Docker 构建，不支持云构建器。'
 - en: 'In addition to a generic strategy of building leaner containers to optimize
     the build speed, Cloud Build specifically prescribes the following best practices,
     which can additionally be used:'
+  id: totrans-154
   prefs: []
   type: TYPE_NORMAL
+  zh: 除了构建更精简容器的通用策略来优化构建速度，Cloud Build 特别推荐以下最佳实践，这些实践也可以进一步提升构建速度：
 - en: Kaniko cache
+  id: totrans-155
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: Kaniko 缓存
 - en: Cloud Storage for caching directories
+  id: totrans-156
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 用于缓存目录的 Cloud Storage
 - en: Custom VM sizes
+  id: totrans-157
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 自定义 VM 大小
 - en: Ignoring unwanted files
+  id: totrans-158
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 忽略不需要的文件
 - en: The following are the details of the above-mentioned best practices.
+  id: totrans-159
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下是上述最佳实践的详细信息。
 - en: Kaniko cache
+  id: totrans-160
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: Kaniko 缓存
 - en: Kaniko cache is based on the open source tool Kaniko and is also a feature of
     Cloud Build where intermediate container image layers are directly written to
     Google's Container Registry without an explicit push step.
+  id: totrans-161
   prefs: []
   type: TYPE_NORMAL
+  zh: Kaniko 缓存基于开源工具 Kaniko，并且也是 Cloud Build 的一个特性，其中中间容器镜像层会直接写入到 Google 的 Container
+    Registry，而无需显式的推送步骤。
 - en: 'To enable Kaniko cache, as part of the build configuration file `cloudbuild.yaml`,
     the following is a code snippet that could incorporate it:'
+  id: totrans-162
   prefs: []
   type: TYPE_NORMAL
+  zh: 要启用 Kaniko 缓存，作为构建配置文件 `cloudbuild.yaml` 的一部分，以下是一个可以包含它的代码片段：
 - en: '[PRE5]'
+  id: totrans-163
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE5]'
 - en: 'The following are recommendations that should be taken into consideration while
     implementing Kaniko cache through the `kaniko-project` cloud builder:'
+  id: totrans-164
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下是实施 Kaniko 缓存时应考虑的建议，通过 `kaniko-project` 云构建器实现：
 - en: Use `kaniko-project/executor` instead of `cloud-builders/docker`.
+  id: totrans-165
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 使用 `kaniko-project/executor` 替代 `cloud-builders/docker`。
 - en: The `destination` flag should refer to the target container image.
+  id: totrans-166
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`destination` 标志应指向目标容器镜像。'
 - en: The `cache` flag should be set to `true`.
+  id: totrans-167
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`cache` 标志应设置为 `true`。'
 - en: The cache-ttl flag should be set to the required cache expiration time.
+  id: totrans-168
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`cache-ttl` 标志应设置为所需的缓存过期时间。'
 - en: 'Alternatively, Kaniko cache can be enabled via the gcloud CLI by running the
     command as shown in the following snippet:'
+  id: totrans-169
   prefs: []
   type: TYPE_NORMAL
+  zh: 或者，可以通过 gcloud CLI 启用 Kaniko 缓存，方法是运行以下命令：
 - en: '[PRE6]'
+  id: totrans-170
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE6]'
 - en: Kaniko cache speeds up the build execution time by storing and indexing the
     intermediate layers within a Container Registry and eventually saves build execution
     time since it can be used by subsequent builds.
+  id: totrans-171
   prefs: []
   type: TYPE_NORMAL
+  zh: Kaniko 缓存通过在容器镜像注册表中存储和索引中间层，加速了构建执行时间，并最终节省了构建执行时间，因为它可以被后续构建重用。
 - en: Cloud Storage for caching directories
+  id: totrans-172
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 用于缓存目录的 Cloud Storage
 - en: Conceptually, this is like a cached Docker image. The results of a previous
     build can be reused by copying from a Cloud Storage bucket and the new results
     can also be written back to the Cloud Storage bucket. This concept is not restricted
     only to Docker builds but can also be extended to any builder supported by Cloud
     Build.
+  id: totrans-173
   prefs: []
   type: TYPE_NORMAL
+  zh: 从概念上讲，这就像是一个缓存的 Docker 镜像。可以通过从 Cloud Storage 存储桶中复制上一个构建的结果来重用这些结果，同时新的结果也可以写回到
+    Cloud Storage 存储桶中。这个概念不仅限于 Docker 构建，还可以扩展到 Cloud Build 支持的任何构建器。
 - en: Additionally, Cloud Build uses a default working directory named `/workspace`,
     which is available to all steps in the build process. The results of one step
     can be passed on to the next step by persisting it in the default working directory.
     The working directory can also be explicitly set using the `dir` field as part
     of the build step.
+  id: totrans-174
   prefs: []
   type: TYPE_NORMAL
+  zh: 此外，Cloud Build 使用一个名为 `/workspace` 的默认工作目录，所有构建过程中的步骤都可以访问该目录。通过将步骤结果保存在默认工作目录中，可以将一个步骤的结果传递给下一个步骤。也可以通过在构建步骤中使用
+    `dir` 字段显式设置工作目录。
 - en: 'The following is a sample snippet of a build configuration file where Cloud
     Storage is used for caching directories:'
+  id: totrans-175
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下是一个构建配置文件的示例片段，其中使用了 Cloud Storage 来缓存目录：
 - en: '[PRE7]'
+  id: totrans-176
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE7]'
 - en: The preceding example also shows the usage of a specific working directory,
     `my-cloud-build/examples`, as specified under the `dir` field as part of the build
     steps. Like Kaniko cache, cloud storage can be used to optimize build speeds by
     using the results from a previous build.
+  id: totrans-177
   prefs: []
   type: TYPE_NORMAL
+  zh: 上述示例还展示了如何在构建步骤中通过 `dir` 字段指定一个特定的工作目录 `my-cloud-build/examples`。与 Kaniko 缓存类似，云存储可以通过使用上一个构建的结果来优化构建速度。
 - en: Custom VM sizes
+  id: totrans-178
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 自定义虚拟机大小
 - en: 'Cloud builds are executed against a managed VM of a standard size. However,
     Cloud Build provides an option to increase the speed of a build by using a higher
     CPU VM, which essentially speeds up the build process. This is done by specifying
     the `--machine-type` argument. Cloud Build specifically provides a choice of 8
     cores or 32 cores across two families of VMs. Specific choices are as follows:'
+  id: totrans-179
   prefs: []
   type: TYPE_NORMAL
+  zh: Cloud 构建是通过一个标准大小的托管虚拟机执行的。然而，Cloud Build 提供了一个选项，通过使用更高 CPU 配置的虚拟机来提高构建速度，这本质上是加速构建过程。通过指定
+    `--machine-type` 参数可以实现这一点。Cloud Build 特别提供了两种虚拟机类型，分别为 8 核和 32 核。具体选项如下：
 - en: '`N1_HIGHCPU_8`'
+  id: totrans-180
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`N1_HIGHCPU_8`'
 - en: '`N1_HIGHCPU_32`'
+  id: totrans-181
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`N1_HIGHCPU_32`'
 - en: '`E2_HIGHCPU_8`'
+  id: totrans-182
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`E2_HIGHCPU_8`'
 - en: '`E2_HIGHCPU_32`'
+  id: totrans-183
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`E2_HIGHCPU_32`'
 - en: 'The following is the CLI command to specify a machine type while initiating
     the Cloud Build process:'
+  id: totrans-184
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下是启动 Cloud Build 过程时指定虚拟机类型的 CLI 命令：
 - en: '[PRE8]'
+  id: totrans-185
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE8]'
 - en: Ignoring unwanted files
+  id: totrans-186
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 忽略不需要的文件
 - en: Cloud Build uploads the code directory to a Cloud Storage location. The upload
     process can be made quicker by ignoring files that are not relevant to the build
     process. These files might include third-party dependencies, compiled code, binaries,
     or JAR files used for local development. In addition, documentation and code samples
     are not required for the build process. These files can be specified as part of
     the `gcloudignore` file to optimize the upload time.
+  id: totrans-187
   prefs: []
   type: TYPE_NORMAL
+  zh: Cloud Build 将代码目录上传到 Cloud Storage 位置。通过忽略与构建过程无关的文件，可以加速上传过程。这些文件可能包括第三方依赖项、编译后的代码、二进制文件或用于本地开发的
+    JAR 文件。此外，文档和代码示例对构建过程没有要求。这些文件可以作为 `gcloudignore` 文件的一部分来指定，以优化上传时间。
 - en: This completes our deep dive into Cloud Build and its key constructs, which
     include cloud builders and the build configuration, options available to initiate
     a build process, automating the available options using triggers, viewing build
     results with information stored in Cloud Storage, defining access controls, and
     prescribing recommended practices to optimize builds.
+  id: totrans-188
   prefs: []
   type: TYPE_NORMAL
+  zh: 这完成了我们对 Cloud Build 及其关键构件的深入讲解，包括云构建器和构建配置、启动构建过程的可用选项、通过触发器自动化可用选项、查看存储在 Cloud
+    Storage 中的构建结果、定义访问控制，以及推荐最佳实践来优化构建。
 - en: The next section focuses on the concepts of artifact management and the usage
     of Container Registry to manage build artifacts while working with containers.
+  id: totrans-189
   prefs: []
   type: TYPE_NORMAL
+  zh: 下一部分专注于制品管理的概念以及在与容器一起工作时使用 Container Registry 管理构建制品。
 - en: Managing build artifacts – Container Registry
+  id: totrans-190
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 管理构建制品 – Container Registry
 - en: Source code management is the first step in the CI process. This is followed
     by building the code. Code can be built based on various trigger points; either
     against a development branch or when a PR is merged into the master branch. The
@@ -970,14 +1399,19 @@
     then deployed into a computing environment and form the CD process. In between
     the CI and CD process, there is an intermediate process where the build artifacts
     are stored and then subsequently deployed. This is known as **artifact management**.
+  id: totrans-191
   prefs: []
   type: TYPE_NORMAL
+  zh: 源代码管理是 CI 过程的第一步。接着是构建代码。代码可以根据各种触发点构建；可以是针对开发分支，也可以是在将 PR 合并到主分支时。代码构建过程可能会生成一个或多个制品。根据构建的代码性质，生成的制品可以是二进制文件、包、容器镜像或它们的组合。这些制品存储在注册表中，然后部署到计算环境中，并形成
+    CD 过程。在 CI 和 CD 过程之间，还有一个中间过程，其中构建制品被存储，然后随后部署。这被称为 **制品管理**。
 - en: Artifact management acts as a single source of truth and a critical integration
     point between CI and CD. Many artifact management systems provide versioning,
     the ability to scan for vulnerabilities, provide consistent configuration, and
     accommodate unified access control.
+  id: totrans-192
   prefs: []
   type: TYPE_NORMAL
+  zh: 制品管理充当单一真相源和 CI 与 CD 之间的关键集成点。许多制品管理系统提供版本控制、漏洞扫描能力、一致的配置以及统一的访问控制。
 - en: Given that the theme of this book is working with containers, the critical build
     artifacts in this case will be the container images. Images are typically stored
     in a central registry. The most common container registry is Docker Hub, which
@@ -986,212 +1420,312 @@
     code that is specific to the enterprise. In such scenarios, a private registry
     is preferred over a public registry, since a private registry can offer role-based
     access controls to provide more security and governance.
+  id: totrans-193
   prefs: []
   type: TYPE_NORMAL
+  zh: 鉴于本书的主题是与容器一起工作，这种情况下的关键构建制品将是容器镜像。镜像通常存储在中央注册表中。最常见的容器注册表是 Docker Hub，用于存储公共
+    Docker 镜像。然而，在企业内部工作时，通常需要确保访问企业特定构建的容器镜像。在这种情况下，私有注册表比公共注册表更可取，因为私有注册表可以提供基于角色的访问控制，提供更多的安全性和治理。
 - en: Container Registry is GCP's private container image registry service, which
     supports Docker Image Manifest V2 and OCI image formats including Docker. The
     Container Registry service can be accessed through secure HTTPS endpoints and
     allows users to push or pull images from any possible compute option.
+  id: totrans-194
   prefs: []
   type: TYPE_NORMAL
+  zh: Container Registry 是 GCP 的私有容器镜像注册表服务，支持 Docker 镜像清单 V2 和 OCI 镜像格式，包括 Docker。可以通过安全的
+    HTTPS 端点访问 Container Registry 服务，并允许用户从任何可能的计算选项推送或拉取镜像。
 - en: Artifact Registry
+  id: totrans-195
   prefs: []
   type: TYPE_NORMAL
+  zh: '**Artifact Registry**'
 - en: Artifact Registry is a managed service offering from GCP that is similar to
     Container Registry but also provides options to store non-container artifacts
     such as Java packages, Node.js modules, and so on. It is currently not part of
     the GCP DevOps Professional exam.
+  id: totrans-196
   prefs: []
   type: TYPE_NORMAL
+  zh: '**制品注册表** 是 GCP 的托管服务，类似于 Container Registry，但还提供存储非容器制品（如 Java 包、Node.js 模块等）的选项。目前不是
+    GCP DevOps 专业考试的一部分。'
 - en: Container Registry – key concepts
+  id: totrans-197
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: Container Registry – 关键概念
 - en: Container Registry is one of Google's approaches to artifact management. Like
     any other service, it has certain key constructs and concepts. The following sub-sections
     dive into those details.
+  id: totrans-198
   prefs: []
   type: TYPE_NORMAL
+  zh: '**Container Registry** 是 Google 的一种制品管理方法之一。与任何其他服务一样，它具有某些关键的结构和概念。以下子部分深入探讨这些细节。'
 - en: Enabling/disabling Container Registry
+  id: totrans-199
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 启用/禁用 Container Registry
 - en: 'The Container Registry service can be enabled or disabled using the GCP Console
     via the **APIs & Services** section. Additionally, the service can be enabled
     or disabled through the CLI using the following command:'
+  id: totrans-200
   prefs: []
   type: TYPE_NORMAL
+  zh: 可以通过 GCP 控制台的 **APIs & Services** 部分启用或禁用 Container Registry 服务。此外，也可以通过以下命令在
+    CLI 中启用或禁用该服务：
 - en: '[PRE9]'
+  id: totrans-201
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE9]'
 - en: Container Registry service accounts
+  id: totrans-202
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: Container Registry 服务账户
 - en: Like Cloud Build, when Container Registry is enabled, a Google-managed SA will
     get created that is specific to your current project. This SA allows Container
     Registry to access critical GCP services such as Pub/Sub and Cloud Storage within
     the project. Google makes this possible by assigning the Container Registry Service
     Agent role to the Container Registry SA.
+  id: totrans-203
   prefs: []
   type: TYPE_NORMAL
+  zh: 与 Cloud Build 一样，当启用容器注册表时，会为当前项目创建一个 Google 管理的 SA（服务账户）。该 SA 允许容器注册表访问项目中的关键
+    GCP 服务，如 Pub/Sub 和 Cloud Storage。Google 通过将容器注册表服务代理角色分配给容器注册表 SA 来实现这一点。
 - en: The structure of Container Registry
+  id: totrans-204
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 容器注册表的结构
 - en: 'There could be one or more registries in a Container Registry service. Each
     registry is identified by the hostname, project ID, and image (tag or image digest).
     The following are the two possible formats:'
+  id: totrans-205
   prefs: []
   type: TYPE_NORMAL
+  zh: 容器注册表服务中可能有一个或多个注册表。每个注册表由主机名、项目 ID 和镜像（标签或镜像摘要）标识。以下是两种可能的格式：
 - en: '`HOSTNAME / PROJECT_ID / IMAGE:TAG`'
+  id: totrans-206
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`HOSTNAME / PROJECT_ID / IMAGE:TAG`'
 - en: '`HOSTNAME / PROJECT_ID / IMAGE@IMAGE-DIGEST`'
+  id: totrans-207
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`HOSTNAME / PROJECT_ID / IMAGE@IMAGE-DIGEST`'
 - en: 'In the preceding code, we have the following:'
+  id: totrans-208
   prefs: []
   type: TYPE_NORMAL
+  zh: 在前面的代码中，我们有以下内容：
 - en: '`HOSTNAME`: Refers to the location where the image is stored. Images are stored
     in a Cloud Storage bucket. If the hostname is `gcr.io`, then by default the images
     are stored in the United States. Additionally, the user can specify specific hosts
     such as `us.gcr.io`, `eu.gcr.io`, or `asia.gcr.io`, where each host is tied to
     a specific geographic region where the images are hosted.'
+  id: totrans-209
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`HOSTNAME`：指镜像存储的位置。镜像存储在 Cloud Storage 存储桶中。如果主机名是 `gcr.io`，则默认镜像存储在美国。此外，用户还可以指定特定的主机，如
+    `us.gcr.io`、`eu.gcr.io` 或 `asia.gcr.io`，其中每个主机都与特定的地理区域相关联，镜像存储于该区域。'
 - en: '`PROJECT_ID`: Refers to the specific GCP project ID.'
+  id: totrans-210
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`PROJECT_ID`：指特定的 GCP 项目 ID。'
 - en: '`IMAGE`: Refers to the image name. Registries in Container Registry are listed
     by image name. A single registry can hold different versions of an image. Adding
     either `:TAG` or `@IMAGE-DIGEST` helps to differentiate between images with the
     same image name. If neither is specified, then the image is tagged as latest.'
+  id: totrans-211
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`IMAGE`：指镜像名称。在容器注册表中，注册表是按镜像名称列出的。单个注册表可以保存不同版本的镜像。添加 `:TAG` 或 `@IMAGE-DIGEST`
+    有助于区分具有相同镜像名称的镜像。如果未指定，则镜像会被标记为最新版本。'
 - en: '**Examples**:'
+  id: totrans-212
   prefs: []
   type: TYPE_NORMAL
+  zh: '**示例**：'
 - en: 'The following are examples of a registry for a specific image where the version
     of the image is differentiated by either adding a tag or image digest:'
+  id: totrans-213
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下是特定镜像的注册表示例，其中镜像的版本通过添加标签或镜像摘要进行区分：
 - en: '[PRE10]'
+  id: totrans-214
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE10]'
 - en: This completes the topic that details the structure of Container Registry, an
     understanding that is critical to upload or download container images to/from
     Container Registry. This will be detailed in upcoming topics.
+  id: totrans-215
   prefs: []
   type: TYPE_NORMAL
+  zh: 这完成了关于容器注册表结构的主题了解，掌握这一点对于将容器镜像上传或下载到/从容器注册表至关重要。相关细节将在后续主题中详细介绍。
 - en: Uploading images to Container Registry
+  id: totrans-216
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 将镜像上传到容器注册表
 - en: The build process, on completion, will produce container images as artifacts.
     These artifacts are generally created in the local directory where the build process
     was run. These local Docker images need to be uploaded to a private registry such
     as Container Registry. The process of uploading an image to Container Registry
     is also synonymous with pushing images to Container Registry.
+  id: totrans-217
   prefs: []
   type: TYPE_NORMAL
+  zh: 构建过程完成后，会生成容器镜像作为构建工件。这些工件通常会在执行构建过程的本地目录中创建。这些本地 Docker 镜像需要上传到私有注册表，如容器注册表。上传镜像到容器注册表的过程，也可称为将镜像推送到容器注册表。
 - en: 'To break it down, there are two main steps that push images to Container Registry:'
+  id: totrans-218
   prefs: []
   type: TYPE_NORMAL
+  zh: 简而言之，将镜像推送到容器注册表有两个主要步骤：
 - en: 'Tag the local image with the registry name (as shown in the following snippet):'
+  id: totrans-219
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 将本地镜像标记为注册表名称（如以下代码片段所示）：
 - en: '[PRE11]'
+  id: totrans-220
   prefs:
   - PREF_IND
   type: TYPE_PRE
+  zh: '[PRE11]'
 - en: 'Push the tagged image to Container Registry (as shown in the following snippet):'
+  id: totrans-221
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 将带标签的镜像推送到容器注册表（如以下代码片段所示）：
 - en: '[PRE12]'
+  id: totrans-222
   prefs:
   - PREF_IND
   type: TYPE_PRE
+  zh: '[PRE12]'
 - en: 'A container image can be pushed to a new registry or an existing registry:'
+  id: totrans-223
   prefs: []
   type: TYPE_NORMAL
+  zh: 容器镜像可以推送到新的注册表或现有的注册表：
 - en: If pushed to a new registry, that is, a registry with a new hostname, then Container
     Registry will create a multi-regional storage bucket.
+  id: totrans-224
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 如果推送到一个新的注册表，即一个具有新主机名的注册表，则容器注册表会创建一个多区域存储桶。
 - en: If pushed to an existing registry, then a new version of the image is created
     either with an image tag or image digest. If neither is present, then the image
     is tagged as `latest`.
+  id: totrans-225
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 如果推送到现有的注册表，则会使用镜像标签或镜像摘要创建新版本的镜像。如果两者都没有，则镜像会被标记为 `latest`。
 - en: Specifying the location of Container Registry
+  id: totrans-226
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: 指定容器注册表的位置
 - en: The location of Container Registry can be specified under the hostname. If `gcr.io`
     is used, then the default location is *United States*. If a specific location
     needs to be used, then the host can be specified as `eu.gcr.io`.
+  id: totrans-227
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: 容器注册表的位置可以在主机名下指定。如果使用`gcr.io`，则默认位置是*美国*。如果需要使用特定的位置，则可以将主机指定为`eu.gcr.io`。
 - en: 'The newly created image can be listed using the following gcloud CLI command:'
+  id: totrans-228
   prefs: []
   type: TYPE_NORMAL
+  zh: 新创建的镜像可以使用以下 gcloud CLI 命令列出：
 - en: '[PRE13]'
+  id: totrans-229
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE13]'
 - en: This concludes the topic on uploading or pushing a container image to GCP's
     Container Registry. Now the newly pushed image can be deployed by any application
     by downloading the image from Container Registry. This will be covered as the
     next topic.
+  id: totrans-230
   prefs: []
   type: TYPE_NORMAL
+  zh: 这完成了将容器镜像上传或推送到 GCP 容器注册表的主题。现在，任何应用程序都可以通过从容器注册表下载镜像来部署新推送的镜像。下一个主题将涵盖此内容。
 - en: Downloading images from Container Registry
+  id: totrans-231
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 从容器注册表下载镜像
 - en: The CD process feeds on the output of the CI process, which essentially is stored
     in a registry such as Container Registry in the form of an OCI image. So, for
     the CD process to progress, the Docker image needs to be downloaded from Container
     Registry. The process of downloading an image from Container Registry is synonymous
     with pulling images from Container Registry.
+  id: totrans-232
   prefs: []
   type: TYPE_NORMAL
+  zh: CD 过程依赖于 CI 过程的输出，CI 过程的输出本质上以 OCI 镜像的形式存储在像容器注册表这样的注册表中。因此，为了使 CD 过程能够继续进行，需要从容器注册表下载
+    Docker 镜像。从容器注册表下载镜像的过程与从容器注册表拉取镜像是同义的。
 - en: 'An image can be pulled from Container Registry either using the image tag or
     image digest. If neither is specified, then the image with a tag of `latest` will
     be downloaded (as shown in the following snippet):'
+  id: totrans-233
   prefs: []
   type: TYPE_NORMAL
+  zh: 可以通过镜像标签或镜像摘要从容器注册表拉取镜像。如果两者都未指定，则会下载标签为`latest`的镜像（如下所示的代码片段）：
 - en: '[PRE14]'
+  id: totrans-234
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE14]'
 - en: This completes the topic on downloading images from Container Registry. To either
     upload or download images to or from Container Registry, it is critical that the
     user or application trying to perform those actions has the necessary access controls.
     This will be covered as the next topic.
+  id: totrans-235
   prefs: []
   type: TYPE_NORMAL
+  zh: 这完成了从容器注册表下载镜像的主题。要上传或下载镜像到容器注册表，用户或应用程序必须具有必要的访问控制权限。这将在下一个主题中详细讲解。
 - en: Container Registry access controls
+  id: totrans-236
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 容器注册表访问控制
 - en: 'Container Registry is a repository for container images. The images are physically
     stored in a Cloud Storage bucket. So, in order to push or pull images from Container
     Registry, the user or SA should be granted the following roles:'
+  id: totrans-237
   prefs: []
   type: TYPE_NORMAL
+  zh: 容器注册表是一个用于存储容器镜像的仓库。这些镜像物理上存储在 Cloud Storage 存储桶中。因此，为了从容器注册表推送或拉取镜像，用户或服务账户应被授予以下角色：
 - en: '![](img/B15597_06_Table_02.jpg)'
+  id: totrans-238
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/B15597_06_Table_02.jpg)'
 - en: If an application is deployed using GCP's available compute options, such as
     Compute Engine, App Engine, or GKE, then each of these services will have default
     service accounts with a pre-defined set of roles. However, the use of default
@@ -1200,51 +1734,70 @@
     could use a custom SA with the minimum set of required permissions. Either way,
     it is important to understand the scope of these service accounts and their impact
     during the CD process. This will be discussed in detail in the next topic.
+  id: totrans-239
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果应用程序是使用 GCP 提供的计算选项进行部署的，例如 Compute Engine、App Engine 或 GKE，那么这些服务将拥有具有预定义角色集的默认服务账户。然而，不建议使用默认服务账户，因为这种做法不符合最小权限原则。作为替代方案，也可以让计算选项使用具有最小所需权限的自定义服务账户。无论哪种方式，了解这些服务账户的范围及其在
+    CD 过程中的影响都非常重要。接下来的主题将详细讨论这一点。
 - en: Continuous Delivery/Deployment integrations via Container Registry
+  id: totrans-240
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 通过容器注册表的持续交付/部署集成
 - en: As mentioned previously, artifact management is the bridge between CI and CD.
     GCP has multiple compute options where code or an application can be deployed
     as part of the CD process. Each of GCP's compute options has a way to interact
     and integrate with Container Registry, which are detailed in the following sub-sections.
+  id: totrans-241
   prefs: []
   type: TYPE_NORMAL
+  zh: 如前所述，制品管理是 CI 和 CD 之间的桥梁。GCP 提供了多种计算选项，可以将代码或应用程序作为 CD 过程的一部分进行部署。GCP 的每个计算选项都有与容器注册表交互和集成的方式，以下子节将详细介绍。
 - en: Compute Engine
+  id: totrans-242
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 计算引擎
 - en: 'The **Compute Engine** service uses either a SA or access scopes to identify
     the identity and provide API access to other services. The following is a summary
     of the possibilities or potential changes to successfully push or pull an image
     originating from a Compute Engine instance:'
+  id: totrans-243
   prefs: []
   type: TYPE_NORMAL
+  zh: '**计算引擎** 服务使用服务帐号或访问范围来识别身份并提供对其他服务的 API 访问。以下是成功推送或拉取源自计算引擎实例的镜像的可能性或潜在更改的总结：'
 - en: The default Compute Engine SA or the default access scope provides read-only
     access to storage and service management. This allows you to download or pull
     images from Container Registry within the same project.
+  id: totrans-244
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 默认的计算引擎服务帐号或默认访问范围提供对存储和服务管理的只读访问权限。这允许你从同一项目中的容器注册表下载或拉取镜像。
 - en: To push images, either the read-write storage access scope should be used, or
     the default Compute Engine SA should be configured with the Storage Object Admin
     role.
+  id: totrans-245
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 要推送镜像，应该使用读写存储访问范围，或者将默认的计算引擎服务帐号配置为具有存储对象管理员角色。
 - en: If the VM instance is using a SA other than the default Compute Engine SA or
     if the VM instance is in a project different from Container Registry, then the
     SA should be given the appropriate permissions to access the storage bucket used
     by Container Registry.
+  id: totrans-246
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 如果虚拟机实例使用的是非默认的计算引擎服务帐号，或者虚拟机实例位于不同于容器注册表的项目中，则应为服务帐号授予适当的权限，以访问容器注册表使用的存储桶。
 - en: Google Kubernetes Engine
+  id: totrans-247
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: Google Kubernetes Engine
 - en: A **Google Kubernetes Engine** (**GKE**) cluster is essentially a collection
     of Google Compute Engine VMs that represents a node pool. This also means that
     GKE uses the SA configured on the VM instance. So, eventually, GKE's access to
@@ -1252,108 +1805,156 @@
     the previous sub-section on *Compute Engine* for the possibilities or potential
     changes to successfully push or pull an image originating from a compute instance
     within GKE.
+  id: totrans-248
   prefs: []
   type: TYPE_NORMAL
+  zh: '**Google Kubernetes Engine**（**GKE**）集群本质上是由代表节点池的 Google 计算引擎虚拟机组成的集合。这也意味着
+    GKE 使用在虚拟机实例上配置的服务帐号。因此，最终，GKE 对容器注册表的访问是基于授予虚拟机服务帐号的访问权限。因此，请参考之前关于 *计算引擎* 的小节，了解成功推送或拉取源自
+    GKE 中计算实例的镜像的可能性或潜在更改。'
 - en: App Engine flexible
+  id: totrans-249
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: App Engine flexible
 - en: '**App Engine flexible** supports the deployment of Docker containers. The default
     SA tied with App Engine flexible has the required permissions to push and pull
     images from Container Registry, provided both are present in the same project.'
+  id: totrans-250
   prefs: []
   type: TYPE_NORMAL
+  zh: '**App Engine flexible** 支持 Docker 容器的部署。与 App Engine flexible 关联的默认服务帐号具有从容器注册表推送和拉取镜像所需的权限，前提是两者位于同一项目中。'
 - en: If App Engine is in a different project than Container Registry or if App Engine
     is using a different SA than the default App Engine SA, then the SA tied to App
     Engine should be given the appropriate permissions to access the storage bucket
     used by Container Registry.
+  id: totrans-251
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果应用引擎与容器注册表在不同的项目中，或者应用引擎使用的服务帐号与默认的应用引擎服务帐号不同，则应为与应用引擎关联的服务帐号授予适当的权限，以访问由容器注册表使用的存储桶。
 - en: This completes the topic on how GCP compute options can integrate with Container
     Registry. Outside the compute options provided by GCP, there are several use cases
     where CD systems use a compute option that is not native to GCP.
+  id: totrans-252
   prefs: []
   type: TYPE_NORMAL
+  zh: 本文完成了关于 GCP 计算选项如何与容器注册表集成的主题。在 GCP 提供的计算选项之外，还有几种用例，其中持续交付系统使用的计算选项并非 GCP 本地的。
 - en: The next topic discusses the details of how third-party clients can access artifacts
     in GCP's Container Registry.
+  id: totrans-253
   prefs: []
   type: TYPE_NORMAL
+  zh: 下一部分将讨论第三方客户端如何访问 GCP 容器注册表中的工件的详细信息。
 - en: Container Registry authentication methods
+  id: totrans-254
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 容器注册表身份验证方法
 - en: There are compute options outside Google Cloud that could potentially deploy
     an application by pulling container images from Google Cloud's Container Registry.
     Such compute options are referred to as third-party clients. A **Red Hat Enterprise
     Linux (RHEL**) cluster is an example of a third-party client that is a compute
     option from Red Hat and can download a container image from Container Registry.
+  id: totrans-255
   prefs: []
   type: TYPE_NORMAL
+  zh: 也有一些 Google Cloud 之外的计算选项，可能会通过从 Google Cloud 的容器注册表中拉取容器镜像来部署应用程序。此类计算选项被称为第三方客户端。**Red
+    Hat Enterprise Linux (RHEL)** 集群是一个第三方客户端的示例，它是 Red Hat 提供的计算选项，可以从容器注册表中下载容器镜像。
 - en: 'Apart from ensuring that the third-party client has the required access control
     to pull or push images, it is mandatory for third-party clients to authenticate
     with Container Registry prior to initiating an attempt to push or pull images.
     The following are the possible authentication methods that third-party clients
     can use to authenticate with Container Registry:'
+  id: totrans-256
   prefs: []
   type: TYPE_NORMAL
+  zh: 除了确保第三方客户端具有拉取或推送镜像所需的访问控制外，第三方客户端必须在尝试推送或拉取镜像之前先对容器注册表进行身份验证。以下是第三方客户端可以使用的身份验证方法：
 - en: gcloud credential helper
+  id: totrans-257
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: gcloud 凭证助手
 - en: Standalone credential helper
+  id: totrans-258
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 独立凭证助手
 - en: The details on how third-party clients can authenticate with Container Registry
     are elaborated on in the upcoming sub-sections.
+  id: totrans-259
   prefs: []
   type: TYPE_NORMAL
+  zh: 第三方客户端如何与容器注册表进行身份验证的详细内容将在接下来的子章节中展开。
 - en: gcloud credential helper
+  id: totrans-260
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: gcloud 凭证助手
 - en: 'This is the recommended authentication method and mandates the installation
     of Google''s Cloud SDK or the usage of GCP''s Cloud Shell. This method essentially
     uses the gcloud tool to configure authentication. The following are the required
     steps to use this authentication method:'
+  id: totrans-261
   prefs: []
   type: TYPE_NORMAL
+  zh: 这是推荐的身份验证方法，并且要求安装 Google Cloud SDK 或使用 GCP 的 Cloud Shell。此方法基本上使用 gcloud 工具来配置身份验证。以下是使用此身份验证方法所需的步骤：
 - en: 'Log into gcloud as the IAM user that will run the Docker commands:'
+  id: totrans-262
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 以将执行 Docker 命令的 IAM 用户身份登录到 gcloud：
 - en: '[PRE15]'
+  id: totrans-263
   prefs:
   - PREF_IND
   type: TYPE_PRE
+  zh: '[PRE15]'
 - en: 'If the intent is to log into gcloud as a SA, then run the following Docker
     command. This uses a JSON key file that contains the information about the SA
     and retrieves an access token that is valid for 60 minutes:'
+  id: totrans-264
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 如果目标是以服务帐号（SA）身份登录 gcloud，则运行以下 Docker 命令。此命令使用包含 SA 信息的 JSON 密钥文件，并检索一个有效期为
+    60 分钟的访问令牌：
 - en: '[PRE16]'
+  id: totrans-265
   prefs:
   - PREF_IND
   type: TYPE_PRE
+  zh: '[PRE16]'
 - en: 'Configure Docker with the following command, which allows Docker to authenticate
     with Container Registry:'
+  id: totrans-266
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 使用以下命令配置 Docker，这将允许 Docker 进行容器注册表身份验证：
 - en: '[PRE17]'
+  id: totrans-267
   prefs:
   - PREF_IND
   type: TYPE_PRE
+  zh: '[PRE17]'
 - en: The next sub-section details an alternative approach to how the Docker standalone
     credential helper can be used as an authorization method for third-party clients
     to interact with GCP's Container Registry.
+  id: totrans-268
   prefs: []
   type: TYPE_NORMAL
+  zh: 下一小节详细说明了如何将 Docker 独立凭证助手作为第三方客户端与 GCP 容器注册表交互的授权方法。
 - en: Standalone credential helper
+  id: totrans-269
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 独立凭证助手
 - en: '`docker-credential-gcr` is GCP Container Registry''s standalone credential
     helper. This authentication method is used when Google Cloud SDK is not installed
     or GCP Cloud Shell is not used but Docker needs to be configured to authenticate
@@ -1362,471 +1963,688 @@
     Registry. It allows you to fetch credentials from application default credentials
     and is also capable of generating credentials without an explicit login operation.
     More details about `docker-credential-gcr` can be found at [https://github.com/GoogleCloudPlatform/docker-credential-gcr](https://github.com/GoogleCloudPlatform/docker-credential-gcr).'
+  id: totrans-270
   prefs: []
   type: TYPE_NORMAL
+  zh: '`docker-credential-gcr` 是 GCP 容器注册表的独立凭证助手。当未安装 Google Cloud SDK 或未使用 GCP Cloud
+    Shell，但需要将 Docker 配置为与 GCP 容器注册表进行身份验证时，使用此身份验证方法。此凭证助手实现了 Docker 凭证存储 API，并支持更高级的身份验证方案，以便使用
+    GCP 容器注册表。它允许从应用程序默认凭证中获取凭证，并且还能够在没有明确登录操作的情况下生成凭证。有关 `docker-credential-gcr`
+    的更多细节，请参阅 [https://github.com/GoogleCloudPlatform/docker-credential-gcr](https://github.com/GoogleCloudPlatform/docker-credential-gcr)。'
 - en: 'The following are the required steps to use the standalone credential helper
     as the authentication method:'
+  id: totrans-271
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下是将独立凭证助手用作身份验证方法所需的步骤：
 - en: Log on to the machine as the user that will run the Docker commands.
+  id: totrans-272
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 以将执行 Docker 命令的用户身份登录到机器。
 - en: 'Download `docker-credential-gcr` from GitHub releases: ([https://github.com/GoogleCloudPlatform/docker-credential-gcr/releases](https://github.com/GoogleCloudPlatform/docker-credential-gcr/releases)).'
+  id: totrans-273
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 从 GitHub 发布页面下载 `docker-credential-gcr`：[https://github.com/GoogleCloudPlatform/docker-credential-gcr/releases](https://github.com/GoogleCloudPlatform/docker-credential-gcr/releases)。
 - en: 'Configure Docker with the following command. Internally, the credential helper
     will use a SA that is supplied in a JSON key file:'
+  id: totrans-274
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 使用以下命令配置 Docker。在内部，凭证助手将使用一个通过 JSON 密钥文件提供的服务帐号（SA）：
 - en: '[PRE18]'
+  id: totrans-275
   prefs:
   - PREF_IND
   type: TYPE_PRE
+  zh: '[PRE18]'
 - en: Container Analysis
+  id: totrans-276
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 容器分析
 - en: '**Container Analysis** is a construct of Container Registry and even Artifact
     Registry. The purpose of this construct is to analyze the image that is being
     pushed into GCP Container Registry for any vulnerabilities that might be a security
     concern. The resulting metadata from vulnerability scanning is stored and is made
     available through an API for consumption. This metadata is later used in the authorization
     process.'
+  id: totrans-277
   prefs: []
   type: TYPE_NORMAL
+  zh: '**容器分析** 是容器注册表和工件注册表的一个构件。这个构件的目的是分析推送到 GCP 容器注册表的镜像，以寻找可能存在的安全漏洞。漏洞扫描的元数据会被存储，并通过
+    API 提供供后续使用。该元数据随后会在授权过程中使用。'
 - en: 'There are two specific APIs through which Container Analysis provides metadata
     storage and vulnerability scanning:'
+  id: totrans-278
   prefs: []
   type: TYPE_NORMAL
+  zh: 容器分析提供元数据存储和漏洞扫描的两个特定 API：
 - en: '**Container Analysis API**: Enables metadata storage. Metadata storage includes
     information about vulnerability or build information, also referred to as *note*.'
+  id: totrans-279
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**容器分析 API**：启用元数据存储。元数据存储包括有关漏洞或构建信息的内容，也称为 *注释*。'
 - en: '**Container Scanning API**: Enables vulnerability scanning across the project.
     The process comprises scanning and continuous analysis to find malicious activity
     or potential compromises leading to system failure.'
+  id: totrans-280
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**容器扫描 API**：启用跨项目的漏洞扫描。该过程包括扫描和持续分析，以发现可能导致系统故障的恶意活动或潜在漏洞。'
 - en: 'The following are the steps involved in configuring Container Analysis as part
     of Container Registry:'
+  id: totrans-281
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下是配置容器分析作为容器注册表一部分的步骤：
 - en: 'Enable the Container Analysis API: Navigate to `Container Analysis API`, and
     select the **Enable** option.'
+  id: totrans-282
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 启用容器分析 API：导航到 `Container Analysis API`，选择 **启用** 选项。
 - en: 'Enable the Container Scanning API: Navigate to `Container Scanning API`, and
     select the `On-Demand Scanning API` and enable it.'
+  id: totrans-283
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 启用容器扫描 API：导航到 `Container Scanning API`，选择 `按需扫描 API` 并启用它。
 - en: Navigate to **Container Registry** and under **Settings**, verify that **Vulnerability
     Scanning** is enabled. If enabled, the **Settings** screen will be similar to
     *Figure 6.3*. If not, enable it:![Figure 6.3 – Vulnerability scanning enabled
     in Container Registry
+  id: totrans-284
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 导航到 **容器注册表**，在 **设置** 下，验证是否启用了 **漏洞扫描**。如果启用，**设置** 屏幕将类似于 *图 6.3*。如果没有启用，请启用它：![图
+    6.3 – 在容器注册表中启用漏洞扫描
 - en: '](img/B15597_06_03.jpg)'
+  id: totrans-285
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: '](img/B15597_06_03.jpg)'
 - en: Figure 6.3 – Vulnerability scanning enabled in Container Registry
+  id: totrans-286
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: 图 6.3 – 在容器注册表中启用漏洞扫描
 - en: Now when an image is pushed to Container Registry, container analysis and vulnerability
     scanning will be performed automatically. The results will be displayed under
     the **Images** section of **Container Registry**. *Figure 6.4* represents the
     summary of the container analysis:![Figure 6.4 – Summary of container analysis
     on a newly created image
+  id: totrans-287
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 现在，当镜像被推送到容器注册表时，容器分析和漏洞扫描将自动执行。结果将在 **容器注册表** 的 **镜像** 部分显示。*图 6.4* 表示容器分析的摘要：![图
+    6.4 – 新创建镜像的容器分析摘要
 - en: '](img/B15597_06_04.jpg)'
+  id: totrans-288
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: '](img/B15597_06_04.jpg)'
 - en: Figure 6.4 – Summary of container analysis on a newly created image
+  id: totrans-289
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: 图 6.4 – 新创建镜像的容器分析摘要
 - en: 'The details of all the vulnerabilities scanned and the categorization of them
     can be found by clicking on the summary. *Figure 6.5* represents the detailed
     report:'
+  id: totrans-290
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 所有扫描到的漏洞及其分类的详细信息，可以通过点击摘要查看。*图 6.5* 表示详细报告：
 - en: '![Figure 6.5 – Details of vulnerability scanning through Container Analysis'
+  id: totrans-291
   prefs: []
   type: TYPE_NORMAL
+  zh: '![图 6.5 – 通过容器分析进行漏洞扫描的详细信息'
 - en: '](img/B15597_06_05.jpg)'
+  id: totrans-292
   prefs: []
   type: TYPE_NORMAL
+  zh: '](img/B15597_06_05.jpg)'
 - en: Figure 6.5 – Details of vulnerability scanning through Container Analysis
+  id: totrans-293
   prefs: []
   type: TYPE_NORMAL
+  zh: 图 6.5 – 通过容器分析进行漏洞扫描的详细信息
 - en: This completes multiple sub-sections related to how GCP's compute options, as
     well as other third-party CD systems, can integrate with GCP Container Registry.
     This also concludes the deep dive into several of the key factors related to Container
     Registry.
+  id: totrans-294
   prefs: []
   type: TYPE_NORMAL
+  zh: 这一部分完成了与 GCP 计算选项以及其他第三方 CD 系统如何与 GCP 容器注册表集成的多个子章节的内容。这也结束了对容器注册表相关几个关键因素的深入探讨。
 - en: The next section is a hands-on lab that tries to combine multiple concepts learned
     across sections of this chapter.
+  id: totrans-295
   prefs: []
   type: TYPE_NORMAL
+  zh: 下一部分是一个实操实验，旨在结合本章各节所学的多个概念。
 - en: Hands-on lab – building, creating, pushing, and deploying a container to Cloud
     Run using Cloud Build triggers
+  id: totrans-296
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 实操实验 – 使用 Cloud Build 触发器构建、创建、推送和部署容器到 Cloud Run
 - en: The goal of this hands-on lab is to provide a step-by-step illustration of how
     code can be automatically built, pushed, and deployed to a compute option called
     Cloud Run.
+  id: totrans-297
   prefs: []
   type: TYPE_NORMAL
+  zh: 该实践实验的目标是通过逐步演示如何自动构建、推送和部署代码到名为 Cloud Run 的计算选项。
 - en: Cloud Run
+  id: totrans-298
   prefs: []
   type: TYPE_NORMAL
+  zh: Cloud Run
 - en: Cloud Run is GCP's managed serverless compute option, which deploys containers
     and abstracts away the infrastructure management. Cloud Run can scale up or down
     from zero based on traffic and charges on a pay-per-use model.
+  id: totrans-299
   prefs: []
   type: TYPE_NORMAL
+  zh: Cloud Run 是 GCP 提供的托管无服务器计算选项，它可以部署容器并抽象化基础设施管理。Cloud Run 可以根据流量从零扩展或收缩，并按按需付费模式收费。
 - en: 'The hands-on lab implements concepts across Cloud Build and Container Registry.
     The following is a high-level breakdown of the steps involved. Each of the steps
     is further elaborated into multiple sub-steps:'
+  id: totrans-300
   prefs: []
   type: TYPE_NORMAL
+  zh: 该实践实验涵盖了 Cloud Build 和 Container Registry 的概念。以下是步骤的高层次拆解，每个步骤进一步细分为多个子步骤：
 - en: Creating an empty repository in Source Repositories
+  id: totrans-301
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在 Source Repositories 中创建一个空仓库
 - en: Creating a Cloud Build trigger
+  id: totrans-302
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 创建一个 Cloud Build 触发器
 - en: Adding code and pushing it to the master branch
+  id: totrans-303
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 添加代码并推送到主分支
 - en: Code walk-through to build, create, push, and deploy the container image
+  id: totrans-304
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 代码演示：构建、创建、推送和部署容器镜像
 - en: Viewing the build results in Cloud Build, Container Registry, and Cloud Run
+  id: totrans-305
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在 Cloud Build、Container Registry 和 Cloud Run 中查看构建结果
 - en: Let's take a look at these steps in detail.
+  id: totrans-306
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们详细了解这些步骤。
 - en: Creating an empty repository in Source Repositories
+  id: totrans-307
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 在 Source Repositories 中创建空仓库
 - en: 'The following are the steps required to create an empty repository in GCP''s
     Source Repositories:'
+  id: totrans-308
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下是创建一个空仓库到 GCP 的 Source Repositories 所需的步骤：
 - en: Navigate to **Source Repositories** in the GCP Console.
+  id: totrans-309
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在 GCP 控制台中，导航到**Source Repositories**。
 - en: Create a new repository by using the `my-cloud-build-trigger`).
+  id: totrans-310
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 使用`my-cloud-build-trigger`创建一个新仓库。
 - en: Creating a Cloud Build trigger
+  id: totrans-311
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 创建 Cloud Build 触发器
 - en: 'The following are the steps required to create a Cloud Build trigger against
     a specific repository, which will be invoked on a specific repository event (refer
     to *Figure 6.6*):'
+  id: totrans-312
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下是创建一个针对特定仓库的 Cloud Build 触发器所需的步骤，触发器将在特定仓库事件发生时被调用（参见*图 6.6*）：
 - en: Navigate to the **Triggers** section under **Cloud Build** in the GCP console.
+  id: totrans-313
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在 GCP 控制台中，导航到**Cloud Build**下的**触发器**部分。
 - en: Select the **Create Trigger** option.
+  id: totrans-314
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 选择**创建触发器**选项。
 - en: Enter an appropriate name for the trigger, for example, `build-on-push-to-master`.
+  id: totrans-315
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 输入触发器的适当名称，例如`build-on-push-to-master`。
 - en: Enter an appropriate description.
+  id: totrans-316
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 输入适当的描述。
 - en: Select a choice of event. Available options are **Push to a branch**, **Push
     new tag**, or **Pull request**. In this specific example, select the **Push to
     a branch** option.
+  id: totrans-317
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 选择一个事件选项。可用的选项有**推送到分支**、**推送新标签**或**拉取请求**。在这个具体的示例中，选择**推送到分支**选项。
 - en: Select a source repository. In this specific example, select the newly created
     repository, that is, `my-cloud-build-trigger`.
+  id: totrans-318
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 选择一个源仓库。在这个具体的示例中，选择新创建的仓库，即`my-cloud-build-trigger`。
 - en: Select a choice of branch. It can be `*` or a specific branch. In this specific
     example, enter the option as `^master$`.
+  id: totrans-319
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 选择一个分支。可以是`*`或特定的分支。在这个具体的示例中，输入选项为`^master$`。
 - en: Select the source for the build configuration. It can either be a Cloud Build
     configuration file or a Dockerfile. In this specific example, select the `/cloudbuild.yaml`).
+  id: totrans-320
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 选择构建配置的来源。它可以是 Cloud Build 配置文件或 Dockerfile。在这个具体的示例中，选择`/cloudbuild.yaml`。
 - en: 'Create the Cloud Build trigger (refer to *Figure 6.6*):'
+  id: totrans-321
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 创建 Cloud Build 触发器（参见*图 6.6*）：
 - en: '![Figure 6.6 – Steps to illustrate the creation of the Cloud Build trigger'
+  id: totrans-322
   prefs: []
   type: TYPE_NORMAL
+  zh: '![图 6.6 – 用于说明创建 Cloud Build 触发器的步骤]'
 - en: '](img/B15597_06_06.jpg)'
+  id: totrans-323
   prefs: []
   type: TYPE_NORMAL
+  zh: '](img/B15597_06_06.jpg)'
 - en: Figure 6.6 – Steps to illustrate the creation of the Cloud Build trigger
+  id: totrans-324
   prefs: []
   type: TYPE_NORMAL
+  zh: 图 6.6 – 用于说明创建 Cloud Build 触发器的步骤
 - en: Adding code and pushing it to the master branch
+  id: totrans-325
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 添加代码并推送到主分支
 - en: 'We have created a repository and set up a trigger against the repository. The
     trigger will build code when the code is pushed to the master branch. The next
     step is to add code to the repository and push it to the master branch. The following
     steps illustrate this:'
+  id: totrans-326
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们已经创建了一个仓库并设置了一个针对该仓库的触发器。当代码推送到主分支时，触发器会构建代码。接下来的步骤是将代码添加到仓库并推送到主分支。以下步骤将演示这一过程：
 - en: 'Clone the empty repository to a local Git repository:'
+  id: totrans-327
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 克隆空的仓库到本地 Git 仓库：
 - en: '[PRE19]'
+  id: totrans-328
   prefs:
   - PREF_IND
   type: TYPE_PRE
+  zh: '[PRE19]'
 - en: 'Switch to the new local Git repository:'
+  id: totrans-329
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 切换到新的本地 Git 仓库：
 - en: '[PRE20]'
+  id: totrans-330
   prefs:
   - PREF_IND
   type: TYPE_PRE
+  zh: '[PRE20]'
 - en: 'Create a remote branch:'
+  id: totrans-331
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 创建远程分支：
 - en: '[PRE21]'
+  id: totrans-332
   prefs:
   - PREF_IND
   type: TYPE_PRE
+  zh: '[PRE21]'
 - en: Copy the `my-cloud-build-trigger` folder from [https://github.com/PacktPublishing/Google-Cloud-Platform-for-DevOps-Engineers/tree/main/my-cloud-build-trigger](https://github.com/PacktPublishing/Google-Cloud-Platform-for-DevOps-Engineers/tree/main/my-cloud-build-trigger).
+  id: totrans-333
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 从[https://github.com/PacktPublishing/Google-Cloud-Platform-for-DevOps-Engineers/tree/main/my-cloud-build-trigger](https://github.com/PacktPublishing/Google-Cloud-Platform-for-DevOps-Engineers/tree/main/my-cloud-build-trigger)复制`my-cloud-build-trigger`文件夹。
 - en: 'Add files, commit the changes, and push to the remote branch:'
+  id: totrans-334
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 添加文件、提交更改并推送到远程分支：
 - en: '[PRE22]'
+  id: totrans-335
   prefs:
   - PREF_IND
   type: TYPE_PRE
+  zh: '[PRE22]'
 - en: 'Checkout to the master branch and fix the upstream:'
+  id: totrans-336
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 切换到主分支并修复上游：
 - en: '[PRE23]'
+  id: totrans-337
   prefs:
   - PREF_IND
   type: TYPE_PRE
+  zh: '[PRE23]'
 - en: 'Merge the remote branch with the master branch:'
+  id: totrans-338
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 将远程分支与主分支合并：
 - en: '[PRE24]'
+  id: totrans-339
   prefs:
   - PREF_IND
   type: TYPE_PRE
+  zh: '[PRE24]'
 - en: Code walk-through
+  id: totrans-340
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 代码讲解
 - en: As soon as the code is pushed to the master branch in the previous step, the
     configured trigger will come into effect and will eventually build the code, create
     a container image, push the container image to Container Registry, and eventually
     provide the feasibility of the container image being deployed.
+  id: totrans-341
   prefs: []
   type: TYPE_NORMAL
+  zh: 一旦代码在前一步推送到主分支，配置的触发器就会生效，最终会构建代码、创建容器镜像、将容器镜像推送到容器注册表，并最终提供容器镜像部署的可行性。
 - en: 'The `my-cloud-build-trigger` repository consists of three types of files:'
+  id: totrans-342
   prefs: []
   type: TYPE_NORMAL
+  zh: '`my-cloud-build-trigger` 仓库包含三种类型的文件：'
 - en: The application code
+  id: totrans-343
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 应用程序代码
 - en: Dockerfile
+  id: totrans-344
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: Dockerfile
 - en: The build configuration file
+  id: totrans-345
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 构建配置文件
 - en: The application code
+  id: totrans-346
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 应用程序代码
 - en: 'The application code represents the core code that runs the application. In
     this specific case, the code is under `app/main.py`, is written in Python, and
     creates a web application using the FastAPI framework. The following is the code
     snippet:'
+  id: totrans-347
   prefs: []
   type: TYPE_NORMAL
+  zh: 应用程序代码代表运行应用程序的核心代码。在这个特定的案例中，代码位于`app/main.py`，是用 Python 编写的，并使用 FastAPI 框架创建了一个
+    Web 应用程序。以下是代码片段：
 - en: '[PRE25]'
+  id: totrans-348
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE25]'
 - en: Dockerfile
+  id: totrans-349
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: Dockerfile
 - en: 'The Dockerfile represents the instructions required to build the application
     code using a base image and subsequently create a container image. The following
     is the code snippet:'
+  id: totrans-350
   prefs: []
   type: TYPE_NORMAL
+  zh: Dockerfile 代表了使用基础镜像构建应用程序代码并随后创建容器镜像所需的指令。以下是代码片段：
 - en: '[PRE26]'
+  id: totrans-351
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE26]'
 - en: The build configuration file
+  id: totrans-352
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 构建配置文件
 - en: 'The build configuration file represents the configuration to initiate the build
     process. In addition, it can include steps to push the container image to Container
     Registry and subsequently deploy it. The following is the code snippet:'
+  id: totrans-353
   prefs: []
   type: TYPE_NORMAL
+  zh: 构建配置文件代表启动构建过程的配置。此外，它可以包括将容器镜像推送到容器注册表并随后进行部署的步骤。以下是代码片段：
 - en: '[PRE27]'
+  id: totrans-354
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE27]'
 - en: 'In this specific example, the configuration file has three specific steps:'
+  id: totrans-355
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这个特定的示例中，配置文件有三个具体步骤：
 - en: Build the code using Docker Cloud Builder. The code is picked up from the specified
     directory. In this case, it is the current directory.
+  id: totrans-356
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 使用 Docker Cloud Builder 构建代码。代码从指定的目录中获取。在这种情况下，它是当前目录。
 - en: The code built in the first step creates a container image that is local to
     the cloud builder. The image is then tagged and pushed to Container Registry using
     the Docker Cloud Builder. The container image is pushed against a specific repository.
+  id: totrans-357
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在第一步中构建的代码创建了一个对云构建器本地的容器镜像。然后使用 Docker Cloud Builder 标记该镜像并将其推送到容器注册表。该容器镜像会推送到特定的仓库。
 - en: The image pushed in *step 2* is used in this step to deploy to Google's Cloud
     Run.
+  id: totrans-358
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在*步骤 2*中推送的镜像将在此步骤中用于部署到 Google 的 Cloud Run。
 - en: Viewing the results
+  id: totrans-359
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 查看结果
 - en: 'After the code is pushed to the master branch, the configured trigger will
     initiate the build process. To view the build results, navigate to the **History**
     section of **Cloud Build** in the GCP console and find the build result for the
     specific source repository (refer to *Figure 6.7*):'
+  id: totrans-360
   prefs: []
   type: TYPE_NORMAL
+  zh: 在代码推送到主分支后，配置的触发器将启动构建过程。要查看构建结果，请导航到 GCP 控制台中**Cloud Build**的**历史记录**部分，并查找特定源代码库的构建结果（参见*图
+    6.7*）：
 - en: '![Figure 6.7 – Summary of the build history specific to the Cloud Build trigger'
+  id: totrans-361
   prefs: []
   type: TYPE_NORMAL
+  zh: '![图 6.7 – 特定于 Cloud Build 触发器的构建历史摘要](img/B15597_06_07.jpg)'
 - en: '](img/B15597_06_07.jpg)'
+  id: totrans-362
   prefs: []
   type: TYPE_NORMAL
+  zh: '](img/B15597_06_07.jpg)'
 - en: Figure 6.7 – Summary of the build history specific to the Cloud Build trigger
+  id: totrans-363
   prefs: []
   type: TYPE_NORMAL
+  zh: 图 6.7 – 特定于 Cloud Build 触发器的构建历史摘要
 - en: 'To view the details of the build, click on the specific build. The details
     will show reference to steps that include the execution of the Dockerfile and
     the creation of a container image that is pushed to Container Registry (refer
     to *Figure 6.8*):'
+  id: totrans-364
   prefs: []
   type: TYPE_NORMAL
+  zh: 要查看构建的详细信息，点击特定的构建。详情将显示执行 Dockerfile 和创建推送到容器注册表的容器镜像的步骤（参见*图 6.8*）：
 - en: '![Figure 6.8 – Log to build a container image and push to Container Registry'
+  id: totrans-365
   prefs: []
   type: TYPE_NORMAL
+  zh: '![图 6.8 – 构建容器镜像并推送到容器注册表的日志](img/B15597_06_08.jpg)'
 - en: '](img/B15597_06_08.jpg)'
+  id: totrans-366
   prefs: []
   type: TYPE_NORMAL
+  zh: '](img/B15597_06_08.jpg)'
 - en: Figure 6.8 – Log to build a container image and push to Container Registry
+  id: totrans-367
   prefs: []
   type: TYPE_NORMAL
 - en: 'The newly created container can be found under **Container Registry** (refer
     to *Figure 6.9*):'
+  id: totrans-368
   prefs: []
   type: TYPE_NORMAL
 - en: '![Figure 6.9 – Viewing the container image in Container Registry'
+  id: totrans-369
   prefs: []
   type: TYPE_NORMAL
 - en: '](img/B15597_06_09.jpg)'
+  id: totrans-370
   prefs: []
   type: TYPE_NORMAL
 - en: Figure 6.9 – Viewing the container image in Container Registry
+  id: totrans-371
   prefs: []
   type: TYPE_NORMAL
 - en: 'The end of the build log will show the deployment of the container image to
     Cloud Run. This will also include the newly created service URL to access the
     application (refer to *Figure 6.10*):'
+  id: totrans-372
   prefs: []
   type: TYPE_NORMAL
 - en: '![Figure 6.10 – Log to deploy the container to Cloud Run'
+  id: totrans-373
   prefs: []
   type: TYPE_NORMAL
 - en: '](img/B15597_06_10.jpg)'
+  id: totrans-374
   prefs: []
   type: TYPE_NORMAL
 - en: Figure 6.10 – Log to deploy the container to Cloud Run
+  id: totrans-375
   prefs: []
   type: TYPE_NORMAL
 - en: 'Navigate to the highlighted service URL to view the deployed application in
     Cloud Run (refer to *Figure 6.11*):'
+  id: totrans-376
   prefs: []
   type: TYPE_NORMAL
 - en: '![Figure 6.11 – Container image deployed in Cloud Run'
+  id: totrans-377
   prefs: []
   type: TYPE_NORMAL
 - en: '](img/B15597_06_11.jpg)'
+  id: totrans-378
   prefs: []
   type: TYPE_NORMAL
 - en: Figure 6.11 – Container image deployed in Cloud Run
+  id: totrans-379
   prefs: []
   type: TYPE_NORMAL
 - en: This completes the hands-on lab where we deployed an application automatically
     to Cloud Run whenever a developer made a code change and pushed the code to the
     master branch. This illustrates an automatic CI/CD process that is built using
     GCP's native constructs such as Cloud Build and Container Registry.
+  id: totrans-380
   prefs: []
   type: TYPE_NORMAL
 - en: Summary
+  id: totrans-381
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
@@ -1838,6 +2656,7 @@
     each of the services' key constructs and concluded with a hands-on lab where users
     can automatically deploy code to Cloud Run when a code change is detected by a
     configured trigger.
+  id: totrans-382
   prefs: []
   type: TYPE_NORMAL
 - en: Google strongly recommends deploying applications using containers specifically
@@ -1845,378 +2664,546 @@
     flexible and Cloud Run. The key concepts of GKE will be discussed in the next
     three chapters, which include understanding the core features of native Kubernetes,
     learning about GKE-specific features, and topics specific to hardening a GKE cluster.
+  id: totrans-383
   prefs: []
   type: TYPE_NORMAL
 - en: Points to remember
+  id: totrans-384
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
 - en: 'The following are some important points to remember:'
+  id: totrans-385
   prefs: []
   type: TYPE_NORMAL
 - en: Cloud Build can import source code from Google Cloud Storage, CSR, GitHub, or
     Bitbucket.
+  id: totrans-386
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: Cloud builders are container images that run the build process.
+  id: totrans-387
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: Google-managed builders are pre-built images that can be used to execute one
     or more build steps.
+  id: totrans-388
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: Community-contributed builders are open source builders but not pre-built images
     and only source code is made available.
+  id: totrans-389
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: The build configuration is a configuration file that encapsulates the steps
     to perform build-related tasks, written in `yaml` or `json` format.
+  id: totrans-390
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: Manual invocation and automatic builds using triggers are the two main options
     to invoke the build process via Cloud Build.
+  id: totrans-391
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: Cloud Build related logs are stored in Cloud Storage and Cloud Logging.
+  id: totrans-392
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: Cloud Build Editor provides full control of Cloud Build resources.
+  id: totrans-393
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: Cloud Build 编辑器提供对 Cloud Build 资源的完全控制。
 - en: Cloud Build creates a specific Cloud Build SA (with minimal permissions assigned)
     for a project when the Cloud Build API is enabled on a project.
+  id: totrans-394
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 启用 Cloud Build API 后，Cloud Build 为项目创建一个特定的 Cloud Build 服务账户（具有最小权限）。
 - en: Two common strategies to increase build speed are building leaner containers
     and using cached Docker images.
+  id: totrans-395
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 提高构建速度的两种常见策略是构建更精简的容器和使用缓存的 Docker 镜像。
 - en: Kaniko cache is a feature of Cloud Build where intermediate container image
     layers are directly written to Google's Container Registry.
+  id: totrans-396
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: Kaniko 缓存是 Cloud Build 的一项功能，其中中间容器镜像层直接写入 Google 的容器注册表。
 - en: Cloud Build provides an option to increase the speed of the build by using a
     higher CPU VM.
+  id: totrans-397
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: Cloud Build 提供了一种通过使用更高 CPU 的虚拟机来加速构建速度的选项。
 - en: Unwanted files during the Cloud Build process can be ignored using the `gcloudignore`
     file.
+  id: totrans-398
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 在 Cloud Build 过程中，可以使用 `gcloudignore` 文件忽略不需要的文件。
 - en: Container Registry is GCP's private container image registry service, which
     supports Docker Image Manifest V2 and OCI image formats.
+  id: totrans-399
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 容器注册表是 GCP 的私有容器镜像注册服务，支持 Docker 镜像清单 V2 和 OCI 镜像格式。
 - en: If `gcr.io` is used, then the default location is considered as *United States*.
+  id: totrans-400
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 如果使用 `gcr.io`，则默认位置被视为*美国*。
 - en: Storage Admin provides the ability to push and pull images from the Cloud Storage
     bucket associated with Container Registry.
+  id: totrans-401
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 存储管理员提供将镜像推送和拉取到与容器注册表关联的 Cloud Storage 存储桶中的能力。
 - en: The gcloud credential helper and standalone credential helper are possible authentication
     methods that third-party clients can use to authenticate with Container Registry.
+  id: totrans-402
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: gcloud 凭据助手和独立凭据助手是第三方客户端可以用来与容器注册表进行身份验证的可能身份验证方法。
 - en: Container Analysis is a service that provides vulnerability scanning and metadata
     storage for software artifacts.
+  id: totrans-403
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 容器分析是一个提供软件制品的漏洞扫描和元数据存储的服务。
 - en: The Container Analysis API enables metadata storage and the Container Scanning
     API enables vulnerability scanning.
+  id: totrans-404
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 容器分析 API 使元数据存储成为可能，而容器扫描 API 使漏洞扫描成为可能。
 - en: Further reading
+  id: totrans-405
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 深入阅读
 - en: 'For more information on Cloud Build and Container Registry, read the following
     articles:'
+  id: totrans-406
   prefs: []
   type: TYPE_NORMAL
+  zh: 有关 Cloud Build 和容器注册表的更多信息，请阅读以下文章：
 - en: '**Cloud Build**: [https://cloud.google.com/cloud-build](https://cloud.google.com/cloud-build)'
+  id: totrans-407
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**Cloud Build**：[https://cloud.google.com/cloud-build](https://cloud.google.com/cloud-build)'
 - en: '**Container Registry**: [https://cloud.google.com/container-registry](https://cloud.google.com/container-registry)'
+  id: totrans-408
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**容器注册表**：[https://cloud.google.com/container-registry](https://cloud.google.com/container-registry)'
 - en: Practice test
+  id: totrans-409
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 实践测试
 - en: 'Answer the following questions:'
+  id: totrans-410
   prefs: []
   type: TYPE_NORMAL
+  zh: 请回答以下问题：
 - en: 'Select all possible options that Cloud Build can import source code from (multiple):'
+  id: totrans-411
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 选择 Cloud Build 可以从哪些来源导入源代码的所有可能选项（多选）：
 - en: a) GitHub and Bitbucket
+  id: totrans-412
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: a) GitHub 和 Bitbucket
 - en: b) Google Cloud Storage
+  id: totrans-413
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: b) Google Cloud Storage
 - en: c) CSR
+  id: totrans-414
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: c) CSR
 - en: d) None of the above
+  id: totrans-415
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: d) 上述都不是
 - en: 'Cloud Build requires a build configuration file. Select the option that represents
     this:'
+  id: totrans-416
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: Cloud Build 需要一个构建配置文件。选择表示此文件的选项：
 - en: a) `cloudbuild.json`, `cloudbuild.xml`
+  id: totrans-417
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: a) `cloudbuild.json`，`cloudbuild.xml`
 - en: b) `build.json`, `build.yaml`
+  id: totrans-418
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: b) `build.json`，`build.yaml`
 - en: c) `cloudbuild.json`, `cloudbuild.yaml`
+  id: totrans-419
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: c) `cloudbuild.json`，`cloudbuild.yaml`
 - en: d) `build.json`, `build.xml`
+  id: totrans-420
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: d) `build.json`，`build.xml`
 - en: 'Select the command that will configure Cloud Build to store an image in Container
     Registry during the build process:'
+  id: totrans-421
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 选择将配置 Cloud Build 在构建过程中将镜像存储到容器注册表中的命令：
 - en: a) The `push` command
+  id: totrans-422
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: a) `push` 命令
 - en: b) The `docker put` command
+  id: totrans-423
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: b) `docker put` 命令
 - en: c) The `put` command
+  id: totrans-424
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: c) `put` 命令
 - en: d) The `docker push` command
+  id: totrans-425
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: d) `docker push` 命令
 - en: Which of the following options can be used to store container images?
+  id: totrans-426
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 以下哪些选项可以用来存储容器镜像？
 - en: a) Container Analysis
+  id: totrans-427
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: a) 容器分析
 - en: b) Cloud Build
+  id: totrans-428
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: b) Cloud Build
 - en: c) Container Registry
+  id: totrans-429
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: c) 容器注册表
 - en: d) CSR
+  id: totrans-430
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: d) CSR
 - en: 'Select the option that stores trusted metadata used later in the authorization
     process:'
+  id: totrans-431
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 选择存储在授权过程中稍后使用的受信任元数据的选项：
 - en: a) Container Registry
+  id: totrans-432
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: a) 容器注册表
 - en: b) Container Analysis
+  id: totrans-433
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: b) 容器分析
 - en: c) Container Scanning
+  id: totrans-434
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: c) 容器扫描
 - en: d) Container Artifactory
+  id: totrans-435
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: d) 容器制品库
 - en: 'Select the option that represents an intermediate image that is created by
     executing each instruction in a Dockerfile:'
+  id: totrans-436
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 选择代表通过执行 Dockerfile 中的每个指令创建的中间镜像的选项：
 - en: a) Docker image
+  id: totrans-437
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: a) Docker 镜像
 - en: b) Dockerfile
+  id: totrans-438
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: b) Dockerfile
 - en: c) Docker layer
+  id: totrans-439
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: c) Docker 层
 - en: d) Docker daemon
+  id: totrans-440
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: d) Docker 守护进程
 - en: 'Select the option that allows you to run multiple applications on the same
     physical hardware:'
+  id: totrans-441
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 选择允许您在同一物理硬件上运行多个应用程序的选项：
 - en: a) OS
+  id: totrans-442
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: a) 操作系统
 - en: b) Virtualization
+  id: totrans-443
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: b) 虚拟化
 - en: c) Hypervisor
+  id: totrans-444
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: c) 虚拟机监控程序
 - en: d) All of the above
+  id: totrans-445
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: d) 上述都包括
 - en: 'Select all options that are applicable to Cloud Build:'
+  id: totrans-446
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 选择所有适用于Cloud Build的选项：
 - en: a) Managed service
+  id: totrans-447
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: a) 托管服务
 - en: b) Serverless
+  id: totrans-448
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: b) 无服务器
 - en: c) Both (a) and (b)
+  id: totrans-449
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: c) 既有(a)也有(b)
 - en: d) None of the above
+  id: totrans-450
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: d) 以上都不是
 - en: 'Which of the following is not a valid option that a user can provide in a build
     step (select one):'
+  id: totrans-451
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 以下哪个选项不是用户在构建步骤中可以提供的有效选项（选择一个）：
 - en: a) `name`
+  id: totrans-452
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: a) `name`
 - en: b) `args`
+  id: totrans-453
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: b) `args`
 - en: c) `env`
+  id: totrans-454
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: c) `env`
 - en: d) `uniqueid`
+  id: totrans-455
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: d) `uniqueid`
 - en: 'The build configuration file can be configured to store Cloud Build logs. Select
     the appropriate option to store logs:'
+  id: totrans-456
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 构建配置文件可以配置为存储Cloud Build日志。选择适当的选项来存储日志：
 - en: a) Cloud Storage
+  id: totrans-457
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: a) Cloud Storage
 - en: b) Cloud Logging
+  id: totrans-458
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: b) Cloud Logging
 - en: c) Both (a) and (b)
+  id: totrans-459
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: c) 既有(a)也有(b)
 - en: d) None of the above
+  id: totrans-460
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: d) 以上都不是
 - en: Answers
+  id: totrans-461
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 答案
 - en: (a) – (b) and (c).
+  id: totrans-462
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: (a) – (b) 和 (c)。
 - en: (c) – `cloudbuild.json`, `cloudbuild.yaml`.
+  id: totrans-463
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: (c) – `cloudbuild.json`，`cloudbuild.yaml`。
 - en: (d) – The `docker push` command.
+  id: totrans-464
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: (d) – `docker push`命令。
 - en: (c) – Container Registry.
+  id: totrans-465
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: (c) – 容器注册表。
 - en: (b) – Container Analysis.
+  id: totrans-466
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: (b) – 容器分析。
 - en: (c) – Docker layer.
+  id: totrans-467
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: (c) – Docker层。
 - en: (b) - Virtualization.
+  id: totrans-468
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: (b) – 虚拟化。
 - en: (c) – Managed service and Serverless. Every serverless service is a managed
     service.
+  id: totrans-469
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: (c) – 托管服务和无服务器。每个无服务器服务都是托管服务。
 - en: (d) – `uniqueid`. The right option is `id`.
+  id: totrans-470
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: (d) – `uniqueid`。正确选项是`id`。
 - en: (c) – Cloud Storage and Cloud Logging.
+  id: totrans-471
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: (c) – Cloud Storage 和 Cloud Logging。

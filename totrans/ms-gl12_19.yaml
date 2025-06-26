@@ -1,728 +1,1110 @@
 - en: Installing and Configuring GitLab Runners
+  id: totrans-0
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 安装与配置 GitLab Runner
 - en: In this chapter, we will take a look at the GitLab Runner client architecture.
     After studying this topic, you will understand the basic flow of control between
     GitLab CI and Runners. In the second part of this chapter, I will show you how
     to install Runner software on different operating systems. Since the Runner program
     is written in Golang, there are many platforms that are capable of running the
     client. Golang is known for its excellent multi-platform support.
+  id: totrans-1
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本章中，我们将深入了解 GitLab Runner 客户端架构。通过学习本章节内容，您将理解 GitLab CI 和 Runner 之间的基本控制流程。在本章的第二部分，我将展示如何在不同操作系统上安装
+    Runner 软件。由于 Runner 程序是用 Golang 编写的，许多平台都能运行此客户端。Golang 以其出色的多平台支持而著称。
 - en: 'In this chapter, we will cover the following topics:'
+  id: totrans-2
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本章中，我们将涵盖以下主题：
 - en: The Runner client architecture
+  id: totrans-3
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: Runner 客户端架构
 - en: Creating a basic runner with the shell executor
+  id: totrans-4
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 使用 shell 执行器创建基础的 Runner
 - en: Technical requirements
+  id: totrans-5
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 技术要求
 - en: To follow along with the instructions in this chapter, please download the Git
     repository with the examples available from GitHub: [https://github.com/PacktPublishing/Mastering-GitLab-12/tree/master/Chapter15](https://github.com/PacktPublishing/Mastering-GitLab-12/tree/master/Chapter15)[.](https://github.com/PacktPublishing/Mastering-GitLab-12/tree/master/Chapter15)
+  id: totrans-6
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了跟随本章的指导，请从 GitHub 下载包含示例的 Git 仓库：[https://github.com/PacktPublishing/Mastering-GitLab-12/tree/master/Chapter15](https://github.com/PacktPublishing/Mastering-GitLab-12/tree/master/Chapter15)[.](https://github.com/PacktPublishing/Mastering-GitLab-12/tree/master/Chapter15)
 - en: 'The other requirements for this chapter are as follows:'
+  id: totrans-7
   prefs: []
   type: TYPE_NORMAL
+  zh: 本章的其他要求如下：
 - en: '**GitLab Runner client – Linux 64-bit**: [https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-linux-amd64](https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-linux-amd64)'
+  id: totrans-8
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**GitLab Runner 客户端 – Linux 64-bit**: [https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-linux-amd64](https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-linux-amd64)'
 - en: '**Linux 32-bit**: [https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-linux-386](https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-linux-386)'
+  id: totrans-9
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**Linux 32-bit**: [https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-linux-386](https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-linux-386)'
 - en: '**Linux ARM**: [https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-linux-arm](https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-linux-arm)'
+  id: totrans-10
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**Linux ARM**: [https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-linux-arm](https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-linux-arm)'
 - en: '**macOS 64-bit**: [https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-darwin-amd64](https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-darwin-amd64)'
+  id: totrans-11
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**macOS 64-bit**: [https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-darwin-amd64](https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-darwin-amd64)'
 - en: '**FreeBSD 64-bit**: [https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-freebsd-amd64](https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-freebsd-amd64)'
+  id: totrans-12
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**FreeBSD 64-bit**: [https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-freebsd-amd64](https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-freebsd-amd64)'
 - en: '**FreeBSD 32-bit**: [https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-freebsd-386](https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-freebsd-386)'
+  id: totrans-13
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**FreeBSD 32-bit**: [https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-freebsd-386](https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-freebsd-386)'
 - en: '**Windows 32-bit**: [https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-windows-386.exe](https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-windows-386.exe)'
+  id: totrans-14
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**Windows 32-bit**: [https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-windows-386.exe](https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-windows-386.exe)'
 - en: '**Windows 64-bit**: [https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-windows-amd64.exe](https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-windows-amd64.exe)'
+  id: totrans-15
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**Windows 64-bit**: [https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-windows-amd64.exe](https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-windows-amd64.exe)'
 - en: '**cURL**: [https://curl.haxx.se/download.html](https://curl.haxx.se/download.html)'
+  id: totrans-16
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**cURL**: [https://curl.haxx.se/download.html](https://curl.haxx.se/download.html)'
 - en: The Runner client architecture
+  id: totrans-17
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: Runner 客户端架构
 - en: We took a brief look at the GitLab architecture in [Chapter 1](384dcfd9-ef7f-470d-89dc-3af7502a2d09.xhtml),
     *Introducing the GitLab Architecture*. It was explained that a GitLab Runner registers
     with a GitLab instance and waits for a job to execute. Unlike the individual components
     that are a part of the GitLab frontend application server, the runner has a very
     straightforward architecture. The communication between a runner and its GitLab
     host is basically one-way.
+  id: totrans-18
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们在[第一章](384dcfd9-ef7f-470d-89dc-3af7502a2d09.xhtml)中简要介绍了 GitLab 架构，*介绍 GitLab
+    架构*。文中解释了 GitLab Runner 如何注册到 GitLab 实例并等待执行任务。与作为 GitLab 前端应用服务器一部分的各个组件不同，Runner
+    的架构非常简单。Runner 与 GitLab 主机之间的通信基本上是单向的。
 - en: Basic architecture
+  id: totrans-19
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 基本架构
 - en: 'The main network communication is from the GitLab Runner to the GitLab CI,
     never the other way around. This is shown in the following diagram:'
+  id: totrans-20
   prefs: []
   type: TYPE_NORMAL
+  zh: 主要的网络通信是从 GitLab Runner 到 GitLab CI，而不是反向通信。如下图所示：
 - en: '![](img/74727c52-cbf6-47c2-bb6e-195b186058bd.png)'
+  id: totrans-21
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/74727c52-cbf6-47c2-bb6e-195b186058bd.png)'
 - en: 'The behavior is best depicted by a sequence diagram like the following one:'
+  id: totrans-22
   prefs: []
   type: TYPE_NORMAL
+  zh: 该行为最好通过如下的顺序图来展示：
 - en: '![](img/417ee550-ae39-4540-b50a-8e511aa4e7f8.png)'
+  id: totrans-23
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/417ee550-ae39-4540-b50a-8e511aa4e7f8.png)'
 - en: When the GitLab Runner starts, it tries to find its coordinator by contacting
     the GitLab URL. When it registers itself with the registration token, it gets
     a special token to connect to GitLab. After a restart, it connects and waits for
     a job from GitLab CI. It polls GitLab in intervals, and when there is nothing
     to do, it will check GitLab less often to prohibit too much network traffic.
+  id: totrans-24
   prefs: []
   type: TYPE_NORMAL
+  zh: 当 GitLab Runner 启动时，它会通过联系 GitLab URL 来尝试找到它的协调器。当它使用注册令牌注册时，它会获得一个特殊令牌以连接 GitLab。重启后，它会连接并等待
+    GitLab CI 的任务。它会定时轮询 GitLab，当没有任务时，它会减少检查 GitLab 的频率，以避免过多的网络流量。
 - en: When a job is queued in GitLab CI, it will try to find an available runner.
     After receiving the command, it will clone the project-specific commit that triggered
     the job and will execute the steps defined in the `.gitlab-ci.yml` file. After
     execution, the results are sent back to GitLab.
+  id: totrans-25
   prefs: []
   type: TYPE_NORMAL
+  zh: 当一个任务在 GitLab CI 中排队时，它会尝试寻找一个可用的 Runner。接收到命令后，它会克隆触发任务的特定提交，并执行 `.gitlab-ci.yml`
+    文件中定义的步骤。执行后，结果会发送回 GitLab。
 - en: 'GitLab CI has two types of runners:'
+  id: totrans-26
   prefs: []
   type: TYPE_NORMAL
+  zh: GitLab CI 有两种类型的 Runner：
 - en: 'Specific Runners: As a developer, you can create your own runners and register
     them to a project in GitLab. Only then is the project visible to the runner.'
+  id: totrans-27
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 特定 Runner：作为开发人员，您可以创建自己的 Runner 并将其注册到 GitLab 项目中。只有这样，项目才会对该 Runner 可见。
 - en: 'Shared Runners: A GitLab administrator can also designate a runner to be shared.
     It can then pick up jobs from several projects. Because this is potentially classed
     as a security breach, be careful when you''re promoting runners to be shared.'
+  id: totrans-28
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 共享 Runner：GitLab 管理员还可以指定一个 Runner 为共享 Runner。它可以从多个项目中接收任务。由于这可能被视为安全漏洞，因此在将
+    Runner 设置为共享时要小心。
 - en: 'In the following screenshot, you can see the CI/CD configuration of a project
     in GitLab, where you can set which runner to use:'
+  id: totrans-29
   prefs: []
   type: TYPE_NORMAL
+  zh: 在以下截图中，您可以看到 GitLab 项目的 CI/CD 配置，您可以在其中设置使用哪个 Runner：
 - en: '![](img/02838e13-ac9c-4bfd-91a2-8abdca80dee2.png)'
+  id: totrans-30
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/02838e13-ac9c-4bfd-91a2-8abdca80dee2.png)'
 - en: 'The GitLab Runner clones the repository and performs steps that are defined
     in the `.gitlab-ci.yml` file. It is possible to inject special variables that
     can be protected on the GitLab project level:'
+  id: totrans-31
   prefs: []
   type: TYPE_NORMAL
+  zh: GitLab Runner 克隆仓库并执行 `.gitlab-ci.yml` 文件中定义的步骤。可以在 GitLab 项目级别注入特殊变量，并对其进行保护：
 - en: '![](img/fc761b09-be1d-453a-bb45-91ddc7a63130.png)'
+  id: totrans-32
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/fc761b09-be1d-453a-bb45-91ddc7a63130.png)'
 - en: We've explained the basic architecture of the runner platform, so now we'll
     install the software on different operating systems.
+  id: totrans-33
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们已经解释了 Runner 平台的基本架构，现在将介绍如何在不同的操作系统上安装软件。
 - en: 'The GitLab Runner software is available for the following operating systems:'
+  id: totrans-34
   prefs: []
   type: TYPE_NORMAL
+  zh: GitLab Runner 软件适用于以下操作系统：
 - en: Linux
+  id: totrans-35
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: Linux
 - en: FreeBSD
+  id: totrans-36
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: FreeBSD
 - en: macOS
+  id: totrans-37
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: macOS
 - en: Windows
+  id: totrans-38
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: Windows
 - en: The installation procedure is largely identical on all systems, with subtle
     differences. In the next section, we will show you how to install the basic Runner
     on several types of operating systems.
+  id: totrans-39
   prefs: []
   type: TYPE_NORMAL
+  zh: 安装过程在所有系统上大致相同，只是细节上有所不同。在接下来的部分中，我们将展示如何在几种不同的操作系统上安装基本的 Runner。
 - en: Creating a basic Runner with the shell executor
+  id: totrans-40
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 使用 shell 执行器创建一个基本的 Runner
 - en: On the machine where you install the GitLab Runner software, you can run the
     shell executor to locally build software. This shell type of executor can be run
     on all platforms where the runner software is installed. Therefore, you can run
     Bash or a Bourne shell on a Unix-like system, or CMD or PowerShell on the Windows
     platform.
+  id: totrans-41
   prefs: []
   type: TYPE_NORMAL
+  zh: 在安装 GitLab Runner 软件的机器上，你可以运行 shell 执行器来本地构建软件。该类型的执行器可以在所有安装了 Runner 软件的平台上运行。因此，你可以在类
+    Unix 系统上运行 Bash 或 Bourne shell，或者在 Windows 平台上运行 CMD 或 PowerShell。
 - en: It isn't a very safe way to build because it can access local resources on the
     system where the runner executes. More secure executors will be introduced in
     later chapters.
+  id: totrans-42
   prefs: []
   type: TYPE_NORMAL
+  zh: 这种构建方式并不十分安全，因为它可以访问 Runner 执行所在系统上的本地资源。更安全的执行器将在后续章节中介绍。
 - en: In the next section, we will demonstrate how to install the GitLab Runner software
     for your platform.
+  id: totrans-43
   prefs: []
   type: TYPE_NORMAL
+  zh: 在下一节中，我们将展示如何为你的平台安装 GitLab Runner 软件。
 - en: Installing Runner on Linux
+  id: totrans-44
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 在 Linux 上安装 Runner
 - en: If you run a Linux distribution with a package management system such as
+  id: totrans-45
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你运行的是带有包管理系统的 Linux 发行版，例如
 - en: '`yum` or `apt`, you can install the GitLab Runner package using that method.
     Alternatively, you can install the software manually. First, we will cover the
     installation via a package manager.'
+  id: totrans-46
   prefs: []
   type: TYPE_NORMAL
+  zh: 使用 `yum` 或 `apt`，你可以使用这种方式安装 GitLab Runner 包。或者，你也可以手动安装软件。首先，我们将介绍通过包管理器进行的安装。
 - en: Using a package manager
+  id: totrans-47
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 使用包管理器
 - en: 'For yum-based systems, you can add the official GitLab package repository:'
+  id: totrans-48
   prefs: []
   type: TYPE_NORMAL
+  zh: 对于基于 yum 的系统，你可以添加官方的 GitLab 包存储库：
 - en: '[PRE0]'
+  id: totrans-49
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE0]'
 - en: 'After that, you can install GitLab with this basic command (as root or with
     `sudo`):'
+  id: totrans-50
   prefs: []
   type: TYPE_NORMAL
+  zh: 然后，你可以使用这个基本命令（作为 root 用户或使用 `sudo`）安装 GitLab：
 - en: '[PRE1]'
+  id: totrans-51
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE1]'
 - en: 'For apt-based systems, it''s a bit more tricky to stay up to date with the
     latest and greatest. We can add a link to GitLab apt repositories, but unfortunately,
     Debian has named the package in the base repository the same as GitLab. This means
     that the base packages automatically take precedence. A solution to this is to
     `pin` the package to the right repository. This can be done by adding a file to
     `/etc/apt/preferences.d`:'
+  id: totrans-52
   prefs: []
   type: TYPE_NORMAL
+  zh: 对于基于 apt 的系统，保持与最新版本同步稍微有些麻烦。我们可以添加 GitLab apt 存储库的链接，但不幸的是，Debian 在基本存储库中将该软件包命名为
+    GitLab。这意味着基本包会自动优先选择。解决方案是将软件包固定到正确的存储库。这可以通过向 `/etc/apt/preferences.d` 添加文件来实现：
 - en: '[PRE2]'
+  id: totrans-53
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE2]'
 - en: 'After that, you can install the correct `apt` package repositories:'
+  id: totrans-54
   prefs: []
   type: TYPE_NORMAL
+  zh: 之后，你可以安装正确的 `apt` 包存储库：
 - en: '[PRE3]'
+  id: totrans-55
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE3]'
 - en: 'The output from the preceding command is shown in the following code block.
     As you can see, it checks the `gpg` key and adds the package repository:'
+  id: totrans-56
   prefs: []
   type: TYPE_NORMAL
+  zh: 前面的命令输出结果如下所示。在输出中，你可以看到它检查 `gpg` 密钥并添加包存储库：
 - en: '[PRE4]'
+  id: totrans-57
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE4]'
 - en: 'The next step is much simpler – you just install it via `apt-get`:'
+  id: totrans-58
   prefs: []
   type: TYPE_NORMAL
+  zh: 下一步更简单——你只需通过 `apt-get` 安装：
 - en: '[PRE5]'
+  id: totrans-59
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE5]'
 - en: 'In the output, you will find a message like the following, which means that
     you have now installed all the binaries. However, you have to register the GitLab
     Runner first before running it:'
+  id: totrans-60
   prefs: []
   type: TYPE_NORMAL
+  zh: 在输出中，你会看到类似下面的信息，这意味着你已经安装了所有的二进制文件。然而，在运行之前，你需要先注册 GitLab Runner：
 - en: '[PRE6]'
+  id: totrans-61
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE6]'
 - en: The process of registering the runner is explained in more detail in the *Registering
     a runner* section.
+  id: totrans-62
   prefs: []
   type: TYPE_NORMAL
+  zh: 注册 Runner 的过程在 *注册 Runner* 部分有更详细的说明。
 - en: 'Updating the package is done just as updating all the other packages on the
     system is done: you can run the `apt-get update` or `yum update` command.'
+  id: totrans-63
   prefs: []
   type: TYPE_NORMAL
+  zh: 更新包的方法与更新系统上所有其他包的方法相同：你可以运行 `apt-get update` 或 `yum update` 命令。
 - en: When installing with `apt-get` or `yum`, package management will give you a
     GitLab Runner install with the necessary configuration files and init scripts
     for your Linux distribution. You can also choose to just download the runner binary
     and run it in a generic way.
+  id: totrans-64
   prefs: []
   type: TYPE_NORMAL
+  zh: 使用 `apt-get` 或 `yum` 安装时，包管理器会为你的 Linux 发行版提供一个包含必要配置文件和初始化脚本的 GitLab Runner
+    安装包。你也可以选择仅下载 Runner 的二进制文件并以通用方式运行它。
 - en: Using a manual installation
+  id: totrans-65
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 使用手动安装
 - en: 'Simply download one of the binaries for your CPU architecture (x86-64, x86-32,
     or ARM):'
+  id: totrans-66
   prefs: []
   type: TYPE_NORMAL
+  zh: 只需下载适合你 CPU 架构（x86-64、x86-32 或 ARM）的二进制文件之一：
 - en: '**x86-64 bit architecture**:'
+  id: totrans-67
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**x86-64 位架构**：'
 - en: '[PRE7]'
+  id: totrans-68
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE7]'
 - en: '**x86-32 bit architecture**:'
+  id: totrans-69
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**x86-32 位架构**：'
 - en: '[PRE8]'
+  id: totrans-70
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE8]'
 - en: '**ARM architecture**: This is the binary for the ARM CPU architecture, in a
     list:'
+  id: totrans-71
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**ARM 架构**：这是适用于 ARM CPU 架构的二进制文件，列表如下：'
 - en: '[PRE9]'
+  id: totrans-72
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE9]'
 - en: 'When you''re getting binaries this way, you have to make them executable:'
+  id: totrans-73
   prefs: []
   type: TYPE_NORMAL
+  zh: 当你以这种方式获取二进制文件时，你需要使其具有执行权限：
 - en: '[PRE10]'
+  id: totrans-74
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE10]'
 - en: 'Then, you can create a GitLab Runner user as root:'
+  id: totrans-75
   prefs: []
   type: TYPE_NORMAL
+  zh: 然后，你可以以 root 用户身份创建一个 GitLab Runner 用户：
 - en: '[PRE11]'
+  id: totrans-76
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE11]'
 - en: 'You then need to install it and run it as a service:'
+  id: totrans-77
   prefs: []
   type: TYPE_NORMAL
+  zh: 然后，你需要安装并将其作为服务运行：
 - en: '[PRE12]'
+  id: totrans-78
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE12]'
 - en: Although the manual installation is a bit more work than via the package managers,
     it still isn't a complex process. One advantage is that, when using the manual
     installation, you can't install newer versions of the runner. The package manager
     maintainers will never install a development version, while you can. Updating
     the binary is not very hard either.
+  id: totrans-79
   prefs: []
   type: TYPE_NORMAL
+  zh: 虽然手动安装比通过包管理器要多一点工作，但这仍然不是复杂的过程。一个优点是，使用手动安装时，您可以安装更新的 runner 版本。包管理器维护者永远不会安装开发版本，而您可以安装。更新二进制文件也不是很难。
 - en: Updating a manually installed runner binary
+  id: totrans-80
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 更新手动安装的 runner 二进制文件
 - en: The process we are following when updating is to replace the Golang binary that
     was downloaded previously. It does have to be stopped, so make sure it isn't running,
     otherwise the installation will fail.
+  id: totrans-81
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们在更新时遵循的过程是替换之前下载的 Golang 二进制文件。必须先停止运行，因此确保它没有运行，否则安装会失败。
 - en: 'Stop the service (you need root permissions, like before):'
+  id: totrans-82
   prefs: []
   type: TYPE_NORMAL
+  zh: 停止服务（像之前一样，您需要 root 权限）：
 - en: '[PRE13]'
+  id: totrans-83
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE13]'
 - en: 'Then, download a new binary to replace the older one:'
+  id: totrans-84
   prefs: []
   type: TYPE_NORMAL
+  zh: 然后，下载一个新的二进制文件以替换旧的文件：
 - en: '[PRE14]'
+  id: totrans-85
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE14]'
 - en: 'Set the execute bit on the runner binary:'
+  id: totrans-86
   prefs: []
   type: TYPE_NORMAL
+  zh: 设置 runner 二进制文件的执行权限：
 - en: '[PRE15]'
+  id: totrans-87
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE15]'
 - en: 'Start the runner again:'
+  id: totrans-88
   prefs: []
   type: TYPE_NORMAL
+  zh: 再次启动 runner：
 - en: '[PRE16]'
+  id: totrans-89
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE16]'
 - en: The manual install is much easier, but you have to manage the updates yourself.
     In this era of automation, it makes more sense to let the package manager that's
     available for your distribution to manage it.
+  id: totrans-90
   prefs: []
   type: TYPE_NORMAL
+  zh: 手动安装更简单，但您必须自己管理更新。在这个自动化的时代，让您分发的包管理器来管理它更为合适。
 - en: Installing on Mac
+  id: totrans-91
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 在 Mac 上安装
 - en: Just like on Linux, there are several ways to install the GitLab Runner software.
     Unlike on Linux, where package management is recommended by GitLab, for macOS,
     they recommend the manual install. The other way to install is by using the Homebrew
     installation method, which you saw earlier in the book (*Installing Redis* section
     of  [Chapter 1](384dcfd9-ef7f-470d-89dc-3af7502a2d09.xhtml), *Introducing the
     GitLab Architecture*).
+  id: totrans-92
   prefs: []
   type: TYPE_NORMAL
+  zh: 就像在 Linux 上一样，有几种方法可以安装 GitLab Runner 软件。不同于 Linux 上 GitLab 推荐的包管理方式，对于 macOS，它们推荐手动安装。另一种安装方法是使用
+    Homebrew 安装方法，您之前在书中看到过（*安装 Redis* 部分，[第 1 章](384dcfd9-ef7f-470d-89dc-3af7502a2d09.xhtml)的
+    *介绍 GitLab 架构*）。
 - en: The manual way of installing a runner
+  id: totrans-93
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 手动安装 runner
 - en: 'First, get the binary for your system (with `sudo`):'
+  id: totrans-94
   prefs: []
   type: TYPE_NORMAL
+  zh: 首先，获取适用于您系统的二进制文件（使用 `sudo`）：
 - en: '[PRE17]'
+  id: totrans-95
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE17]'
 - en: 'Then, just like we did previously, make the binary executable:'
+  id: totrans-96
   prefs: []
   type: TYPE_NORMAL
+  zh: 然后，就像我们之前做的那样，设置二进制文件为可执行：
 - en: '[PRE18]'
+  id: totrans-97
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE18]'
 - en: 'Now that we have the binary in place, we can run the program as another user
     if we want:'
+  id: totrans-98
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在我们已经有了二进制文件，如果需要的话，可以作为其他用户运行该程序：
 - en: '[PRE19]'
+  id: totrans-99
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE19]'
 - en: The runner will be installed and will be run after a system reboot.
+  id: totrans-100
   prefs: []
   type: TYPE_NORMAL
+  zh: 安装后，runner 将在系统重启后自动运行。
 - en: Installing and using the Homebrew package manager
+  id: totrans-101
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 安装和使用 Homebrew 包管理器
 - en: A unified package manager for macOS doesn't really exist, but the one that's
     used the most is Homebrew, which can be found at [https://brew.sh/](https://brew.sh/).
     It works with formulas that contain scripts and settings to install binaries.
+  id: totrans-102
   prefs: []
   type: TYPE_NORMAL
+  zh: macOS 没有统一的软件包管理器，但最常用的是 Homebrew，您可以在 [https://brew.sh/](https://brew.sh/)
+    找到它。它使用包含脚本和设置的配方来安装二进制文件。
 - en: 'A Homebrew formula exists to install GitLab Runner:'
+  id: totrans-103
   prefs: []
   type: TYPE_NORMAL
+  zh: 有一个 Homebrew 配方用于安装 GitLab Runner：
 - en: '[PRE20]'
+  id: totrans-104
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE20]'
 - en: 'The next step is to install the runner as a service (this will also start it):'
+  id: totrans-105
   prefs: []
   type: TYPE_NORMAL
+  zh: 下一步是将 runner 安装为一个服务（这也会启动它）：
 - en: '[PRE21]'
+  id: totrans-106
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE21]'
 - en: There are some drawbacks to using macOS as a runner platform. Many developers
     use runners on macOS to build iOS-related software. Often, UI testing is also
     involved. It isn't possible to automate this. You would have to run in the background
     as a system service (LaunchDaemon), and then the UI isn't reachable anymore. You
     can only run the runner in user mode to get access to the UI, which is why you
     must always log in to run the GitLab Runner.
+  id: totrans-107
   prefs: []
   type: TYPE_NORMAL
+  zh: 使用 macOS 作为 runner 平台有一些缺点。许多开发者使用 macOS runner 来构建 iOS 相关的软件，通常还会涉及 UI 测试。但这是无法自动化的。你必须作为系统服务（LaunchDaemon）在后台运行，而此时
+    UI 将无法访问。您只能在用户模式下运行 runner 才能访问 UI，这就是为什么必须始终登录才能运行 GitLab Runner。
 - en: Updating the runner is done by issuing `brew upgrade gitlab-runner`. For a manual
     install, it's a bit more complicated.
+  id: totrans-108
   prefs: []
   type: TYPE_NORMAL
+  zh: 更新 runner 通过执行 `brew upgrade gitlab-runner` 来完成。对于手动安装，这会稍微复杂一些。
 - en: Updating a manually installed runner binary
+  id: totrans-109
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 更新手动安装的 runner 二进制文件
 - en: 'Just like we did for Linux, we are replacing the Golang binary that was downloaded
     previously. It also needs to be stopped, so make sure it isn''t running, otherwise
     the installation will fail:'
+  id: totrans-110
   prefs: []
   type: TYPE_NORMAL
+  zh: 就像我们在 Linux 上做的一样，我们正在替换之前下载的 Golang 二进制文件。它也需要停止，因此确保它没有运行，否则安装会失败：
 - en: 'First, we need to stop the service:'
+  id: totrans-111
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 首先，我们需要停止服务：
 - en: '[PRE22]'
+  id: totrans-112
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE22]'
 - en: 'Like we did previously, get the binary to replace the runner''s executable:'
+  id: totrans-113
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 就像我们之前做的那样，获取二进制文件以替换运行器的可执行文件：
 - en: '[PRE23]'
+  id: totrans-114
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE23]'
 - en: 'Make the downloaded binary executable:'
+  id: totrans-115
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 使下载的二进制文件可执行：
 - en: '[PRE24]'
+  id: totrans-116
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE24]'
 - en: 'Start the GitLab Runner service again:'
+  id: totrans-117
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 重新启动 GitLab Runner 服务：
 - en: '[PRE25]'
+  id: totrans-118
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE25]'
 - en: The steps to install the GitLab Runner software are roughly the same on the
     Linux and macOS platforms. The good part about using a package manager is that
     the software is easier to upgrade.
+  id: totrans-119
   prefs: []
   type: TYPE_NORMAL
+  zh: 在 Linux 和 macOS 平台上安装 GitLab Runner 软件的步骤大致相同。使用包管理器的好处是软件更容易升级。
 - en: Installing on Windows
+  id: totrans-120
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 在 Windows 上安装
 - en: Unlike GitLab itself, which doesn't run on Windows, you can operate the GitLab
     Runner software on Windows machines.
+  id: totrans-121
   prefs: []
   type: TYPE_NORMAL
+  zh: 与 GitLab 本身不同，GitLab 不支持在 Windows 上运行，但你可以在 Windows 机器上操作 GitLab Runner 软件。
 - en: 'There are two types of runner binaries, depending on your CPU architecture:'
+  id: totrans-122
   prefs: []
   type: TYPE_NORMAL
+  zh: 根据你的 CPU 架构，有两种类型的运行器二进制文件：
 - en: 32-bit version ([https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-windows-386.exe](https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-windows-386.exe))
+  id: totrans-123
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 32 位版本 ([https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-windows-386.exe](https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-windows-386.exe))
 - en: 64-bit version ([https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-windows-amd64.exe](https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-windows-amd64.exe))
+  id: totrans-124
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 64 位版本 ([https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-windows-amd64.exe](https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-windows-amd64.exe))
 - en: Download it and copy it to `gitlab-runner.exe` in a folder on your local drive;
     for example, `C:-runner`.
+  id: totrans-125
   prefs: []
   type: TYPE_NORMAL
+  zh: 下载并将其复制到本地驱动器中的 `gitlab-runner.exe` 文件夹中；例如，`C:-runner`。
 - en: 'Now, you need an elevated command prompt to register and install the software:'
+  id: totrans-126
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，你需要一个提升权限的命令提示符来注册并安装软件：
 - en: '[PRE26]'
+  id: totrans-127
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE26]'
 - en: The registration steps will be shown in the next section as they are almost
     universal for all platforms.
+  id: totrans-128
   prefs: []
   type: TYPE_NORMAL
+  zh: 注册步骤将在下一部分中展示，因为它们几乎对所有平台都是通用的。
 - en: 'When registration succeeds, you can start the GitLab Runner:'
+  id: totrans-129
   prefs: []
   type: TYPE_NORMAL
+  zh: 注册成功后，你可以启动 GitLab Runner：
 - en: '[PRE27]'
+  id: totrans-130
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE27]'
 - en: Now that we have installed the runner software, the next step is to register
     with GitLab.
+  id: totrans-131
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在我们已经安装了运行器软件，下一步是与 GitLab 注册。
 - en: Registering a runner
+  id: totrans-132
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 注册运行器
 - en: 'A GitLab Runner needs some basic information to start:'
+  id: totrans-133
   prefs: []
   type: TYPE_NORMAL
+  zh: GitLab Runner 需要一些基本信息才能启动：
 - en: The URL where it can find GitLab, which is called the coordinator URL.
+  id: totrans-134
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 它可以找到 GitLab 的 URL，称为协调器 URL。
 - en: The special token that you can find in GitLab that's meant to register runner
     instances.
+  id: totrans-135
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 你可以在 GitLab 中找到的特殊令牌，用于注册运行器实例。
 - en: A description that will later show up in the GitLab CI.
+  id: totrans-136
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 一个将在 GitLab CI 中显示的描述。
 - en: Tags, which you can give to the runner to make it easier to find in GitLab CI.
+  id: totrans-137
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 标签，可以分配给运行器，以便在 GitLab CI 中更容易找到它。
 - en: The type of executor (remember that there are many types, all of which were
     named in the *Runner client architecture* section).
+  id: totrans-138
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 执行器的类型（记住有多种类型，所有类型都在 *Runner 客户端架构* 部分中命名）。
 - en: 'This basic information can be provided to the runner in two ways: interactive
     and non-interactive. First, we will discuss the interactive way.'
+  id: totrans-139
   prefs: []
   type: TYPE_NORMAL
+  zh: 这些基本信息可以通过两种方式提供给运行器：交互式和非交互式。首先，我们将讨论交互式方式。
 - en: The interactive way of registering a runner
+  id: totrans-140
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 注册运行器的交互方式
 - en: 'The web location of the GitLab server to connect is the following:'
+  id: totrans-141
   prefs: []
   type: TYPE_NORMAL
+  zh: 连接到 GitLab 服务器的 Web 地址如下：
 - en: '[PRE28]'
+  id: totrans-142
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE28]'
 - en: 'Please enter the gitlab-ci coordinator URL (for example, [https://gitlab.com](https://gitlab.com)):'
+  id: totrans-143
   prefs: []
   type: TYPE_NORMAL
+  zh: 请输入 gitlab-ci 协调器的 URL（例如，[https://gitlab.com](https://gitlab.com)）：
 - en: '[PRE29]'
+  id: totrans-144
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE29]'
 - en: 'You also need to enter the runner registration token since it''s needed to
     register with GitLab:'
+  id: totrans-145
   prefs: []
   type: TYPE_NORMAL
+  zh: 你还需要输入运行器注册令牌，因为它是与 GitLab 注册所必需的：
 - en: '[PRE30]'
+  id: totrans-146
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE30]'
 - en: The runner registration token can be found on the Admin Area | Overview | Runners
     page or under Projects.
+  id: totrans-147
   prefs: []
   type: TYPE_NORMAL
+  zh: 运行器注册令牌可以在管理区域 | 概览 | 运行器页面或在项目下找到。
 - en: 'You want a nice description so that you can find the runner later (the default
     is `hostname`):'
+  id: totrans-148
   prefs: []
   type: TYPE_NORMAL
+  zh: 你希望有一个好的描述，以便以后可以找到运行器（默认值是 `hostname`）：
 - en: '[PRE31]'
+  id: totrans-149
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE31]'
 - en: 'Enter the tags that should apply to this runner (for example, `javarunner`).
     This can be changed later in GitLab:'
+  id: totrans-150
   prefs: []
   type: TYPE_NORMAL
+  zh: 输入应该适用于此运行器的标签（例如，`javarunner`）。这可以在 GitLab 中稍后更改：
 - en: '[PRE32]'
+  id: totrans-151
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE32]'
 - en: 'The most important part is determining the type of executor (for this chapter,
     I chose the shell executor):'
+  id: totrans-152
   prefs: []
   type: TYPE_NORMAL
+  zh: 最重要的部分是确定执行器的类型（对于本章，我选择了 shell 执行器）：
 - en: '[PRE33]'
+  id: totrans-153
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE33]'
 - en: The non-interactive way of registering a runner
+  id: totrans-154
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 注册运行器的非交互方式
 - en: 'In larger environments, deployments are frequently scripted. So, for the runner,
     there is also a non-interactive install available to help in the effort of automating
     the infrastructure. You can specify subcommands to the GitLab `register` argument.
     To find out about these options, type the following on the command line:'
+  id: totrans-155
   prefs: []
   type: TYPE_NORMAL
+  zh: 在更大的环境中，部署通常是通过脚本自动化的。因此，对于 GitLab Runner，也有一个非交互式安装方式，帮助自动化基础设施的构建。你可以为 GitLab
+    `register` 命令指定子命令。要了解这些选项，请在命令行中输入以下内容：
 - en: '[PRE34]'
+  id: totrans-156
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE34]'
 - en: 'To register a runner, using the most common options, you would do the following:'
+  id: totrans-157
   prefs: []
   type: TYPE_NORMAL
+  zh: 要注册一个 runner，使用最常见的选项，你可以按以下步骤操作：
 - en: '[PRE35]'
+  id: totrans-158
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE35]'
 - en: 'When the runner is registered, it will show up in GitLab in the Runner list:'
+  id: totrans-159
   prefs: []
   type: TYPE_NORMAL
+  zh: 当 runner 被注册后，它将在 GitLab 的 Runner 列表中显示：
 - en: '![](img/1ed45ca0-a248-4b5d-add9-ee08630b3079.png)'
+  id: totrans-160
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/1ed45ca0-a248-4b5d-add9-ee08630b3079.png)'
 - en: 'The registration process is basically the process of telling the runner where
     GitLab is situated, and initiating a key exchange to secure access to GitLab.
     Following a successful registration, the runner saves the configuration information
     in a TOML file, which looks as follows:'
+  id: totrans-161
   prefs: []
   type: TYPE_NORMAL
+  zh: 注册过程基本上是告诉 runner GitLab 所在位置，并启动密钥交换以确保安全访问 GitLab。在注册成功后，runner 会将配置信息保存在一个
+    TOML 文件中，该文件内容如下：
 - en: '[PRE36]'
+  id: totrans-162
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE36]'
 - en: The shell can also be set to `sh` for a simple Bourne shell or `powershell` on
     Windows. On Linux, this is usually placed in `/etc/gitlab-runner/config.toml`.
+  id: totrans-163
   prefs: []
   type: TYPE_NORMAL
+  zh: Shell 也可以设置为 `sh` 用于简单的 Bourne shell，或者在 Windows 上设置为 `powershell`。在 Linux 上，通常将其放置在
+    `/etc/gitlab-runner/config.toml` 中。
 - en: Running the nightly version
+  id: totrans-164
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 运行夜间版本
 - en: 'If you are feeling adventurous, you could also install the latest release,
     which isn''t part of any release yet. Do this at your own risk. There could still
     be bugs in there:'
+  id: totrans-165
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你愿意冒险，你也可以安装最新版本，该版本尚未发布。这是有风险的，可能会有一些 bug：
 - en: '**Linux**:'
+  id: totrans-166
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**Linux**：'
 - en: '[https://s3.amazonaws.com/gitlab-runner-downloads/master/binaries/gitlab-runner-linux-386](https://s3.amazonaws.com/gitlab-runner-downloads/master/binaries/gitlab-runner-linux-386)'
+  id: totrans-167
   prefs:
   - PREF_IND
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '[https://s3.amazonaws.com/gitlab-runner-downloads/master/binaries/gitlab-runner-linux-386](https://s3.amazonaws.com/gitlab-runner-downloads/master/binaries/gitlab-runner-linux-386)'
 - en: '[https://s3.amazonaws.com/gitlab-runner-downloads/master/binaries/gitlab-runner-linux-amd64](https://s3.amazonaws.com/gitlab-runner-downloads/master/binaries/gitlab-runner-linux-amd64)'
+  id: totrans-168
   prefs:
   - PREF_IND
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '[https://s3.amazonaws.com/gitlab-runner-downloads/master/binaries/gitlab-runner-linux-amd64](https://s3.amazonaws.com/gitlab-runner-downloads/master/binaries/gitlab-runner-linux-amd64)'
 - en: '[https://s3.amazonaws.com/gitlab-runner-downloads/master/binaries/gitlab-runner-linux-arm](https://s3.amazonaws.com/gitlab-runner-downloads/master/binaries/gitlab-runner-linux-arm)'
+  id: totrans-169
   prefs:
   - PREF_IND
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '[https://s3.amazonaws.com/gitlab-runner-downloads/master/binaries/gitlab-runner-linux-arm](https://s3.amazonaws.com/gitlab-runner-downloads/master/binaries/gitlab-runner-linux-arm)'
 - en: '**macOS**:'
+  id: totrans-170
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**macOS**：'
 - en: '[https://s3.amazonaws.com/gitlab-runner-downloads/master/binaries/gitlab-runner-darwin-386](https://s3.amazonaws.com/gitlab-runner-downloads/master/binaries/gitlab-runner-darwin-386)'
+  id: totrans-171
   prefs:
   - PREF_IND
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '[https://s3.amazonaws.com/gitlab-runner-downloads/master/binaries/gitlab-runner-darwin-386](https://s3.amazonaws.com/gitlab-runner-downloads/master/binaries/gitlab-runner-darwin-386)'
 - en: '[https://s3.amazonaws.com/gitlab-runner-downloads/master/binaries/gitlab-runner-darwin-amd64](https://s3.amazonaws.com/gitlab-runner-downloads/master/binaries/gitlab-runner-darwin-amd64)'
+  id: totrans-172
   prefs:
   - PREF_IND
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '[https://s3.amazonaws.com/gitlab-runner-downloads/master/binaries/gitlab-runner-darwin-amd64](https://s3.amazonaws.com/gitlab-runner-downloads/master/binaries/gitlab-runner-darwin-amd64)'
 - en: '**Windows**:'
+  id: totrans-173
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**Windows**：'
 - en: '[https://s3.amazonaws.com/gitlab-runner-downloads/master/binaries/gitlab-runner-windows-386.exe](https://s3.amazonaws.com/gitlab-runner-downloads/master/binaries/gitlab-runner-windows-386.exe)'
+  id: totrans-174
   prefs:
   - PREF_IND
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '[https://s3.amazonaws.com/gitlab-runner-downloads/master/binaries/gitlab-runner-windows-386.exe](https://s3.amazonaws.com/gitlab-runner-downloads/master/binaries/gitlab-runner-windows-386.exe)'
 - en: '[https://s3.amazonaws.com/gitlab-runner-downloads/master/binaries/gitlab-runner-windows-amd64.exe](https://s3.amazonaws.com/gitlab-runner-downloads/master/binaries/gitlab-runner-windows-amd64.exe)'
+  id: totrans-175
   prefs:
   - PREF_IND
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '[https://s3.amazonaws.com/gitlab-runner-downloads/master/binaries/gitlab-runner-windows-amd64.exe](https://s3.amazonaws.com/gitlab-runner-downloads/master/binaries/gitlab-runner-windows-amd64.exe)'
 - en: '**FreeBSD**:'
+  id: totrans-176
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**FreeBSD**：'
 - en: '[https://s3.amazonaws.com/gitlab-runner-downloads/master/binaries/gitlab-runner-freebsd-386](https://s3.amazonaws.com/gitlab-runner-downloads/master/binaries/gitlab-runner-freebsd-386)'
+  id: totrans-177
   prefs:
   - PREF_IND
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '[https://s3.amazonaws.com/gitlab-runner-downloads/master/binaries/gitlab-runner-freebsd-386](https://s3.amazonaws.com/gitlab-runner-downloads/master/binaries/gitlab-runner-freebsd-386)'
 - en: '[https://s3.amazonaws.com/gitlab-runner-downloads/master/binaries/gitlab-runner-freebsd-amd64](https://s3.amazonaws.com/gitlab-runner-downloads/master/binaries/gitlab-runner-freebsd-amd64)'
+  id: totrans-178
   prefs:
   - PREF_IND
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '[https://s3.amazonaws.com/gitlab-runner-downloads/master/binaries/gitlab-runner-freebsd-amd64](https://s3.amazonaws.com/gitlab-runner-downloads/master/binaries/gitlab-runner-freebsd-amd64)'
 - en: '[https://s3.amazonaws.com/gitlab-runner-downloads/master/binaries/gitlab-runner-freebsd-arm](https://s3.amazonaws.com/gitlab-runner-downloads/master/binaries/gitlab-runner-freebsd-arm)'
+  id: totrans-179
   prefs:
   - PREF_IND
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '[https://s3.amazonaws.com/gitlab-runner-downloads/master/binaries/gitlab-runner-freebsd-arm](https://s3.amazonaws.com/gitlab-runner-downloads/master/binaries/gitlab-runner-freebsd-arm)'
 - en: Now, we should have a runner installed and ready for use.
+  id: totrans-180
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，我们应该已经安装并准备好一个 runner 可供使用。
 - en: The easiest way to install a runner is by using a package manager running on
     the host operating system. Doing a manual install allows you to run development
     versions or patched versions easily because it has only one Golang binary.
+  id: totrans-181
   prefs: []
   type: TYPE_NORMAL
+  zh: 安装 runner 最简单的方法是使用主机操作系统上运行的包管理器。手动安装允许你轻松运行开发版本或补丁版本，因为它只有一个 Golang 二进制文件。
 - en: Summary
+  id: totrans-182
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 摘要
 - en: In this chapter, we showed you the basic architecture of a GitLab Runner. Then,
     we showed you how to install it on several operating systems with a shell executor.
     On most systems, there is a more or less automated way to do this, which also
@@ -730,52 +1112,77 @@
     the software on every system. Using the manual method allows you to run developer
     versions of the runner easily. The registration process of the runner can be done
     step by step or in one command.
+  id: totrans-183
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本章中，我们展示了 GitLab Runner 的基本架构。然后，我们向你展示了如何在几个操作系统上使用 shell 执行器安装它。在大多数系统上，都有一种或多种自动化方法可以实现这一点，同时管理更新和平台兼容性。也有一种手动安装软件的方法，适用于每个系统。使用手动方法可以轻松运行
+    runner 的开发版本。runner 的注册过程可以一步一步完成，也可以通过一条命令完成。
 - en: In the next chapter, we will deploy GitLab Runner in a Docker container and
     also in a more managed way in a Kubernetes cluster.
+  id: totrans-184
   prefs: []
   type: TYPE_NORMAL
+  zh: 在下一章中，我们将部署 GitLab Runner 到 Docker 容器中，并以更受管理的方式部署到 Kubernetes 集群中。
 - en: Questions
+  id: totrans-185
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 问题
 - en: What part of GitLab does a runner connect to?
+  id: totrans-186
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: runner 连接到 GitLab 的哪一部分？
 - en: What additional action has to be performed on Debian-based systems to install
     the right package?
+  id: totrans-187
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在基于 Debian 的系统上安装正确的包需要执行什么额外操作？
 - en: In what language is the runner client written?
+  id: totrans-188
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: runner 客户端是用什么语言编写的？
 - en: What is the default description that's given to a runner?
+  id: totrans-189
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: runner 默认的描述是什么？
 - en: What command argument is used to communicate the registration token to the `gitlab
     register` command?
+  id: totrans-190
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 用于将注册令牌传递给 `gitlab register` 命令的命令参数是什么？
 - en: Further reading
+  id: totrans-191
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 进一步阅读
 - en: '*Hands-On Full Stack Development with Go*, by *Mina Andrawos*: [https://www.packtpub.com/web-development/hands-full-stack-development-go](https://www.packtpub.com/web-development/hands-full-stack-development-go)'
+  id: totrans-192
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '*动手实践 Go 全栈开发*，作者：*Mina Andrawos*：[https://www.packtpub.com/web-development/hands-full-stack-development-go](https://www.packtpub.com/web-development/hands-full-stack-development-go)'
 - en: '*Windows 10 for Enterprise Administrators*, by *Jeff Stokes*, *Manuel Singer*,
     and *Richard Diver*: [https://www.packtpub.com/in/networking-and-servers/windows-10-enterprise-administrators](https://www.packtpub.com/in/networking-and-servers/windows-10-enterprise-administrators)'
+  id: totrans-193
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '*Windows 10 企业管理员实战*，作者：*Jeff Stokes*、*Manuel Singer* 和 *Richard Diver*：[https://www.packtpub.com/in/networking-and-servers/windows-10-enterprise-administrators](https://www.packtpub.com/in/networking-and-servers/windows-10-enterprise-administrators)'
 - en: '*Hands-On Continuous Integration and Delivery*, by *Jean-Marcel Belmont*: [https://www.packtpub.com/in/virtualization-and-cloud/hands-continuous-integration-and-delivery](https://www.packtpub.com/in/virtualization-and-cloud/hands-continuous-integration-and-delivery)'
+  id: totrans-194
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '*动手实践持续集成与交付*，作者：*Jean-Marcel Belmont*：[https://www.packtpub.com/in/virtualization-and-cloud/hands-continuous-integration-and-delivery](https://www.packtpub.com/in/virtualization-and-cloud/hands-continuous-integration-and-delivery)'

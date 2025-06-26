@@ -1,10 +1,12 @@
 - en: Using GitLab Runners with Docker or Kubernetes
+  id: totrans-0
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
 - en: 'In the previous chapter, we installed a GitLab Runner with the shell executor.
     In this chapter, we will take a closer look at containerized GitLab Runners. You
     can run a GitLab Runner in a container in multiple ways:'
+  id: totrans-1
   prefs: []
   type: TYPE_NORMAL
 - en: '**With the Shell executor running in a custom-built Docker container**: This
@@ -15,6 +17,7 @@
     work from your side because the Runner itself only knows how to run jobs and connect
     to GitLab. You will collect state (files in `/tmp` or elsewhere) in your containers
     if they don''t restart after a job, so be prepared to handle that as well.'
+  id: totrans-2
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
@@ -25,6 +28,7 @@
     container or several that are started in parallel with a container for your job.
     For instance, you can start a MySQL database and it will be a linked service that
     is available under the service name.'
+  id: totrans-3
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
@@ -33,6 +37,7 @@
     to spin up containers. The Runners are completely stateless and when there is
     a decreasing number of jobs in the queue, the number of containers is scaled back
     automatically.'
+  id: totrans-4
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
@@ -40,6 +45,7 @@
     new Runners)**: In this configuration, the GitLab Runner controls the Docker Machine
     binary. It can create new Runner containers on the fly and scale down again if
     there are less jobs in the queue.'
+  id: totrans-5
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
@@ -48,69 +54,86 @@
     The autoscaling executors will be part of the next chapter. The reason for this
     is that the autoscaling Docker executor has a lot of options and requires more
     planning and system management features to maintain.
+  id: totrans-6
   prefs: []
   type: TYPE_NORMAL
 - en: 'The following topics will be covered in this chapter:'
+  id: totrans-7
   prefs: []
   type: TYPE_NORMAL
 - en: Runner client architecture
+  id: totrans-8
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: Creating your own Dockerized GitLab Runner
+  id: totrans-9
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: Using a prebuilt Docker container to deploy GitLab Runners
+  id: totrans-10
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: Using a Kubernetes cluster to spawn GitLab Runners
+  id: totrans-11
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: Technical requirements
+  id: totrans-12
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
 - en: To follow along with the instructions in this chapter, please download this
     book's GitHub repository, along with the examples that are available, from GitHub
     at [https://github.com/PacktPublishing/Mastering-GitLab-12/tree/master/Chapter16](https://github.com/PacktPublishing/Mastering-GitLab-12/tree/master/Chapter16).
+  id: totrans-13
   prefs: []
   type: TYPE_NORMAL
 - en: 'The other requirements for this chapter are as follows:'
+  id: totrans-14
   prefs: []
   type: TYPE_NORMAL
 - en: Docker installed for your platform
+  id: totrans-15
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: The `wget` command-line download tool ([https://www.gnu.org/software/wget/](https://www.gnu.org/software/wget/))
+  id: totrans-16
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: Access to the Alpine Docker image ([https://hub.docker.com/_/alpine](https://hub.docker.com/_/alpine))
+  id: totrans-17
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: Access to the Python Alpine Docker image ([https://hub.docker.com/r/lgatica/python-alpine](https://hub.docker.com/r/lgatica/python-alpine))
+  id: totrans-18
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: Access to the GitLab Runner Docker image ([https://hub.docker.com/r/gitlab/gitlab-runner](https://hub.docker.com/r/gitlab/gitlab-runner))
+  id: totrans-19
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: The `kubectl` utility on your system (you can find installation instructions
     at [https://kubernetes.io/docs/tasks/tools/install-kubectl/](https://kubernetes.io/docs/tasks/tools/install-kubectl/))
+  id: totrans-20
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: Helm or Tiller (a Kubernetes utility to help you to manage clusters: [https://helm.sh/docs/using_helm/](https://helm.sh/docs/using_helm/))
+  id: totrans-21
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: Runner client architecture
+  id: totrans-22
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
@@ -118,35 +141,43 @@
     from the one in the previous chapter in one way. The Runner binary is executed
     from inside a Docker container instead of directly on a host system. The following
     diagram shows this architecture:'
+  id: totrans-23
   prefs: []
   type: TYPE_NORMAL
 - en: '![](img/752fc375-9252-4ff6-9b2f-492f2ec7b80c.png)'
+  id: totrans-24
   prefs: []
   type: TYPE_IMG
 - en: The image is the same whether you create a container yourself or you use an
     existing container from the internet.
+  id: totrans-25
   prefs: []
   type: TYPE_NORMAL
 - en: 'If you are going to orchestrate your GitLab Runners using Kubernetes, the architecture
     is going to look a bit different. You can see that, inside the cluster, a **GitLab
     Runner** with the Kubernetes architecture can talk to the cluster''s Kubernetes
     API to scale up the number of Runner instances:'
+  id: totrans-26
   prefs: []
   type: TYPE_NORMAL
 - en: '![](img/933b0dfe-812b-4c39-8117-60663c61fd66.png)'
+  id: totrans-27
   prefs: []
   type: TYPE_IMG
 - en: The two architectures both use Docker containers as the core unit of operation. The
     first needs more management in the field of scaling, upgrading the software, and
     setting up a network. Much of that has already been arranged with Kubernetes.
+  id: totrans-28
   prefs: []
   type: TYPE_NORMAL
 - en: Now, we know about the difference between these architectures and that a Runner
     is deployed without a container, but what does this mean in practice? We will
     explore this in the following sections.
+  id: totrans-29
   prefs: []
   type: TYPE_NORMAL
 - en: Creating your own Dockerized GitLab Runner
+  id: totrans-30
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
@@ -155,26 +186,32 @@
     aren't installed in the default Docker images that are available or maybe it's
     just not possible because of security restrictions. A lot of default images have
     software included that contain vulnerabilities.
+  id: totrans-31
   prefs: []
   type: TYPE_NORMAL
 - en: Let's create our own Dockerized GitLab Runner for the project from [Chapter
     10](1eceee2e-41d6-41cc-95eb-3d225f25f3fa.xhtml), *Create Your Product, Verify,
     and Package it*, that is, the event manager documentation, using a Dockerfile. You
     will find our first attempt in the next section.
+  id: totrans-32
   prefs: []
   type: TYPE_NORMAL
 - en: Let me stress that this Dockerfile is purely for demonstration purposes. We
     don't recommend building containers like this for production-like systems or even
     your own development systems. It's being used here to show you how easily you
     can wrap commands and services in containers.
+  id: totrans-33
   prefs: []
   type: TYPE_NORMAL
 - en: 'The first line of the file is as follows:'
+  id: totrans-34
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE0]'
+  id: totrans-35
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE0]'
 - en: This is the base image we used for the container. It is from the Alpine Linux
     distribution, which contains only the bare minimum to run programs. It is only
     4.41 MB and, when using container security scanners such as Clair ([https://github.com/coreos/clair](https://github.com/coreos/clair)),
@@ -182,70 +219,88 @@
     [https://ericchiang.github.io/post/containers-from-scratch/](https://ericchiang.github.io/post/containers-from-scratch/)),
     but this is a very tedious task. The Alpine Linux image is safe enough and is
     ready to go immediately.
+  id: totrans-36
   prefs: []
   type: TYPE_NORMAL
 - en: 'In the following lines, we install some basic packages:'
+  id: totrans-37
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE1]'
+  id: totrans-38
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE1]'
 - en: We need CA certificates because we need the GitLab Runner client to connect
     to our HTTPS endpoint, where a TLS handshake will take place. The Git binary is
     also necessary to clone code from a project.
+  id: totrans-39
   prefs: []
   type: TYPE_NORMAL
 - en: 'Finally, the last command that is set to run in the creation sequence of the
     container is used to download, execute, and register the GitLab Runner with our
     GitLab server:'
+  id: totrans-40
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE2]'
+  id: totrans-41
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE2]'
 - en: 'For this example''s sake, we have hardcoded all of the arguments in the Dockerfile
     to show you how easy it is to Dockerize your command (don''t do this normally):'
+  id: totrans-42
   prefs: []
   type: TYPE_NORMAL
 - en: '`non-interactive`: Without it, there would be a dialog that takes you through
     the configuration settings.'
+  id: totrans-43
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: '`url`: This is the URL of our GitLab server.'
+  id: totrans-44
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: '`registration-token`: This is the token of a Runner from the project, group,
     or GitLab instance''s scope.'
+  id: totrans-45
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: '`executor`: This specifies which kind of Runner to implement. We chose to use
     the shell executor.'
+  id: totrans-46
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: '`shell`: This specifies which kind of shell to implement; this could be `bash`, `sh`,
     or `powershell` on Windows. We chose `sh` as it is the most basic one.'
+  id: totrans-47
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: '`description`: This is what description you will see in GitLab.'
+  id: totrans-48
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: '`tag-list`: We can put tags on Runners for easier management in GitLab. In
     this case, we have used `docker`.'
+  id: totrans-49
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: '`run-untagged`: We set it to `true`, which means that any job with or without
     tags can be run on this Runner.'
+  id: totrans-50
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: '`locked`: The Runner isn''t tied to a project.'
+  id: totrans-51
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
@@ -253,94 +308,129 @@
     (we specify `–no-cache` so that we can rebuild every time). The output is as follows,
     and we will go through it step by step. The first part is pulling the Alpine base
     image:'
+  id: totrans-52
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE3]'
+  id: totrans-53
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE3]'
 - en: 'The first Docker layer has been created. The second step is adding the necessary
     packages:'
+  id: totrans-54
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE4]'
+  id: totrans-55
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE4]'
 - en: 'The previous code downloaded the packages we specified, as well as some dependencies.
     This is still a modest amount of packages. In the following build step, the GitLab
     Runner binary is downloaded:'
+  id: totrans-56
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE5]'
+  id: totrans-57
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE5]'
 - en: 'The next step is the execution of the Runner:'
+  id: totrans-58
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE6]'
+  id: totrans-59
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE6]'
 - en: 'Then, we need to register it:'
+  id: totrans-60
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE7]'
+  id: totrans-61
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE7]'
 - en: 'The binary was successfully downloaded, and the registration was successful;
     a specific Runner token was created and is now part of the Docker image. The final
     part of the build sets the entry point for the instantiation of a Docker instance
     with this image:'
+  id: totrans-62
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE8]'
+  id: totrans-63
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE8]'
 - en: 'It automatically tagged the image with `latest`. The image is now available
     on the machine where its build was executed. You can view it by using the following
     command:'
+  id: totrans-64
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE9]'
+  id: totrans-65
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE9]'
 - en: 'If you go to GitLab and open the Runner list in the administrative settings
     menu, a new Runner will appear there:'
+  id: totrans-66
   prefs: []
   type: TYPE_NORMAL
 - en: '![](img/46ba2707-2ebe-4c45-bf16-b953004b46b8.png)'
+  id: totrans-67
   prefs: []
   type: TYPE_IMG
 - en: 'Now, it''s time to start the Runner and try to build the `eventmanager-documentation`
     project. You can start the Runner in the foreground using the following command:'
+  id: totrans-68
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE10]'
+  id: totrans-69
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE10]'
 - en: 'The following output should appear after a brief pause:'
+  id: totrans-70
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE11]'
+  id: totrans-71
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE11]'
 - en: As you can see, it has successfully loaded a configuration that was saved in
     the container during the registration phase. It also mentions the fact that it
     didn't load a metrics and debug session server, so this Runner exposes no service
     of any kind to the outside world. It has connected to the GitLab server and is
     now waiting for commands.
+  id: totrans-72
   prefs: []
   type: TYPE_NORMAL
 - en: 'When we try to run the `eventmanager-documentation` project pipeline for the
     master branch, it will spin off a build job to the new GitLab Runner:'
+  id: totrans-73
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE12]'
+  id: totrans-74
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE12]'
 - en: 'Unfortunately, it''s failed to build the project. If we look at the job log,
     we get the following output:'
+  id: totrans-75
   prefs: []
   type: TYPE_NORMAL
 - en: '![](img/7fdcd13d-9b72-4b72-9bf8-b59bcc6f21f1.png)'
+  id: totrans-76
   prefs: []
   type: TYPE_IMG
 - en: It's quite clear why the job failed. We created a basic GitLab Runner container
@@ -348,42 +438,53 @@
     Package Manager** (**PIP**) not being found. We need Python to install the **Amazon**
     **Web** **Services** **Command-Line** **Interface** (**AWS CLI**) utility, which
     is defined in the `.gitlab-ci.yml` file for this project.
+  id: totrans-77
   prefs: []
   type: TYPE_NORMAL
 - en: 'This is easy to fix. We can change the first line in the Dockerfile to the
     following:'
+  id: totrans-78
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE13]'
+  id: totrans-79
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE13]'
 - en: This will change the base image of the Docker container to a version of Linux
     with Python included. Now, you can rebuild the image using the exact same preceding
     command line and starting the container again.
+  id: totrans-80
   prefs: []
   type: TYPE_NORMAL
 - en: 'If we run the pipeline for this project again, the job will succeed:'
+  id: totrans-81
   prefs: []
   type: TYPE_NORMAL
 - en: '![](img/ba7011ed-5490-4bfe-b4a6-0edcfee8d0ad.png)'
+  id: totrans-82
   prefs: []
   type: TYPE_IMG
 - en: You can create much more elaborate container images, but this was a basic way
     to containerize a Runner.
+  id: totrans-83
   prefs: []
   type: TYPE_NORMAL
 - en: In this section, we have created our own GitLab Runner container and registered
     it with a GitLab instance. In the next section, we will use a prebuilt image that
     GitLab provides from their site.
+  id: totrans-84
   prefs: []
   type: TYPE_NORMAL
 - en: Using a prebuilt Docker container to deploy GitLab Runners
+  id: totrans-85
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
 - en: 'There are two basic flavors of prebuilt Docker containers available (Ubuntu-based
     and Alpine-based). The big difference between them is that the Alpine one is much
     smaller and has a better security track. You can find it here: [https://gitlab.com/gitlaborg/gitlabrunner/blob/master/dockerfiles/alpine/Dockerfile](https://gitlab.com/gitlaborg/gitlabrunner/blob/master/dockerfiles/alpine/Dockerfile).'
+  id: totrans-86
   prefs: []
   type: TYPE_NORMAL
 - en: You can run the container with arguments that will be passed through to the
@@ -391,132 +492,178 @@
     runtime registration of the Runner with a GitLab instance. Remember from the *Creating
     your own Dockerized GitLab Runner* section that we baked the registration of the
     Runner inside the image. You can find the appropriate images on Docker Hub: [https://hub.docker.com/r/gitlab/gitlab-runner/tags](https://hub.docker.com/r/gitlab/gitlab-runner/tags).
+  id: totrans-87
   prefs: []
   type: TYPE_NORMAL
 - en: 'Just start a container using the following command. It will automatically download
     the right image:'
+  id: totrans-88
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE14]'
+  id: totrans-89
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE14]'
 - en: 'You can check the logs of the running container with the following command:'
+  id: totrans-90
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE15]'
+  id: totrans-91
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE15]'
 - en: The preceding output means that the `gitlab-runner` software is running inside
     the container, but it isn't registered yet.
+  id: totrans-92
   prefs: []
   type: TYPE_NORMAL
 - en: 'The next step is to register it and save the configuration file in the container
     (in the configuration volume you specified with `-v`):'
+  id: totrans-93
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE16]'
+  id: totrans-94
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE16]'
 - en: 'If you examine the container logs (maybe you left the window open) after this,
     a message should appear:'
+  id: totrans-95
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE17]'
+  id: totrans-96
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE17]'
 - en: This means that the Runner now has a valid configuration and is online with
     GitLab.
+  id: totrans-97
   prefs: []
   type: TYPE_NORMAL
 - en: 'If we try to trigger the pipeline for the `eventmanager-documentation` project
     again, a job will be run:'
+  id: totrans-98
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE18]'
+  id: totrans-99
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE18]'
 - en: 'In GitLab, you will see this job running:'
+  id: totrans-100
   prefs: []
   type: TYPE_NORMAL
 - en: '![](img/9ca6f192-edb0-4d8c-aab6-ab2b8288fb4e.png)'
+  id: totrans-101
   prefs: []
   type: TYPE_IMG
 - en: 'In the log file of the container, a message will appear if the job succeeds:'
+  id: totrans-102
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE19]'
+  id: totrans-103
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE19]'
 - en: 'This is also visible in the job log in GitLab:'
+  id: totrans-104
   prefs: []
   type: TYPE_NORMAL
 - en: '![](img/225c4efc-b8f2-4186-8f5b-8177f110b7fb.png)'
+  id: totrans-105
   prefs: []
   type: TYPE_IMG
 - en: 'This concludes the two ways of running Docker locally with relatively simple
     containers:'
+  id: totrans-106
   prefs: []
   type: TYPE_NORMAL
 - en: Building your own container
+  id: totrans-107
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: Using a prebuilt image
+  id: totrans-108
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: How can you manage this if you have massive amounts of build jobs? You can use
     an orchestration system such as Kubernetes, which is the subject of the next section.
+  id: totrans-109
   prefs: []
   type: TYPE_NORMAL
 - en: Using a Kubernetes cluster to spawn GitLab Runners
+  id: totrans-110
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
 - en: The best method of deploying a GitLab Runner container into a Kubernetes cluster
     is by using the GitLab Runner Helm chart.
+  id: totrans-111
   prefs: []
   type: TYPE_NORMAL
 - en: It contains all of the configuration information that's run using the GitLab
     Runner Kubernetes executor. For each new job it receives from GitLab CI/CD, it
     will provision a new pod within the specified namespace to run it.
+  id: totrans-112
   prefs: []
   type: TYPE_NORMAL
 - en: 'You can run the install using the following command:'
+  id: totrans-113
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE20]'
+  id: totrans-114
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE20]'
 - en: 'This command can take some time to complete. After some time, you will receive
     the following output:'
+  id: totrans-115
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE21]'
+  id: totrans-116
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE21]'
 - en: This shows quite a bit of output, but the important part is that the status
     of the Helm chart is `DEPLOYED`.
+  id: totrans-117
   prefs: []
   type: TYPE_NORMAL
 - en: The GitLab Runner should now be registered to the GitLab instance reachable
     at [https://gitlab-ee.joustie.nl/](https://gitlab-ee.joustie.nl/).
+  id: totrans-118
   prefs: []
   type: TYPE_NORMAL
 - en: We have run this deployment on my local Kubernetes cluster.
+  id: totrans-119
   prefs: []
   type: TYPE_NORMAL
 - en: 'You can find out which Kubernetes pods are running by using the following command:'
+  id: totrans-120
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE22]'
+  id: totrans-121
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE22]'
 - en: 'As you can see, the Runner was deployed in Kubernetes in the Runner list of
     the administrative section of GitLab:'
+  id: totrans-122
   prefs: []
   type: TYPE_NORMAL
 - en: '![](img/e3e42102-c4ee-4cfe-ac72-57ce5833725a.png)'
+  id: totrans-123
   prefs: []
   type: TYPE_IMG
 - en: 'We can run the pipeline for the `eventmanager-documentation` project that was
@@ -524,53 +671,68 @@
     Your Product, Verifying it, and Packaging it,* to demonstrate the fact that multiple
     Runners are spawned on the Kubernetes cluster. Here is the pipeline view in GitLab
     showing multiple parallel jobs:'
+  id: totrans-124
   prefs: []
   type: TYPE_NORMAL
 - en: '![](img/e80b020c-9086-45f1-a007-c2c6142fdf6b.png)'
+  id: totrans-125
   prefs: []
   type: TYPE_IMG
 - en: 'If you look into individual jobs, you will see that it takes some time to spin
     up the new Runner resources in the cluster. Until it is ready, the job is polled:'
+  id: totrans-126
   prefs: []
   type: TYPE_NORMAL
 - en: '![](img/20bb77e4-4c92-4486-ac83-2b858610ec41.png)'
+  id: totrans-127
   prefs: []
   type: TYPE_IMG
 - en: 'After some time, a Runner is spawned in the Kubernetes cluster and the jobs
     are dispatched to it:'
+  id: totrans-128
   prefs: []
   type: TYPE_NORMAL
 - en: '![](img/68dcf651-55e4-4809-ad45-63014911eadc.png)'
+  id: totrans-129
   prefs: []
   type: TYPE_IMG
 - en: 'You can view a list of pods on the Kubernetes cluster and see that many pods
     were created:'
+  id: totrans-130
   prefs: []
   type: TYPE_NORMAL
 - en: '![](img/349e3596-bab6-4413-b629-551bcfb3f0fc.png)'
+  id: totrans-131
   prefs: []
   type: TYPE_IMG
 - en: 'After some time, you will see that some parallel started jobs are finishing
     (in green):'
+  id: totrans-132
   prefs: []
   type: TYPE_NORMAL
 - en: '![](img/f274f9f4-9cdb-436a-8a91-cffa490d7e98.png)'
+  id: totrans-133
   prefs: []
   type: TYPE_IMG
 - en: 'In the end, all of the jobs will succeed and the pipeline will be passed:'
+  id: totrans-134
   prefs: []
   type: TYPE_NORMAL
 - en: '![](img/ebbe1740-7893-4758-9a3d-aa46e9c27c2a.png)'
+  id: totrans-135
   prefs: []
   type: TYPE_IMG
 - en: After this job, the number of GitLab Runners is reduced once more.
+  id: totrans-136
   prefs: []
   type: TYPE_NORMAL
 - en: By doing this, we've shown you how to use Kubernetes to manage containers and
     how to handle scaling on the fly.
+  id: totrans-137
   prefs: []
   type: TYPE_NORMAL
 - en: Summary
+  id: totrans-138
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
@@ -579,57 +741,74 @@
     how to use existing Docker images that are provided by GitLab itself. Afterward,
     we talked about a way to manage a greater amount of containers and how you can
     handle this more economically with Kubernetes.
+  id: totrans-139
   prefs: []
   type: TYPE_NORMAL
 - en: 'In the next chapter, we will discuss another way to scale Runners: with autoscaling.'
+  id: totrans-140
   prefs: []
   type: TYPE_NORMAL
 - en: Questions
+  id: totrans-141
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
 - en: What are the advantages of the Docker executor?
+  id: totrans-142
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: What is the basic build command for a Docker container?
+  id: totrans-143
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: Which file contains the building instructions for a container?
+  id: totrans-144
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: What is the name of a small Linux container distribution?
+  id: totrans-145
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: What tool is used to configure a Kubernetes cluster with much more ease?
+  id: totrans-146
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: How can you set the number of Runners to spawn by default in Kubernetes?
+  id: totrans-147
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: Further reading
+  id: totrans-148
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
 - en: '*Kubernetes Course from a DevOps Guru (Kubernetes and Docker)*, by *Tao W*,
     *James Lee*, and *Basit Mustafa*: [https://www.packtpub.com/application-development/kubernetes-course-devops-guru-kubernetes-docker](https://www.packtpub.com/application-development/kubernetes-course-devops-guru-kubernetes-docker)'
+  id: totrans-149
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: '*Learn Docker – Fundamentals of Docker 18.x*, by *Gabriel N. Schenker*: [https://www.packtpub.com/in/networking-and-servers/learn-docker-fundamentals-docker-18x](https://www.packtpub.com/in/networking-and-servers/learn-docker-fundamentals-docker-18x)'
+  id: totrans-150
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '*学习 Docker – Docker 18.x 基础*，作者：*加布里埃尔·N·申克*： [https://www.packtpub.com/in/networking-and-servers/learn-docker-fundamentals-docker-18x](https://www.packtpub.com/in/networking-and-servers/learn-docker-fundamentals-docker-18x)'
 - en: '*Hands-On Continuous Integration and Delivery*, by *Jean-Marcel Belmont*: [https://www.packtpub.com/in/virtualization-and-cloud/hands-continuous-integration-and-delivery](https://www.packtpub.com/in/virtualization-and-cloud/hands-continuous-integration-and-delivery)'
+  id: totrans-151
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '*实践持续集成与交付*，作者：*让-马塞尔·贝尔蒙特*： [https://www.packtpub.com/in/virtualization-and-cloud/hands-continuous-integration-and-delivery](https://www.packtpub.com/in/virtualization-and-cloud/hands-continuous-integration-and-delivery)'
 - en: '*Containers from Scratch*: [https://ericchiang.github.io/post/containers-from-scratch/](https://ericchiang.github.io/post/containers-from-scratch/)'
+  id: totrans-152
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '*从零开始的容器*： [https://ericchiang.github.io/post/containers-from-scratch/](https://ericchiang.github.io/post/containers-from-scratch/)'

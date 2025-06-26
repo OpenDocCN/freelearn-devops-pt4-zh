@@ -1,1040 +1,1494 @@
 - en: '*Chapter 9*: Pushing Images to a Container Registry'
+  id: totrans-0
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: '*第9章*：将镜像推送到容器注册表'
 - en: In the previous chapter, we went through the very important concept of the container
     base image. As we saw, it is really important to choose the base image wisely
     for our containers, using official container images from trusted container registries
     and development communities.
+  id: totrans-1
   prefs: []
   type: TYPE_NORMAL
+  zh: 在上一章中，我们探讨了容器基础镜像的一个非常重要的概念。如我们所见，为我们的容器明智地选择基础镜像非常重要，应该使用来自可信容器注册表和开发社区的官方容器镜像。
 - en: But once we choose the preferred base image and then build our final container
     image, we need a way to further distribute our work to the various target hosts
     that we plan to let it run on.
+  id: totrans-2
   prefs: []
   type: TYPE_NORMAL
+  zh: 但是，一旦我们选择了首选的基础镜像并构建了最终的容器镜像，我们就需要一种方法将我们的工作进一步分发到计划运行的各种目标主机上。
 - en: The best option to distribute a container image is to push it to a container
     registry and after that, let all the target hosts pull the container image and
     run it.
+  id: totrans-3
   prefs: []
   type: TYPE_NORMAL
+  zh: 分发容器镜像的最佳选项是将其推送到容器注册表，然后让所有目标主机拉取并运行该容器镜像。
 - en: 'For this reason, in this chapter, we''re going to cover the following main
     topics:'
+  id: totrans-4
   prefs: []
   type: TYPE_NORMAL
+  zh: 因此，在本章中，我们将覆盖以下主要主题：
 - en: What is a container registry?
+  id: totrans-5
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 什么是容器注册表？
 - en: Cloud-based and on-premise container registries
+  id: totrans-6
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 基于云的和本地的容器注册表
 - en: Managing container images with Skopeo
+  id: totrans-7
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 使用Skopeo管理容器镜像
 - en: Running a local container registry
+  id: totrans-8
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 运行本地容器注册表
 - en: Technical requirements
+  id: totrans-9
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 技术要求
 - en: Before proceeding with the chapter and its examples, a machine with a working
     Podman installation is required. As stated in [*Chapter 3*](B17908_03_epub.xhtml#_idTextAnchor068),
     *Running the First Container*, all the examples in the book are executed on a
     Fedora 34 system or later but can be reproduced on your OS of choice.
+  id: totrans-10
   prefs: []
   type: TYPE_NORMAL
+  zh: 在继续本章及其示例之前，需要一台已安装并正常运行Podman的机器。如[*第3章*](B17908_03_epub.xhtml#_idTextAnchor068)《运行第一个容器》所述，本书中的所有示例都在Fedora
+    34或更高版本的系统上执行，但可以在你选择的操作系统上复制。
 - en: A good understanding of the topics covered in [*Chapter 4*](B17908_04_epub.xhtml#_idTextAnchor083),
     *Managing Running Containers*, and [*Chapter 8*](B17908_08_epub.xhtml#_idTextAnchor149),
     *Choosing the Container Base Image*, is useful to easily grasp concepts regarding
     container registries.
+  id: totrans-11
   prefs: []
   type: TYPE_NORMAL
+  zh: 理解[*第4章*](B17908_04_epub.xhtml#_idTextAnchor083)《管理运行中的容器》和[*第8章*](B17908_08_epub.xhtml#_idTextAnchor149)《选择容器基础镜像》中的内容，将有助于轻松掌握有关容器注册表的概念。
 - en: What is a container registry?
+  id: totrans-12
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 什么是容器注册表？
 - en: A container registry is just a collection of container images' repositories,
     used in conjunction with systems that need to pull and run container images in
     a dynamic way.
+  id: totrans-13
   prefs: []
   type: TYPE_NORMAL
+  zh: 容器注册表只是容器镜像仓库的集合，用于与需要动态拉取和运行容器镜像的系统配合使用。
 - en: 'The main features available on a container registry are the following:'
+  id: totrans-14
   prefs: []
   type: TYPE_NORMAL
+  zh: 容器注册表上可用的主要功能如下：
 - en: Repository management
+  id: totrans-15
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 仓库管理
 - en: Pushing container images
+  id: totrans-16
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 推送容器镜像
 - en: Tag management
+  id: totrans-17
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 标签管理
 - en: Pulling container images
+  id: totrans-18
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 拉取容器镜像
 - en: Authentication management
+  id: totrans-19
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 身份验证管理
 - en: Let's look at every feature in detail in the following sections.
+  id: totrans-20
   prefs: []
   type: TYPE_NORMAL
+  zh: 接下来我们将在以下各节中详细介绍每个特性。
 - en: Repository management
+  id: totrans-21
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 仓库管理
 - en: One of the most important features of container registries is managing container
     images through repositories. Depending on the container registry implementation
     that we choose, we will be sure to find a web interface or a command-line interface
     that will let us handle the creation of a sort of *folder* that will act as a
     repository for our container images.
+  id: totrans-22
   prefs: []
   type: TYPE_NORMAL
+  zh: 容器注册表的最重要特性之一是通过仓库管理容器镜像。根据我们选择的容器注册表实现方式，我们肯定会找到一个网页界面或命令行界面，让我们处理创建类似于*文件夹*的容器镜像仓库。
 - en: 'According to the **Open Container Initiative** (**OCI**) Distribution Specification
     *[1]*, the container images are organized in a repository that is identified by
     name. A repository name is usually composed of a user/organization name and the
     container image name in this way: *myorganization/mycontainerimage*, and it must
     respect the following regular expression check:'
+  id: totrans-23
   prefs: []
   type: TYPE_NORMAL
+  zh: 根据**开放容器倡议**（**OCI**）分发规范*[1]*，容器镜像被组织在一个通过名称识别的仓库中。仓库名称通常由用户/组织名称和容器镜像名称组成，格式为：*myorganization/mycontainerimage*，并且必须符合以下正则表达式检查：
 - en: '[PRE0]'
+  id: totrans-24
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE0]'
 - en: Important Definition
+  id: totrans-25
   prefs: []
   type: TYPE_NORMAL
+  zh: 重要定义
 - en: A **regular expression** (**regex**) is a search pattern defined by a sequence
     of characters. This pattern definition leverages several notations that let the
     user define in detail the target keyword, line, or multiple lines to find in a
     text document.
+  id: totrans-26
   prefs: []
   type: TYPE_NORMAL
+  zh: '**正则表达式**（**regex**）是一种由字符序列定义的搜索模式。这个模式定义利用了多种符号，允许用户详细定义在文本文件中查找的目标关键字、行或多行。'
 - en: Once we've created a repository on our container registry, we should be able
     to start pushing, pulling, and handling different versions (identified by a label)
     of our container images.
+  id: totrans-27
   prefs: []
   type: TYPE_NORMAL
+  zh: 一旦我们在容器注册表上创建了一个仓库，我们应该能够开始推送、拉取并处理不同版本（由标签标识）的容器镜像。
 - en: Pushing container images
+  id: totrans-28
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 推送容器镜像
 - en: The act of pushing container images to a container registry is handled by the
     container tool that we are using, which respects the OCI Distribution Specification.
+  id: totrans-29
   prefs: []
   type: TYPE_NORMAL
+  zh: 将容器镜像推送到容器注册表的操作是由我们使用的容器工具处理的，该工具遵循OCI分发规范。
 - en: In this process, the blobs, which are the binary form of the content, are uploaded
     first and, usually at the end, the manifest is then uploaded. This order is not
     strict and mandatory by the specification, but a registry may refuse a manifest
     that references blobs that it does not know.
+  id: totrans-30
   prefs: []
   type: TYPE_NORMAL
+  zh: 在此过程中，blob（即内容的二进制形式）会首先上传，通常最后上传的是清单。这个顺序并不是规范严格要求的，但如果清单引用了注册表不认识的blob，注册表可能会拒绝该清单。
 - en: Using a container management tool to push a container image to a registry, we
     must specify again the name of the repository in the form shown before and the
     container image's tag we want to upload.
+  id: totrans-31
   prefs: []
   type: TYPE_NORMAL
+  zh: 使用容器管理工具将容器镜像推送到注册表时，我们必须再次指定之前展示的仓库名称和我们想上传的容器镜像标签。
 - en: Tag management
+  id: totrans-32
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 标签管理
 - en: As we introduced starting in [*Chapter 4*](B17908_04_epub.xhtml#_idTextAnchor083),
     *Managing Running Containers*, the container images are identified by a name and
     a tag. Thanks to the tag mechanism, we can store several different versions of
     the container images on a system's local cache or on a container registry.
+  id: totrans-33
   prefs: []
   type: TYPE_NORMAL
+  zh: 正如我们在[*第4章*](B17908_04_epub.xhtml#_idTextAnchor083)《管理正在运行的容器》中介绍的那样，容器镜像通过名称和标签来标识。通过标签机制，我们可以在系统的本地缓存或容器注册表上存储多个不同版本的容器镜像。
 - en: The container registry should be able to expose the feature of content discovery,
     providing the list of the container images' tags to the client requesting it.
     This feature can give the opportunity to the container registry's users to choose
     the right container image to pull and run to the target systems.
+  id: totrans-34
   prefs: []
   type: TYPE_NORMAL
+  zh: 容器注册表应能够公开内容发现功能，向请求的客户端提供容器镜像标签的列表。此功能使容器注册表的用户能够选择正确的容器镜像进行拉取和运行到目标系统。
 - en: Pulling container images
+  id: totrans-35
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 拉取容器镜像
 - en: In the process of pulling container images, the client should first request
     the manifest to know which blobs, which are the binary form of the content, to
     pull to get the final container image. The order is strict because without pulling
     and parsing the manifest file of the container image, the client would not be
     able to know which binary data it has to request from the registry.
+  id: totrans-36
   prefs: []
   type: TYPE_NORMAL
+  zh: 在拉取容器镜像的过程中，客户端应首先请求清单，以便了解需要拉取哪些blob（即内容的二进制形式），从而获取最终的容器镜像。这个顺序是严格的，因为如果不拉取和解析容器镜像的清单文件，客户端将无法知道从注册表请求哪些二进制数据。
 - en: Using a container management tool to pull a container image from a registry,
     we must specify again the name of the repository in the form shown before and
     the container image's tag we want to download.
+  id: totrans-37
   prefs: []
   type: TYPE_NORMAL
+  zh: 使用容器管理工具从注册表拉取容器镜像时，我们必须再次指定之前展示的仓库名称和我们想下载的容器镜像标签。
 - en: Authentication management
+  id: totrans-38
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 身份验证管理
 - en: All the previous operations may require authentication. In many cases, public
     container registries may allow anonymous pulling and content discovery but for
     pushing container images they require a valid authentication.
+  id: totrans-39
   prefs: []
   type: TYPE_NORMAL
+  zh: 所有上述操作可能都需要身份验证。在许多情况下，公共容器注册表可能允许匿名拉取和内容发现，但推送容器镜像时需要有效的身份验证。
 - en: Depending on the container registry chosen, we might find basic or advanced
     features to authenticate to a container registry, let our client store a token,
     and then use it for every operation that could require it.
+  id: totrans-40
   prefs: []
   type: TYPE_NORMAL
+  zh: 根据选择的容器注册表，我们可能会发现基本或高级功能来进行身份验证，允许我们的客户端存储令牌，并在每次需要时使用它进行操作。
 - en: This ends up our brief deep dive into container registry theory. If you want
     to know more about the OCI Distribution Specification, you can investigate the
     URL *[1]* available at the end of this chapter in the *Further reading* section.
+  id: totrans-41
   prefs: []
   type: TYPE_NORMAL
+  zh: 这就是我们对容器注册表理论的简短深入探讨。如果你想了解更多关于 OCI 分发规范的信息，可以参考本章末尾的*进一步阅读*部分中的 URL *[1]*。
 - en: Nice to Know
+  id: totrans-42
   prefs: []
   type: TYPE_NORMAL
+  zh: 了解一下
 - en: 'The OCI Distribution Specification also defines a set of conformance tests
     that anyone could run against a container registry to check if that particular
     implementation respects all the rules defined in the specification: [https://github.com/opencontainers/distribution-spec/tree/main/conformance](https://github.com/opencontainers/distribution-spec/tree/main/conformance).'
+  id: totrans-43
   prefs: []
   type: TYPE_NORMAL
+  zh: OCI 分发规范还定义了一套符合性测试，任何人都可以运行这些测试，检查某个容器注册表的实现是否遵循了规范中定义的所有规则：[https://github.com/opencontainers/distribution-spec/tree/main/conformance](https://github.com/opencontainers/distribution-spec/tree/main/conformance)。
 - en: The various implementations of a container registry available on the web, in
     addition to the basic functions we described before, also add more features that
     we will discover soon in the next section.
+  id: totrans-44
   prefs: []
   type: TYPE_NORMAL
+  zh: 网络上可用的各种容器注册表实现，除了我们之前描述的基本功能外，还添加了更多的功能，我们将在下一节中深入了解。
 - en: Cloud-based and on-premise container registries
+  id: totrans-45
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 基于云和本地的容器注册表
 - en: As we introduced in the previous sections, the OCI defined a standard to adhere
     to for container registries. This initiative allowed the rise of many other container
     registries apart from the initial Docker Registry and its online service, Docker
     Hub.
+  id: totrans-46
   prefs: []
   type: TYPE_NORMAL
+  zh: 正如我们在前面的章节中介绍的，OCI 定义了一个容器注册表遵循的标准。这个倡议促使了许多其他容器注册表的兴起，除了最初的 Docker Registry
+    及其在线服务 Docker Hub。
 - en: 'We can group the available container registries into two main categories:'
+  id: totrans-47
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们可以将可用的容器注册表分为两个主要类别：
 - en: Cloud-based container registries
+  id: totrans-48
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 基于云的容器注册表
 - en: On-premise container registries
+  id: totrans-49
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 本地容器注册表
 - en: Let's see these two categories in detail in the following subsections.
+  id: totrans-50
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们在以下小节中详细了解这两类容器注册表。
 - en: On-premise container registries
+  id: totrans-51
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 本地容器注册表
 - en: 'On-premise container registries are often used for creating a private repository
     for enterprise purposes. The main use cases include the following:'
+  id: totrans-52
   prefs: []
   type: TYPE_NORMAL
+  zh: 本地容器注册表通常用于创建企业用途的私有仓库。主要的使用场景包括：
 - en: Distributing images in a private or isolated network
+  id: totrans-53
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 在私有或隔离网络中分发镜像
 - en: Deploying a new container image at a large scale over several machines
+  id: totrans-54
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 在多个机器上大规模部署新的容器镜像
 - en: Keeping any sensitive data in our own data center
+  id: totrans-55
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 将任何敏感数据存储在我们自己的数据中心
 - en: Improving the speed of pulling and pushing images using an internal network
+  id: totrans-56
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 使用内部网络提高拉取和推送镜像的速度
 - en: Of course, running an on-premise registry requires several skills to ensure
     availability, monitoring, logging, and security.
+  id: totrans-57
   prefs: []
   type: TYPE_NORMAL
+  zh: 当然，运行本地注册表需要具备一些技能，以确保可用性、监控、日志记录和安全性。
 - en: 'This is a non-comprehensive list of the available container registries that
     we can install on-premises:'
+  id: totrans-58
   prefs: []
   type: TYPE_NORMAL
+  zh: 这是一个可在本地安装的容器注册表的非全面列表：
 - en: '**Docker Registry**: Docker''s project, which is currently at version 2, provides
     all the basic features described in the earlier sections and we will learn how
     to run it in the last section of this chapter, *Running a local container registry*.'
+  id: totrans-59
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**Docker Registry**：这是 Docker 的项目，目前版本为 2，提供前面章节描述的所有基本功能，我们将在本章最后一节*运行本地容器注册表*中学习如何运行它。'
 - en: '**Harbor**: This is a VMware open source project that provides high availability,
     image auditing, and integration with authentication systems.'
+  id: totrans-60
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**Harbor**：这是一个 VMware 的开源项目，提供高可用性、镜像审计和与身份验证系统的集成。'
 - en: '**GitLab Container Registry**: This is strongly integrated with the GitLab
     product, so it requires minimal setup, but it depends on the main project.'
+  id: totrans-61
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**GitLab Container Registry**：这与 GitLab 产品紧密集成，因此只需最小的设置，但它依赖于主项目。'
 - en: '**JFrog Artifactory**: This manages more than just containers; it provides
     management for any artifact.'
+  id: totrans-62
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**JFrog Artifactory**：它不仅仅管理容器；它还提供任何制品的管理。'
 - en: '**Quay**: This is the open source distribution of the Red Hat product called
     Quay. This project offers a fully-featured web UI, a service for image vulnerability
     scanning, data storage, and protection.'
+  id: totrans-63
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**Quay**：这是 Red Hat 产品 Quay 的开源版本。该项目提供了一个功能齐全的 Web 用户界面、镜像漏洞扫描服务、数据存储和保护功能。'
 - en: We will not go into every detail of these container registries. What we can
     suggest for sure is to pay attention and choose the product or project that fits
     better with your use cases and support needs. Many of these products have support
     plans or enterprise editions (license required) that could easily save your skin
     in the event of a disaster.
+  id: totrans-64
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们不会深入讨论这些容器注册表的每个细节。我们可以确定地建议你要小心选择适合你使用案例和支持需求的产品或项目。许多这些产品都有支持计划或企业版本（需要许可），在发生灾难时，它们可以轻松帮助你解围。
 - en: Let's now see what the cloud-based container registries are that could make
     our life easier, offering a complete managed service, with which our operational
     skills could be reduced to zero.
+  id: totrans-65
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在让我们来看看那些基于云的容器注册表，它们可以通过提供完整的托管服务，简化我们的生活，使我们的操作技能降到零。
 - en: Cloud-based container registries
+  id: totrans-66
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 基于云的容器注册表
 - en: As anticipated in the previous section, cloud-based container registries could
     be the fastest way to start working with container images through a registry.
+  id: totrans-67
   prefs: []
   type: TYPE_NORMAL
+  zh: 正如上一节所预期的，基于云的容器注册表可能是通过注册表开始使用容器镜像的最快方式。
 - en: As described in [*Chapter 8*](B17908_08_epub.xhtml#_idTextAnchor149), *Choosing
     the Container Base Image*, there are several cloud-based container registry services
     on the web. We will concentrate only on a small subset, taking out of the analysis
     the ones provided by a public cloud provider and the ones offered by the Linux
     distribution, which usually are only available to pull images, preloaded by the
     distribution maintainers.
+  id: totrans-68
   prefs: []
   type: TYPE_NORMAL
+  zh: 如在[*第8章*](B17908_08_epub.xhtml#_idTextAnchor149)中所述，*选择容器基础镜像*，网上有多个基于云的容器注册表服务。我们将仅集中讨论其中的一小部分，排除掉由公共云提供商提供的服务和由
+    Linux 发行版提供的服务，这些通常只允许拉取由发行版维护者预装的镜像。
 - en: 'We will take a look at these cloud container registries:'
+  id: totrans-69
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们将看看这些云容器注册表：
 - en: '**Docker Hub**: This is a hosted registry solution by Docker Inc. This registry
     also hosts official repositories and security verified images for some popular
     open source projects.'
+  id: totrans-70
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**Docker Hub**：这是由 Docker 公司提供的托管注册表解决方案。该注册表还托管一些受安全验证的官方仓库和流行开源项目的镜像。'
 - en: '**Quay**: This is the hosted registry solution born under the CoreOS company,
     now part of Red Hat. It offers private and public repositories, automated scanning
     for security purposes, image builds, and integration with popular Git public repositories.'
+  id: totrans-71
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**Quay**：这是由 CoreOS 公司（现在是红帽公司的一部分）推出的托管注册表解决方案。它提供私有和公共仓库、自动化的安全扫描、镜像构建，以及与流行的
+    Git 公共仓库的集成。'
 - en: Docker Hub cloud registry
+  id: totrans-72
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: Docker Hub 云注册表
 - en: Docker Hub cloud registry was born together with the Docker project and it represented
     one of the greatest features added to this project and containers in general,
     the right attention they deserved.
+  id: totrans-73
   prefs: []
   type: TYPE_NORMAL
+  zh: Docker Hub 云注册表伴随着 Docker 项目的诞生而诞生，成为该项目及容器技术的最大亮点之一，给予了它们应有的关注。
 - en: 'Talking about features, Docker Hub has free and paid plans:'
+  id: totrans-74
   prefs: []
   type: TYPE_NORMAL
+  zh: 说到功能，Docker Hub 有免费和付费计划：
 - en: 'Anonymous access: Only 100 image pulls in 6 hours.'
+  id: totrans-75
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 匿名访问：每 6 小时只有 100 次镜像拉取。
 - en: 'A registered user account with the free tier: 200 image pulls in 6 hours and
     unlimited public repositories. With the free tier we do not get builds or security
     scans.'
+  id: totrans-76
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 使用免费套餐的注册用户账户：每 6 小时 200 次镜像拉取，并且可以拥有无限量的公共仓库。免费套餐不包括镜像构建或安全扫描。
 - en: 'Pro, Team, and Business accounts: Thousands of image pulls per day, automated
     builds, security scans, RBAC, and so on.'
+  id: totrans-77
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 专业、团队和企业账户：每天成千上万的镜像拉取，自动化构建，安全扫描，RBAC 等等。
 - en: As we just reported, if we try to log in with a registered user account with
     the free tier, we can only create public repositories. This could be enough for
     communities or individual developers, but once you start using it at the enterprise
     level, you may need the additional features provided by the paid plans.
+  id: totrans-78
   prefs: []
   type: TYPE_NORMAL
+  zh: 正如我们刚才所提到的，如果我们尝试用免费套餐的注册用户账户登录，我们只能创建公共仓库。这对于社区或个人开发者可能足够了，但一旦你开始在企业级使用时，你可能需要付费计划提供的附加功能。
 - en: 'To avoid a big limitation in terms of image pulls, we should at least use a
     registered user account and log in to the web portal and to the container registry
     with our beloved container engine: Podman. We will see in the following sections
     how to authenticate to a registry and ensure 200 image pulls every 6 hours using
     Docker Hub.'
+  id: totrans-79
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了避免在拉取镜像时遇到较大的限制，我们应该至少使用一个注册的用户账户，并通过我们钟爱的容器引擎：Podman，登录到 web 门户和容器注册表。接下来的章节将介绍如何认证到注册表，并确保每
+    6 小时可以拉取 200 次镜像，使用 Docker Hub。
 - en: Red Hat Quay cloud registry
+  id: totrans-80
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: Red Hat Quay 云注册表
 - en: Quay cloud registry is the Red Hat on-premise registry but offered as **Software-as-a-Service**
     (**SaaS**).
+  id: totrans-81
   prefs: []
   type: TYPE_NORMAL
+  zh: Quay云注册表是Red Hat的本地注册表，但作为**软件即服务**（**SaaS**）提供。
 - en: Quay cloud registry, like Docker Hub, offers paid plans as well to unlock additional
     features.
+  id: totrans-82
   prefs: []
   type: TYPE_NORMAL
+  zh: Quay云注册表像Docker Hub一样，提供付费计划以解锁更多功能。
 - en: 'But the nice news is that Quay''s free tier has a lot of features included:'
+  id: totrans-83
   prefs: []
   type: TYPE_NORMAL
+  zh: 好消息是，Quay的免费套餐包含了许多功能：
 - en: Build from a Dockerfile, manually uploaded or even linked through GitHub/Bitbucket/Gitlab
     or any Git repository.
+  id: totrans-84
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 从Dockerfile构建，可以手动上传或通过GitHub/Bitbucket/Gitlab或任何Git仓库链接。
 - en: Security scans for images pushed on the registry.
+  id: totrans-85
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 对推送到注册表的镜像进行安全扫描。
 - en: Usage/auditing logs.
+  id: totrans-86
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 使用/审计日志。
 - en: Robot user account/tokens for integrating any external software.
+  id: totrans-87
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 用于集成任何外部软件的机器人用户账户/令牌。
 - en: There is no limit on image pulls.
+  id: totrans-88
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 镜像拉取没有限制。
 - en: On the other hand, the paid plans will unlock private repositories and team-based
     permissions.
+  id: totrans-89
   prefs: []
   type: TYPE_NORMAL
+  zh: 另一方面，付费计划将解锁私有仓库和基于团队的权限。
 - en: 'Let''s look at the Quay cloud registry by creating a public repository and
     linking it to a GitHub repository in which we pushed a Dockerfile to build our
     target container image:'
+  id: totrans-90
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们通过创建一个公共仓库并将其与GitHub上的一个仓库关联来查看Quay云注册表，在该仓库中我们推送了一个Dockerfile来构建目标容器镜像：
 - en: First, we need to register or log in to the Quay portal at [https://quay.io](https://quay.io).
+  id: totrans-91
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 首先，我们需要在[https://quay.io](https://quay.io)上注册或登录Quay门户。
 - en: 'After that, we can click on the **+ Create New Repository** button in the upper-right
     corner:'
+  id: totrans-92
   prefs: []
   type: TYPE_NORMAL
+  zh: 之后，我们可以点击右上角的**+ 创建新仓库**按钮：
 - en: '![](img/B17908_09_01.jpg)'
+  id: totrans-93
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/B17908_09_01.jpg)'
 - en: Figure 9.1 – Quay Create New Repository button
+  id: totrans-94
   prefs: []
   type: TYPE_NORMAL
+  zh: 图9.1 – Quay 创建新仓库按钮
 - en: 'Once done, the web portal will request some basic information about the new
     repository we want to create:'
+  id: totrans-95
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 完成后，网页门户会请求一些关于我们要创建的新仓库的基本信息：
 - en: A name
+  id: totrans-96
   prefs:
   - PREF_IND
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 一个名称
 - en: A description
+  id: totrans-97
   prefs:
   - PREF_IND
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 一个描述
 - en: Public or private (we are using a free account, so public is fine)
+  id: totrans-98
   prefs:
   - PREF_IND
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 公有或私有（我们使用的是免费账户，所以公有即可）
 - en: 'How to initialize the repository:'
+  id: totrans-99
   prefs:
   - PREF_IND
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 如何初始化仓库：
 - en: '![](img/B17908_09_02.jpg)'
+  id: totrans-100
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/B17908_09_02.jpg)'
 - en: Figure 9.2 – Create New Repository page
+  id: totrans-101
   prefs: []
   type: TYPE_NORMAL
+  zh: 图9.2 – 创建新仓库页面
 - en: We just defined a name for our repo, `ubi8-httpd`, and we chose to link this
     repository to a GitHub repository push.
+  id: totrans-102
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们刚刚为我们的仓库定义了一个名称`ubi8-httpd`，并选择将该仓库与GitHub仓库的推送进行链接。
 - en: 'Once confirmed, the Quay registry cloud portal will redirect us to GitHub to
     allow the authorization and then it will ask us to select the right organization
     and GitHub repository to link with:'
+  id: totrans-103
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 确认后，Quay注册云门户将重定向我们到GitHub进行授权，然后会要求我们选择正确的组织和GitHub仓库进行关联：
 - en: '![](img/B17908_09_03.jpg)'
+  id: totrans-104
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/B17908_09_03.jpg)'
 - en: Figure 9.3 – Select the GitHub repository to link with our container repo
+  id: totrans-105
   prefs: []
   type: TYPE_NORMAL
+  zh: 图9.3 – 选择要与我们容器仓库关联的GitHub仓库
 - en: 'We just selected the default organization and the Git repository we created
     holding our Dockerfile. The Git repository is named `ubi8-httpd` and it is available
     here: [https://github.com/alezzandro/ubi8-httpd](https://github.com/alezzandro/ubi8-httpd).'
+  id: totrans-106
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们刚刚选择了默认组织和我们创建的包含Dockerfile的Git仓库。该Git仓库名为`ubi8-httpd`，可以在此处找到：[https://github.com/alezzandro/ubi8-httpd](https://github.com/alezzandro/ubi8-httpd)。
 - en: Important Note
+  id: totrans-107
   prefs: []
   type: TYPE_NORMAL
+  zh: 重要说明
 - en: The repository used in this example belongs to the author's own project. You
     can fork the repository on GitHub and make your own copy with read/write permissions
     in order to be able to make changes and experiment with commits and automated
     builds.
+  id: totrans-108
   prefs: []
   type: TYPE_NORMAL
+  zh: 本示例中使用的仓库属于作者自己的项目。您可以在GitHub上分叉该仓库，并使用读写权限创建自己的副本，以便能够进行更改并尝试提交和自动构建。
 - en: 'Finally, it will ask us to further configure the trigger:'
+  id: totrans-109
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 最后，它会要求我们进一步配置触发器：
 - en: '![](img/B17908_09_04.jpg)'
+  id: totrans-110
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/B17908_09_04.jpg)'
 - en: Figure 9.4 – Build trigger customization
+  id: totrans-111
   prefs: []
   type: TYPE_NORMAL
+  zh: 图9.4 – 构建触发器定制
 - en: We just left the default option, which will trigger a new build every time a
     push is made on the Git repository for any branches and tags.
+  id: totrans-112
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们只选择了默认选项，每次在Git仓库的任何分支和标签上进行推送时，都会触发一个新的构建。
 - en: 'Once done, we will be redirected to the main repository page:'
+  id: totrans-113
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 完成后，我们将被重定向到主仓库页面：
 - en: '![](img/B17908_09_05.jpg)'
+  id: totrans-114
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/B17908_09_05.jpg)'
 - en: Figure 9.5 – Main repository page
+  id: totrans-115
   prefs: []
   type: TYPE_NORMAL
+  zh: 图9.5 – 主仓库页面
 - en: Once created, the repository is empty with no information or activity, of course.
+  id: totrans-116
   prefs: []
   type: TYPE_NORMAL
+  zh: 创建后，仓库为空，没有任何信息或活动，当然。
 - en: 'On the left bar, we can easily access the build section. It''s the fourth icon
     starting from the top. In the following figure, we just executed two pushes on
     our Git repository, which triggered two different builds:'
+  id: totrans-117
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在左侧栏，我们可以轻松访问构建部分。它是从顶部开始的第四个图标。在下图中，我们刚刚在我们的Git仓库上执行了两次推送，触发了两次不同的构建：
 - en: '![](img/B17908_09_06.jpg)'
+  id: totrans-118
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/B17908_09_06.jpg)'
 - en: Figure 9.6 – Container image build section
+  id: totrans-119
   prefs: []
   type: TYPE_NORMAL
+  zh: 图 9.6 – 容器镜像构建部分
 - en: 'If we try clicking on one of the builds, the cloud registry will show the details
     of the build:'
+  id: totrans-120
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 如果我们尝试点击其中一个构建，云注册表将显示构建的详细信息：
 - en: '![](img/B17908_09_07.jpg)'
+  id: totrans-121
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/B17908_09_07.jpg)'
 - en: Figure 9.7 – Container image build details
+  id: totrans-122
   prefs: []
   type: TYPE_NORMAL
+  zh: 图 9.7 – 容器镜像构建详情
 - en: As we can see, the build worked as expected, connecting to the GitHub repository,
     downloading the Dockerfile and executing the build, and finally, pushing the image
     to the container registry, all in an automated way. The Dockerfile contains just
     a few commands for installing an httpd server on a UBI8 base image, as we learned
     in [*Chapter 8*](B17908_08_epub.xhtml#_idTextAnchor149), *Choosing the Container
     Base Image*.
+  id: totrans-123
   prefs: []
   type: TYPE_NORMAL
+  zh: 如我们所见，构建按预期工作，连接到GitHub仓库，下载Dockerfile并执行构建，最后自动将镜像推送到容器注册表。Dockerfile包含了几个命令，用于在UBI8基础镜像上安装httpd服务器，正如我们在[*第8章*](B17908_08_epub.xhtml#_idTextAnchor149)中所学的，*选择容器基础镜像*。
 - en: 'Finally, the last section that is worth mentioning is the included security
     scanning functionality. This feature is accessible by clicking the *Tag* icon,
     the second from the top in the left panel:'
+  id: totrans-124
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 最后，值得一提的最后一部分是包括的安全扫描功能。此功能可以通过点击左侧面板中第二个的*标签*图标来访问：
 - en: '![](img/B17908_09_08.jpg)'
+  id: totrans-125
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/B17908_09_08.jpg)'
 - en: Figure 9.8 – Container image tags page
+  id: totrans-126
   prefs: []
   type: TYPE_NORMAL
+  zh: 图 9.8 – 容器镜像标签页面
 - en: As you will notice, there is a `SECURITY SCAN` column (the third) reporting
     the status of the scan executed on that particular container image associated
     with the tag name reported in the first column. By clicking on the value of that
     column (in the previous screenshot, it is `Passed`), we can obtain further details.
+  id: totrans-127
   prefs: []
   type: TYPE_NORMAL
+  zh: 如你所见，有一个`SECURITY SCAN`列（第三列），它报告了与第一个列中所述的标签名称关联的特定容器镜像扫描的状态。点击该列的值（在前面的截图中为`Passed`），我们可以获得更多详情。
 - en: We just got some experience leveraging a container registry offered as a managed
     service. This could make our life easier, reducing our operational skills, but
     they are not always the best option for our projects or companies.
+  id: totrans-128
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们刚刚获得了一些使用作为托管服务提供的容器注册表的经验。这可能使我们的生活更轻松，减少我们的操作技能要求，但它们并不总是最适合我们的项目或公司。
 - en: In the next section, we will explore more in detail how to manage container
     images with Podman's companion Skopeo, and then we'll learn how to configure and
     run a container registry on-premises.
+  id: totrans-129
   prefs: []
   type: TYPE_NORMAL
+  zh: 在下一部分，我们将更详细地探讨如何使用Podman的配套工具Skopeo管理容器镜像，接着我们将学习如何在本地配置和运行容器注册表。
 - en: Managing container images with Skopeo
+  id: totrans-130
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 使用Skopeo管理容器镜像
 - en: So far, we have learned about many container registry concepts, including the
     differences between private and public registries, their compliance with OCI image
     specifications, and how to consume images with Podman and Buildah to build and
     run containers.
+  id: totrans-131
   prefs: []
   type: TYPE_NORMAL
+  zh: 到目前为止，我们已经了解了许多容器注册表的概念，包括私有和公共注册表之间的差异，它们是否符合OCI镜像规范，以及如何使用Podman和Buildah获取镜像并构建和运行容器。
 - en: However, sometimes we need to implement simple image manipulation tasks such
     as moving an image from a registry to a mirror, inspecting a remote image without
     the need to pull it locally, or even signing images.
+  id: totrans-132
   prefs: []
   type: TYPE_NORMAL
+  zh: 然而，有时我们需要实现一些简单的镜像操作任务，例如将镜像从注册表移动到镜像库、检查远程镜像而无需将其拉取到本地，甚至为镜像签名。
 - en: The community that gave birth to Podman and Buildah developed a third amazing
     tool, **Skopeo** ([https://github.com/containers/skopeo](https://github.com/containers/skopeo)),
     which exactly implements the features described previously.
+  id: totrans-133
   prefs: []
   type: TYPE_NORMAL
+  zh: 诞生于Podman和Buildah的社区开发了另一个令人惊叹的工具，**Skopeo** ([https://github.com/containers/skopeo](https://github.com/containers/skopeo))，它完全实现了之前描述的功能。
 - en: Skopeo was designed as an image and registry manipulation tool for DevOps teams
     and is not intended to run containers (the main role of Podman) nor build OCI
     images (the main role of Buildah). Instead, it offers a minimal and straightforward
     command-line interface with basic image manipulation commands that will prove
     to be extremely useful in different contexts.
+  id: totrans-134
   prefs: []
   type: TYPE_NORMAL
+  zh: Skopeo被设计为一个用于DevOps团队的镜像和注册表操作工具，并不用于运行容器（Podman的主要功能）或构建OCI镜像（Buildah的主要功能）。相反，它提供了一个最小化且简洁的命令行界面，配备了基本的镜像操作命令，这在不同的上下文中将非常有用。
 - en: Let's inspect the most interesting features in the next subsections.
+  id: totrans-135
   prefs: []
   type: TYPE_NORMAL
+  zh: 接下来，让我们在下一个子部分中查看一些最有趣的功能。
 - en: Installing Skopeo
+  id: totrans-136
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 安装 Skopeo
 - en: Skopeo is a Go binary tool that is already packaged and available for many distributions.
     It can also be built and installed from source directly.
+  id: totrans-137
   prefs: []
   type: TYPE_NORMAL
+  zh: Skopeo是一个Go语言编写的二进制工具，已经打包并可用于许多发行版。也可以从源代码直接构建并安装。
 - en: 'This section provides a non-exhaustive list of installation examples on the
     major distributions. For the sake of clarity, it is important to reiterate that
     the book lab environments were all based on Fedora 34:'
+  id: totrans-138
   prefs: []
   type: TYPE_NORMAL
+  zh: 本节提供了主要发行版的安装示例的非详尽清单。为了清晰起见，需要重申的是，本书的实验环境都是基于 Fedora 34 的：
 - en: '`dnf` command:'
+  id: totrans-139
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`dnf` 命令：'
 - en: '[PRE1]'
+  id: totrans-140
   prefs:
   - PREF_IND
   type: TYPE_PRE
+  zh: '[PRE1]'
 - en: '`apt-get` commands:'
+  id: totrans-141
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`apt-get` 命令：'
 - en: '[PRE2]'
+  id: totrans-142
   prefs:
   - PREF_IND
   type: TYPE_PRE
+  zh: '[PRE2]'
 - en: '`dnf` command:'
+  id: totrans-143
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`dnf` 命令：'
 - en: '[PRE3]'
+  id: totrans-144
   prefs:
   - PREF_IND
   type: TYPE_PRE
+  zh: '[PRE3]'
 - en: '`yum` command:'
+  id: totrans-145
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`yum` 命令：'
 - en: '[PRE4]'
+  id: totrans-146
   prefs:
   - PREF_IND
   type: TYPE_PRE
+  zh: '[PRE4]'
 - en: '**Ubuntu**: To install Skopeo on Ubuntu 20.10 and newer, run the following
     command:'
+  id: totrans-147
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**Ubuntu**: 要在 Ubuntu 20.10 及更新版本上安装 Skopeo，请运行以下命令：'
 - en: '[PRE5]'
+  id: totrans-148
   prefs:
   - PREF_IND
   type: TYPE_PRE
+  zh: '[PRE5]'
 - en: '`pacman` command:'
+  id: totrans-149
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`pacman` 命令：'
 - en: '[PRE6]'
+  id: totrans-150
   prefs:
   - PREF_IND
   type: TYPE_PRE
+  zh: '[PRE6]'
 - en: '`zypper` command:'
+  id: totrans-151
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`zypper` 命令：'
 - en: '[PRE7]'
+  id: totrans-152
   prefs:
   - PREF_IND
   type: TYPE_PRE
+  zh: '[PRE7]'
 - en: '`brew` command:'
+  id: totrans-153
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`brew` 命令：'
 - en: '[PRE8]'
+  id: totrans-154
   prefs:
   - PREF_IND
   type: TYPE_PRE
+  zh: '[PRE8]'
 - en: '**Building from source**: Skopeo can also be built from source. As for Buildah,
     for the purposes of this book, we will keep the focus on simple deployment methods
     but if you''re curious, you can find a dedicated install section in the main project
     repository that illustrates how to build Skopeo from source: [https://github.com/containers/skopeo/blob/main/install.md#building-from-source](https://github.com/containers/skopeo/blob/main/install.md#building-from-source).'
+  id: totrans-155
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**从源代码构建**: Skopeo 也可以从源代码构建。与 Buildah 类似，出于本书的目的，我们将专注于简单的部署方法，但如果你感兴趣，可以在主项目仓库中找到一个专门的安装章节，说明如何从源代码构建
+    Skopeo：[https://github.com/containers/skopeo/blob/main/install.md#building-from-source](https://github.com/containers/skopeo/blob/main/install.md#building-from-source)。'
 - en: The preceding link shows examples of containerized and non-containerized builds.
+  id: totrans-156
   prefs: []
   type: TYPE_NORMAL
+  zh: 上面的链接展示了容器化和非容器化构建的示例。
 - en: '`podman` command:'
+  id: totrans-157
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`podman` 命令：'
 - en: '[PRE9]'
+  id: totrans-158
   prefs:
   - PREF_IND
   type: TYPE_PRE
+  zh: '[PRE9]'
 - en: '**Windows**: At the time of writing of this book, there is no build available
     for Microsoft Windows.'
+  id: totrans-159
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**Windows**: 在编写本书时，Microsoft Windows 尚无可用的构建版本。'
 - en: Skopeo uses the same system and local configuration files described for Podman
     and Buildah, therefore we can immediately focus on the installation verification
     and the analysis of the most common use cases.
+  id: totrans-160
   prefs: []
   type: TYPE_NORMAL
+  zh: Skopeo 使用与 Podman 和 Buildah 相同的系统和本地配置文件，因此我们可以直接关注安装验证和分析最常见的使用场景。
 - en: Verifying the installation
+  id: totrans-161
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 验证安装
 - en: 'To verify the correct installation, simply run the `skopeo` command with the
     `-h` or `--help` option to view all available commands, as in the following example:'
+  id: totrans-162
   prefs: []
   type: TYPE_NORMAL
+  zh: 要验证安装是否正确，只需运行 `skopeo` 命令，并加上 `-h` 或 `--help` 选项查看所有可用的命令，如以下示例所示：
 - en: '[PRE10]'
+  id: totrans-163
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE10]'
 - en: 'The expected output will show, among the utility options, all the available
     commands, each one with a description of the command scope. The full list of commands
     is as follows:'
+  id: totrans-164
   prefs: []
   type: TYPE_NORMAL
+  zh: 预期输出将在工具选项中显示所有可用命令，每个命令都会附有命令范围的描述。所有命令的完整列表如下：
 - en: '`copy`: Copy an image across locations, using different transports, such as
     the Docker Registry, local directories, OCI, tarballs, OSTree, and OCI archives.'
+  id: totrans-165
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`copy`: 跨位置复制镜像，使用不同的传输方式，如 Docker 注册表、本地目录、OCI、tarball、OSTree 和 OCI 档案。'
 - en: '`delete`: Delete an image from a target location.'
+  id: totrans-166
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`delete`: 从目标位置删除镜像。'
 - en: '`help`: Print help commands.'
+  id: totrans-167
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`help`: 打印帮助命令。'
 - en: '`inspect`: Inspect the metadata, tags, and configuration of an image in a target
     location.'
+  id: totrans-168
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`inspect`: 检查目标位置镜像的元数据、标签和配置。'
 - en: '`list-tags`: Shows the available tags for a specific image repository.'
+  id: totrans-169
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`list-tags`: 显示特定镜像仓库的可用标签。'
 - en: '`login`: Authenticates to a remote registry.'
+  id: totrans-170
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`login`: 用于认证远程注册表。'
 - en: '`logout`: Log out from a remote registry.'
+  id: totrans-171
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`logout`: 从远程注册表注销。'
 - en: '`manifest-digest`: Produce a manifest digest for a file.'
+  id: totrans-172
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`manifest-digest`: 为文件生成清单摘要。'
 - en: '`standalone-sign`: A debugging tool to publish and sign an image using local
     files.'
+  id: totrans-173
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`standalone-sign`: 一个调试工具，用于使用本地文件发布和签名镜像。'
 - en: '`standalone-verify`: Verify an image signature using local files.'
+  id: totrans-174
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`standalone-verify`: 使用本地文件验证镜像签名。'
 - en: '`sync`: Synchronizes one or more images across locations.'
+  id: totrans-175
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`sync`: 在多个位置之间同步一个或多个镜像。'
 - en: Let's now inspect in greater detail some of the most interesting Skopeo commands.
+  id: totrans-176
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在让我们更详细地检查一些最有趣的 Skopeo 命令。
 - en: Copying images across locations
+  id: totrans-177
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 跨位置复制镜像
 - en: Podman, just like Docker, can be used not only to run containers but also to
     pull images locally and push them to other locations. However, one of the main
     caveats is the need to run two commands, one to pull and one to push, while the
     local image store remains filled with the pulled images. Therefore, users should
     periodically clean up the local store.
+  id: totrans-178
   prefs: []
   type: TYPE_NORMAL
+  zh: Podman，像 Docker 一样，不仅可以用于运行容器，还可以拉取镜像到本地并将其推送到其他位置。然而，一个主要的注意事项是需要运行两个命令，一个用来拉取，另一个用来推送，而本地镜像存储会充满拉取下来的镜像。因此，用户应定期清理本地存储。
 - en: 'Skopeo offers a smarter and simpler way to achieve this goal with the `skopeo
     copy` command. The command implements the following syntax:'
+  id: totrans-179
   prefs: []
   type: TYPE_NORMAL
+  zh: Skopeo 提供了一种更智能、更简单的方法来实现此目标，使用 `skopeo copy` 命令。该命令实现了以下语法：
 - en: '[PRE11]'
+  id: totrans-180
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE11]'
 - en: 'In this generic description, `SOURCE-IMAGE` and `DESTINATION-IMAGE` are images
     belonging to local or remote locations and reachable using one of the following
     **transports**:'
+  id: totrans-181
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这个通用描述中，`SOURCE-IMAGE` 和 `DESTINATION-IMAGE` 是属于本地或远程位置的镜像，可以通过以下**传输方式**之一访问：
 - en: '`docker://docker-reference`: This transport is related to images stored in
     registries implementing the *Docker Registry HTTP API V2*.'
+  id: totrans-182
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`docker://docker-reference`：此传输方式与实现了*Docker Registry HTTP API V2*的注册表中存储的镜像相关。'
 - en: This setting uses the `/etc/containers/registries.conf` or `$HOME/.config/containers/registries.conf`
     file to obtain further registry configurations.
+  id: totrans-183
   prefs: []
   type: TYPE_NORMAL
+  zh: 此设置使用 `/etc/containers/registries.conf` 或 `$HOME/.config/containers/registries.conf`
+    文件来获取进一步的注册表配置。
 - en: The `docker-reference` field follows the format `name[:tag|@digest]`.
+  id: totrans-184
   prefs: []
   type: TYPE_NORMAL
+  zh: '`docker-reference` 字段遵循 `name[:tag|@digest]` 的格式。'
 - en: '`containers-storage:[[storage-specifier]]{image-id|docker-reference[@image-id]}`:
     This setting refers to an image in local container storage.'
+  id: totrans-185
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`containers-storage:[[storage-specifier]]{image-id|docker-reference[@image-id]}`：此设置指的是本地容器存储中的镜像。'
 - en: The `storage-specifier` field is in the format `[[driver@]root[+run-root][:options]]`.
+  id: totrans-186
   prefs: []
   type: TYPE_NORMAL
+  zh: '`storage-specifier` 字段的格式为 `[[driver@]root[+run-root][:options]]`。'
 - en: '`dir:path`: This setting refers to an existing local directory that holds manifests,
     layers (in tarball format), and signatures.'
+  id: totrans-187
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`dir:path`：此设置指的是包含清单、层（以 tarball 格式）和签名的现有本地目录。'
 - en: '`docker-archive:path[:{docker-reference|@source-index}]`: This setting refers
     to a Docker archive obtained with the `docker save` or `podman save` commands.'
+  id: totrans-188
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`docker-archive:path[:{docker-reference|@source-index}]`：此设置指的是通过 `docker save`
+    或 `podman save` 命令获得的 Docker 存档。'
 - en: '`docker-daemon:docker-reference|algo:digest`: This setting refers to image
     storage in the Docker daemon''s internal storage.'
+  id: totrans-189
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`docker-daemon:docker-reference|algo:digest`：此设置指的是 Docker 守护进程内部存储中的镜像存储。'
 - en: '`oci:path[:tag]`: This setting refers to an image stored in a local path compliant
     with the OCI layout specifications.'
+  id: totrans-190
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`oci:path[:tag]`：此设置指的是存储在符合 OCI 布局规范的本地路径中的镜像。'
 - en: '`oci-archive:path[:tag]`: This setting refers to an OCI layout specification
     compliant image stored in tarball format.'
+  id: totrans-191
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`oci-archive:path[:tag]`：此设置指的是存储为 tarball 格式的符合 OCI 布局规范的镜像。'
 - en: '`ostree:docker-reference[@/absolute/repo/path]`: This setting refers to an
     image stored in a local `ostree` repository. OSTree is a tool to manage multiple
     versioned filesystem trees. It allows you to manage operating systems in an atomic
     and immutable way. Check out `man ostree` for more details.'
+  id: totrans-192
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`ostree:docker-reference[@/absolute/repo/path]`：此设置指的是存储在本地 `ostree` 仓库中的镜像。OSTree
+    是一个管理多个版本文件系统树的工具。它允许你以原子和不可变的方式管理操作系统。有关更多细节，请查看 `man ostree`。'
 - en: 'Let''s inspect some usage examples of the `skopeo copy` command in real-world
     scenarios. The first example shows how to copy an image from a remote registry
     to another remote registry:'
+  id: totrans-193
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们检查一下在实际场景中使用 `skopeo copy` 命令的一些示例。第一个示例展示了如何将镜像从一个远程注册表复制到另一个远程注册表：
 - en: '[PRE12]'
+  id: totrans-194
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE12]'
 - en: 'The preceding example does not take care of registry authentication, which
     is usually a requirement to push images to the remote repository. In the next
     example, we show a variant where both source and target registry are decorated
     with authentication options:'
+  id: totrans-195
   prefs: []
   type: TYPE_NORMAL
+  zh: 前面的示例没有处理注册表身份验证，而身份验证通常是将镜像推送到远程仓库时的必要条件。在下一个示例中，我们展示了一个变体，其中源注册表和目标注册表都附加了认证选项：
 - en: '[PRE13]'
+  id: totrans-196
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE13]'
 - en: The previous approach, despite working perfectly, has the limitation of passing
     username and password strings as clear text strings. To avoid this, we can use
     the `skopeo login` command to authenticate to our registries before running `skopeo
     copy`.
+  id: totrans-197
   prefs: []
   type: TYPE_NORMAL
+  zh: 尽管前述方法可以正常工作，但它有一个限制，即将用户名和密码作为明文字符串传递。为了避免这种情况，我们可以使用 `skopeo login` 命令在运行
+    `skopeo copy` 之前对注册表进行身份验证。
 - en: 'The third example shows a pre-authentication to the destination registry, assuming
     that the source registry is publicly accessible for pulls:'
+  id: totrans-198
   prefs: []
   type: TYPE_NORMAL
+  zh: 第三个示例展示了在目标注册表进行预认证的情况，假设源注册表是公开可访问的，且支持拉取：
 - en: '[PRE14]'
+  id: totrans-199
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE14]'
 - en: When we log in to the source/target registries, the system persists the registry-provided
     auth tokens in dedicated auth files that we can reuse later for further access.
+  id: totrans-200
   prefs: []
   type: TYPE_NORMAL
+  zh: 当我们登录源/目标注册表时，系统会将注册表提供的认证令牌保存在专用的认证文件中，之后可以重复使用这些令牌进行进一步访问。
 - en: By default, Skopeo looks at the `${XDG_RUNTIME_DIR}/containers/auth.json` path,
     but we can provide a custom location for the auth file. For example, in case we
     used Docker container runtime before, we could find it in the path `${HOME}/.docker/config.json`.
     This file contains a simple JSON object that holds, for every used registry, the
     token obtained upon authentication. The client (Podman, Skopeo, or Buildah) will
     use this token to directly access the registry.
+  id: totrans-201
   prefs: []
   type: TYPE_NORMAL
 - en: 'The following example shows the usage of the auth file, provided with a custom
     path:'
+  id: totrans-202
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE15]'
+  id: totrans-203
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE15]'
 - en: Another common issue that can be encountered when working with a private registry
     is the lack of certificates signed by a known `--dest-tls-verify` and `--src-tls-verify`
     options, which accept a simple Boolean value.
+  id: totrans-204
   prefs: []
   type: TYPE_NORMAL
 - en: 'The following example shows how to skip the TLS verification on the target
     registry:'
+  id: totrans-205
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE16]'
+  id: totrans-206
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE16]'
 - en: So far, we've seen how to move images across public and private registries,
     but we can use Skopeo to move images to and from local stores easily. For example,
     we can use Skopeo as a highly specialized push/pull tool for images inside our
     build pipelines.
+  id: totrans-207
   prefs: []
   type: TYPE_NORMAL
 - en: 'The next example shows how to push a locally built image to a public registry:'
+  id: totrans-208
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE17]'
+  id: totrans-209
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE17]'
 - en: This is an amazing way to manage an image push with total control over the push/pull
     process and shows how the three tools – Podman, Buildah, and Skopeo – can fulfill
     specialized tasks in our DevOps environment, each one accomplishing the purpose
     it was designed for at its best.
+  id: totrans-210
   prefs: []
   type: TYPE_NORMAL
 - en: 'Let''s see another example, this time showing how to pull an image from a remote
     registry to an OCI-compliant local store:'
+  id: totrans-211
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE18]'
+  id: totrans-212
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE18]'
 - en: 'The output folder is compliant with the OCI image specifications and will have
     the following structure (blob hashes cut for layout reasons):'
+  id: totrans-213
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE19]'
+  id: totrans-214
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE19]'
 - en: The files inside the `blobs/sha256` folder include the image manifest (in JSON
     format) and the image layers, as compressed tarballs.
+  id: totrans-215
   prefs: []
   type: TYPE_NORMAL
 - en: 'It''s interesting to know that Podman can seamlessly run a container based
     on a local folder compliant with the OCI image specifications. The next example
     shows how to run an NGINX container from the previously downloaded image:'
+  id: totrans-216
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE20]'
+  id: totrans-217
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE20]'
 - en: Notice the `oci:` prefix before the image path, necessary to specify that the
     path provided is OCI compliant.
+  id: totrans-218
   prefs: []
   type: TYPE_NORMAL
 - en: Besides, it is interesting to show that Podman copies and extracts the blobs
     inside its local store (under `$HOME/.local/share/containers/storage` for a rootless
     container like the one in the example).
+  id: totrans-219
   prefs: []
   type: TYPE_NORMAL
 - en: After learning how to copy images with Skopeo, let's see how to inspect remote
     images without the need to pull them locally.
+  id: totrans-220
   prefs: []
   type: TYPE_NORMAL
 - en: Inspecting remote images
+  id: totrans-221
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
 - en: Sometimes we need to verify the configurations, tags, or metadata of an image
     before pulling and executing it locally. For this purpose, Skopeo offers the useful
     `skopeo inspect` command to inspect images over supported transports.
+  id: totrans-222
   prefs: []
   type: TYPE_NORMAL
 - en: 'The first example shows how to inspect the official NGINX image repository:'
+  id: totrans-223
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE21]'
+  id: totrans-224
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE21]'
 - en: 'The `skopeo copy` command creates a JSON-formatted output with the following
     fields:'
+  id: totrans-225
   prefs: []
   type: TYPE_NORMAL
 - en: '`Name`: The name of the image repository.'
+  id: totrans-226
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: '`Digest`: The SHA256 calculated digest.'
+  id: totrans-227
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: '`RepoTags`: The full list of available image tags in the repository. This list
     will be empty when inspecting local transports such as `containers-storage:` or
     `oci:` since they will be referred to as a single image.'
+  id: totrans-228
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: '`Created`: The creation date of the repository or image.'
+  id: totrans-229
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: '`DockerVersion`: The version of Docker used to create the image. This value
     is empty for images created with Podman, Buildah, or other tools.'
+  id: totrans-230
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: '`Labels`: Additional labels applied to the image at build time.'
+  id: totrans-231
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: '`Architecture`: The target system architecture the image was built for. This
     value is `amd64` for x86-64 systems.'
+  id: totrans-232
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: '`Os`: The target operating system the image was built for.'
+  id: totrans-233
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: '`Layers`: The list of layers that compose the image, along with their SHA256
     digest.'
+  id: totrans-234
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: '`Env`: Additional environment variables defined in the image at build time.'
+  id: totrans-235
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
@@ -1042,76 +1496,100 @@
     verification apply to the `skopeo inspect` command: it is possible to inspect
     images on a private registry upon authentication and skip the TLS verification.
     The next example shows this use case:'
+  id: totrans-236
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE22]'
+  id: totrans-237
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE22]'
 - en: 'Inspecting local images is possible by passing the correct transport. The next
     example shows how to inspect a local OCI image:'
+  id: totrans-238
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE23]'
+  id: totrans-239
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE23]'
 - en: The output of this command will have an empty `RepoTags` field.
+  id: totrans-240
   prefs: []
   type: TYPE_NORMAL
 - en: 'In addition, it is possible to use the `--no-tags` option to intentionally
     skip the repository tags, like in the following example:'
+  id: totrans-241
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE24]'
+  id: totrans-242
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE24]'
 - en: 'On the other hand, if we need to print only the available repository tags,
     we can use the `skopeo list-tags` command. The next example prints all the available
     tags of the official Nginx repository:'
+  id: totrans-243
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE25]'
+  id: totrans-244
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE25]'
 - en: The third use case we are going to analyze is the synchronization of images
     across registries and local stores.
+  id: totrans-245
   prefs: []
   type: TYPE_NORMAL
 - en: Synchronizing registries and local directories
+  id: totrans-246
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
 - en: When working with disconnected environments, a quite common scenario is the
     need to synchronize repositories from a remote registry locally.
+  id: totrans-247
   prefs: []
   type: TYPE_NORMAL
 - en: To serve this purpose, Skopeo introduced the `skopeo sync` command, which helps
     synchronize content between a source and destination, supporting different transport
     kinds.
+  id: totrans-248
   prefs: []
   type: TYPE_NORMAL
 - en: We can use this command to synchronize a whole repository, with all the available
     tags inside it, between a source and a destination. Alternatively, it is possible
     to synchronize only a specific image tag.
+  id: totrans-249
   prefs: []
   type: TYPE_NORMAL
 - en: 'The first example shows how to synchronize the official busybox repository
     from a private registry to the local filesystem. This command pulls all the tags
     contained in the remote repository to the local destination (the target directory
     must already exist):'
+  id: totrans-250
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE26]'
+  id: totrans-251
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE26]'
 - en: 'Notice the use of the `--src` and `--dest` options to define the kind of transport.
     Supported transport types are as follows:'
+  id: totrans-252
   prefs: []
   type: TYPE_NORMAL
 - en: '*Source*: `docker`, `dir`, and `yaml` (covered later in this section)'
+  id: totrans-253
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: '*Destination*: `docker` and `dir`'
+  id: totrans-254
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
@@ -1120,203 +1598,265 @@
     repositories with the same name from multiple sources. To solve this limitation,
     we can add the `--scoped` option and get the full image source path copied in
     the destination tree.
+  id: totrans-255
   prefs: []
   type: TYPE_NORMAL
 - en: 'The second example shows a scoped synchronization of the busybox repository:'
+  id: totrans-256
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE27]'
+  id: totrans-257
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE27]'
 - en: The resulting path in the destination directory will contain the registry name
     and the related namespace, with a new folder named after the image tag.
+  id: totrans-258
   prefs: []
   type: TYPE_NORMAL
 - en: 'The next example shows the directory structure of the destination after a successful
     synchronization:'
+  id: totrans-259
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE28]'
+  id: totrans-260
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE28]'
 - en: 'If we need to synchronize only a specific image tag, it is possible to specify
     the tag name in the source argument, like in this third example:'
+  id: totrans-261
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE29]'
+  id: totrans-262
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE29]'
 - en: We can directly synchronize two registries using Docker both for the source
     and destination transport. This is especially useful in disconnected environments
     where systems are allowed to reach a local registry only. The local registry can
     mirror repositories from other public or private registries and the task can be
     scheduled periodically to keep the mirror updated.
+  id: totrans-263
   prefs: []
   type: TYPE_NORMAL
 - en: 'The next example shows how to synchronize the UBI8 image and all its tags from
     the public Red Hat repository to a local mirror registry:'
+  id: totrans-264
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE30]'
+  id: totrans-265
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE30]'
 - en: The preceding command will mirror all the UBI8 image tags to the target registry.
+  id: totrans-266
   prefs: []
   type: TYPE_NORMAL
 - en: Notice the `--dest-tls-verify=false` option to disable TLS certificate checks
     on the destination.
+  id: totrans-267
   prefs: []
   type: TYPE_NORMAL
 - en: The `skopeo sync` command is great to mirror repositories and single images
     between locations but when it comes to mirroring full registries or a large set
     of repositories, we should run the command many times, passing different source
     arguments.
+  id: totrans-268
   prefs: []
   type: TYPE_NORMAL
 - en: To avoid this limitation, the source transport can be defined as a YAML file
     to include an exhaustive list of registries, repositories, and images. It is also
     possible to use regular expressions to capture only selected subsets of image
     tags.
+  id: totrans-269
   prefs: []
   type: TYPE_NORMAL
 - en: 'The following is an example of a custom YAML file that will be passed as a
     source argument to Skopeo:'
+  id: totrans-270
   prefs: []
   type: TYPE_NORMAL
 - en: Chapter09/example_sync.yaml
+  id: totrans-271
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE31]'
+  id: totrans-272
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE31]'
 - en: In the preceding example, different images and repositories are defined and
     therefore the file content deserves a detailed description.
+  id: totrans-273
   prefs: []
   type: TYPE_NORMAL
 - en: The whole `alpine` repository is pulled from `docker.io`, along with the `nginx:latest`
     image tag. Also, a regular expression is used to define a pattern of tags for
     the `httpd` image, in order to pull Alpine-based image version 2.4.z only.
+  id: totrans-274
   prefs: []
   type: TYPE_NORMAL
 - en: The file also defines a specific tag (`latest`) for the `fedora` image stored
     under [https://quay.io/](https://quay.io/) and the `8.4` and `8.5` tags for the
     `ubi8` image stored under the `registry.access.redhat.com` registry.
+  id: totrans-275
   prefs: []
   type: TYPE_NORMAL
 - en: 'Once defined, the file is passed as an argument to Skopeo, along with the destination:'
+  id: totrans-276
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE32]'
+  id: totrans-277
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE32]'
 - en: All the contents listed in the `example_sync.yaml` file will be copied to the
     destination directory, following the previously mentioned filtering rules.
+  id: totrans-278
   prefs: []
   type: TYPE_NORMAL
 - en: 'The next example shows a larger mirroring use case, applied to the OpenShift
     release images. The following `openshift_sync.yaml` file defines a regular expression
     to sync all the images for version 4.9.z of OpenShift built for the x86_64 architecture:'
+  id: totrans-279
   prefs: []
   type: TYPE_NORMAL
 - en: Chapter09/openshift_sync.yaml
+  id: totrans-280
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE33]'
+  id: totrans-281
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE33]'
 - en: 'We can use this file to mirror a whole minor release of OpenShift to an internal
     registry accessible from disconnected environments and use this mirror to successfully
     conduct an air-gapped installation of OpenShift Container Platform. The next command
     example shows this use case:'
+  id: totrans-282
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE34]'
+  id: totrans-283
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE34]'
 - en: It is worth noticing the usage of a pull secret file, passed with the `--src-authfile`
     option, to authenticate on the Quay public registry and pull images from the `ocp-release`
     repository.
+  id: totrans-284
   prefs: []
   type: TYPE_NORMAL
 - en: 'There is a final Skopeo feature that captures our interest: the remote deletion
     of images, covered in the next subsection.'
+  id: totrans-285
   prefs: []
   type: TYPE_NORMAL
 - en: Deleting images
+  id: totrans-286
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
 - en: A registry can be imagined as a specialized object store that implements a set
     of HTTP APIs to manipulate its content and push/pull objects in the form of image
     layers and metadata.
+  id: totrans-287
   prefs: []
   type: TYPE_NORMAL
 - en: The `GET`, `PUT`, `DELETE`, `POST`, and `PATCH` methods.
+  id: totrans-288
   prefs: []
   type: TYPE_NORMAL
 - en: This means that we could interact with a registry with any kind of HTTP client
     capable of managing the requests correctly, for example, the `curl` command.
+  id: totrans-289
   prefs: []
   type: TYPE_NORMAL
 - en: Any container engine uses, at a lower level, HTTP client libraries to execute
     the various methods against the registry (for example, for an image pull).
+  id: totrans-290
   prefs: []
   type: TYPE_NORMAL
 - en: 'The Docker v2 protocol also supports the remote deletion of images, and any
     registry that implements this protocol supports the following `DELETE` request
     for images:'
+  id: totrans-291
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE35]'
+  id: totrans-292
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE35]'
 - en: 'The following example represents a theoretical delete command issued with the
     `curl` command against a local registry:'
+  id: totrans-293
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE36]'
+  id: totrans-294
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE36]'
 - en: The preceding example intentionally avoids including the management of authorization
     tokens for readability.
+  id: totrans-295
   prefs: []
   type: TYPE_NORMAL
 - en: Podman or Docker, designed to work as registry engines, do not implement a remote
     delete feature in their command interfaces.
+  id: totrans-296
   prefs: []
   type: TYPE_NORMAL
 - en: Fortunately, Skopeo comes to the rescue with its built-in `skopeo delete` command
     to manage remote image deletion with a simple and user-friendly syntax.
+  id: totrans-297
   prefs: []
   type: TYPE_NORMAL
 - en: 'The following example deletes an image on a hypothetical internal `mirror-registry.example.com:5000`
     registry:'
+  id: totrans-298
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE37]'
+  id: totrans-299
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE37]'
 - en: The command immediately deletes the image tag references in the remote registry.
+  id: totrans-300
   prefs: []
   type: TYPE_NORMAL
 - en: Important Note
+  id: totrans-301
   prefs: []
   type: TYPE_NORMAL
 - en: When deleting images with Skopeo, it is necessary to enable image deletion in
     the remote registry, as covered in the next section, *Running a local container
     registry*.
+  id: totrans-302
   prefs: []
   type: TYPE_NORMAL
 - en: In this section, we have learned how to use Skopeo to copy, delete, inspect,
     and sync images or even whole repositories across different transports, including
     private local registries, gaining control over daily image manipulation operations.
+  id: totrans-303
   prefs: []
   type: TYPE_NORMAL
 - en: In the next section, we will learn how to run and configure a local container
     registry to directly manage image storage in our lab or development environments.
+  id: totrans-304
   prefs: []
   type: TYPE_NORMAL
 - en: Running a local container registry
+  id: totrans-305
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
@@ -1326,150 +1866,194 @@
     (**RBAC**), an image vulnerability scanner, mirroring, geo-replication, and high
     availability, becoming the default choice for production and mission-critical
     environments.
+  id: totrans-306
   prefs: []
   type: TYPE_NORMAL
 - en: However, sometimes it is very useful to run a simple local registry, for example,
     in development environments or training labs. Local registries can also be helpful
     in disconnected environments to mirror main public or private registries.
+  id: totrans-307
   prefs: []
   type: TYPE_NORMAL
 - en: This section aims to illustrate how to run a simple local registry and how to
     apply basic configuration settings.
+  id: totrans-308
   prefs: []
   type: TYPE_NORMAL
 - en: Running a containerized registry
+  id: totrans-309
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
 - en: Like every application, a local registry can be installed on the host by its
     administrators. Alternatively, a commonly preferred approach is to run the registry
     itself inside a container.
+  id: totrans-310
   prefs: []
   type: TYPE_NORMAL
 - en: The most used containerized registry solution is based on the official **Docker
     Registry 2.0** image, which offers all the necessary functionalities for a basic
     registry and is very easy to use.
+  id: totrans-311
   prefs: []
   type: TYPE_NORMAL
 - en: 'When running a local registry, containerized or not, we must define a destination
     directory to host all image layers and metadata. The next example shows the first
     execution of a containerized registry, with the `/var/lib/registry` folder created
     and bind-mounted to hold image data:'
+  id: totrans-312
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE38]'
+  id: totrans-313
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE38]'
 - en: The registry will be reachable at the host address on port `5000/tcp`, which
     is also the default port for this service. If we run the registry on our local
     workstation, it will be reachable at `localhost:5000`, and exposed to the external
     connection using the assigned IP address or its **Fully Qualified Domain Name**
     (**FQDN**) if the workstation/laptop is resolved by a local DNS service.
+  id: totrans-314
   prefs: []
   type: TYPE_NORMAL
 - en: For, example, if a host has the IP address `10.10.2.30` and FQDN `registry.example.com`
     correctly resolved by DNS queries, the registry service will be reachable at `10.10.2.30:5000`
     or at `registry.example.com:5000`.
+  id: totrans-315
   prefs: []
   type: TYPE_NORMAL
 - en: Important Note
+  id: totrans-316
   prefs: []
   type: TYPE_NORMAL
 - en: If the host runs a local firewall service or is behind a corporate firewall,
     do not forget to open the correct ports to expose the registry externally.
+  id: totrans-317
   prefs: []
   type: TYPE_NORMAL
 - en: 'We can try to build and push a test image to the new registry. The following
     Containerfile builds a basic UBI-based httpd server:'
+  id: totrans-318
   prefs: []
   type: TYPE_NORMAL
 - en: Chapter09/local_registry/minimal_httpd/Containerfile
+  id: totrans-319
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE39]'
+  id: totrans-320
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE39]'
 - en: 'We can build the new image with Buildah:'
+  id: totrans-321
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE40]'
+  id: totrans-322
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE40]'
 - en: To push the image to the local registry, we can use Podman or its companion
     tools Buildah or Skopeo. Skopeo is very handy for these use cases since we do
     not even need to scope the image name with the registry name.
+  id: totrans-323
   prefs: []
   type: TYPE_NORMAL
 - en: 'The next command shows how to push the new image on the registry:'
+  id: totrans-324
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE41]'
+  id: totrans-325
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE41]'
 - en: 'Notice the use of `--dest-tls-verify=false`: it was necessary since the local
     registry provides an HTTP transport by default.'
+  id: totrans-326
   prefs: []
   type: TYPE_NORMAL
 - en: 'Despite being simple to implement, the default registry configuration has some
     limitations that must be addressed. To illustrate one of those limitations, let''s
     try to delete the just uploaded image:'
+  id: totrans-327
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE42]'
+  id: totrans-328
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE42]'
 - en: As we can see in the previous output, the registry did not allow us to delete
     the image, returning an `HTTP 405` error message. To alter this behavior, we need
     to edit the registry configuration.
+  id: totrans-329
   prefs: []
   type: TYPE_NORMAL
 - en: Customizing the registry configuration
+  id: totrans-330
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
 - en: 'The registry configuration file `/etc/docker/registry/config.yml` can be modified
     to alter its behavior. The default content of this file is the following:'
+  id: totrans-331
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE43]'
+  id: totrans-332
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE43]'
 - en: We soon realize that this is an extremely basic configuration with no authentication,
     no deletion of images allowed, and no TLS encryption. Our custom version will
     try to address those limitations.
+  id: totrans-333
   prefs: []
   type: TYPE_NORMAL
 - en: Important Note
+  id: totrans-334
   prefs: []
   type: TYPE_NORMAL
 - en: 'The full documentation about the registry configuration has a wide range of
     options that we''re not mentioning here since it is out of the scope of this book.
     More configuration options can be found at this link: [https://docs.docker.com/registry/configuration/](https://docs.docker.com/registry/configuration/).'
+  id: totrans-335
   prefs: []
   type: TYPE_NORMAL
 - en: 'The following file contains a modified version of the registry `config.yml`:'
+  id: totrans-336
   prefs: []
   type: TYPE_NORMAL
 - en: Chapter09/local_registry/customizations/config.yml
+  id: totrans-337
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE44]'
+  id: totrans-338
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE44]'
 - en: 'The highlighted sections in the previous example emphasize the added features:'
+  id: totrans-339
   prefs: []
   type: TYPE_NORMAL
 - en: '**Image deletion**: By default, this setting is disabled.'
+  id: totrans-340
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: '`htpasswd` file. This approach is acceptable in a development and lab environment
     while a token-based authentication relying on an external issuer would be best
     suited for production use cases.'
+  id: totrans-341
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: '**HTTPS transport** using self-signed certificates.'
+  id: totrans-342
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
@@ -1477,179 +2061,234 @@
     generate a `htpasswd` file that holds at least one valid login and the self-signed
     certificates for TLS encryption. Let''s start with the `htpasswd` file – we can
     generate it using the `htpasswd` utility, like in the following example:'
+  id: totrans-343
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE45]'
+  id: totrans-344
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE45]'
 - en: The `-cBb` option enables batch mode (useful to provide the password non-interactively),
     creates the file if it does not exist, and enables the `admin` with the password
     `p0dman4Dev0ps#`.
+  id: totrans-345
   prefs: []
   type: TYPE_NORMAL
 - en: Finally, we need to create a self-signed server certificate with its related
     private key, to be used for HTTPS connections. As an example, a certificate associated
     with the *localhost* **Common Name** (**CN**) will be created.
+  id: totrans-346
   prefs: []
   type: TYPE_NORMAL
 - en: Important Note
+  id: totrans-347
   prefs: []
   type: TYPE_NORMAL
 - en: Bounding certificates to the *localhost* CN is a frequent practice in development
     environments. However, if the registry is meant to be exposed externally, the
     `CN` and `SubjectAltName` fields should map to the host FQDN and alternate names.
+  id: totrans-348
   prefs: []
   type: TYPE_NORMAL
 - en: 'The following example shows how to create a self-signed certificate with the
     `openssl` utility:'
+  id: totrans-349
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE46]'
+  id: totrans-350
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE46]'
 - en: The command will issue non-interactive certificate generation, without any extra
     information about the certificate subject. The private key `tls.key` is generated
     using a 4096-bit RSA algorithm. The certificate, named `tls.crt`, is set to expire
     after 1 year. Both the key and certificate are written inside the `certs` directory.
+  id: totrans-351
   prefs: []
   type: TYPE_NORMAL
 - en: 'To inspect the content of the generated certificate, we can run the following
     command:'
+  id: totrans-352
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE47]'
+  id: totrans-353
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE47]'
 - en: The command will produce a human-readable dump of the certificate data and validity.
+  id: totrans-354
   prefs: []
   type: TYPE_NORMAL
 - en: Hint
+  id: totrans-355
   prefs: []
   type: TYPE_NORMAL
 - en: For the purpose of this example, the self-signed certificate is acceptable,
     but it should be avoided in production scenarios.
+  id: totrans-356
   prefs: []
   type: TYPE_NORMAL
 - en: Solutions such as **Let's Encrypt** provide a free CA service for everybody
     and can be used to reliably secure the registry or any other HTTPS service. For
     further details, visit [https://letsencrypt.org/](https://letsencrypt.org/).
+  id: totrans-357
   prefs: []
   type: TYPE_NORMAL
 - en: 'We now have all the requirements to run our custom registry. Before creating
     the new container, make sure the previous instance has been stopped and removed:'
+  id: totrans-358
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE48]'
+  id: totrans-359
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE48]'
 - en: 'The next command shows how to run the new custom registry using bind mounts
     to pass the certificates folder, the `htpasswd` file, the registry store, and,
     obviously, the custom config file:'
+  id: totrans-360
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE49]'
+  id: totrans-361
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE49]'
 - en: 'We can now test the login to the remote registry using the previously defined
     credentials:'
+  id: totrans-362
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE50]'
+  id: totrans-363
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE50]'
 - en: 'Notice the `--tls-verify=false` option to skip TLS certificate validation.
     Since it is a self-signed certificate, we need to bypass checks that would produce
     the error message *x509: certificate signed by unknown authority*.'
+  id: totrans-364
   prefs: []
   type: TYPE_NORMAL
 - en: 'We can try again to delete the image pushed before:'
+  id: totrans-365
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE51]'
+  id: totrans-366
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE51]'
 - en: This time, the command will succeed since the deletion feature was enabled in
     the config file.
+  id: totrans-367
   prefs: []
   type: TYPE_NORMAL
 - en: A local registry can be used to mirror images from an external public registry.
     In the next subsection, we will see an example of registry mirroring using our
     local registry and a selected set of repositories and images.
+  id: totrans-368
   prefs: []
   type: TYPE_NORMAL
 - en: Using a local registry to sync repositories
+  id: totrans-369
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
 - en: Mirroring images and repositories to a local registry can be very useful on
     disconnected environments. This can also be very useful to keep an async copy
     of selected images and be able to keep pulling them during public service outages.
+  id: totrans-370
   prefs: []
   type: TYPE_NORMAL
 - en: 'The next example shows simple mirroring using the `skopeo sync` command with
     a list of images provided by a YAML file and our local registry as the destination:'
+  id: totrans-371
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE52]'
+  id: totrans-372
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE52]'
 - en: 'The YAML file contains a list of the images that compose a Kubernetes control
     plane for a specific release. Again, we take advantage of regular expressions
     to customize the images to pull:'
+  id: totrans-373
   prefs: []
   type: TYPE_NORMAL
 - en: Chapter09/kube_sync.yaml
+  id: totrans-374
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE53]'
+  id: totrans-375
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE53]'
 - en: When synchronizing a remote and local registry, a lot of layers can be mirrored
     in the process. For this reason, it is important to monitor the storage used by
     the registry (`/var/lib/registry` in our example) to avoid filling up the filesystem.
+  id: totrans-376
   prefs: []
   type: TYPE_NORMAL
 - en: When the filesystem is filled, deleting older and unused images with Skopeo
     is not enough and an extra garbage collection action is necessary to free space.
     The next subsection illustrates this process.
+  id: totrans-377
   prefs: []
   type: TYPE_NORMAL
 - en: Managing registry garbage collection
+  id: totrans-378
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
 - en: When a delete command is issued on a container registry, it only deletes the
     image manifests that reference a set of blobs (which could be layers or further
     manifests), while keeping the blobs in the filesystem.
+  id: totrans-379
   prefs: []
   type: TYPE_NORMAL
 - en: If a blob is no longer referenced by any manifest, it can be eligible for garbage
     collection by the registry. The garbage collection process is managed with a dedicated
     command, `registry garbage-collect`, issued inside the registry container. This
     is not an automatic process and should be executed manually or scheduled.
+  id: totrans-380
   prefs: []
   type: TYPE_NORMAL
 - en: 'In the next example, we will run a simple garbage collection. The `--dry-run`
     flag only prints the eligible blobs that are no longer referenced by a manifest
     and thus they can be safely deleted:'
+  id: totrans-381
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE54]'
+  id: totrans-382
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE54]'
 - en: 'To delete the blobs, simply remove the `--dry-run` option:'
+  id: totrans-383
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE55]'
+  id: totrans-384
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE55]'
 - en: Garbage collection is helpful to keep the registry cleaned of unused blobs and
     save space. On the other hand, we must keep in mind that an unreferenced blob
     could still be reused in the future by another image. If deleted, it could be
     necessary to upload it again eventually.
+  id: totrans-385
   prefs: []
   type: TYPE_NORMAL
 - en: Summary
+  id: totrans-386
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
@@ -1661,12 +2300,14 @@
     usually executed on-premises. It was especially useful to understand the benefits
     and limitations of both and to help us to understand the best approach for our
     needs.
+  id: totrans-387
   prefs: []
   type: TYPE_NORMAL
 - en: To manage container images on registries, we introduced the Skopeo tool, which
     is part of the Podman companion tools family, and illustrated how it can be used
     to copy, sync, delete, or simply inspect images over registries, giving users
     a higher degree of control over their images.
+  id: totrans-388
   prefs: []
   type: TYPE_NORMAL
 - en: Finally, we learned how to run a local containerized registry using the official
@@ -1675,6 +2316,7 @@
     image deletion, and HTTPS encryption. The local registry proved to be useful to
     sync local images as well as remote registries. The registry garbage collection
     process was illustrated to keep things tidy inside the registry store.
+  id: totrans-389
   prefs: []
   type: TYPE_NORMAL
 - en: 'With the knowledge gained in this chapter, you will be able to manage images
@@ -1683,26 +2325,32 @@
     container adoption strategy and should be understood very well: with this chapter''s
     concepts in mind, you should also be able to understand and design the best fitting
     solutions and gain deep control over the tools to manipulate images.'
+  id: totrans-390
   prefs: []
   type: TYPE_NORMAL
 - en: With this chapter, we have also completed the exploration of all the basic tasks
     related to container management. We can now move on to more advanced topics, such
     as container troubleshooting and monitoring, covered in the next chapter.
+  id: totrans-391
   prefs: []
   type: TYPE_NORMAL
 - en: Further reading
+  id: totrans-392
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
 - en: '[1] **Open Container Initiative** (**OCI**) Distribution Specification: [https://github.com/opencontainers/distribution-spec/blob/main/spec.md](https://github.com/opencontainers/distribution-spec/blob/main/spec.md)'
+  id: totrans-393
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: '[2] Bcrypt description: [https://en.wikipedia.org/wiki/Bcrypt](https://en.wikipedia.org/wiki/Bcrypt)'
+  id: totrans-394
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: '[3] Docker Registry v2 API specifications: [https://docs.docker.com/registry/spec/api/](https://docs.docker.com/registry/spec/api/)'
+  id: totrans-395
   prefs:
   - PREF_UL
   type: TYPE_NORMAL

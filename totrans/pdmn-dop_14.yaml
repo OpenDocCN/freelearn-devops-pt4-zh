@@ -1,1067 +1,1613 @@
 - en: '*Chapter 11*: Securing Containers'
+  id: totrans-0
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: '*第11章*：保护容器安全'
 - en: Security is becoming the hottest topic of current times. Enterprises and companies
     all over the world are making huge investments in security practices and tools
     that should help protect their systems from internal or external attacks.
+  id: totrans-1
   prefs: []
   type: TYPE_NORMAL
+  zh: 安全性正成为当今最热的话题。全球各地的企业和公司都在大量投资于安全实践和工具，以帮助保护其系统免受内部或外部攻击。
 - en: As we saw in [*Chapter 1*](B17908_01_epub.xhtml#_idTextAnchor015), *Introduction
     to Container Technology*, containers and their host systems can be considered
     a medium to execute and keep a target application running. Security should be
     applied to all levels of the service architecture, from the base infrastructure
     to the target application code, all while passing through the virtualization or
     containerization layer.
+  id: totrans-2
   prefs: []
   type: TYPE_NORMAL
+  zh: 正如我们在[*第1章*](B17908_01_epub.xhtml#_idTextAnchor015)《容器技术简介》中简要看到的，容器及其宿主系统可以看作是执行并保持目标应用程序运行的一种媒介。安全性应该应用于服务架构的所有层面，从基础设施到目标应用程序代码，在穿越虚拟化或容器化层时，都应当得到保障。
 - en: 'In this chapter, we will look at the best practices and tools that could help
     improve the overall security of our containerization layer. In particular, we''re
     going to cover the following main topics:'
+  id: totrans-3
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本章中，我们将探讨一些最佳实践和工具，帮助提高容器化层的整体安全性。特别是，我们将讨论以下主要主题：
 - en: Running rootless containers with Podman
+  id: totrans-4
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 使用 Podman 运行无根容器
 - en: Do not run containers with UID 0
+  id: totrans-5
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 不要以 UID 0 运行容器
 - en: Signing our container images
+  id: totrans-6
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 签名我们的容器镜像
 - en: Customizing Linux kernel capabilities
+  id: totrans-7
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 自定义 Linux 内核能力
 - en: SELinux interaction with containers
+  id: totrans-8
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: SELinux 与容器的交互
 - en: Technical requirements
+  id: totrans-9
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 技术要求
 - en: To complete this chapter's examples, you will need a machine with a working
     Podman installation. As we mentioned in [*Chapter 3*](B17908_03_epub.xhtml#_idTextAnchor068),
     *Running the First Container*, all the examples in this book have been executed
     on a Fedora 34 system or later, but they can be reproduced on your OS of choice.
+  id: totrans-10
   prefs: []
   type: TYPE_NORMAL
+  zh: 要完成本章的示例，你需要一台已经安装好 Podman 的机器。正如我们在[*第3章*](B17908_03_epub.xhtml#_idTextAnchor068)《运行第一个容器》中提到的，本书中的所有示例都在
+    Fedora 34 或更高版本的系统上执行，但你也可以在你选择的操作系统上复现这些示例。
 - en: Having a good understanding of the topics that were covered in [*Chapter 4*](B17908_04_epub.xhtml#_idTextAnchor083),
     *Managing Running Containers*, [*Chapter 5*](B17908_05_epub.xhtml#_idTextAnchor101),
     *Implementing Storage for the Container's Data*, and [*Chapter 9*](B17908_09_epub.xhtml#_idTextAnchor167),
     *Pushing Images to a Container Registry*, will help you understand the container
     security topics we'll be discussing here.
+  id: totrans-11
   prefs: []
   type: TYPE_NORMAL
+  zh: 对[*第4章*](B17908_04_epub.xhtml#_idTextAnchor083)《管理正在运行的容器》，[*第5章*](B17908_05_epub.xhtml#_idTextAnchor101)《为容器的数据实现存储》，以及[*第9章*](B17908_09_epub.xhtml#_idTextAnchor167)《将镜像推送到容器注册表》所涵盖的主题有较好的理解，将帮助你更好地理解我们将在这里讨论的容器安全相关内容。
 - en: Running rootless containers with Podman
+  id: totrans-12
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 使用 Podman 运行无根容器
 - en: As we briefly saw in [*Chapter 4*](B17908_04_epub.xhtml#_idTextAnchor083), *Managing
     Running Containers*, it is possible for Podman to let standard users without administrative
     privileges run containers in a Linux host. These containers are often referred
     to as "rootless containers."
+  id: totrans-13
   prefs: []
   type: TYPE_NORMAL
+  zh: 正如我们在[*第4章*](B17908_04_epub.xhtml#_idTextAnchor083)《管理正在运行的容器》中简要看到的，Podman
+    使得没有管理权限的标准用户也能在 Linux 主机上运行容器。这些容器通常被称为“无根容器”。
 - en: 'Rootless containers have many advantages, including the following:'
+  id: totrans-14
   prefs: []
   type: TYPE_NORMAL
+  zh: 无根容器具有许多优势，包括以下几点：
 - en: They create an additional security layer that could block attackers trying to
     get root privileges on the host, even if the container engine, runtime, or orchestrator
     has been compromised.
+  id: totrans-15
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 它们为容器引擎、运行时或编排器被攻破的情况下，增加了一层额外的安全保护，能够阻止攻击者尝试获取主机的根权限。
 - en: They can allow many unprivileged users to run containers on the same host, making
     the most of high-performance computing environments.
+  id: totrans-16
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 它们允许多个没有特权的用户在同一主机上运行容器，从而充分利用高性能计算环境。
 - en: Let's think about the approach that's used by any Linux system to handle traditional
     process services. Usually, the package maintainers tend to create a dedicated
     user for scheduling and running the target process. If we try to install an Apache
     web server on our favorite Linux distribution through the default package manager,
     then we can find out that the installed service will run through a dedicated user
     named "apache."
+  id: totrans-17
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们思考任何 Linux 系统处理传统进程服务的方法。通常，软件包维护者会为调度和运行目标进程创建一个专用用户。如果我们尝试通过默认的软件包管理器在我们喜欢的
+    Linux 发行版上安装 Apache Web 服务器，那么我们会发现，安装的服务将通过一个名为“apache”的专用用户运行。
 - en: This approach has been the best practice for years because, from a security
     perspective, allowing fewer privileges improves security.
+  id: totrans-18
   prefs: []
   type: TYPE_NORMAL
+  zh: 这种方法已经是多年的最佳实践，因为从安全角度来看，授权较少的权限可以提高安全性。
 - en: Using the same approach but with a rootless container allows us to run the container
     process without the need for additional privileges escalation. Additionally, Podman
     is daemonless, so it will just create a child process.
+  id: totrans-19
   prefs: []
   type: TYPE_NORMAL
+  zh: 使用相同的方法，但采用无根容器，这样我们就可以在不需要额外权限提升的情况下运行容器进程。此外，Podman 是无守护进程的，因此它只会创建一个子进程。
 - en: Running rootless containers in Podman is pretty straightforward and, as we saw
     in the previous chapters, many of the examples in this book can be run as standard
     unprivileged users. Now, let's learn what's behind the execution of a rootless
     container.
+  id: totrans-20
   prefs: []
   type: TYPE_NORMAL
+  zh: 在 Podman 中运行 rootless 容器非常简单，正如我们在前几章看到的，书中的许多示例都可以作为标准无特权用户运行。现在，让我们了解一下 rootless
+    容器执行背后的原理。
 - en: The Podman Swiss Army knife – subuid and subgid
+  id: totrans-21
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: Podman 瑞士军刀——subuid 和 subgid
 - en: 'Modern Linux distributions use a version of the `shadow-utils` package that
     leverages two files: `/etc/subuid` and `/etc/subgid`. These files are used to
     determine which UIDs and GIDs can be used to map a user namespace.'
+  id: totrans-22
   prefs: []
   type: TYPE_NORMAL
+  zh: 现代 Linux 发行版使用的 `shadow-utils` 包版本依赖于两个文件：`/etc/subuid` 和 `/etc/subgid`。这些文件用于确定哪些
+    UIDs 和 GIDs 可以用于映射用户命名空间。
 - en: The default allocation for every user is 65536 UIDs and 65536 GIDs.
+  id: totrans-23
   prefs: []
   type: TYPE_NORMAL
+  zh: 每个用户的默认分配是 65536 个 UID 和 65536 个 GID。
 - en: 'We can run the following simple command to check how the subuid and subgid
     allocation works in rootless containers:'
+  id: totrans-24
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们可以运行以下简单命令来检查 rootless 容器中 subuid 和 subgid 分配的工作原理：
 - en: '[PRE0]'
+  id: totrans-25
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE0]'
 - en: As we can see, both files indicate that they start mapping UID and GID 0 with
     the current user's UID/GID that we just run the container with; that is, `1000`.
     After that, it maps UID and GID 1, starting from `100000` and arriving at `165536`.
     This is calculated by summing the starting point, `100000`, and the default range,
     `65536`.
+  id: totrans-26
   prefs: []
   type: TYPE_NORMAL
+  zh: 如我们所见，两个文件都指示它们开始将 UID 和 GID 0 映射到我们刚刚使用来运行容器的当前用户的 UID/GID；即 `1000`。之后，它们将
+    UID 和 GID 1 从 `100000` 开始映射，并最终到达 `165536`。这是通过将起始点 `100000` 与默认范围 `65536` 相加计算得出的。
 - en: Using rootless containers is not the only best practice we can implement for
     our container environments. In the next section, we'll learn why we shouldn't
     run a container with UID 0.
+  id: totrans-27
   prefs: []
   type: TYPE_NORMAL
+  zh: 使用 rootless 容器并不是我们可以为容器环境实施的唯一最佳实践。在接下来的部分中，我们将了解为什么不应该使用 UID 0 运行容器。
 - en: Do not run containers with UID 0
+  id: totrans-28
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 不要使用 UID 0 运行容器
 - en: Container runtimes can be instructed to perform running processes inside a container
     with a user ID that's different from the one that initially created the container,
     similar to what we saw for rootless containers. Running the container's processes
     as a non-root user can be helpful for security purposes. For example, using an
     unprivileged user in a container could limit the attack surface inside and outside
     that container.
+  id: totrans-29
   prefs: []
   type: TYPE_NORMAL
+  zh: 容器运行时可以被指示在容器内部执行与最初创建容器的用户 ID 不同的用户 ID 下的进程，类似于我们在 rootless 容器中看到的情况。以非 root
+    用户运行容器进程有助于安全性。例如，在容器中使用无特权用户可以限制容器内外的攻击面。
 - en: By default, a Dockerfile and Containerfile may set the default user as root
     (that is, UID=0). To avoid this, we can leverage the USER instruction in those
     build files – for example, `USER 1001` – to instruct Buildah or other container
     build tools to build and run the container image using that particular user (with
     UID 1001).
+  id: totrans-30
   prefs: []
   type: TYPE_NORMAL
+  zh: 默认情况下，Dockerfile 和 Containerfile 可能会将默认用户设置为 root（即 UID=0）。为了避免这种情况，我们可以在这些构建文件中利用
+    `USER` 指令——例如，`USER 1001`——来指示 Buildah 或其他容器构建工具使用特定用户（UID 1001）来构建和运行容器镜像。
 - en: If we want to force a specific UID, we need to adjust the permissions of any
     file, folder, or mount we plan to use with our running containers.
+  id: totrans-31
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果我们希望强制使用特定的 UID，需要调整我们计划与正在运行的容器一起使用的任何文件、文件夹或挂载点的权限。
 - en: Now, let's learn how to adapt an existing image so that it can be run with a
     standard user.
+  id: totrans-32
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，让我们学习如何调整现有镜像，使其可以以标准用户身份运行。
 - en: 'We can leverage some prebuilt images on DockerHub or pick one of the official
     Nginx container images. First, we need to create a basic `nginx` configuration
     file:'
+  id: totrans-33
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们可以利用 DockerHub 上的一些预构建镜像，或者选择一个官方的 Nginx 容器镜像。首先，我们需要创建一个基本的 `nginx` 配置文件：
 - en: '[PRE1]'
+  id: totrans-34
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE1]'
 - en: 'The `nginx` configuration file is really simple: we define the listening port
     (80) and the content message to return once a request arrives on the server.'
+  id: totrans-35
   prefs: []
   type: TYPE_NORMAL
+  zh: '`nginx` 配置文件非常简单：我们定义了监听端口（80）以及请求到达服务器时返回的内容消息。'
 - en: 'Then, we can create a simple Dockerfile to leverage one of the official Nginx
     container images:'
+  id: totrans-36
   prefs: []
   type: TYPE_NORMAL
+  zh: 然后，我们可以创建一个简单的 Dockerfile 来利用官方的 Nginx 容器镜像：
 - en: '[PRE2]'
+  id: totrans-37
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE2]'
 - en: 'The Dockerfile contains three instructions:'
+  id: totrans-38
   prefs: []
   type: TYPE_NORMAL
+  zh: Dockerfile 包含三个指令：
 - en: '`FROM`: For selecting the official Nginx image'
+  id: totrans-39
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`FROM`：用于选择官方的 Nginx 镜像'
 - en: '`RUN`: For cleaning the configuration directory from any default config example'
+  id: totrans-40
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`RUN`：用于清理配置目录中的任何默认配置示例'
 - en: '`ADD`: For copying the configuration file we just created'
+  id: totrans-41
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`ADD`：用于复制我们刚创建的配置文件'
 - en: 'Now, let''s build the container image with Buildah:'
+  id: totrans-42
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，让我们使用 Buildah 构建容器镜像：
 - en: '[PRE3]'
+  id: totrans-43
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE3]'
 - en: 'Once you''ve built the image, name it `nginx-root`. Now, we are ready to run
     our container:'
+  id: totrans-44
   prefs: []
   type: TYPE_NORMAL
+  zh: 一旦构建了镜像，命名为 `nginx-root`。现在，我们准备运行我们的容器：
 - en: '[PRE4]'
+  id: totrans-45
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE4]'
 - en: 'Here, we used the`–p` option to publish the port and make it reachable from
     the host. Let''s find out what local port has been chosen, randomly, in the host
     system:'
+  id: totrans-46
   prefs: []
   type: TYPE_NORMAL
+  zh: 这里，我们使用了 `–p` 选项来发布端口并使其可以从主机访问。让我们找出在主机系统中随机选择的本地端口：
 - en: '[PRE5]'
+  id: totrans-47
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE5]'
 - en: 'Finally, let''s call our containerized web server:'
+  id: totrans-48
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后，让我们启动我们的容器化 Web 服务器：
 - en: '[PRE6]'
+  id: totrans-49
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE6]'
 - en: 'The container is finally running, but what user is using our container? Let''s
     find out:'
+  id: totrans-50
   prefs: []
   type: TYPE_NORMAL
+  zh: 容器终于启动了，但到底是哪个用户在使用我们的容器？让我们来看看：
 - en: '[PRE7]'
+  id: totrans-51
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE7]'
 - en: As expected, the container is running as root!
+  id: totrans-52
   prefs: []
   type: TYPE_NORMAL
+  zh: 正如预期的那样，容器正在以 root 用户身份运行！
 - en: 'Now, let''s make a few edits to change the user. First, we need to change the
     listening port in the Nginx server configuration:'
+  id: totrans-53
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，让我们进行一些编辑以更改用户。首先，我们需要更改 Nginx 服务器配置中的监听端口：
 - en: '[PRE8]'
+  id: totrans-54
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE8]'
 - en: Here, we replaced the listening port (`80`) with `8080`; we cannot use a port
     that's below `1024` with unprivileged users.
+  id: totrans-55
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这里，我们将监听端口从 (`80`) 替换为 `8080`；我们不能在非特权用户下使用低于 `1024` 的端口。
 - en: 'Then, we need to edit our Dockerfile:'
+  id: totrans-56
   prefs: []
   type: TYPE_NORMAL
+  zh: 接着，我们需要编辑我们的 Dockerfile：
 - en: '[PRE9]'
+  id: totrans-57
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE9]'
 - en: As you can see, we fixed the permissions for the main file and folder on the
     Nginx server, exposed the new `8080` port, and set the default user to an Nginx
     one.
+  id: totrans-58
   prefs: []
   type: TYPE_NORMAL
+  zh: 如你所见，我们修复了 Nginx 服务器上主文件和文件夹的权限，暴露了新的 `8080` 端口，并将默认用户设置为 Nginx 用户。
 - en: 'Now, we are ready to build a brand-new container image. Let''s call it `nginx-user`:'
+  id: totrans-59
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，我们准备构建一个全新的容器镜像。我们将其命名为 `nginx-user`：
 - en: '[PRE10]'
+  id: totrans-60
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE10]'
 - en: 'Now, we can run the container:'
+  id: totrans-61
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，我们可以运行容器了：
 - en: '[PRE11]'
+  id: totrans-62
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE11]'
 - en: 'Find the associated random host port and check whether the web server is working:'
+  id: totrans-63
   prefs: []
   type: TYPE_NORMAL
+  zh: 找到关联的随机主机端口并检查 Web 服务器是否正常工作：
 - en: '[PRE12]'
+  id: totrans-64
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE12]'
 - en: 'Finally, let''s see whether we changed the user that''s running the target
     process in our container:'
+  id: totrans-65
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后，让我们查看是否改变了在容器中运行目标进程的用户：
 - en: '[PRE13]'
+  id: totrans-66
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE13]'
 - en: As you can see, our container is running as an unprivileged user, which is what
     we wanted.
+  id: totrans-67
   prefs: []
   type: TYPE_NORMAL
+  zh: 如你所见，我们的容器以非特权用户身份运行，这正是我们所期望的。
 - en: 'If you want to look at a ready-to-use example of this, please go to this book''s
     GitHub repository: [https://github.com/PacktPublishing/Podman-for-DevOps](https://github.com/PacktPublishing/Podman-for-DevOps).'
+  id: totrans-68
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你想查看一个现成的示例，请访问本书的 GitHub 仓库：[https://github.com/PacktPublishing/Podman-for-DevOps](https://github.com/PacktPublishing/Podman-for-DevOps)。
 - en: Unfortunately, security is not all about permissions and users – we also need
     to take care of the base image and its source and check container image signatures.
     We'll learn about this in the next section.
+  id: totrans-69
   prefs: []
   type: TYPE_NORMAL
+  zh: 不幸的是，安全不仅仅关乎权限和用户——我们还需要关注基础镜像及其来源，并检查容器镜像的签名。我们将在下一节中学习这个。
 - en: Signing our container images
+  id: totrans-70
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 签名我们的容器镜像
 - en: When we're dealing with images that have been pulled from external registries,
     we will have some security concerns related to the potential attack tactics that
     have been conducted on the containers (see [*1*] in the *Further reading* section),
     especially masquerading techniques, which help the attacker manipulate image components
     to make them appear legitimate. This could also happen due to a **man-in-the-middle**
     (**MITM**) attack being conducted by an attacker over the wire.
+  id: totrans-71
   prefs: []
   type: TYPE_NORMAL
+  zh: 当我们处理从外部注册表拉取的镜像时，我们会有一些安全顾虑，特别是与潜在的攻击手段相关的安全问题（见 *进一步阅读* 部分中的 [*1*]），尤其是伪装技术，它帮助攻击者操控镜像组件使其看起来是合法的。这也可能是由于
+    **中间人攻击**（**MITM**）在传输过程中被攻击者实施。
 - en: To prevent certain kinds of attacks while you're managing containers, the best
     solution is to use a detached image signature to trust the image provider and
     guarantee its reliability.
+  id: totrans-72
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了防止在管理容器时出现某些类型的攻击，最佳解决方案是使用分离的镜像签名来信任镜像提供者并确保其可靠性。
 - en: '**GNU Privacy Guard** (**GPG**) is a free implementation of the OpenPGP standard
     and can be used, together with Podman, to sign images and check their valid signatures
     once they''ve been pulled.'
+  id: totrans-73
   prefs: []
   type: TYPE_NORMAL
+  zh: '**GNU 隐私保护工具**（**GPG**）是 OpenPGP 标准的一个自由实现，可以与 Podman 一起使用，用于签名镜像并在拉取后检查它们的有效签名。'
 - en: When an image is pulled, Podman can verify the validity of the signatures and
     reject images without valid signatures.
+  id: totrans-74
   prefs: []
   type: TYPE_NORMAL
+  zh: 当拉取镜像时，Podman 可以验证签名的有效性，并拒绝没有有效签名的镜像。
 - en: Now, let's learn how to implement a basic image signature workflow.
+  id: totrans-75
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，让我们学习如何实现一个基本的镜像签名工作流。
 - en: Signing images with GPG and Podman
+  id: totrans-76
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 使用 GPG 和 Podman 签名镜像
 - en: In this section, we will create a basic GPG key pair and configure Podman to
     push and sign the image while storing the signature in a staging store. For the
     sake of clarity, we will run a registry using the basic Docker Registry V2 container
     image without any customization.
+  id: totrans-77
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本节中，我们将创建一个基本的 GPG 密钥对，并配置 Podman 来推送和签署镜像，同时将签名存储在一个临时存储库中。为了清晰起见，我们将使用基本的
+    Docker Registry V2 容器镜像来运行一个注册中心，而不做任何自定义。
 - en: Before testing the image pull and signature validation workflow, we will expose
     a basic web server to publish the detached signature.
+  id: totrans-78
   prefs: []
   type: TYPE_NORMAL
+  zh: 在测试镜像拉取和签名验证工作流之前，我们将公开一个基本的 web 服务器以发布分离的签名。
 - en: To create image signatures with GPG, we need to create a valid GPG key pair
     or use an existing one. For this reason, we will provide a short recap on GPG
     key pairs to help you understand how image signatures work.
+  id: totrans-79
   prefs: []
   type: TYPE_NORMAL
+  zh: 要使用 GPG 创建镜像签名，我们需要创建一个有效的 GPG 密钥对，或者使用现有的密钥对。因此，我们将简要回顾 GPG 密钥对，以帮助你理解镜像签名是如何工作的。
 - en: A key pair is composed of a private key and a public key. The public key can
     be shared universally, while the private key is kept private and never shared
     with anybody. The public key that belongs to the receiver can be used by the sender
     of a file or message to sign it. In this way, only the owner of the private key
     (that is, the receiver) will be able to decrypt the message.
+  id: totrans-80
   prefs: []
   type: TYPE_NORMAL
+  zh: 密钥对由私钥和公钥组成。公钥可以广泛共享，而私钥则保持私密，绝不与任何人共享。接收者的公钥可以被发送者用于签署文件或消息。这样，只有私钥的拥有者（即接收者）才能解密消息。
 - en: 'We can easily translate this concept into container images: the image owner
     that pushes it to the remote registry can sign it using a key pair and store the
     detached signature on a store (from now on, *sigstore*) that is publicly accessible
     by users. Here, the signature is separated by the image itself – the registry
     will store the image blobs while the sigstore will hold and expose the image signatures.'
+  id: totrans-81
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们可以轻松地将这一概念转化为容器镜像：将镜像推送到远程注册中心的镜像所有者可以使用密钥对进行签名，并将分离的签名存储在一个对用户公开可访问的存储库（从现在起称为*sigstore*）中。在这里，签名与镜像本身是分开的——注册中心会存储镜像的二进制数据，而sigstore则保存并公开镜像的签名。
 - en: Users who are pulling the image will be able to validate the image signature
     using the previously shared public key.
+  id: totrans-82
   prefs: []
   type: TYPE_NORMAL
+  zh: 拉取镜像的用户将能够使用之前共享的公钥来验证镜像的签名。
 - en: 'Now, let''s go back to creating the GPG key pair. We are going to create a
     simple one with the following command:'
+  id: totrans-83
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，让我们回到创建 GPG 密钥对的过程。我们将使用以下命令创建一个简单的密钥对：
 - en: '[PRE14]'
+  id: totrans-84
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE14]'
 - en: The preceding command will ask you a series of questions and provide a passphrase
     to help you generate the key pair. By default, this will be stored in the `$HOME/.gnupg`
     folder.
+  id: totrans-85
   prefs: []
   type: TYPE_NORMAL
+  zh: 上述命令会要求你回答一系列问题，并提供一个密码短语来帮助生成密钥对。默认情况下，密钥对将存储在 `$HOME/.gnupg` 文件夹中。
 - en: 'The key pair''s output should be similar to the following:'
+  id: totrans-86
   prefs: []
   type: TYPE_NORMAL
+  zh: 密钥对的输出应类似于以下内容：
 - en: '[PRE15]'
+  id: totrans-87
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE15]'
 - en: 'It is also possible to export generated key pairs. The following command will
     export the public key to a file:'
+  id: totrans-88
   prefs: []
   type: TYPE_NORMAL
+  zh: 也可以导出生成的密钥对。以下命令将公钥导出到一个文件：
 - en: '[PRE16]'
+  id: totrans-89
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE16]'
 - en: This command will be useful later when we define the image signature's verification.
+  id: totrans-90
   prefs: []
   type: TYPE_NORMAL
+  zh: 该命令在稍后定义镜像签名的验证时会很有用。
 - en: 'The following command can be used to export the private key:'
+  id: totrans-91
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下命令可用于导出私钥：
 - en: '[PRE17]'
+  id: totrans-92
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE17]'
 - en: In both examples, the `--armor` option has been used to export the keys in **Privacy
     Enhanced Mail** (**PEM**) format.
+  id: totrans-93
   prefs: []
   type: TYPE_NORMAL
+  zh: 在两个示例中，都使用了 `--armor` 选项将密钥导出为 **隐私增强邮件**（**PEM**）格式。
 - en: 'Once the key pair has been generated, we can create a basic registry that will
     host our container images. To do so, we will reuse the basic example from [*Chapter
     9*](B17908_09_epub.xhtml#_idTextAnchor167), *Pushing Images to a Container Registry*,
     and run the following command as root:'
+  id: totrans-94
   prefs: []
   type: TYPE_NORMAL
+  zh: 一旦密钥对生成完成，我们可以创建一个基本的注册中心来托管我们的容器镜像。为此，我们将重新使用 [*第 9 章*](B17908_09_epub.xhtml#_idTextAnchor167)
+    中的基本示例，*推送镜像到容器注册中心*，并以 root 身份运行以下命令：
 - en: '[PRE18]'
+  id: totrans-95
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE18]'
 - en: We now have a local registry without authentication that can be used to push
     the test images. As we mentioned previously, the registry is unaware of the image's
     detached signature.
+  id: totrans-96
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，我们有一个没有身份验证的本地注册中心，可以用来推送测试镜像。正如我们之前提到的，注册中心并不知道镜像的分离签名。
 - en: 'Podman must be able to write signatures on a staging sigstore. There is already
     a default configuration in the `/etc/containers/registries.d/default.yaml` file,
     which looks as follows:'
+  id: totrans-97
   prefs: []
   type: TYPE_NORMAL
+  zh: Podman 必须能够在 staging sigstore 上写入签名。`/etc/containers/registries.d/default.yaml`
+    文件中已经有默认配置，内容如下：
 - en: '[PRE19]'
+  id: totrans-98
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE19]'
 - en: The `sigstore-staging` path is where Podman writes image signatures; it must
     write them to a writable folder. It is possible to customize this path or keep
     the default configuration as-is.
+  id: totrans-99
   prefs: []
   type: TYPE_NORMAL
+  zh: '`sigstore-staging` 路径是 Podman 写入镜像签名的地方；它必须写入一个可写的文件夹。可以自定义此路径或保持默认配置不变。'
 - en: If we want to create multiple user-related sigstores, we can create the `$HOME/.config/containers/registries.d/default.yaml`
     files and define a custom `sigstore-staging` path in the user's home directory,
     following the same syntax that was shown in the previous example. This will allow
     users to run Podman in rootless mode and successfully write to their sigstore.
+  id: totrans-100
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果我们想创建多个与用户相关的 sigstore，可以创建 `$HOME/.config/containers/registries.d/default.yaml`
+    文件，并在用户的主目录中定义一个自定义的 `sigstore-staging` 路径，遵循之前示例中展示的相同语法。这将允许用户以无根模式运行 Podman，并成功写入他们的
+    sigstore。
 - en: Important
+  id: totrans-101
   prefs: []
   type: TYPE_NORMAL
+  zh: 重要
 - en: It is not a good idea to share the default `sigstore` across all users by allowing
     general write permissions. This is because every user in the host would have write
     access to the existing signatures.
+  id: totrans-102
   prefs: []
   type: TYPE_NORMAL
+  zh: 不建议通过允许一般写权限来共享默认 `sigstore` 给所有用户。因为这样主机上的每个用户都能对现有签名进行写操作。
 - en: Since we want to use the default sigstore while still using the default GPG
     key pair under the user's home directory, we will run Podman by elevating privileges
     with `sudo`, an exception to the approach that this book follows.
+  id: totrans-103
   prefs: []
   type: TYPE_NORMAL
+  zh: 由于我们想使用默认的 sigstore，同时在用户的主目录下使用默认的 GPG 密钥对，我们将通过提升权限使用 `sudo` 运行 Podman，这是本书方法的一个例外。
 - en: 'The following example shows the Dockerfile of a custom `httpd` image that''s
     been built using UBI 8:'
+  id: totrans-104
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下示例展示了一个使用 UBI 8 构建的自定义 `httpd` 镜像的 Dockerfile：
 - en: Chapter11/image_signature/Dockerfile
+  id: totrans-105
   prefs: []
   type: TYPE_NORMAL
+  zh: Chapter11/image_signature/Dockerfile
 - en: '[PRE20]'
+  id: totrans-106
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE20]'
 - en: 'To build the image, we can run the following command:'
+  id: totrans-107
   prefs: []
   type: TYPE_NORMAL
+  zh: 要构建镜像，我们可以运行以下命令：
 - en: '[PRE21]'
+  id: totrans-108
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE21]'
 - en: 'Now, we can tag the image with the local registry name:'
+  id: totrans-109
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，我们可以用本地注册表名称标记镜像：
 - en: '[PRE22]'
+  id: totrans-110
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE22]'
 - en: 'Finally, it''s time to push the image on the temporary registry and sign it
     using the generated key pair. The `--sign-by` option allows users to pass a valid
     key pair that''s been identified by the user''s email:'
+  id: totrans-111
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后，是时候将镜像推送到临时注册表，并使用生成的密钥对进行签名。`--sign-by` 选项允许用户传递由用户邮箱标识的有效密钥对：
 - en: '[PRE23]'
+  id: totrans-112
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE23]'
 - en: The preceding code successfully pushed the image blobs to the registry and stored
     the image signature. Notice the `GNUPGHOME` variable, which was passed at the
     beginning of the command to define the GPG keystore path that's accessed by Podman.
+  id: totrans-113
   prefs: []
   type: TYPE_NORMAL
+  zh: 前面的代码成功地将镜像 blob 推送到注册表，并存储了镜像签名。注意 `GNUPGHOME` 变量，它在命令开始时被传递，用于定义 Podman 访问的
+    GPG 密钥存储路径。
 - en: Warning
+  id: totrans-114
   prefs: []
   type: TYPE_NORMAL
+  zh: 警告
 - en: The `--sign-by` option is not supported on the remote Podman client.
+  id: totrans-115
   prefs: []
   type: TYPE_NORMAL
+  zh: 远程 Podman 客户端不支持 `--sign-by` 选项。
 - en: 'To verify that the image has been signed correctly and that its signature is
     being saved in the sigstore, we can check the content of `/var/lib/containers/sigstore`:'
+  id: totrans-116
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了验证镜像是否已正确签名，并且其签名是否被保存在 sigstore 中，我们可以检查 `/var/lib/containers/sigstore` 的内容：
 - en: '[PRE24]'
+  id: totrans-117
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE24]'
 - en: 'As you will see, the new directory contains the image signature file:'
+  id: totrans-118
   prefs: []
   type: TYPE_NORMAL
+  zh: 如你所见，新目录中包含了镜像签名文件：
 - en: '[PRE25]'
+  id: totrans-119
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE25]'
 - en: With that, we have successfully pushed and signed the image, making it more
     secure for future use. Now, let's learn how to configure Podman to retrieve signed
     images.
+  id: totrans-120
   prefs: []
   type: TYPE_NORMAL
+  zh: 这样，我们就成功推送并签署了镜像，使其在未来使用中更加安全。接下来，让我们学习如何配置 Podman 来检索签名镜像。
 - en: Configuring Podman to pull signed images
+  id: totrans-121
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 配置 Podman 拉取签名镜像
 - en: To successfully pull a signed image, Podman must be able to retrieve the signature
     from a sigstore and have access to a public key to verify the signature.
+  id: totrans-122
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了成功拉取签名镜像，Podman 必须能够从 sigstore 获取签名，并且能够访问公钥以验证签名。
 - en: 'Here, we are dealing with detached signatures, and we have already learned
     that the registry doesn''t hold any information about image signatures. For this
     reason, we need to make them available to users with a publicly accessible sigstore:
     a web server (Nginx, Apache httpd, and so on) will be a good fit.'
+  id: totrans-123
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这里，我们处理的是分离的签名，并且我们已经知道注册表不包含任何有关镜像签名的信息。因此，我们需要通过一个公开可访问的 sigstore 让用户可以访问它：一个
+    Web 服务器（如 Nginx、Apache httpd 等）将是一个不错的选择。
 - en: Since the signing host will be the same as the one used to test image pulls,
     we will run an Apache httpd server that exposes the sigstore staging folder as
     the server document root. In a real-life scenario, we would move the signatures
     to a dedicated web server.
+  id: totrans-124
   prefs: []
   type: TYPE_NORMAL
+  zh: 由于签名主机将与用于测试镜像拉取的主机相同，我们将运行一个 Apache httpd 服务器，将 sigstore 暂存文件夹暴露为服务器文档根目录。在实际场景中，我们会将签名移动到专用的
+    Web 服务器上。
 - en: 'For this example, we will use the standard `docker.io/library/httpd` image
     and run the container with root privileges to grant access to the sigstore folder:'
+  id: totrans-125
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这个示例中，我们将使用标准的 `docker.io/library/httpd` 镜像，并以 root 权限运行容器，以便访问 sigstore 文件夹：
 - en: '[PRE26]'
+  id: totrans-126
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE26]'
 - en: The web server is now available at `http://localhost:8080` and can be used by
     Podman to retrieve image signatures.
+  id: totrans-127
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，Web 服务器已在 `http://localhost:8080` 上可用，Podman 可以使用它来获取镜像签名。
 - en: Now, let's configure Podman for image pulling. First, we must configure the
     default image sigstore. We have already defined the staging sigstore that's used
     by Podman to write a signature, so now, we need to define the sigstore that's
     used to read image signatures.
+  id: totrans-128
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，让我们配置 Podman 以进行镜像拉取。首先，我们必须配置默认的镜像 sigstore。我们已经定义了 Podman 用来写入签名的暂存 sigstore，现在，我们需要定义用于读取镜像签名的
+    sigstore。
 - en: 'To do so, we must edit the `/etc/containers/registries.d/default.yaml` file
     one more time and add a reference to the default sigstore web server that''s running
     on `http://localhost:8080`:'
+  id: totrans-129
   prefs: []
   type: TYPE_NORMAL
+  zh: 为此，我们必须再次编辑 `/etc/containers/registries.d/default.yaml` 文件，并添加对运行在 `http://localhost:8080`
+    的默认 sigstore Web 服务器的引用：
 - en: '[PRE27]'
+  id: totrans-130
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE27]'
 - en: 'The preceding code configures the sigstore that''s used by Podman for all images.
     However, it is possible to add more sigstores for specific registries by populating
     the *docker* field of the file. The following code configures the sigstore for
     the public Red Hat registry:'
+  id: totrans-131
   prefs: []
   type: TYPE_NORMAL
+  zh: 前面的代码配置了 Podman 用于所有镜像的 sigstore。然而，通过填写文件的*docker*字段，我们可以为特定的镜像仓库添加更多的 sigstore。以下代码配置了公共
+    Red Hat 仓库的 sigstore：
 - en: '[PRE28]'
+  id: totrans-132
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE28]'
 - en: Before we test the image pulls, we must implement the public key that's used
     by Podman to verify the signatures. This public key must be stored in the host
     that pulls the image and belongs to the key pair that's used to sign the image.
+  id: totrans-133
   prefs: []
   type: TYPE_NORMAL
+  zh: 在测试镜像拉取之前，我们必须实现 Podman 用于验证签名的公钥。这个公钥必须存储在拉取镜像的主机上，并且属于用于签名镜像的密钥对。
 - en: The configuration file that's used to define the public key's path is `/etc/containers/policy.json`.
+  id: totrans-134
   prefs: []
   type: TYPE_NORMAL
+  zh: 用于定义公钥路径的配置文件是 `/etc/containers/policy.json`。
 - en: 'The following code shows the `/etc/containers/policy.json` file with a custom
     configuration for the registry''s `localhost:5000`:'
+  id: totrans-135
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下代码显示了具有自定义配置的 `/etc/containers/policy.json` 文件，适用于注册表 `localhost:5000`：
 - en: '[PRE29]'
+  id: totrans-136
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE29]'
 - en: To verify the signatures of images that have been pulled from `localhost:5000`,
     we can use a public key that's stored in the path defined by the `keyPath` field.
     The public key must exist in the defined path and be readable by Podman.
+  id: totrans-137
   prefs: []
   type: TYPE_NORMAL
+  zh: 要验证从 `localhost:5000` 拉取的镜像的签名，我们可以使用存储在 `keyPath` 字段定义的路径中的公钥。公钥必须存在于定义的路径中，并且可以被
+    Podman 读取。
 - en: 'If we need to extract the public key from the example key pair that was generated
     at the beginning of this section, we can use the following GPG command:'
+  id: totrans-138
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果我们需要从本节开头生成的示例密钥对中提取公钥，可以使用以下 GPG 命令：
 - en: '[PRE30]'
+  id: totrans-139
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE30]'
 - en: 'Now, we are ready to test the image pull and verify its signature:'
+  id: totrans-140
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，我们准备好测试镜像拉取并验证其签名了：
 - en: '[PRE31]'
+  id: totrans-141
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE31]'
 - en: The image was successfully pulled into the local store after signature verification
     using the public key provided.
+  id: totrans-142
   prefs: []
   type: TYPE_NORMAL
+  zh: 在使用提供的公钥进行签名验证后，镜像成功拉取到本地存储中。
 - en: Now, let's see how Podman behaves when it is unable to correctly verify the
     signature.
+  id: totrans-143
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，让我们看看当 Podman 无法正确验证签名时，它的表现如何。
 - en: Testing signature verification failures
+  id: totrans-144
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 测试签名验证失败
 - en: 'What if we make the sigstore unavailable? Will Podman still succeed in pulling
     the image if it''s unable to verify the signature? Let''s try to stop the local
     httpd server that exposes the sigstore:'
+  id: totrans-145
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果我们使 sigstore 无法访问，会怎么样？如果 Podman 无法验证签名，它还会成功拉取镜像吗？让我们尝试停止暴露 sigstore 的本地
+    httpd 服务器：
 - en: '[PRE32]'
+  id: totrans-146
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE32]'
 - en: 'Before pulling it again, let''s remove the previously cached image to avoid
     false positives:'
+  id: totrans-147
   prefs: []
   type: TYPE_NORMAL
+  zh: 在再次拉取镜像之前，让我们删除之前缓存的镜像，以避免误报：
 - en: '[PRE33]'
+  id: totrans-148
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE33]'
 - en: 'Now, we can try to pull the image again:'
+  id: totrans-149
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，我们可以尝试再次拉取镜像：
 - en: '[PRE34]'
+  id: totrans-150
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE34]'
 - en: The preceding error demonstrates that Podman is trying to connect to the web
     server that exposes the sigstore and failed. This error blocked the whole image
     pull process.
+  id: totrans-151
   prefs: []
   type: TYPE_NORMAL
+  zh: 前面的错误表明 Podman 尝试连接暴露 sigstore 的 Web 服务器时失败了。此错误阻止了整个镜像拉取过程。
 - en: 'A different error occurs when the public key we use to verify the signature
     is not valid or not part of the key pair that was used to sign the image. To test
     this, let''s replace the public key with another one from a different key pair
     – in this example, the public Fedora 34 RPM-GPG key, which has been taken from
     the `/etc/pki/rpm-gpg` directory (any other public key can be used):'
+  id: totrans-152
   prefs: []
   type: TYPE_NORMAL
+  zh: 当我们用来验证签名的公共密钥无效或不属于用于签署镜像的密钥对时，会发生不同的错误。为了测试这一点，让我们用另一个密钥对中的公共密钥替换当前的公共密钥——在本示例中，我们使用的是从
+    `/etc/pki/rpm-gpg` 目录获取的公共 Fedora 34 RPM-GPG 密钥（也可以使用任何其他公共密钥）：
 - en: '[PRE35]'
+  id: totrans-153
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE35]'
 - en: 'The previously stopped httpd server must be restarted; we want to make the
     signatures available and focus on the wrong public key error:'
+  id: totrans-154
   prefs: []
   type: TYPE_NORMAL
+  zh: 之前停止的 httpd 服务器必须重新启动；我们要使签名可用，并专注于错误的公共密钥问题：
 - en: '[PRE36]'
+  id: totrans-155
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE36]'
 - en: 'Now, we can pull the image again and inspect the generated errors:'
+  id: totrans-156
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，我们可以再次拉取镜像并检查生成的错误：
 - en: '[PRE37]'
+  id: totrans-157
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE37]'
 - en: Here, Podman generates an error that's caused by an invalid GPG signature, which
     is correct since the public key that's being used does not belong to the correct
     key pair.
+  id: totrans-158
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这里，Podman 产生了一个错误，这个错误是由于无效的 GPG 签名造成的，这是正确的，因为正在使用的公共密钥不属于正确的密钥对。
 - en: Important
+  id: totrans-159
   prefs: []
   type: TYPE_NORMAL
+  zh: 重要
 - en: Do not forget to restore the valid public key before proceeding with the following
     examples.
+  id: totrans-160
   prefs: []
   type: TYPE_NORMAL
+  zh: 在继续进行以下示例之前，请不要忘记恢复有效的公共密钥。
 - en: Podman can manage multiple registries and sigstores, and also offers dedicated
     commands to help you customize security policies, as we'll see in the next subsection.
+  id: totrans-161
   prefs: []
   type: TYPE_NORMAL
+  zh: Podman 可以管理多个注册表和 sigstore，并且还提供专用命令来帮助您自定义安全策略，正如我们在下一小节中将看到的那样。
 - en: Managing keys with Podman image trust commands
+  id: totrans-162
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 使用 Podman 镜像信任命令管理密钥
 - en: It is possible to edit the `/etc/containers/policy.json` file and modify its
     JSON objects to add or remove configurations for dedicated registries. However,
     manual editing can be prone to errors and hard to automate.
+  id: totrans-163
   prefs: []
   type: TYPE_NORMAL
+  zh: 可以编辑 `/etc/containers/policy.json` 文件并修改其 JSON 对象，以添加或删除专用注册表的配置。然而，手动编辑容易出错，且不易自动化。
 - en: Alternatively, we can use the `podman image trust` command to dump or modify
     the current configuration.
+  id: totrans-164
   prefs: []
   type: TYPE_NORMAL
+  zh: 另外，我们可以使用 `podman image trust` 命令来转储或修改当前配置。
 - en: 'The following code shows how to print the current configuration with the `podman
     image trust show` command:'
+  id: totrans-165
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下代码展示了如何使用 `podman image trust show` 命令打印当前的配置：
 - en: '[PRE38]'
+  id: totrans-166
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE38]'
 - en: It is also possible to configure new trusts. For example, we can add the Red
     Hat public GPG key to check the signature of UBI images.
+  id: totrans-167
   prefs: []
   type: TYPE_NORMAL
+  zh: 也可以配置新的信任。例如，我们可以添加 Red Hat 公共 GPG 密钥，以检查 UBI 镜像的签名。
 - en: 'First, we need to download the Red Hat public key:'
+  id: totrans-168
   prefs: []
   type: TYPE_NORMAL
+  zh: 首先，我们需要下载 Red Hat 公共密钥：
 - en: '[PRE39]'
+  id: totrans-169
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE39]'
 - en: Note
+  id: totrans-170
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意
 - en: Red Hat's product signing keys, including the one that was used in this example,
     can be found at [https://access.redhat.com/security/team/key](https://access.redhat.com/security/team/key).
+  id: totrans-171
   prefs: []
   type: TYPE_NORMAL
+  zh: Red Hat 的产品签名密钥，包括本示例中使用的那个，可以在 [https://access.redhat.com/security/team/key](https://access.redhat.com/security/team/key)
+    找到。
 - en: 'After downloading the key, we must configure the image trust for UBI 8 images
     that have been pulled from *registry.access.redhat.com* using the `podman image
     trust set` command:'
+  id: totrans-172
   prefs: []
   type: TYPE_NORMAL
+  zh: 下载密钥后，我们必须使用 `podman image trust set` 命令为从 *registry.access.redhat.com* 拉取的
+    UBI 8 镜像配置镜像信任：
 - en: '[PRE40]'
+  id: totrans-173
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE40]'
 - en: 'After running the preceding command, the `/etc/containers/policy.json` file
     will change, as follows:'
+  id: totrans-174
   prefs: []
   type: TYPE_NORMAL
+  zh: 运行上述命令后，`/etc/containers/policy.json` 文件将发生如下变化：
 - en: '[PRE41]'
+  id: totrans-175
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE41]'
 - en: Note that the entry that's related to *registry.access.redhat.com/ubi8* and
     the public key that was used to verify the image signatures have been added to
     the file.
+  id: totrans-176
   prefs: []
   type: TYPE_NORMAL
+  zh: 请注意，文件中已经添加了与 *registry.access.redhat.com/ubi8* 相关的条目，以及用于验证镜像签名的公共密钥。
 - en: 'To complete the configuration, we need to add the Red Hat sigstore configuration
     to the `/etc/containers/registries.d/default.yaml` configuration file:'
+  id: totrans-177
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了完成配置，我们需要将 Red Hat sigstore 配置添加到 `/etc/containers/registries.d/default.yaml`
+    配置文件中：
 - en: '[PRE42]'
+  id: totrans-178
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE42]'
 - en: Tip
+  id: totrans-179
   prefs: []
   type: TYPE_NORMAL
+  zh: 提示
 - en: It is possible to create custom registry configuration files for different providers
     in the `/etc/containers/registries.d` folder. For example, the preceding example
     could be defined in a dedicated `/etc/containers/registries.d/redhat.yaml` file.
     This allows you to easily maintain and version registry sigstore configurations.
+  id: totrans-180
   prefs: []
   type: TYPE_NORMAL
+  zh: 可以在 `/etc/containers/registries.d` 文件夹中为不同的提供商创建自定义注册表配置文件。例如，前面的示例可以在专用的 `/etc/containers/registries.d/redhat.yaml`
+    文件中定义。这使得您可以轻松维护和版本化注册表 sigstore 配置。
 - en: From now on, every time a UBI8 image is pulled from *registry.access.redhat.com*,
     its signature will be pulled from the Red Hat sigstore and validated using the
     provided public key.
+  id: totrans-181
   prefs: []
   type: TYPE_NORMAL
+  zh: 从现在开始，每次从 *registry.access.redhat.com* 拉取 UBI8 镜像时，它的签名将从 Red Hat sigstore 中拉取，并使用提供的公共密钥进行验证。
 - en: So far, we have looked at examples of managing keys concerning Podman, but it
     is also possible to manage signature verification with Skopeo. In the next subsection,
     we are going to look at some basic examples.
+  id: totrans-182
   prefs: []
   type: TYPE_NORMAL
+  zh: 到目前为止，我们已经查看了与 Podman 相关的密钥管理示例，但也可以使用 Skopeo 来管理签名验证。在下一个小节中，我们将查看一些基本示例。
 - en: Managing signatures with Skopeo
+  id: totrans-183
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 使用 Skopeo 管理签名
 - en: We can verify an image signature using Skopeo when we're pulling an image from
     a valid transport.
+  id: totrans-184
   prefs: []
   type: TYPE_NORMAL
+  zh: 当我们从有效的传输中拉取镜像时，可以使用 Skopeo 验证镜像签名。
 - en: 'The following example uses the `skopeo copy` command to pull the image from
     our registry to the local store. This command has the same effects as using a
     `podman pull` command but allows more control over the source and destination
     transports:'
+  id: totrans-185
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下示例使用 `skopeo copy` 命令将镜像从我们的注册表拉取到本地存储。此命令与使用 `podman pull` 命令具有相同效果，但允许对源和目标传输进行更多控制：
 - en: '[PRE43]'
+  id: totrans-186
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE43]'
 - en: Skopeo does not need any further configuration since the previously modified
     configuration files already define the sigstore and public key path.
+  id: totrans-187
   prefs: []
   type: TYPE_NORMAL
+  zh: Skopeo 不需要进一步配置，因为先前修改过的配置文件已经定义了 sigstore 和公钥路径。
 - en: 'We can also use Skopeo to sign an image before copying it to a transport:'
+  id: totrans-188
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们还可以使用 Skopeo 在将镜像复制到传输之前对其进行签名：
 - en: '[PRE44]'
+  id: totrans-189
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE44]'
 - en: Once again, the configuration files that are used by Podman are still valid
     for Skopeo, which uses the same sigstore to write the signatures and the same
     GPG store to retrieve the key that's used to generate the signature.
+  id: totrans-190
   prefs: []
   type: TYPE_NORMAL
+  zh: 再次强调，Podman 使用的配置文件对于 Skopeo 仍然有效，后者使用相同的 sigstore 来写入签名，并使用相同的 GPG 存储来检索生成签名所需的密钥。
 - en: In this section, we learned how to verify image signatures and avoid potential
     MITM attacks. In the next section, we'll shift focus and learn how to execute
     the container runtime by customizing Linux kernel capabilities.
+  id: totrans-191
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这一部分，我们了解了如何验证镜像签名并避免潜在的中间人攻击。在接下来的部分，我们将重点介绍如何通过自定义 Linux 内核能力来执行容器运行时。
 - en: Customizing Linux kernel capabilities
+  id: totrans-192
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 自定义 Linux 内核能力
 - en: Capabilities are features that were introduced in Linux kernel 2.2 with the
     purpose of splitting elevated privileges into single units that can be arbitrarily
     assigned to a process or thread.
+  id: totrans-193
   prefs: []
   type: TYPE_NORMAL
+  zh: 能力是 Linux 内核 2.2 中引入的特性，目的是将提升的特权拆分成单一单元，这些单元可以被任意分配给进程或线程。
 - en: Instead of running a process as a fully privileged instance with effective UID
     0, we can assign a limited subset of specific capabilities to an unprivileged
     process. By providing more granular control over the security context of the process's
     execution, this approach helps mitigate potential attack tactics.
+  id: totrans-194
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们可以通过为非特权进程分配一组特定的限制性能力，而不是以有效 UID 0 运行一个完全特权的进程。通过对进程执行的安全上下文进行更细粒度的控制，这种方法有助于缓解潜在的攻击手段。
 - en: Before we discuss the capabilities of containers, let's recap on how they work
     in a Linux system so that we understand their inner logic.
+  id: totrans-195
   prefs: []
   type: TYPE_NORMAL
+  zh: 在讨论容器的能力之前，我们先回顾一下它们在 Linux 系统中是如何工作的，这样我们就能理解它们的内部逻辑。
 - en: Capabilities quickstart guide
+  id: totrans-196
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 能力快速入门指南
 - en: Capabilities are associated with the file executables using extended attributes
     (see `man xattr`) and are automatically inherited by the process that's executed
     with an `execve()` system call.
+  id: totrans-197
   prefs: []
   type: TYPE_NORMAL
+  zh: 能力是通过使用扩展属性（参见`man xattr`）与文件可执行文件关联的，并且会被通过`execve()`系统调用执行的进程自动继承。
 - en: 'The list of available capabilities is quite large and still growing; it includes
     very specific actions that can be performed by a thread. Some basic examples are
     as follows:'
+  id: totrans-198
   prefs: []
   type: TYPE_NORMAL
+  zh: 可用能力的列表相当庞大，并且仍在增长；它包括线程可以执行的非常具体的操作。一些基本示例如下：
 - en: '**CAP_CHOWN**: This capability allows a thread to modify a file''s UID and
     GID.'
+  id: totrans-199
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**CAP_CHOWN**：此能力允许线程修改文件的 UID 和 GID。'
 - en: '**CAP_KILL**: This capability allows you to bypass the permission checks to
     send a signal to a process.'
+  id: totrans-200
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**CAP_KILL**：此能力允许你绕过权限检查，向进程发送信号。'
 - en: '`mknod()` syscall.'
+  id: totrans-201
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`mknod()` 系统调用。'
 - en: '**CAP_NET_ADMIN**: This capability allows you to operate various privileged
     actions on the system''s network configuration, including changing the interface
     configuration, enabling/disabling promiscuous mode for an interface, editing routing
     tables, and enabling/disabling multicasting.'
+  id: totrans-202
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**CAP_NET_ADMIN**：此能力允许你对系统的网络配置执行各种特权操作，包括更改接口配置、启用/禁用接口的混杂模式、编辑路由表和启用/禁用多播。'
 - en: '**CAP_NET_RAW**: This capability allows a thread to use RAW and PACKET sockets.
     This capability can be used by programs such as ping to send ICMP packets without
     the need for elevated privileges.'
+  id: totrans-203
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**CAP_NET_RAW**：该功能允许线程使用 RAW 和 PACKET 套接字。程序如 ping 可以使用此功能发送 ICMP 数据包，而无需提升权限。'
 - en: '`chroot()` syscall and change mount namespaces with the `setns()` syscall.'
+  id: totrans-204
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`chroot()` 系统调用和通过 `setns()` 系统调用更改挂载命名空间。'
 - en: '**CAP_DAC_OVERRIDE**: This capability allows you to bypass **discretionary
     access control** (**DAC**) checks for file read, write, and execution.'
+  id: totrans-205
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**CAP_DAC_OVERRIDE**：该功能允许绕过 **自主访问控制**（**DAC**）检查，从而允许文件的读取、写入和执行操作。'
 - en: For more details and an extensive list of available capabilities, see the relevant
     man page (`man capabilities`).
+  id: totrans-206
   prefs: []
   type: TYPE_NORMAL
+  zh: 更多详细信息以及可用功能的详细列表，请参阅相关的手册页（`man capabilities`）。
 - en: 'To assign a capability to an executable, we can use the `setcap` command, as
     shown in the following example, where `CAP_NET_ADMIN` and `CAP_NET_RAW` are being
     permitted in the `/usr/bin/ping` executable:'
+  id: totrans-207
   prefs: []
   type: TYPE_NORMAL
+  zh: 要将某个功能分配给可执行文件，我们可以使用 `setcap` 命令，如以下示例所示，其中 `CAP_NET_ADMIN` 和 `CAP_NET_RAW`
+    被授权给 `/usr/bin/ping` 可执行文件：
 - en: '[PRE45]'
+  id: totrans-208
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE45]'
 - en: The '*+p*' flag in the preceding command indicates that the capabilities have
     been set to *Permitted*.
+  id: totrans-209
   prefs: []
   type: TYPE_NORMAL
+  zh: 前述命令中的 '*+p*' 标志表示这些功能已设置为 *Permitted*。
 - en: 'To inspect the capabilities of a file, we can use the `getcap` command:'
+  id: totrans-210
   prefs: []
   type: TYPE_NORMAL
+  zh: 要检查文件的功能，我们可以使用 `getcap` 命令：
 - en: '[PRE46]'
+  id: totrans-211
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE46]'
 - en: See `man getcap` and `man setcap` for more details about these utilities.
+  id: totrans-212
   prefs: []
   type: TYPE_NORMAL
+  zh: 有关这些工具的更多详细信息，请参阅 `man getcap` 和 `man setcap`。
 - en: 'We can inspect the active capabilities of a running process by looking at the
     `/proc/<PID>/status` file. In the following code, we are launching a `ping` command
     after setting the `CAP_NET_ADMIN` and `CAP_NET_RAW` capabilities. We want to launch
     the process in the background and check its current capabilities:'
+  id: totrans-213
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们可以通过查看 `/proc/<PID>/status` 文件来检查运行中的进程的活动功能。在以下代码中，我们在设置 `CAP_NET_ADMIN`
+    和 `CAP_NET_RAW` 功能后启动 `ping` 命令。我们希望将进程置于后台并检查其当前功能：
 - en: '[PRE47]'
+  id: totrans-214
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE47]'
 - en: 'Here, we are interested in evaluating the bitmap in the `CapPrm` field, which
     represents the permitted capabilities. To get a user-friendly value, we can use
     the `capsh` command to decode the bitmap hex value:'
+  id: totrans-215
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这里，我们的兴趣在于评估 `CapPrm` 字段中的位图，该字段表示允许的功能。为了获得更易读的值，我们可以使用 `capsh` 命令解码位图的十六进制值：
 - en: '[PRE48]'
+  id: totrans-216
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE48]'
 - en: The result is similar to the output of the `getcap` command in the `/usr/bin/ping`
     file, demonstrating that executing the command propagated the file's permitted
     capabilities to its process instance.
+  id: totrans-217
   prefs: []
   type: TYPE_NORMAL
+  zh: 结果与 `getcap` 命令在 `/usr/bin/ping` 文件中的输出相似，表明执行该命令将文件的允许功能传播到了其进程实例。
 - en: 'For a full list of the constants that were used to set the bitmaps, as well
     as their capabilities, see the following kernel header file: [https://github.com/torvalds/linux/blob/master/include/uapi/linux/capability.h](https://github.com/torvalds/linux/blob/master/include/uapi/linux/capability.h).'
+  id: totrans-218
   prefs: []
   type: TYPE_NORMAL
+  zh: 要查看用于设置位图的常量及其对应的功能列表，请参阅以下内核头文件：[https://github.com/torvalds/linux/blob/master/include/uapi/linux/capability.h](https://github.com/torvalds/linux/blob/master/include/uapi/linux/capability.h)。
 - en: Tip
+  id: totrans-219
   prefs: []
   type: TYPE_NORMAL
+  zh: 提示
 - en: Distributions such as RHEL and CentOS use the preceding configuration to allow
     the ping to send ICMP packets with access from all users without them being executed
     as privileged processes with *setuid 0*. This is an insecure approach where an
     attacker could leverage a vulnerability or bug in the executable to escalate privileges
     and gain control of the system.
+  id: totrans-220
   prefs: []
   type: TYPE_NORMAL
+  zh: 像 RHEL 和 CentOS 这样的发行版使用上述配置，允许 ping 命令发送 ICMP 数据包，并且所有用户都可以访问，而无需将其作为特权进程执行，且不使用
+    *setuid 0*。这种做法不安全，攻击者可以利用可执行文件中的漏洞或错误来提升权限并获得系统控制。
 - en: Fedora introduced a new and more secure approach in version 31 that's based
     on using the `net.ipv4.ping_group_range` Linux kernel parameter. By setting an
     extensive range that covers all system groups, this parameter allows users to
     send ICMP packets without the need to enable the `CAP_NET_ADMIN` and `CAP_NET_RAW`
     capabilities.
+  id: totrans-221
   prefs: []
   type: TYPE_NORMAL
+  zh: Fedora 在 31 版本中引入了一种新的、更安全的方法，该方法基于使用 `net.ipv4.ping_group_range` Linux 内核参数。通过设置涵盖所有系统组的广泛范围，该参数允许用户发送
+    ICMP 数据包，而无需启用 `CAP_NET_ADMIN` 和 `CAP_NET_RAW` 功能。
 - en: 'For more details, see the following wiki page from the Fedora Project: [https://fedoraproject.org/wiki/Changes/EnableSysctlPingGroupRange](https://fedoraproject.org/wiki/Changes/EnableSysctlPingGroupRange).'
+  id: totrans-222
   prefs: []
   type: TYPE_NORMAL
+  zh: 更多详细信息，请参阅 Fedora 项目的以下 Wiki 页面：[https://fedoraproject.org/wiki/Changes/EnableSysctlPingGroupRange](https://fedoraproject.org/wiki/Changes/EnableSysctlPingGroupRange)。
 - en: Now that we've provided a high-level description of the Linux kernel's capabilities,
     let's learn how they are applied to containers.
+  id: totrans-223
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在我们已经提供了关于 Linux 内核能力的高层次描述，让我们学习这些能力是如何应用到容器中的。
 - en: Capabilities in containers
+  id: totrans-224
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 容器中的能力
 - en: 'Capabilities can be applied inside containers to allow targeted actions to
     take place. By default, Podman runs containers using a set of Linux kernel capabilities
     that are defined in the `/usr/share/containers/containers.conf` file. At the time
     of writing, the following capabilities are enabled inside this file:'
+  id: totrans-225
   prefs: []
   type: TYPE_NORMAL
+  zh: 能力可以应用于容器内，以便执行特定的操作。默认情况下，Podman 使用一组在`/usr/share/containers/containers.conf`文件中定义的
+    Linux 内核能力来运行容器。在撰写本文时，以下能力在该文件中已启用：
 - en: '[PRE49]'
+  id: totrans-226
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE49]'
 - en: 'We can run a simple test to verify that those capabilities have been effectively
     applied to a process running inside a container. For this test, we will use the
     official Nginx image:'
+  id: totrans-227
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们可以运行一个简单的测试来验证这些能力是否已有效应用于容器内运行的进程。对于这个测试，我们将使用官方的 Nginx 镜像：
 - en: '[PRE50]'
+  id: totrans-228
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE50]'
 - en: 'Here, we have extracted the current capabilities from the parent Nginx process
     (running with PID 1 inside the container). Now, we can check the bitmap with the
     `capsh` utility:'
+  id: totrans-229
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这里，我们提取了来自父进程 Nginx（在容器内以 PID 1 运行）的当前能力。现在，我们可以使用`capsh`工具检查位图：
 - en: '[PRE51]'
+  id: totrans-230
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE51]'
 - en: The preceding list of capabilities is the same as the list that was defined
     in the default Podman configuration. Note that the capabilities are applied in
     both rootless and rootful mode.
+  id: totrans-231
   prefs: []
   type: TYPE_NORMAL
+  zh: 上述能力列表与默认 Podman 配置中定义的列表相同。请注意，这些能力在无根模式和有根模式下都会应用。
 - en: Note
+  id: totrans-232
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意
 - en: If you're curious, the capabilities for the containerized process(es) are set
     up by the container runtime, which is either `runc` or `crun`, based on the distribution.
+  id: totrans-233
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你感兴趣，容器化进程的能力是由容器运行时设置的，该运行时可以是`runc`或`crun`，具体取决于发行版。
 - en: Now that we know how capabilities are configured and applied inside containers,
     let's learn how to customize a container's capabilities.
+  id: totrans-234
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在我们知道了能力是如何在容器内配置和应用的，让我们学习如何定制容器的能力。
 - en: Customizing a container's capabilities
+  id: totrans-235
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 定制容器的能力
 - en: We can add or drop capabilities either at runtime or statically.
+  id: totrans-236
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们可以在运行时或静态地添加或删除能力。
 - en: To statically change the default capabilities, we can simply edit the *default_capabilities*
     field in the `/usr/share/containers/containers.conf` file and add or remove them
     according to our desired results.
+  id: totrans-237
   prefs: []
   type: TYPE_NORMAL
+  zh: 要静态更改默认能力，我们只需编辑`/usr/share/containers/containers.conf`文件中的*default_capabilities*字段，并根据需要添加或删除它们。
 - en: To modify capabilities at runtime, we can use the `–cap-add` and `–cap-drop`
     options, both of which are provided by the `podman run` command.
+  id: totrans-238
   prefs: []
   type: TYPE_NORMAL
+  zh: 要在运行时修改能力，我们可以使用`–cap-add`和`–cap-drop`选项，这两个选项都由`podman run`命令提供。
 - en: 'The following code removes the `CAP_DAC_OVERRIDE` capability from a container:'
+  id: totrans-239
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下代码从容器中移除`CAP_DAC_OVERRIDE`能力：
 - en: '[PRE52]'
+  id: totrans-240
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE52]'
 - en: 'If we look at the capability bitmaps again, we will see that they were updated
     accordingly:'
+  id: totrans-241
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果我们再次查看能力位图，我们会看到它们已相应更新：
 - en: '[PRE53]'
+  id: totrans-242
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE53]'
 - en: 'It is possible to pass the `--cap-add` and `--cap-drop` options multiple times:'
+  id: totrans-243
   prefs: []
   type: TYPE_NORMAL
+  zh: 可以多次传递`--cap-add`和`--cap-drop`选项：
 - en: '[PRE54]'
+  id: totrans-244
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE54]'
 - en: 'When we''re dealing with capabilities, we must be careful while dropping a
     default capability. The following code shows an error in the Nginx container when
     dropping the `CAP_CHOWN` capability:'
+  id: totrans-245
   prefs: []
   type: TYPE_NORMAL
+  zh: 在处理能力时，我们必须小心删除默认能力。以下代码展示了在删除`CAP_CHOWN`能力时，Nginx 容器中的错误：
 - en: '[PRE55]'
+  id: totrans-246
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE55]'
 - en: Here, the container fails. From the output, we can see that the Nginx process
     was unable to show the `/var/cache/nginx/client_temp` directory. This is a direct
     consequence of the `CAP_CHOWN` capability being removed.
+  id: totrans-247
   prefs: []
   type: TYPE_NORMAL
+  zh: 这里容器失败了。从输出中，我们可以看到 Nginx 进程无法显示`/var/cache/nginx/client_temp`目录。这是因为`CAP_CHOWN`能力被移除所导致的直接后果。
 - en: 'Not all capabilities can be applied to rootless containers. For example, if
     we try to apply the `CAP_MKNOD` capability to a rootless container, any attempt
     to create a special file inside a rootless container won''t be allowed by the
     kernel:'
+  id: totrans-248
   prefs: []
   type: TYPE_NORMAL
+  zh: 并非所有能力都可以应用于无根容器。例如，如果我们尝试将`CAP_MKNOD`能力应用于无根容器，内核将不允许在无根容器内创建特殊文件：
 - en: '[PRE56]'
+  id: totrans-249
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE56]'
 - en: 'Instead, if we run the container with elevated root privileges, the capability
     can be assigned successfully:'
+  id: totrans-250
   prefs: []
   type: TYPE_NORMAL
+  zh: 相反，如果我们以提升的 root 权限运行容器，则可以成功分配该能力：
 - en: '[PRE57]'
+  id: totrans-251
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE57]'
 - en: Note
+  id: totrans-252
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意
 - en: Generally, adding capabilities to containers implies enlarging the potential
     attack surface that a malicious attacker could use. If it's not necessary, it
     is a good practice to keep the default capabilities and drop the unwanted ones
     once the potential side effects have been analyzed.
+  id: totrans-253
   prefs: []
   type: TYPE_NORMAL
+  zh: 通常，向容器添加能力意味着扩大潜在的攻击面，恶意攻击者可能利用这一点。如果不必要，保持默认能力并在分析潜在副作用后删除不需要的能力是一种良好的做法。
 - en: In this section, we learned how to manage capabilities inside containers. However,
     capabilities are not the only security aspect to consider when you're securing
     containers. SELinux, as we will learn in the next section, has a crucial role
     in guaranteeing container isolation.
+  id: totrans-254
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这一部分，我们学习了如何管理容器中的能力。然而，能力并不是在保护容器时需要考虑的唯一安全方面。正如我们在下一部分将要学习的，SELinux 在确保容器隔离方面起着至关重要的作用。
 - en: SELinux interaction with containers
+  id: totrans-255
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: SELinux 与容器的交互
 - en: In this section, we will discuss SELinux policies and introduce **Udica**, a
     tool that's used to generate SELinux profiles for containers.
+  id: totrans-256
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这一部分，我们将讨论 SELinux 策略，并介绍 **Udica**，这是一个用于为容器生成 SELinux 配置文件的工具。
 - en: SELinux works directly in kernel space and manages object isolation while following
     a least-privilege model that contains a series of **policies** that can handle
     enforcing or exceptions. To define these objects, SELinux uses labels that define
@@ -1069,424 +1615,624 @@
     resources with a series of exceptions defined by policies. To disable Enforcing
     mode, SELinux can be put in **Permissive** mode, where violations are only audited,
     without them being blocked.
+  id: totrans-257
   prefs: []
   type: TYPE_NORMAL
+  zh: SELinux 直接在内核空间中工作，并遵循最小特权模型来管理对象隔离，该模型包含一系列 **策略**，用于强制执行或例外处理。为了定义这些对象，SELinux
+    使用定义 **类型** 的标签。默认情况下，SELinux 处于 **强制** 模式，拒绝对资源的访问，并根据策略定义一系列例外。要禁用强制模式，可以将 SELinux
+    设置为 **宽容** 模式，在该模式下，违规行为仅会被审计，而不会被阻止。
 - en: Security Alert
+  id: totrans-258
   prefs: []
   type: TYPE_NORMAL
+  zh: 安全警报
 - en: As we mentioned previously, switching SELinux to Permissive mode or completely
     disabling it is *not a good practice* as it opens you up to potential security
     threats. Instead of doing that, users should create custom policies to manage
     the necessary exceptions.
+  id: totrans-259
   prefs: []
   type: TYPE_NORMAL
+  zh: 正如我们之前提到的，切换 SELinux 到宽容模式或完全禁用它是 *不推荐的做法*，因为这会让你面临潜在的安全威胁。与其这样做，用户应该创建自定义策略来管理必要的例外。
 - en: By default, SELinux uses a **targeted** policy type, which tries to target and
     confine specific object types (processes, files, devices, and so on) using a set
     of predefined policies.
+  id: totrans-260
   prefs: []
   type: TYPE_NORMAL
+  zh: 默认情况下，SELinux 使用 **定向** 策略类型，试图通过一组预定义的策略来针对并限制特定的对象类型（进程、文件、设备等）。
 - en: 'SELinux allows different kinds of access control. They can be summarized as
     follows:'
+  id: totrans-261
   prefs: []
   type: TYPE_NORMAL
+  zh: SELinux 允许多种类型的访问控制。它们可以总结如下：
 - en: '**Type Enforcement** (**TE**): This controls access to resources according
     to process and file types. This is the main use case of SELinux access control.'
+  id: totrans-262
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**类型强制**（**TE**）：这根据进程和文件类型控制对资源的访问。这是 SELinux 访问控制的主要应用场景。'
 - en: '**Role-Based Access Control** (**RBAC**): This controls access to resources
     using SELinux users (which can be mapped to real system users) and their associated
     SELinux roles.'
+  id: totrans-263
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**基于角色的访问控制**（**RBAC**）：这通过 SELinux 用户（可以映射到真实系统用户）及其相关的 SELinux 角色来控制对资源的访问。'
 - en: '**Multi-Level Security** (**MLS**): This grants all processes with the same
     sensitivity level read/write access to the resources.'
+  id: totrans-264
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**多级安全**（**MLS**）：这为所有具有相同敏感性级别的进程授予对资源的读/写访问权限。'
 - en: '**Multi-Category Security** (**MCS**): This controls access using **categories**,
     which are plain text labels that are applied to resources. Categories are used
     to create compartments of objects, along with the other SELinux labels. Only processes
     that belong to the same category can access a given resource. In [*Chapter 5*](B17908_05_epub.xhtml#_idTextAnchor101),
     *Implementing Storage for the Container''s Data*, we discussed MCS and how we
     can map categories to resources that have been accessed by containers.'
+  id: totrans-265
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**多类别安全**（**MCS**）：这通过 **类别** 来控制访问，类别是应用于资源的纯文本标签。类别用于创建对象的隔离区，同时与其他 SELinux
+    标签一起使用。只有属于同一类别的进程才能访问某一特定资源。在 [*第 5 章*](B17908_05_epub.xhtml#_idTextAnchor101)中，*为容器的数据实现存储*，我们讨论了
+    MCS 以及如何将类别映射到容器访问过的资源。'
 - en: With Type Enforcement, the system files receive labels called **types**, while
     processes receive labels called **domains**. A process that belongs to a domain
     can be allowed to access a file that belongs to a given type, and this access
     can be audited by SELinux.
+  id: totrans-266
   prefs: []
   type: TYPE_NORMAL
+  zh: 通过类型强制，系统文件被赋予称为**类型**的标签，而进程则被赋予称为**域**的标签。属于某个域的进程可以被允许访问属于特定类型的文件，这种访问可以由SELinux进行审核。
 - en: For example, according to SELinux, the Apache `httpd` process, which is labeled
     with the `httpd_t` domain, can access files or directories with `httpd_sys_content_t`
     labels.
+  id: totrans-267
   prefs: []
   type: TYPE_NORMAL
+  zh: 例如，根据SELinux，标记有`httpd_t`域的Apache `httpd`进程可以访问具有`httpd_sys_content_t`标签的文件或目录。
 - en: 'An SELinux-type policy is based on the following pattern:'
+  id: totrans-268
   prefs: []
   type: TYPE_NORMAL
+  zh: SELinux类型策略基于以下模式：
 - en: '[PRE58]'
+  id: totrans-269
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE58]'
 - en: Here, `POLICY` is the kind of policy (`allow`, `allowxperm`, `auditallow`, `neverallow`,
     `dontaudit`, and so on), `DOMAIN` is the process domain, `TYPE` is the resource
     type context, `CLASS` is the object category (for example, `file`, `dir`, `lnk_file`,
     `chr_file`, `blk_file`, `sock_file`, or `fifo_file`), and `OPERATION` is a list
     of actions that are handled by the policy (for example, `open`, `read`, `use`,
     `lock`, `getattr`, or `revc`).
+  id: totrans-270
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这里，`POLICY`是策略类型（例如，`allow`、`allowxperm`、`auditallow`、`neverallow`、`dontaudit`等），`DOMAIN`是进程域，`TYPE`是资源类型上下文，`CLASS`是对象类别（例如，`file`、`dir`、`lnk_file`、`chr_file`、`blk_file`、`sock_file`或`fifo_file`），而`OPERATION`是由策略处理的操作列表（例如，`open`、`read`、`use`、`lock`、`getattr`或`revc`）。
 - en: 'The following example shows a basic `allow` rule:'
+  id: totrans-271
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下示例展示了一个基本的`allow`规则：
 - en: '[PRE59]'
+  id: totrans-272
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE59]'
 - en: In this example, the process that's running in the `myapp_t` domain is allowed
     to access files of the `myapp_log_t` type and perform the `read_file_perms` and
     `append_file_perms` actions.
+  id: totrans-273
   prefs: []
   type: TYPE_NORMAL
+  zh: 在此示例中，运行在`myapp_t`域中的进程被允许访问`myapp_log_t`类型的文件，并执行`read_file_perms`和`append_file_perms`操作。
 - en: 'SELinux manages policies in a modular fashion, allowing you to dynamically
     load and unload policy modules without the need to recompile the whole policy
     set every time. Policies can be loaded and unloaded using the `semodule` utility,
     as shown in the following example, which shows an example of loading a custom
     policy:'
+  id: totrans-274
   prefs: []
   type: TYPE_NORMAL
+  zh: SELinux以模块化的方式管理策略，允许您动态加载和卸载策略模块，无需每次重新编译整个策略集。策略可以使用`semodule`实用程序加载和卸载，如以下示例所示，展示了加载自定义策略的示例：
 - en: '[PRE60]'
+  id: totrans-275
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE60]'
 - en: 'The `semodule` utility can also be used to view all the loaded policies:'
+  id: totrans-276
   prefs: []
   type: TYPE_NORMAL
+  zh: '`semodule`实用程序也可以用于查看所有加载的策略：'
 - en: '[PRE61]'
+  id: totrans-277
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE61]'
 - en: On Fedora, CentOS, RHEL, and derivate distributions, the current binary policy
     is installed under the `/etc/selinux/targeted/policy` directory in a file named
     `polixy.XX`, with `XX` representing the policy version.
+  id: totrans-278
   prefs: []
   type: TYPE_NORMAL
+  zh: 在Fedora、CentOS、RHEL以及衍生分发版上，当前的二进制策略被安装在`/etc/selinux/targeted/policy`目录下，文件名为`polixy.XX`，其中`XX`表示策略版本。
 - en: 'On the same distributions, container policies are defined inside the `container-selinux`
     package, which contains the already compiled SELinux module. The source code of
     the package is available on GitHub if you wish to look at it in more detail: [https://github.com/containers/container-selinux](https://github.com/containers/container-selinux).'
+  id: totrans-279
   prefs: []
   type: TYPE_NORMAL
+  zh: 在相同的分发版本上，容器策略定义在`container-selinux`软件包中，该软件包包含已编译的SELinux模块。如果您希望更详细地查看，软件包的源代码可在GitHub上获取：[https://github.com/containers/container-selinux](https://github.com/containers/container-selinux)。
 - en: 'By looking at the repository''s content, we will find the three most important
     policy source files for developing any module:'
+  id: totrans-280
   prefs: []
   type: TYPE_NORMAL
+  zh: 通过查看存储库的内容，我们将找到开发任何模块所需的三个最重要的策略源文件：
 - en: '`container.fc`: This file defines the files and directories that are bound
     to the types defined in the module.'
+  id: totrans-281
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`container.fc`：此文件定义了与模块中定义的类型绑定的文件和目录。'
 - en: '`container.te`: This file defines the policy rules, attributes, and aliases.'
+  id: totrans-282
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`container.te`：此文件定义了策略规则、属性和别名。'
 - en: '`container.if`: This file defines the module interface. It contains a set of
     public macro functions that are exposed by the module.'
+  id: totrans-283
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`container.if`：此文件定义了模块接口。它包含一组由模块公开的宏函数。'
 - en: A process that's running inside a container is labeled with the `container_t`
     domain. It has read/write access to resources labeled with the `container_file_t`
     type context and read/execute access to resources labeled with the `container_share_t`
     type context.
+  id: totrans-284
   prefs: []
   type: TYPE_NORMAL
+  zh: 在容器内运行的进程被标记为`container_t`域。它具有对被标记为`container_file_t`类型上下文的资源的读写访问权限，并且对被标记为`container_share_t`类型上下文的资源具有读取和执行访问权限。
 - en: 'When a container is executed, the `podman` process, as well as the container
     runtime and the `conmon` process, run with the `container_runtime_t` domain type
     and are allowed to execute processes that transition only to specific types. Those
     types are grouped in the `container_domain` attribute and can be inspected with
     the `seinfo` utility (installed with the `setools-console` package on Fedora),
     as shown in the following code:'
+  id: totrans-285
   prefs: []
   type: TYPE_NORMAL
+  zh: 当容器执行时，`podman` 进程、容器运行时以及 `conmon` 进程将以 `container_runtime_t` 域类型运行，并且只允许执行那些仅能过渡到特定类型的进程。这些类型被分组在
+    `container_domain` 属性中，并且可以使用 `seinfo` 工具（在 Fedora 上与 `setools-console` 包一起安装）进行检查，如以下代码所示：
 - en: '[PRE62]'
+  id: totrans-286
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE62]'
 - en: 'The `container_domain` attribute is declared in the `container.te` source file
     in the `container-policy` repository using the **attribute** keyword:'
+  id: totrans-287
   prefs: []
   type: TYPE_NORMAL
+  zh: '`container_domain` 属性在 `container-policy` 仓库中的 `container.te` 源文件里通过 **attribute**
+    关键字声明：'
 - en: '[PRE63]'
+  id: totrans-288
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE63]'
 - en: 'The preceding attributes are mapped to the `container_t` type using a `typeattribute`
     declaration:'
+  id: totrans-289
   prefs: []
   type: TYPE_NORMAL
+  zh: 上述属性通过 `typeattribute` 声明映射到 `container_t` 类型：
 - en: '[PRE64]'
+  id: totrans-290
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE64]'
 - en: Using this approach, SELinux guarantees process isolations across containers
     and between a container and its host. In this way, a process escaping the container
     (maybe exploiting a vulnerability) cannot access resources on the host or inside
     other containers.
+  id: totrans-291
   prefs: []
   type: TYPE_NORMAL
+  zh: 使用这种方法，SELinux 确保了容器之间以及容器与主机之间的进程隔离。通过这种方式，逃离容器的进程（可能是利用漏洞）无法访问主机或其他容器中的资源。
 - en: When a container is created, the image's read-only layers, which form the OverlayFS
     set of LowerDirs, are labeled with the `container_ro_file_t` type, which prevents
     the container from writing inside those directories. At the same time, MergedDir,
     which is the sum of LowerDirs and UpperDir, is writable and labeled as `container_file_t`.
+  id: totrans-292
   prefs: []
   type: TYPE_NORMAL
+  zh: 当容器被创建时，镜像的只读层（即形成 OverlayFS 的 LowerDirs 集合）会被标记为 `container_ro_file_t` 类型，这会防止容器在这些目录中进行写操作。同时，MergedDir（LowerDirs
+    和 UpperDir 的总和）是可写的，并被标记为 `container_file_t`。
 - en: 'To prove this, let''s run a `c1` and `c2` MCS categories:'
+  id: totrans-293
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了证明这一点，让我们运行 `c1` 和 `c2` MCS 类别：
 - en: '[PRE65]'
+  id: totrans-294
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE65]'
 - en: 'Now, we can find all the files labeled as `container_file_t:s0:c1,c2` under
     the host filesystem:'
+  id: totrans-295
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，我们可以在主机文件系统中找到所有标记为 `container_file_t:s0:c1,c2` 的文件：
 - en: '[PRE66]'
+  id: totrans-296
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE66]'
 - en: As expected, the `container_file_t` label, which is associated with the `c1`
     and `c2` categories, is applied to all the files under the MergedDir container.
+  id: totrans-297
   prefs: []
   type: TYPE_NORMAL
+  zh: 如预期的那样，`container_file_t` 标签，关联了 `c1` 和 `c2` 类别，被应用于 MergedDir 容器下的所有文件。
 - en: 'At the same time, we can demonstrate that the container''s LowerDirs are labeled
     as `container_ro_file_t`. First, we need to extract the container''s LowerDirs
     list:'
+  id: totrans-298
   prefs: []
   type: TYPE_NORMAL
+  zh: 同时，我们可以演示容器的 LowerDirs 被标记为 `container_ro_file_t`。首先，我们需要提取容器的 LowerDirs 列表：
 - en: '[PRE67]'
+  id: totrans-299
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE67]'
 - en: 'The rightmost directory represents the container''s lowest layer and is usually
     the base filesystem tree of the image. Let''s inspect the type context of this
     directory:'
+  id: totrans-300
   prefs: []
   type: TYPE_NORMAL
+  zh: 最右侧的目录代表容器的最底层，通常是镜像的基础文件系统树。让我们检查这个目录的类型上下文：
 - en: '[PRE68]'
+  id: totrans-301
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE68]'
 - en: 'The preceding output also shows another interesting aspect: since the LowerDir
     layers are shared across multiple containers that use the same image, we won''t
     find any MCS categories that have been applied here.'
+  id: totrans-302
   prefs: []
   type: TYPE_NORMAL
+  zh: 上述输出还展示了另一个有趣的方面：由于 LowerDir 层在使用相同镜像的多个容器之间共享，我们不会在这里找到任何已应用的 MCS 类别。
 - en: Containers do not have read/write access to files or directories that are not
     labeled as `container_file_t`. Previously, we saw that it is possible to relabel
     those files by applying the `:z` suffix to mounted volumes or by manually relabeling
     them in advance before running the containers.
+  id: totrans-303
   prefs: []
   type: TYPE_NORMAL
+  zh: 容器无法读写未标记为 `container_file_t` 的文件或目录。之前，我们看到通过对挂载卷应用 `:z` 后缀，或者在运行容器之前手动重新标记它们，都是可以重新标记这些文件的。
 - en: However, relabeling crucial directories such as `/home` or `/var/logs` is a
     very bad idea since many other non-containerized processes won't be able to access
     them anymore.
+  id: totrans-304
   prefs: []
   type: TYPE_NORMAL
+  zh: 然而，重新标记像 `/home` 或 `/var/logs` 这样的关键目录是一个非常糟糕的主意，因为许多其他非容器化的进程将无法再访问它们。
 - en: The only solution is to manually create custom policies that override the default
     behavior. However, this is too complex to manage in everyday use and production
     environments.
+  id: totrans-305
   prefs: []
   type: TYPE_NORMAL
+  zh: 唯一的解决方案是手动创建自定义策略来覆盖默认行为。然而，这对于日常使用和生产环境来说，管理起来过于复杂。
 - en: 'Luckily, we can solve this limitation with a tool that generates custom SELinux
     security profiles for our containers: **Udica**.'
+  id: totrans-306
   prefs: []
   type: TYPE_NORMAL
+  zh: 幸运的是，我们可以通过一个工具来解决这个限制，该工具为我们的容器生成自定义的 SELinux 安全配置文件：**Udica**。
 - en: Introducing Udica
+  id: totrans-307
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 引入 Udica
 - en: Udica is an open source project ([https://github.com/containers/udica](https://github.com/containers/udica))
     that was created by Lukas Vrabec, SELinux evangelist and team leader of the SELinux
     and Security Special Projects engineering teams at Red Hat.
+  id: totrans-308
   prefs: []
   type: TYPE_NORMAL
+  zh: Udica 是一个开源项目（[https://github.com/containers/udica](https://github.com/containers/udica)），由Lukas
+    Vrabec创建，他是SELinux的倡导者，并且是Red Hat SELinux与安全专项工程团队的负责人。
 - en: Udica aims to overcome the rigid policy limitations that were described previously
     by generating SELinux profiles for containers and allowing them to access resources
     that would normally be prevented with the common `container_t` domain.
+  id: totrans-309
   prefs: []
   type: TYPE_NORMAL
+  zh: Udica旨在克服前面描述的严格策略限制，通过为容器生成SELinux配置文件，使它们能够访问通常会被`container_t`域阻止的资源。
 - en: 'To install Udica on Fedora, simply run the following command:'
+  id: totrans-310
   prefs: []
   type: TYPE_NORMAL
+  zh: 在Fedora上安装Udica，只需运行以下命令：
 - en: '[PRE69]'
+  id: totrans-311
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE69]'
 - en: 'On other distributions, Udica can be installed from its source by running the
     following commands:'
+  id: totrans-312
   prefs: []
   type: TYPE_NORMAL
+  zh: 在其他发行版中，可以通过运行以下命令从源代码安装Udica：
 - en: '[PRE70]'
+  id: totrans-313
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE70]'
 - en: To demonstrate how Udica works, we are going to create a container that writes
     to the `/var/log` directory of the host, which is bind-mounted when the container
     is created. By default, the process with the `container_t` domain would not be
     able to write a directory labeled with the `var_log_t` type.
+  id: totrans-314
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了演示Udica的工作原理，我们将创建一个容器，它会写入主机的`/var/log`目录，该目录在容器创建时会被绑定挂载。默认情况下，具有`container_t`域的进程无法写入标记为`var_log_t`类型的目录。
 - en: 'The following script, which has been executed inside the container, is an endless
     loop that writes a log line composed of the current date and a counter:'
+  id: totrans-315
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下脚本已在容器内执行，它是一个无限循环，写入由当前日期和计数器组成的日志行：
 - en: Chapter11/custom_logger/logger.sh
+  id: totrans-316
   prefs: []
   type: TYPE_NORMAL
+  zh: Chapter11/custom_logger/logger.sh
 - en: '[PRE71]'
+  id: totrans-317
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE71]'
 - en: The preceding script uses the `set -euo pipefail` option, to exit immediately
     in case an error occurs, and the `tee` utility, to write both to standard output
     and the `/var/log/custom.log` file in append mode. The `count` variable increments
     on each loop cycle.
+  id: totrans-318
   prefs: []
   type: TYPE_NORMAL
+  zh: 上述脚本使用了`set -euo pipefail`选项，以便在发生错误时立即退出，并使用`tee`工具，将标准输出和`/var/log/custom.log`文件追加模式同时写入。`count`变量在每个循环周期递增。
 - en: 'The Dockerfile for this container is kept minimal – it just copies the logger
     script and executes it at container startup:'
+  id: totrans-319
   prefs: []
   type: TYPE_NORMAL
+  zh: 这个容器的Dockerfile保持简洁——它只复制日志记录脚本并在容器启动时执行：
 - en: Chapter11/custom_logger/Dockerfile
+  id: totrans-320
   prefs: []
   type: TYPE_NORMAL
+  zh: Chapter11/custom_logger/Dockerfile
 - en: '[PRE72]'
+  id: totrans-321
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE72]'
 - en: Important
+  id: totrans-322
   prefs: []
   type: TYPE_NORMAL
+  zh: 重要提示
 - en: The `logger.sh` script must be executed before the build so that it can be launched
     correctly at container startup.
+  id: totrans-323
   prefs: []
   type: TYPE_NORMAL
+  zh: '`logger.sh`脚本必须在构建前执行，以便在容器启动时正确启动。'
 - en: 'The container image is built with the name `custom_logger`:'
+  id: totrans-324
   prefs: []
   type: TYPE_NORMAL
+  zh: 容器镜像是以`custom_logger`为名称构建的：
 - en: '[PRE73]'
+  id: totrans-325
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE73]'
 - en: 'Now, it''s time to test the container and see how it behaves. The `/var/log`
     directory is bind-mounted with `rw` permissions to the container''s `/var/log`,
     without this altering its type context. We should keep the execution in the foreground
     to see the immediate output:'
+  id: totrans-326
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，是时候测试容器并查看其行为了。`/var/log`目录以`rw`权限与容器的`/var/log`进行绑定挂载，而不改变其类型上下文。我们应该保持执行在前台，以便查看即时输出：
 - en: '[PRE74]'
+  id: totrans-327
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE74]'
 - en: As expected, the script failed to write to the target file. We could fix this
     by changing the directory type context to `container_file_t` but, as we learned
     previously, this is a poor idea since it would prevent other processes from writing
     their logs.
+  id: totrans-328
   prefs: []
   type: TYPE_NORMAL
+  zh: 正如预期的那样，脚本未能写入目标文件。我们可以通过将目录类型上下文更改为`container_file_t`来修复此问题，但正如我们之前所学，这并不是一个好主意，因为它会阻止其他进程写入它们的日志。
 - en: 'Instead, we can use Udica to generate a custom SELinux security profile for
     the container. In the following code, the container specs are exported to a `container.json`
     file and then parsed by Udica to generate a custom profile called *custom_logger*:'
+  id: totrans-329
   prefs: []
   type: TYPE_NORMAL
+  zh: 另外，我们可以使用Udica为容器生成一个自定义的SELinux安全配置文件。在以下代码中，容器规格被导出到一个`container.json`文件，然后由Udica解析生成一个名为*custom_logger*的自定义配置文件：
 - en: '[PRE75]'
+  id: totrans-330
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE75]'
 - en: Once the profile has been generated, Udica outputs the instructions to configure
     the container. First, we need to load the new custom policy using the `semodule`
     utility. The generated file is in `/usr/share/udica/templates/base_container.cil`
     and `/usr/share/udica/templates/log_container.cil`, whose rules are inherited
     in the custom container policy file.
+  id: totrans-331
   prefs: []
   type: TYPE_NORMAL
+  zh: 一旦配置文件生成，Udica 会输出配置容器的指令。首先，我们需要使用`semodule`工具加载新的自定义策略。生成的文件位于`/usr/share/udica/templates/base_container.cil`和`/usr/share/udica/templates/log_container.cil`，其规则会继承到自定义容器策略文件中。
 - en: 'Let''s load the modules using the suggested command:'
+  id: totrans-332
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们使用推荐的命令加载模块：
 - en: '[PRE76]'
+  id: totrans-333
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE76]'
 - en: 'After loading the modules in SELinux, we are ready to run the container with
     the custom `custom_logger.process` label, passing it as an argument to the Podman
     `--security-opt` option. The other container option was kept identical, except
     for its name, which has been updated to `custom_logger2` to differentiate it from
     the previous instance:'
+  id: totrans-334
   prefs: []
   type: TYPE_NORMAL
+  zh: 在加载SELinux模块后，我们准备好运行带有自定义`custom_logger.process`标签的容器，将其作为参数传递给Podman的`--security-opt`选项。其他容器选项保持不变，除了名称已更新为`custom_logger2`，以便与先前的实例区分开来：
 - en: '[PRE77]'
+  id: totrans-335
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE77]'
 - en: This time, the script successfully wrote to the `/var/log/custom.log` file thanks
     to the custom profile that was generated with Udica.
+  id: totrans-336
   prefs: []
   type: TYPE_NORMAL
+  zh: 这次，脚本成功地写入了`/var/log/custom.log`文件，这得益于使用Udica生成的自定义配置文件。
 - en: Note that the container processes are not running with the `container_t` domain,
     but with the new `custom_logger.process` superset, which includes additional rules
     on top of the default.
+  id: totrans-337
   prefs: []
   type: TYPE_NORMAL
+  zh: 请注意，容器进程不是在`container_t`域中运行，而是使用新的`custom_logger.process`超集，该超集包含在默认规则之上添加的额外规则。
 - en: 'We can confirm this by running the following command on the host:'
+  id: totrans-338
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们可以通过在主机上运行以下命令来确认这一点：
 - en: '[PRE78]'
+  id: totrans-339
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE78]'
 - en: 'Udica creates the custom policy by parsing the JSON spec file and looking for
     the container mount points, ports, and capabilities. Let''s look at the content
     of the generated `custom_logger.cil` file from our example:'
+  id: totrans-340
   prefs: []
   type: TYPE_NORMAL
+  zh: Udica通过解析JSON规范文件并查找容器挂载点、端口和能力来创建自定义策略。我们来看一下从示例中生成的`custom_logger.cil`文件的内容：
 - en: '[PRE79]'
+  id: totrans-341
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE79]'
 - en: 'The CIL language syntax is beyond the scope of this book, but we still can
     notice some interesting things:'
+  id: totrans-342
   prefs: []
   type: TYPE_NORMAL
+  zh: CIL语言语法超出了本书的范围，但我们仍然可以注意到一些有趣的内容：
 - en: The *custom_logger* profile is defined by a `block` statement.
+  id: totrans-343
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '*custom_logger*配置文件由`block`语句定义。'
 - en: The `allow` rule enables the default capabilities for the container.
+  id: totrans-344
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`allow`规则启用了容器的默认能力。'
 - en: The policy inherits the `container` and `log_rw_container` blocks with the `blockinherit`
     statements.
+  id: totrans-345
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 策略通过`blockinherit`语句继承了`container`和`log_rw_container`模块。
 - en: 'The generated CIL file inherits the blocks that have been defined in the available
     Udica templates, each one focused on specific actions. On Fedora, the templates
     are installed via the `container-selinux` package and are available in the `/usr/share/udica/templates/`
     folder:'
+  id: totrans-346
   prefs: []
   type: TYPE_NORMAL
+  zh: 生成的CIL文件继承了在可用的Udica模板中已定义的模块，每个模块都专注于特定的操作。在Fedora中，这些模板通过`container-selinux`包安装，并可在`/usr/share/udica/templates/`文件夹中找到：
 - en: '[PRE80]'
+  id: totrans-347
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE80]'
 - en: The available templates are implemented for common scenarios, such as accessing
     log directories or user homes, or even for opening network ports. Among them,
     the `base_container.cil` template is always included by all the Udica-generated
     policies as the base building block that's used to generate the custom policies.
+  id: totrans-348
   prefs: []
   type: TYPE_NORMAL
+  zh: 可用的模板为常见场景提供了实现，例如访问日志目录或用户主目录，甚至是打开网络端口。在这些模板中，`base_container.cil`模板始终由所有Udica生成的策略包含，作为生成自定义策略所用的基础构建块。
 - en: According to the behavior of the container that's derived from the spec file,
     other templates are included. For example, the policy inherited the `log_rw_container`
     block from the `log_container.cil` template to let the custom logger container
     access the `/var/log` directory.
+  id: totrans-349
   prefs: []
   type: TYPE_NORMAL
+  zh: 根据从规范文件派生的容器行为，其他模板被包含进来。例如，策略继承了来自`log_container.cil`模板的`log_rw_container`模块，以便让自定义日志容器访问`/var/log`目录。
 - en: Udica is a great tool for addressing container isolation issues and helps administrators
     address SELinux confinement use cases by overcoming the complexity of writing
     rules manually.
+  id: totrans-350
   prefs: []
   type: TYPE_NORMAL
+  zh: Udica是一个非常好的工具，能够解决容器隔离问题，帮助管理员通过克服手动编写规则的复杂性来解决SELinux限制的使用场景。
 - en: Generated security profiles can also be versioned inside a GitHub repository
     and reused for similar containers on different hosts.
+  id: totrans-351
   prefs: []
   type: TYPE_NORMAL
+  zh: 生成的安全配置文件也可以在GitHub仓库中进行版本控制，并在不同主机上的类似容器之间复用。
 - en: Summary
+  id: totrans-352
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 总结
 - en: In this chapter, we learned how to develop and apply techniques to improve the
     overall security of our container-based service architecture. We learned how leveraging
     rootless containers and avoiding UID 0 can reduce the attack surface of our services.
@@ -1494,45 +2240,67 @@
     Finally, we went under the hood of a containers' tools and looked at the Linux
     kernel's capabilities and the SELinux subsystem, which can help us fine-tune various
     security aspects for our running containers.
+  id: totrans-353
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本章中，我们学习了如何开发和应用技术来提高基于容器的服务架构的整体安全性。我们了解了如何通过利用无根容器和避免UID 0来减少服务的攻击面。然后，我们学习了如何对容器镜像进行签名和信任，以避免中间人攻击。最后，我们深入探讨了容器工具的内部工作，查看了Linux内核的能力和SELinux子系统，这些可以帮助我们精细调整运行容器的各种安全方面。
 - en: Now that we've done a deep dive into security, we are ready to move on to the
     next chapter, where we will take an advanced look at networking for containers.
+  id: totrans-354
   prefs: []
   type: TYPE_NORMAL
+  zh: 经过深入的安全性分析后，我们已经准备好进入下一个章节，在那里我们将对容器的网络进行高级探讨。
 - en: Further reading
+  id: totrans-355
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 进一步阅读
 - en: 'For more information about the topics that were covered in this chapter, take
     a look at the following resources:'
+  id: totrans-356
   prefs: []
   type: TYPE_NORMAL
+  zh: 若想了解更多本章涉及的主题，请查看以下资源：
 - en: 'MITRE ATT&CK Container Matrix: [https://attack.mitre.org/matrices/enterprise/containers/](https://attack.mitre.org/matrices/enterprise/containers/)'
+  id: totrans-357
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 'MITRE ATT&CK容器矩阵: [https://attack.mitre.org/matrices/enterprise/containers/](https://attack.mitre.org/matrices/enterprise/containers/)'
 - en: 'GNU Privacy Guard: [https://gnupg.org/](https://gnupg.org/)'
+  id: totrans-358
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 'GNU隐私保护工具: [https://gnupg.org/](https://gnupg.org/)'
 - en: 'RFC4880 – OpenPGP standard: [https://www.rfc-editor.org/info/rfc4880](https://www.rfc-editor.org/info/rfc4880)'
+  id: totrans-359
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 'RFC4880 – OpenPGP标准: [https://www.rfc-editor.org/info/rfc4880](https://www.rfc-editor.org/info/rfc4880)'
 - en: 'Podman image signing tutorial: [https://github.com/containers/podman/blob/main/docs/tutorials/image_signing.md](https://github.com/containers/podman/blob/main/docs/tutorials/image_signing.md)'
+  id: totrans-360
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 'Podman镜像签名教程: [https://github.com/containers/podman/blob/main/docs/tutorials/image_signing.md](https://github.com/containers/podman/blob/main/docs/tutorials/image_signing.md)'
 - en: 'Lukas Vrabec''s blog: [https://lukas-vrabec.com/](https://lukas-vrabec.com/)'
+  id: totrans-361
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 'Lukas Vrabec的博客: [https://lukas-vrabec.com/](https://lukas-vrabec.com/)'
 - en: 'CIL introduction and design principles: [https://github.com/SELinuxProject/cl/wiki](https://github.com/SELinuxProject/cl/wiki)'
+  id: totrans-362
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 'CIL介绍及设计原则: [https://github.com/SELinuxProject/cl/wiki](https://github.com/SELinuxProject/cl/wiki)'
 - en: 'Udica introduction on Red Hat''s blog: [https://www.redhat.com/en/blog/generate-selinux-policies-containers-with-udica](https://www.redhat.com/en/blog/generate-selinux-policies-containers-with-udica)'
+  id: totrans-363
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 'Red Hat博客上的Udica介绍: [https://www.redhat.com/en/blog/generate-selinux-policies-containers-with-udica](https://www.redhat.com/en/blog/generate-selinux-policies-containers-with-udica)'

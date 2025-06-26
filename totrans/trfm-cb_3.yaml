@@ -1,742 +1,1120 @@
 - en: Building Dynamic Environments with Terraform
+  id: totrans-0
   prefs: []
   type: TYPE_NORMAL
+  zh: 使用 Terraform 构建动态环境
 - en: In the previous chapter, we learned how to use Terraform's language concepts
     to provision an infrastructure efficiently with Terraform. One of the advantages
     of **Infrastructure as Code** (**IaC**) is that it allows you to provision infrastructure
     on a large scale much faster than manual provisioning.
+  id: totrans-1
   prefs: []
   type: TYPE_NORMAL
+  zh: 在上一章中，我们学习了如何使用 Terraform 的语言概念高效地配置基础设施。**基础设施即代码**（**IaC**）的一个优势是，它允许你比手动配置更快地大规模部署基础设施。
 - en: When writing IaC, it is also important to apply the development and clean code
     principles that developers have already acquired over the years.
+  id: totrans-2
   prefs: []
   type: TYPE_NORMAL
+  zh: 在编写 IaC（基础设施即代码）时，同样重要的是应用开发人员多年来已经掌握的开发和清晰代码原则。
 - en: One of these principles is **Don't Repeat Yourself** (**DRY**), which means
     not duplicating the code ([https://thevaluable.dev/dry-principle-cost-benefit-example/](https://thevaluable.dev/dry-principle-cost-benefit-example/)).
     In this chapter, we will learn how to use expressions from the Terraform language,
     such as count, maps, collections, and dynamic. We will learn that these notions
     will allow us to write simple Terraform configuration to provide an infrastructure
     with multiple resources without having to duplicate code.
+  id: totrans-3
   prefs: []
   type: TYPE_NORMAL
+  zh: 这些原则之一是 **不要重复自己**（**DRY**），意味着不重复代码 ([https://thevaluable.dev/dry-principle-cost-benefit-example/](https://thevaluable.dev/dry-principle-cost-benefit-example/))。在本章中，我们将学习如何使用
+    Terraform 语言中的表达式，如 count、maps、collections 和 dynamic。我们将了解这些概念将帮助我们编写简单的 Terraform
+    配置，以便为基础设施提供多个资源，而不需要重复代码。
 - en: 'In this chapter, we will cover the following recipes:'
+  id: totrans-4
   prefs: []
   type: TYPE_NORMAL
+  zh: 本章将涵盖以下内容：
 - en: Provisioning multiple resources with the count property
+  id: totrans-5
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 使用 count 属性配置多个资源
 - en: Using a table of key-value variables with maps
+  id: totrans-6
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 使用键值对变量的映射表
 - en: Looping over object collections
+  id: totrans-7
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 遍历对象集合
 - en: Generating multiple blocks with dynamic expressions
+  id: totrans-8
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 使用动态表达式生成多个块
 - en: Technical requirements
+  id: totrans-9
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 技术要求
 - en: This chapter does not have any technical prerequisites. However, it is advisable
     to have already read the previous chapter.
+  id: totrans-10
   prefs: []
   type: TYPE_NORMAL
+  zh: 本章没有任何技术先决条件。然而，建议已阅读上一章内容。
 - en: The source code of this chapter is available at [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP03](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP03).
+  id: totrans-11
   prefs: []
   type: TYPE_NORMAL
+  zh: 本章的源代码可在 [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP03](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP03)
+    获取。
 - en: Check out the following video to see the Code in Action: [https://bit.ly/2R5GSBN](https://bit.ly/2R5GSBN)
+  id: totrans-12
   prefs: []
   type: TYPE_NORMAL
+  zh: 查看以下视频，查看代码的实际操作：[https://bit.ly/2R5GSBN](https://bit.ly/2R5GSBN)
 - en: Provisioning multiple resources with the count property
+  id: totrans-13
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 使用 count 属性配置多个资源
 - en: In corporate scenarios, there is a need to provide infrastructure and to take
     into account the so-called horizontal scalability, that is, *N* identical resources that
     will reduce the load on individual resources (such as compute instances) and the
     application as a whole.
+  id: totrans-14
   prefs: []
   type: TYPE_NORMAL
+  zh: 在企业场景中，需要提供基础设施并考虑所谓的水平扩展性，即 *N* 个相同的资源，这些资源将减少单个资源（如计算实例）以及整个应用的负载。
 - en: 'The challenge we will have to face is as follows:'
+  id: totrans-15
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们将面临的挑战如下：
 - en: Writing Terraform configuration that does not require duplicate code for each
     instance of identical resources to be provisioned
+  id: totrans-16
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 编写 Terraform 配置，无需为每个相同资源实例的配置重复代码
 - en: Being able to rapidly increase or reduce the number of instances of these resources
+  id: totrans-17
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 能够快速增加或减少这些资源的实例数量
 - en: We will see in this recipe how Terraform makes it possible to provision *N*
     instances of resources quickly and without the duplication of code.
+  id: totrans-18
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本食谱中，我们将看到 Terraform 如何使得快速配置 *N* 个资源实例成为可能，并且不会出现代码重复。
 - en: Getting ready
+  id: totrans-19
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 准备工作
 - en: 'To begin, we will use a Terraform configuration that allows us to provision
     one Azure App Service, which is in a `main.tf` file and of which the following
     is an extract:'
+  id: totrans-20
   prefs: []
   type: TYPE_NORMAL
+  zh: 首先，我们将使用一个 Terraform 配置，该配置允许我们配置一个 Azure App Service，它位于 `main.tf` 文件中，以下是其中的一个提取部分：
 - en: '[PRE0]'
+  id: totrans-21
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE0]'
 - en: The purpose of this recipe is to apply and modify this Terraform configuration
     to provision *N* Azure App Service instances identical to the one already described
     in the base code, with just a slight difference in the names, which use an incremental
     index number starting at `1`.
+  id: totrans-22
   prefs: []
   type: TYPE_NORMAL
+  zh: 本食谱的目的是应用并修改此 Terraform 配置，以配置 *N* 个 Azure App Service 实例，这些实例与在基础代码中已描述的实例相同，仅在名称上有细微差别，名称使用从
+    `1` 开始的递增索引号。
 - en: The source code of this recipe is available at [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP03/count](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP03/count).
+  id: totrans-23
   prefs: []
   type: TYPE_NORMAL
+  zh: 本配方的源代码可在[https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP03/count](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP03/count)找到。
 - en: How to do it…
+  id: totrans-24
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 如何操作……
 - en: 'To create multiple identical resources, perform the following steps:'
+  id: totrans-25
   prefs: []
   type: TYPE_NORMAL
+  zh: 要创建多个相同的资源，请执行以下步骤：
 - en: 'In the `variables.tf` file, we add the following variable:'
+  id: totrans-26
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在`variables.tf`文件中，我们添加了以下变量：
 - en: '[PRE1]'
+  id: totrans-27
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE1]'
 - en: 'In the `terraform.tfvars` file, we give a value for this new variable as follows:'
+  id: totrans-28
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在`terraform.tfvars`文件中，我们为这个新变量提供了以下值：
 - en: '[PRE2]'
+  id: totrans-29
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE2]'
 - en: 'In the `main.tf` file, we modify the resource code of `azurerm_app_service`
     in the following way:'
+  id: totrans-30
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在`main.tf`文件中，我们以以下方式修改了`azurerm_app_service`资源的代码：
 - en: '[PRE3]'
+  id: totrans-31
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE3]'
 - en: '(Optional:) In a new `outputs.tf` file, we add the output values with the following
     code:'
+  id: totrans-32
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: （可选：）在一个新的`outputs.tf`文件中，我们添加了以下代码来输出值：
 - en: '[PRE4]'
+  id: totrans-33
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE4]'
 - en: How it works…
+  id: totrans-34
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 它是如何工作的……
 - en: In *step 1*, we add an `nb_webapp` variable, which will contain the number of
     Azure App Service instances to write, which we then instantiate in *step 2* in
     the `terraform.tfvars` file.
+  id: totrans-35
   prefs: []
   type: TYPE_NORMAL
+  zh: 在*第 1 步*中，我们添加了一个`nb_webapp`变量，它将包含要写入的Azure App Service实例的数量，我们将在*第 2 步*中在`terraform.tfvars`文件中实例化该变量。
 - en: Then in *step 3*, in the `azurerm_app_service` resource, we add the Terraform
     `count` property (which is available for all resources and data Terraform blocks)
     and takes as a value the `nb_webapp` variable created previously.
+  id: totrans-36
   prefs: []
   type: TYPE_NORMAL
+  zh: 然后在*第 3 步*中，在`azurerm_app_service`资源中，我们添加了Terraform的`count`属性（该属性适用于所有资源和数据Terraform块），其值为之前创建的`nb_webapp`变量。
 - en: Moreover, in the `name` of the `azurerm_app_service` resource, we add the suffix
     with the current index of the count that we increment by 1 (starting from 1, and
     not from 0, to reflect the fact that count indexes start with zero) with the Terraform
     instruction `count.index + 1`.
+  id: totrans-37
   prefs: []
   type: TYPE_NORMAL
+  zh: 此外，在`azurerm_app_service`资源的`name`中，我们添加了一个后缀，表示当前`count`的索引，我们通过`count.index
+    + 1`将索引递增1（从1开始，而不是从0开始，以反映`count`索引从零开始的事实）。
 - en: Finally, and optionally, in *step 4*, we add an output that will contain the
     names of the App Service instances that have been provisioned.
+  id: totrans-38
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后，可选地，在*第 4 步*中，我们添加了一个输出，它将包含已配置的App Service实例的名称。
 - en: When executing the `terraform plan` command of this recipe with the `nb_webapp`
     variable equal to `2`, we can see that the two App Service instances have been
     provisioned.
+  id: totrans-39
   prefs: []
   type: TYPE_NORMAL
+  zh: 执行此配方的`terraform plan`命令时，`nb_webapp`变量等于`2`，我们可以看到已配置了两个App Service实例。
 - en: 'The following screenshots show an extract of this `terraform plan` command,
     with the first image displaying the preview changes for the first App Service:'
+  id: totrans-40
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下截图显示了此`terraform plan`命令的摘录，第一张图显示了第一个App Service的预览更改：
 - en: '![](img/3e294bf5-8210-46ac-ba62-6042164a7576.png)'
+  id: totrans-41
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/3e294bf5-8210-46ac-ba62-6042164a7576.png)'
 - en: 'This following screenshot, which is the continuation of the `terraform plan`
     command, displays the preview changes of the second App Service instance:'
+  id: totrans-42
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下截图是`terraform plan`命令的延续，显示了第二个App Service实例的预览更改：
 - en: '![](img/0a4c99f5-a475-4074-a113-42a4eb585787.png)'
+  id: totrans-43
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/0a4c99f5-a475-4074-a113-42a4eb585787.png)'
 - en: 'And when the changes are applied, the output is displayed:'
+  id: totrans-44
   prefs: []
   type: TYPE_NORMAL
+  zh: 当更改应用时，输出将显示如下：
 - en: '![](img/e0fdc725-947e-4b8c-852e-33305e2b1ccd.png)'
+  id: totrans-45
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/e0fdc725-947e-4b8c-852e-33305e2b1ccd.png)'
 - en: As you can see in the output, we have a list containing the names of the two
     generated App Service instances.
+  id: totrans-46
   prefs: []
   type: TYPE_NORMAL
+  zh: 正如您在输出中看到的，我们有一个列表，其中包含生成的两个App Service实例的名称。
 - en: There's more…
+  id: totrans-47
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 还有更多内容……
 - en: As we discussed in the *Manipulating variables* recipe in the previous chapter,
     we can also use the `-var` option of the `terraform plan` and `apply` commands
     to very easily increase or decrease the number of instances of this resource without
     having to modify the Terraform configuration.
+  id: totrans-48
   prefs: []
   type: TYPE_NORMAL
+  zh: 正如我们在上一章的*操作变量*配方中讨论的那样，我们还可以使用`terraform plan`和`apply`命令的`-var`选项，轻松增加或减少此资源的实例数量，而无需修改Terraform配置。
 - en: 'In our case, for example, we could use the following `plan` and `apply` command:'
+  id: totrans-49
   prefs: []
   type: TYPE_NORMAL
+  zh: 例如，在我们的案例中，我们可以使用以下`plan`和`apply`命令：
 - en: '[PRE5]'
+  id: totrans-50
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE5]'
 - en: However, with this option, we lose the benefits of IaC, which is the fact of
     writing everything in code and thus having a history of changes made to the infrastructure.
+  id: totrans-51
   prefs: []
   type: TYPE_NORMAL
+  zh: 然而，使用这种选项，我们失去了基础设施即代码（IaC）的好处，即将所有内容写入代码中，从而拥有基础设施更改历史记录的优势。
 - en: Moreover, it should be noted that lowering the `nb_webapp` value removes the
     last resources from the index, and it is not possible to remove resources that
     are in the middle of the index, which has been improved with the `for_each` expression that
     we will see in the *Looping over object collections* recipe in this chapter.
+  id: totrans-52
   prefs: []
   type: TYPE_NORMAL
+  zh: 此外，需要注意的是，降低`nb_webapp`值会将索引中的最后一部分资源移除，而无法移除位于索引中间的资源，这一点已经通过`for_each`表达式得到了改进，后者将在本章的*遍历对象集合*一节中讲解。
 - en: 'In addition, thanks to the `count` property we have just seen and the condition
     expressions we have studied in the *Writing conditional operations* recipe of
     [Chapter 2](3099c9ac-8c38-4e7d-8146-411fac26a2b7.xhtml)*, Writing Terraform Configuration*,
     we can make the provisioning of resources optional in a dynamic way, as shown
     in the following code snippet:'
+  id: totrans-53
   prefs: []
   type: TYPE_NORMAL
+  zh: 此外，感谢我们刚刚看到的`count`属性和我们在[第二章](3099c9ac-8c38-4e7d-8146-411fac26a2b7.xhtml)*编写
+    Terraform 配置*一节中学习的条件表达式，我们可以通过动态方式使资源的配置变得可选，如下所示的代码片段所示：
 - en: '[PRE6]'
+  id: totrans-54
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE6]'
 - en: In this code, we have indicated to Terraform that if the `use_appinsight` variable is
     `true`, then the count property is `1`, which will allow us to provision one Azure
     Application Insights resource. In the opposite case, where the `use_appinsight`
     variable is `false`, the `count` property is `0` and in this case, Terraform does
     not provide an Application Insight resource instance.
+  id: totrans-55
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这段代码中，我们已经告诉 Terraform，如果`use_appinsight`变量为`true`，那么`count`属性为`1`，这将允许我们配置一个
+    Azure Application Insights 资源。在相反的情况下，当`use_appinsight`变量为`false`时，`count`属性为`0`，此时，Terraform
+    不会提供 Application Insight 资源实例。
 - en: And so Terraform configuration can be put in a generic way for all environments
     or all applications and make their provisioning dynamic and conditional according
     to variables.
+  id: totrans-56
   prefs: []
   type: TYPE_NORMAL
+  zh: 这样，Terraform 配置可以以通用方式用于所有环境或所有应用程序，并根据变量动态和有条件地进行配置。
 - en: This technique, also called **feature flags**, is applied in the development
     world, but we see here that we can also apply it to IaC.
+  id: totrans-57
   prefs: []
   type: TYPE_NORMAL
+  zh: 这种技术，也称为**功能标志**，已被广泛应用于开发领域，但在这里我们看到，我们也可以将其应用于基础设施即代码（IaC）。
 - en: As we have seen in this recipe, the `count` property allows you to quickly provision
     several resources that are identical in their characteristics.
+  id: totrans-58
   prefs: []
   type: TYPE_NORMAL
+  zh: 正如我们在本节中看到的，`count`属性允许您快速配置多个在特性上相同的资源。
 - en: We will study in the *Looping over object collections* recipe of this chapter
     how to provision several resources of the same nature, but with different properties.
+  id: totrans-59
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们将在本章的*遍历对象集合*一节中学习如何配置多个相同性质但具有不同属性的资源。
 - en: See also
+  id: totrans-60
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 另见
 - en: For more information on the `count` property, refer to the documentation at [https://www.terraform.io/docs/configuration/resources.html#count-multiple-resource-instances-by-count](https://www.terraform.io/docs/configuration/resources.html#count-multiple-resource-instances-by-count).
+  id: totrans-61
   prefs: []
   type: TYPE_NORMAL
+  zh: 有关`count`属性的更多信息，请参阅文档：[https://www.terraform.io/docs/configuration/resources.html#count-multiple-resource-instances-by-count](https://www.terraform.io/docs/configuration/resources.html#count-multiple-resource-instances-by-count)。
 - en: Using a table of key-value variables with maps
+  id: totrans-62
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 使用键值变量表和映射
 - en: So far in this book, we have studied sample code using standard variable types
     (string, numeric, or Boolean). However, the Terraform language has other types
     of variables such as lists, maps, tuples, and even more complex object variables.
+  id: totrans-63
   prefs: []
   type: TYPE_NORMAL
+  zh: 到目前为止，在本书中，我们学习了使用标准变量类型（字符串、数字或布尔值）的示例代码。然而，Terraform 语言还有其他类型的变量，如列表、映射、元组，甚至更复杂的对象变量。
 - en: Among these variable types are maps, which are represented by a collection of
     key-value elements and are widely used to write dynamic and scalable Terraform
     configurations.
+  id: totrans-64
   prefs: []
   type: TYPE_NORMAL
+  zh: 这些变量类型中包括映射（maps），它们由一组键值元素表示，并广泛用于编写动态且可扩展的 Terraform 配置。
 - en: 'Maps can have several uses, which are as follows:'
+  id: totrans-65
   prefs: []
   type: TYPE_NORMAL
+  zh: 映射有多种用途，具体如下：
 - en: To put all the properties of a block in a Terraform resource into a single variable
+  id: totrans-66
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 将 Terraform 资源中一个块的所有属性放入一个单一变量中
 - en: To avoid the declaration of several variables of the **same type** and thus
     put all the values of these variables in a single variable of the `map` type
+  id: totrans-67
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 为了避免声明多个**相同类型**的变量，从而将这些变量的所有值放入一个`map`类型的单一变量中
 - en: To have a key-value reference table of elements that will be used in the Terraform
     configuration
+  id: totrans-68
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 拥有一个键值参考表，用于在 Terraform 配置中使用的元素
 - en: In this recipe, we will see a simple and practical case of using a map variable
     to dynamically define all the tags of an Azure resource.
+  id: totrans-69
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本节中，我们将看到一个使用映射变量来动态定义 Azure 资源所有标签的简单实用案例。
 - en: Getting ready
+  id: totrans-70
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 准备就绪
 - en: For this recipe, we start with a basic Terraform configuration that allows us
     to provision a Resource Group and an App Service instance in Azure.
+  id: totrans-71
   prefs: []
   type: TYPE_NORMAL
+  zh: 对于这个教程，我们从一个基本的Terraform配置开始，允许我们在Azure中创建一个资源组和一个应用服务实例。
 - en: The source code for this recipe is available at [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP03/map](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP03/map).
+  id: totrans-72
   prefs: []
   type: TYPE_NORMAL
+  zh: 这个教程的源代码可以在[https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP03/map](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP03/map)上找到。
 - en: 'In this recipe, we will illustrate the use of maps in two use cases, which
     are as follows:'
+  id: totrans-73
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这个教程中，我们将通过两个使用案例来演示如何使用映射，具体如下：
 - en: The implementation of the tags of this Resource Group
+  id: totrans-74
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 这个资源组的标签实现
 - en: The App settings properties of the App Service
+  id: totrans-75
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 应用服务的应用设置属性
 - en: How to do it…
+  id: totrans-76
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 如何做到这一点……
 - en: 'Perform the following steps:'
+  id: totrans-77
   prefs: []
   type: TYPE_NORMAL
+  zh: 执行以下步骤：
 - en: 'In the `variables.tf` file, we add the following variable declarations:'
+  id: totrans-78
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在`variables.tf`文件中，我们添加以下变量声明：
 - en: '[PRE7]'
+  id: totrans-79
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE7]'
 - en: 'Then, in the `terraform.tfvars` file, we add this code:'
+  id: totrans-80
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 然后，在`terraform.tfvars`文件中，我们添加了以下代码：
 - en: '[PRE8]'
+  id: totrans-81
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE8]'
 - en: 'Finally, we modify the `main.tf` file with the following code:'
+  id: totrans-82
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 最后，我们修改`main.tf`文件，加入以下代码：
 - en: '[PRE9]'
+  id: totrans-83
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE9]'
 - en: How it works…
+  id: totrans-84
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 它是如何工作的……
 - en: In *step 1*, we have declared two variables for which we have specified their
     type, which is `map (string)`. That is to say, it will be composed of elements
     of the key-value type and the value is in *string* format. Moreover, given that
     these variables can be omitted and their values are therefore optional, we have
     assigned them an empty default value, which is `{}` for `map`.
+  id: totrans-85
   prefs: []
   type: TYPE_NORMAL
+  zh: 在*步骤 1*中，我们声明了两个变量，并指定了它们的类型，即`map (string)`。也就是说，它将由键值对类型的元素组成，其中值的格式为*string*。此外，考虑到这些变量可以省略，因此它们的值是可选的，我们为它们分配了一个空的默认值，即`{}`，用于`map`。
 - en: Then, in *step 2*, we defined the values of these two variables with the tags
     for the resources, as well as the `app_settings` for the App Service.
+  id: totrans-86
   prefs: []
   type: TYPE_NORMAL
+  zh: 然后，在*步骤 2*中，我们用资源的标签以及应用服务的`app_settings`定义了这两个变量的值。
 - en: Finally, in *step 3*, we use these variables in the Terraform configuration
     that provides the Resource Group and the App Service.
+  id: totrans-87
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后，在*步骤 3*中，我们在Terraform配置中使用这些变量，以提供资源组和应用服务。
 - en: 'The following screenshot shows a sample of the execution of the `terraform
     plan` command in this recipe:'
+  id: totrans-88
   prefs: []
   type: TYPE_NORMAL
+  zh: 下图展示了在这个教程中执行`terraform plan`命令的示例：
 - en: '![](img/0bbda167-4c4f-4eb5-ad9f-9860a7ffeea7.png)'
+  id: totrans-89
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/0bbda167-4c4f-4eb5-ad9f-9860a7ffeea7.png)'
 - en: We can see in the previous screenshot that the `app_settings` and `tags` properties
     are populated with the values of the `map` variables.
+  id: totrans-90
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们可以从前面的截图中看到，`app_settings`和`tags`属性已经填充了`map`变量的值。
 - en: There's more…
+  id: totrans-91
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 还有更多……
 - en: Maps thus allow us to simplify the use of blocks of objects in resources, but
     be careful – it is not possible to put a variable inside `map`. A `map` type variable
     is therefore to be considered as a single block of variables.
+  id: totrans-92
   prefs: []
   type: TYPE_NORMAL
+  zh: 因此，映射使我们能够简化资源中对象块的使用，但要小心——不能将变量放入`map`中。`map`类型的变量因此应该被视为一个单独的变量块。
 - en: To go further, we can see that it is also possible to merge maps; that is, to
     merge two maps, we can use the `merge` function, which is native to Terraform.
+  id: totrans-93
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了进一步了解，我们可以看到也可以合并映射；也就是说，要合并两个映射，我们可以使用Terraform的原生`merge`函数。
 - en: 'The following steps show how to use this function to merge the app settings
     properties of the App Service:'
+  id: totrans-94
   prefs: []
   type: TYPE_NORMAL
+  zh: 接下来的步骤展示了如何使用这个函数合并应用服务的应用设置属性：
 - en: 'In the `variables.tf` file, we create a `custom_app_settings` variable that
     will contain the custom app settings provided by the user:'
+  id: totrans-95
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在`variables.tf`文件中，我们创建了一个`custom_app_settings`变量，它将包含用户提供的自定义应用设置：
 - en: '[PRE10]'
+  id: totrans-96
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE10]'
 - en: 'In the `terraform.tfvars` file, we instantiate this variable with a custom
     map:'
+  id: totrans-97
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在`terraform.tfvars`文件中，我们用一个自定义映射实例化了这个变量：
 - en: '[PRE11]'
+  id: totrans-98
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE11]'
 - en: 'Finally, in the `main.tf` file, we use a local variable to define the default
     app settings, and in the `azurerm_app_service` resource, we use the `merge` function
     to merge the default app settings with the custom app settings:'
+  id: totrans-99
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 最后，在`main.tf`文件中，我们使用本地变量定义了默认的应用设置，并在`azurerm_app_service`资源中，使用`merge`函数将默认应用设置与自定义应用设置合并：
 - en: '[PRE12]'
+  id: totrans-100
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE12]'
 - en: In the preceding code, we have defined default app settings properties for the
     Azure App Service, and the user can enrich these settings if needed by adding
     custom app settings.
+  id: totrans-101
   prefs: []
   type: TYPE_NORMAL
+  zh: 在之前的代码中，我们定义了Azure App Service的默认应用设置属性，用户可以在需要时通过添加自定义应用设置来丰富这些设置。
 - en: Moreover, it is also possible to create a `map` object on the fly, directly
     in the code, without having to use a variable.
+  id: totrans-102
   prefs: []
   type: TYPE_NORMAL
+  zh: 此外，也可以在代码中动态创建一个`map`对象，而无需使用变量。
 - en: 'For this, we can use the `{....}` syntax integrated to Terraform, which takes
     in a list of key values as parameters, as seen in the following code:'
+  id: totrans-103
   prefs: []
   type: TYPE_NORMAL
+  zh: 为此，我们可以使用Terraform集成的`{....}`语法，它将键值对列表作为参数，正如以下代码所示：
 - en: '[PRE13]'
+  id: totrans-104
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE13]'
 - en: In this recipe, we studied the use of maps. But if we want to use more complex
     maps with key-values of different types, then we will use object variables, as
     explained in the documentation at [https://www.terraform.io/docs/configuration/types.html#object-](https://www.terraform.io/docs/configuration/types.html#object-).
+  id: totrans-105
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这个食谱中，我们研究了映射的使用。但如果我们想使用具有不同类型键值对的更复杂的映射，那么我们将使用对象变量，具体内容可以参考文档 [https://www.terraform.io/docs/configuration/types.html#object-](https://www.terraform.io/docs/configuration/types.html#object-)。
 - en: In the following recipe, we will discuss how to iterate on the list of key-value
     elements that constitute a map variable.
+  id: totrans-106
   prefs: []
   type: TYPE_NORMAL
+  zh: 在下面的食谱中，我们将讨论如何对构成映射变量的键值对列表进行迭代。
 - en: See also
+  id: totrans-107
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 另见
 - en: The documentation relating to the merge function is available at [https://www.terraform.io/docs/configuration/functions/merge.html](https://www.terraform.io/docs/configuration/functions/merge.html).
+  id: totrans-108
   prefs: []
   type: TYPE_NORMAL
+  zh: 与merge函数相关的文档可以在 [https://www.terraform.io/docs/configuration/functions/merge.html](https://www.terraform.io/docs/configuration/functions/merge.html)查看。
 - en: Looping over object collections
+  id: totrans-109
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 遍历对象集合
 - en: We have seen in the previous recipes of the chapter the use of the `count` property,
     which allows us to provision *N* identical resources, as well as the use of map
     variables, which allow key-value objects.
+  id: totrans-110
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们在本章的前几个食谱中已经看到了`count`属性的使用，它允许我们配置*N*个相同的资源，以及使用映射变量，它允许键值对象。
 - en: In this recipe, we will discuss how to provision *N* resources of the same type
     but with different properties using the loop functionalities included in Terraform
     since version 0.12.
+  id: totrans-111
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这个食谱中，我们将讨论如何使用Terraform从0.12版本开始包含的循环功能来配置具有不同属性的*N*个相同类型的资源。
 - en: Getting ready
+  id: totrans-112
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 准备工作
 - en: To get started, we start with a basic Terraform configuration that allows you
     to deploy a single App Service in Azure.
+  id: totrans-113
   prefs: []
   type: TYPE_NORMAL
+  zh: 要开始，我们从一个基本的Terraform配置开始，这个配置允许你在Azure中部署一个单一的App Service。
 - en: 'The basic Terraform configuration is as follows:'
+  id: totrans-114
   prefs: []
   type: TYPE_NORMAL
+  zh: 基本的Terraform配置如下：
 - en: '[PRE14]'
+  id: totrans-115
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE14]'
 - en: The source code for this recipe is available at [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP03/list_map](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP03/list_map).
+  id: totrans-116
   prefs: []
   type: TYPE_NORMAL
+  zh: 这个食谱的源代码可以在 [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP03/list_map](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP03/list_map)找到。
 - en: How to do it…
+  id: totrans-117
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 如何操作…
 - en: 'Perform the following steps:'
+  id: totrans-118
   prefs: []
   type: TYPE_NORMAL
+  zh: 执行以下步骤：
 - en: 'In the `variables.tf` file, we add the following Terraform configuration:'
+  id: totrans-119
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在`variables.tf`文件中，我们添加以下Terraform配置：
 - en: '[PRE15]'
+  id: totrans-120
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE15]'
 - en: 'In the `terraform.tfvars` file, we add the following configuration:'
+  id: totrans-121
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在`terraform.tfvars`文件中，我们添加以下配置：
 - en: '[PRE16]'
+  id: totrans-122
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE16]'
 - en: 'In the `main.tf` file, we modify the code of the App Service with the following
     configuration:'
+  id: totrans-123
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在`main.tf`文件中，我们通过以下配置修改App Service的代码：
 - en: '[PRE17]'
+  id: totrans-124
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE17]'
 - en: 'Finally, in the `outputs.tf` file, we add the following code:'
+  id: totrans-125
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 最后，在`outputs.tf`文件中，我们添加以下代码：
 - en: '[PRE18]'
+  id: totrans-126
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE18]'
 - en: How it works…
+  id: totrans-127
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 它是如何工作的…
 - en: In *step 1*, we declared a new variable of type `any`, that is, we do not specify
     its type because it is complex.
+  id: totrans-128
   prefs: []
   type: TYPE_NORMAL
+  zh: 在*步骤1*中，我们声明了一个类型为`any`的新变量，也就是说，我们没有指定它的类型，因为它是复杂的。
 - en: It is worth noting that complex variables can be declared. It does make the
     code more verbose, but it can be very helpful in validation.
+  id: totrans-129
   prefs: []
   type: TYPE_NORMAL
+  zh: 值得注意的是，可以声明复杂的变量。虽然这会使代码更加冗长，但在验证时非常有帮助。
 - en: In *step 2*, we instantiate this variable with a list of map objects that will
     be the properties of each App Service. In this list, we have two App Service instances
     in which we specify the properties in the form of a map with the name, version
     of the framework, the Azure region location, and the name of the database server
     of the application that will be used in the App Service.
+  id: totrans-130
   prefs: []
   type: TYPE_NORMAL
+  zh: 在*步骤2*中，我们通过一个包含映射对象列表的变量实例化它，这些对象将成为每个App Service的属性。在这个列表中，我们有两个App Service实例，我们指定了框架名称、版本、Azure区域位置以及应用程序数据库服务器名称等属性，这些属性将被用于App
+    Service。
 - en: In *step 3*, in the `azurerm_app_service` resource, we don't use the `count`
     property anymore, but rather the `for_each` expression (which is included in Terraform
     0.12), which allows us to loop on lists.
+  id: totrans-131
   prefs: []
   type: TYPE_NORMAL
+  zh: 在*步骤3*中，在`azurerm_app_service`资源中，我们不再使用`count`属性，而是使用`for_each`表达式（这是Terraform
+    0.12版本中引入的），它允许我们对列表进行循环。
 - en: 'Then, for each property of `azurerm_app_service` resource, we can use the short
     expression `each.value["<property name>"]` or the `lookup` function integrated
     in Terraform that takes in the following parameters:'
+  id: totrans-132
   prefs: []
   type: TYPE_NORMAL
+  zh: 然后，对于`azurerm_app_service`资源的每个属性，我们可以使用简短表达式`each.value["<property name>"]`或Terraform中集成的`lookup`函数，该函数接受以下参数：
 - en: The current element of the `for_each` expression with `each.value`, thus the
     line of the list.
+  id: totrans-133
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`for_each`表达式的当前元素为`each.value`，即列表中的这一行。'
 - en: The name of the property of the map, which in our sample is `location`.
+  id: totrans-134
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 映射中属性的名称，在我们的示例中是`location`。
 - en: Then comes the third parameter of this lookup function, which is not mandatory.
     It allows you to specify the value to use if the property is not present in the
     map. We used the Azure West Europe region, which is the default value.
+  id: totrans-135
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 然后是`lookup`函数的第三个参数，它是可选的。它允许你指定在属性不存在于映射中时使用的值。我们使用的是Azure西欧地区，这是默认值。
 - en: Finally, in *step 4*, we created an output that uses the `for` expression to
     iterate on the list of resources that have been provisioned, and export their
     names as output.
+  id: totrans-136
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后，在*步骤 4*中，我们创建了一个输出，使用`for`表达式遍历已配置的资源列表，并将它们的名称作为输出导出。
 - en: 'The result of this output is shown in the following screenshot:'
+  id: totrans-137
   prefs: []
   type: TYPE_NORMAL
+  zh: 这个输出的结果如下图所示：
 - en: '![](img/45320b9d-4891-496d-800f-0f8ca252a22b.png)'
+  id: totrans-138
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/45320b9d-4891-496d-800f-0f8ca252a22b.png)'
 - en: In the previous screenshot, we can see the result of the output, which displays
     the name of two provisioned Azure App Service instances in the console.
+  id: totrans-139
   prefs: []
   type: TYPE_NORMAL
+  zh: 在之前的截图中，我们可以看到输出的结果，它在控制台中显示了两个已配置的Azure App Service实例的名称。
 - en: There's more…
+  id: totrans-140
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 还有更多……
 - en: In this recipe, we have learned expressions and functions from the Terraform
     language that allows for the provisioning of resource collections.
+  id: totrans-141
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本例中，我们学习了Terraform语言中的表达式和函数，允许对资源集合进行配置。
 - en: I advise you to take a good look at the articles and documentation on the `for`
     and `for_each` expressions. Regarding the `lookup` and `element` functions, they
     can be used, but it is preferable to use the native syntax instead (such as `var_name[42]` and `var_map["key"]`)
     to access elements of a map, list, or set.
+  id: totrans-142
   prefs: []
   type: TYPE_NORMAL
+  zh: 我建议你仔细阅读关于`for`和`for_each`表达式的文章和文档。至于`lookup`和`element`函数，它们是可以使用的，但最好使用本地语法（例如`var_name[42]`和`var_map["key"]`）来访问映射、列表或集合的元素。
 - en: It is obvious that in this recipe, we have used simple resources such as Azure
     App Service, but these methods can also be applied to more property-rich resources
     such as virtual machines.
+  id: totrans-143
   prefs: []
   type: TYPE_NORMAL
+  zh: 很明显，在本例中，我们使用了简单的资源，如Azure App Service，但这些方法也可以应用于更富属性的资源，如虚拟机。
 - en: See also
+  id: totrans-144
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 另见
 - en: Documentation on loops with `for` and `for_each` is available at [https://www.terraform.io/docs/configuration/resources.html](https://www.terraform.io/docs/configuration/resources.html),
     and the article on these loops can be found at [https://www.hashicorp.com/blog/hashicorp-terraform-0-12-preview-for-and-for-each/](https://www.hashicorp.com/blog/hashicorp-terraform-0-12-preview-for-and-for-each/).
+  id: totrans-145
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 关于`for`和`for_each`循环的文档可以在[https://www.terraform.io/docs/configuration/resources.html](https://www.terraform.io/docs/configuration/resources.html)找到，关于这些循环的文章可以在[https://www.hashicorp.com/blog/hashicorp-terraform-0-12-preview-for-and-for-each/](https://www.hashicorp.com/blog/hashicorp-terraform-0-12-preview-for-and-for-each/)找到。
 - en: The documentation on the `lookup` function is available at [https://www.terraform.io/docs/configuration/functions/lookup.html](https://www.terraform.io/docs/configuration/functions/lookup.html).
+  id: totrans-146
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 关于`lookup`函数的文档可以在[https://www.terraform.io/docs/configuration/functions/lookup.html](https://www.terraform.io/docs/configuration/functions/lookup.html)找到。
 - en: Generating multiple blocks with dynamic expressions
+  id: totrans-147
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 使用动态表达式生成多个块
 - en: 'Terraform resources are defined by the following elements:'
+  id: totrans-148
   prefs: []
   type: TYPE_NORMAL
+  zh: Terraform资源由以下元素定义：
 - en: Properties that are in the form `property name = value`, which we have seen
     several times in this book
+  id: totrans-149
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 以`property name = value`形式出现的属性，这在本书中已经看到过好几次
 - en: Blocks that represent a grouping of properties, such as the `site_config` block
     inside the `azurerm_app_service` resource
+  id: totrans-150
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 表示属性分组的块，例如`azurerm_app_service`资源中的`site_config`块
 - en: Depending on the Terraform resource, a block can be present once or even multiple
     times in the same resource, such as the `security_rule` block inside the `azurerm_network_security_group` resource
     (see the documentation, for example, at [https://www.terraform.io/docs/providers/azurerm/r/network_security_group.html](https://www.terraform.io/docs/providers/azurerm/r/network_security_group.html)).
+  id: totrans-151
   prefs: []
   type: TYPE_NORMAL
+  zh: 根据 Terraform 资源的不同，一个区块可以在同一资源中出现一次，甚至多次，例如 `azurerm_network_security_group`
+    资源中的 `security_rule` 区块（例如，参见文档：[https://www.terraform.io/docs/providers/azurerm/r/network_security_group.html](https://www.terraform.io/docs/providers/azurerm/r/network_security_group.html)）。
 - en: Until Terraform version 0.12, it was not possible to make these blocks present
     several times in the same resource dynamically using, for example, a variable
     of `list` type.
+  id: totrans-152
   prefs: []
   type: TYPE_NORMAL
+  zh: 在 Terraform 0.12 之前，无法通过动态方式在同一资源中多次呈现这些区块，例如使用 `list` 类型的变量。
 - en: One of the great novelties of Terraform 0.12 is the new `dynamic` expression
     that allows us to loop the blocks in resources.
+  id: totrans-153
   prefs: []
   type: TYPE_NORMAL
+  zh: Terraform 0.12 的一个重要新特性是新的 `dynamic` 表达式，它允许我们在资源中循环处理区块。
 - en: In this recipe, we will see how to use the dynamic expression to provision an `azurerm_network_security_group`
     resource in Azure, which contains a list of security rules.
+  id: totrans-154
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本食谱中，我们将看到如何使用动态表达式在 Azure 中配置一个 `azurerm_network_security_group` 资源，其中包含一组安全规则。
 - en: Getting ready
+  id: totrans-155
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 准备工作
 - en: To get started, we don't need any basic Terraform configuration. In this recipe,
     we will use a Terraform file that allows us to create an Azure Resource Group
     in which we will create a Network Security Group.
+  id: totrans-156
   prefs: []
   type: TYPE_NORMAL
+  zh: 要开始使用，我们不需要任何基础的 Terraform 配置。在本食谱中，我们将使用一个 Terraform 文件，允许我们创建一个 Azure 资源组，在其中我们将创建一个网络安全组。
 - en: The source code for this recipe is available at [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP03/dynamics](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP03/dynamics).
+  id: totrans-157
   prefs: []
   type: TYPE_NORMAL
+  zh: 本食谱的源代码可以在 [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP03/dynamics](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP03/dynamics)
+    找到。
 - en: How to do it…
+  id: totrans-158
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 如何做到这一点…
 - en: 'To use dynamic expressions, perform the following steps:'
+  id: totrans-159
   prefs: []
   type: TYPE_NORMAL
+  zh: 要使用动态表达式，请执行以下步骤：
 - en: 'In the `variables.tf` file, we add the following code:'
+  id: totrans-160
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在 `variables.tf` 文件中，我们添加以下代码：
 - en: '[PRE19]'
+  id: totrans-161
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE19]'
 - en: 'In the `terraform.tfvars` file, we add the following code:'
+  id: totrans-162
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在 `terraform.tfvars` 文件中，我们添加以下代码：
 - en: '[PRE20]'
+  id: totrans-163
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE20]'
 - en: 'In the `main.tf` file, we add the code for the Network Security Group with
     the following code:'
+  id: totrans-164
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在 `main.tf` 文件中，我们使用以下代码添加网络安全组（Network Security Group）：
 - en: '[PRE21]'
+  id: totrans-165
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE21]'
 - en: How it works…
+  id: totrans-166
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 它是如何工作的…
 - en: In *step 1*, we create an `nsg_rules` variable of type `any`, which will contain
     the list of rules in map format.
+  id: totrans-167
   prefs: []
   type: TYPE_NORMAL
+  zh: 在 *步骤 1* 中，我们创建了一个类型为 `any` 的 `nsg_rules` 变量，它将包含以映射格式表示的规则列表。
 - en: Then, in *step 2*, we instantiate this `nsg_rules` variable with the list of
     rules and their properties.
+  id: totrans-168
   prefs: []
   type: TYPE_NORMAL
+  zh: 然后，在 *步骤 2* 中，我们实例化了这个 `nsg_rules` 变量，并传入规则列表及其属性。
 - en: Finally, in *step 3*, in the `azurerm_network_security_group` resource, we add
     the `dynamic` instruction, which allows us to generate *N* blocks of `security_rule`.
+  id: totrans-169
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后，在 *步骤 3* 中，在 `azurerm_network_security_group` 资源中，我们添加了 `dynamic` 指令，这使我们能够生成
+    *N* 个 `security_rule` 区块。
 - en: In this `dynamic` Terraform expression, we make a `for_each` loop (as seen in
     the *Looping over object collections* recipe earlier in this chapter), which will
     iterate on the lines of the `nsg_rules` variable and will map each property of
     the resource to the maps of the list.
+  id: totrans-170
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这个 `dynamic` Terraform 表达式中，我们使用了一个 `for_each` 循环（如本章前面的 *循环遍历对象集合* 食谱中所示），它将迭代
+    `nsg_rules` 变量的每一行，并将资源的每个属性映射到列表的映射中。
 - en: 'This following screenshot shows the execution of the `terraform plan` command:'
+  id: totrans-171
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下截图显示了 `terraform plan` 命令的执行：
 - en: '![](img/8174d0fc-466c-40fe-b2ef-076abf3ca640.png)'
+  id: totrans-172
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/8174d0fc-466c-40fe-b2ef-076abf3ca640.png)'
 - en: We can see the list of security rules in the preceding output.
+  id: totrans-173
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们可以在前面的输出中看到安全规则的列表。
 - en: There's more…
+  id: totrans-174
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 还有更多内容…
 - en: 'If you want to render the presence of a block conditionally, you can also use
     the conditions in the `dynamic` expression, as shown in the following code example:'
+  id: totrans-175
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你想有条件地呈现一个区块的存在，你也可以使用 `dynamic` 表达式中的条件，如下所示：
 - en: '[PRE22]'
+  id: totrans-176
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE22]'
 - en: In this example, in the `for_each` expression of the `dynamic` expression, we
     have a condition that returns a list with one element if the local value, `use_boot_diagnostics`,
     is true. Otherwise, this condition returns an empty list that will not make the
     `boot_diagnostics` block appear in the `azurerm_virtual_machine` resource.
+  id: totrans-177
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这个例子中，在 `dynamic` 表达式的 `for_each` 表达式中，我们有一个条件，如果本地值 `use_boot_diagnostics`
+    为 true，则返回一个包含一个元素的列表。否则，这个条件返回一个空列表，这样就不会在 `azurerm_virtual_machine` 资源中出现 `boot_diagnostics`
+    区块。
 - en: See also
+  id: totrans-178
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 另见
 - en: Documentation on dynamic expressions is available at [https://www.terraform.io/docs/configuration/expressions.html#dynamic-blocks](https://www.terraform.io/docs/configuration/expressions.html#dynamic-blocks).
+  id: totrans-179
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 关于动态表达式的文档可以在[https://www.terraform.io/docs/configuration/expressions.html#dynamic-blocks](https://www.terraform.io/docs/configuration/expressions.html#dynamic-blocks)找到。
 - en: Another example of a Terraform guide on dynamic expressions is available at [https://github.com/hashicorp/terraform-guides/tree/master/infrastructure-as-code/terraform-0.12-examples/advanced-dynamic-blocks](https://github.com/hashicorp/terraform-guides/tree/master/infrastructure-as-code/terraform-0.12-examples/advanced-dynamic-blocks).
+  id: totrans-180
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 另一个关于动态表达式的Terraform指南示例可以在[https://github.com/hashicorp/terraform-guides/tree/master/infrastructure-as-code/terraform-0.12-examples/advanced-dynamic-blocks](https://github.com/hashicorp/terraform-guides/tree/master/infrastructure-as-code/terraform-0.12-examples/advanced-dynamic-blocks)找到。

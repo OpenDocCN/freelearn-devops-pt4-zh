@@ -2188,6 +2188,10 @@
   id: totrans-328
   prefs: []
   type: TYPE_NORMAL
+  zh: 你可能会认为这些机密应该保存在某个安全的地方——你是对的！如果你想探索将机密存储在 Git 中的想法，以便它们也能变得*GitOpsy*（是的，我刚才确实又发明了一个词），那么我们可以使用
+    Bitnami 的 SealedSecrets。它提供了一个加密机密的控制器，允许我们以明文形式存储它们。这意味着我们可以将它们提交到 Git！通过 SealedSecret
+    自定义资源的魔力，它会解密 SealedSecret，并代表你创建一个常规的 Kubernetes 秘密。我们已经编写了 Jenkins Helm 图表来接受
+    SealedSecrets，正是为了这个原因！
 - en: You can deploy SealedSecrets to the cluster by enabling it in the Ubiquitous
     Journey Git project. Open up `bootstrap/values-bootstrap.yaml`. It's as simple
     as changing the `enabled` flag to `true` and, of course, Git committing the changes.
@@ -2198,6 +2202,9 @@
   id: totrans-329
   prefs: []
   type: TYPE_NORMAL
+  zh: 你可以通过在 Ubiquitous Journey Git 项目中启用它，将 SealedSecrets 部署到集群中。打开 `bootstrap/values-bootstrap.yaml`。只需将
+    `enabled` 标志更改为 `true`，然后当然是 Git 提交这些更改。这样将会与 Argo CD 同步，并在你的集群中创建一个 Bitnami SealedSecrets
+    实例，默认情况下在 `labs-ci-cd` 命名空间中。由于这是我们正在向工具中添加的新组件，当然我们也应该更新我们的 Big Picture，并添加描述我们如何使用它的句子。
 - en: '[PRE118]'
   id: totrans-330
   prefs: []
@@ -2223,18 +2230,21 @@
   id: totrans-334
   prefs: []
   type: TYPE_NORMAL
+  zh: 一旦控制器创建完成，我们可以通过以下几个步骤来加密我们的机密：
 - en: 'Install `kubeseal` using the instructions found on their GitHub releases page:
     [https://github.com/bitnami-labs/sealed-secrets/releases](https://github.com/bitnami-labs/sealed-secrets/releases).'
   id: totrans-335
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 使用他们的 GitHub 发布页面上的说明安装 `kubeseal`：[https://github.com/bitnami-labs/sealed-secrets/releases](https://github.com/bitnami-labs/sealed-secrets/releases)。
 - en: Log in to the cluster where SealedSecrets is deployed and take note of the namespace
     (in our case this defaults to `labs-ci-cd`).
   id: totrans-336
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 登录到部署了 SealedSecrets 的集群并注意命名空间（在我们的例子中，默认为 `labs-ci-cd`）。
 - en: 'Process your existing secret using the `kubeseal` command-line utility. It
     is important to set the correct namespace otherwise the secret will not be unsealed.
     In this case, we''re going to seal it as `super-dooper-secret`. It should look
@@ -2243,6 +2253,7 @@
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 使用 `kubeseal` 命令行工具处理你现有的机密。设置正确的命名空间非常重要，否则机密将无法解密。在这种情况下，我们将其加密为 `super-dooper-secret`。它应该看起来像这样：
 - en: '[PRE122]'
   id: totrans-338
   prefs:
@@ -2258,6 +2269,8 @@
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 现在，你可以直接将该机密应用到集群中进行验证，但你*应该*通过将其提交到 Git 来使用 Argo CD 将其添加到集群中。如果它不在 Git 中，那就不算真正的机密。在这里，我们可以看到
+    SealedSecret 在应用到集群之前的样子。如你所见，对于我们加密的每个变量，它是一个非常大的加密字符串：
 - en: '[PRE123]'
   id: totrans-340
   prefs:
@@ -2272,6 +2285,8 @@
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 要*GitOpsify*（是的，我刚才确实发明了这个词），打开 `ubiquitous-journey/values-tooling.yaml` 中的
+    Jenkins 配置。使用机密生成步骤的输出将加密信息添加到每个密钥，按照如下所示设置 Jenkins `sealed_secrets` 的值。此处示例已为提高可读性而进行了裁剪：
 - en: '[PRE124]'
   id: totrans-342
   prefs:
@@ -2286,11 +2301,15 @@
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 如果你已经在*步骤 4*中手动应用了机密，请通过运行 `cat /tmp/sealed-super-dooper.yaml | oc delete -f-
+    -n labs-ci-cd` 删除它。然后 `Git commit` 这些更改，这样它们就可以供 Jenkins 使用，更重要的是，保存在 Git 中。在
+    Argo CD 中，我们应该看到 SealedSecret 生成了一个常规的机密。![](img/B16297_14_29.jpg)
 - en: 'Figure 14.29: SealedSecrets from Argo CD'
   id: totrans-344
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: 图 14.29：来自 Argo CD 的 SealedSecrets
 - en: 'In Jenkins, we should see all that the synchronized secrets using the `magic`
     annotation (`credential.sync.jenkins.openshift.io: "true"`) have become available.![](img/B16297_14_30.jpg)'
   id: totrans-345
@@ -2443,14 +2462,21 @@
   id: totrans-365
   prefs: []
   type: TYPE_NORMAL
+  zh: 构建阶段应始终获取源代码，进行编译，执行一些静态代码检查（lint）和测试，然后生成软件包，并将其存储到 Nexus。我们应生成测试报告，并在决定是否失败构建时由
+    Jenkins 进行解读。我们正在构建一个 Angular 应用程序，但 Jenkins 不知道如何执行 `npm` 或其他基于 JavaScript 的命令，因此我们需要告诉它使用包含
+    `npm` 二进制文件的代理。这时，我们在 Jenkins 部署中启动的代理将派上用场。每个构建的代理都会将所需的二进制文件（即 `npm`）扩展到基础代理镜像中，并推送到集群中。这个
+    ImageStream 将被标记为 `role=jenkins-slave`，这样如果它们在同一命名空间中运行，Jenkins 就能自动发现它。为了使用这个，我们只需要配置
+    Jenkins 阶段使用 `agent { label "jenkins-agent-npm" }`。
 - en: '![](img/B16297_14_32.jpg)'
   id: totrans-366
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/B16297_14_32.jpg)'
 - en: 'Figure 14.32: Jenkins agent discovery magic'
   id: totrans-367
   prefs: []
   type: TYPE_NORMAL
+  zh: 图 14.32：Jenkins 代理发现魔法
 - en: The Build stage will use this agent and execute some steps. The first thing
     is to capture the app's version to be used throughout the pipeline by reading
     the app's manifest (`pom.xml` for Java or `package.json` for Node). This version
@@ -2461,10 +2487,14 @@
   id: totrans-368
   prefs: []
   type: TYPE_NORMAL
+  zh: 构建阶段将使用此代理并执行一些步骤。首先需要捕获应用程序的版本，以便在整个管道中使用，通过读取应用程序的清单文件（Java 使用 `pom.xml`，Node
+    使用 `package.json`）。此版本随后将用于所有生成的工件，包括我们的镜像和 Helm 图表版本，并应遵循语义化版本控制（SemVer）（例如，`<major>.<minor>.<patch>
+    = 1.0.1`）。接下来，我们将拉取依赖项，运行测试，进行代码静态检查，构建代码，并将结果发布到 Jenkins，将软件包发布到 Nexus。
 - en: 'This will display in the Jenkins declarative pipeline like so:'
   id: totrans-369
   prefs: []
   type: TYPE_NORMAL
+  zh: 这将在 Jenkins 声明式流水线中显示如下：
 - en: '[PRE125]'
   id: totrans-370
   prefs: []
@@ -2672,20 +2702,28 @@
   id: totrans-409
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们的 Bake 阶段将始终获取上一步的输出，在这种情况下是存储在 Nexus 中的软件包，并将其放入容器中。在我们的案例中，我们将执行一个 OpenShift
+    构建。这将导致软件包被添加到基础容器中并推送到仓库。如果我们正在执行沙箱构建，比如在某个分支上开发新特性，那么我们不关心将镜像推送到外部——因此可以使用 OpenShift
+    的内部注册表。如果这个构建是发布候选版本，那么我们将推送到 Quay.io（我们用于存储镜像的外部注册表）。Bake 阶段的步骤细节可以在本书配套的 Git
+    仓库中找到：[https://github.com/petbattle/pet-battle/blob/master/Jenkinsfile](https://github.com/petbattle/pet-battle/blob/master/Jenkinsfile)。
 - en: From a bird's-eye view, the idea is to get the package from Nexus and then create
     an OpenShift `BuildConfig` with a binary build and pass the package to it. You
     should then see the build execute in the OpenShift cluster.
   id: totrans-410
   prefs: []
   type: TYPE_NORMAL
+  zh: 从鸟瞰图来看，整个过程的思路是从 Nexus 获取软件包，然后创建一个 OpenShift `BuildConfig`，进行二进制构建，并将软件包传递给它。然后你应该能看到构建在
+    OpenShift 集群中执行。
 - en: '![](img/B16297_14_33.jpg)'
   id: totrans-411
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/B16297_14_33.jpg)'
 - en: 'Figure 14.33: Jenkins stages outline for Bake and Deploy'
   id: totrans-412
   prefs: []
   type: TYPE_NORMAL
+  zh: 图 14.33：Jenkins 阶段概述：Bake 和 Deploy
 - en: The deployment will take the application that has just been packaged up with
     its dependencies and deploy it to our cluster. Initially, we will push the application
     to our `labs-test` environment. We want to package the application and its Kubernetes
@@ -2695,12 +2733,16 @@
   id: totrans-413
   prefs: []
   type: TYPE_NORMAL
+  zh: 部署将把刚刚打包好的应用及其依赖项部署到我们的集群中。最初，我们会将应用推送到 `labs-test` 环境。我们希望将应用及其 Kubernetes
+    资源打包为 Helm 图表，因此在部署过程中，我们将使用最新的发布版本来更新 values 文件中引用的应用版本。因此，我们的部署阶段被分为两个部分。
 - en: The first one patches the Helm chart with the new image information, as well
     as any repository configuration, such as where to find the image we just Baked!
     This is then stored in Nexus, which can be used as a Helm chart repository.
   id: totrans-414
   prefs: []
   type: TYPE_NORMAL
+  zh: 第一个步骤是将新的镜像信息和任何仓库配置（例如，我们刚刚构建的镜像所在位置）补丁到 Helm 图表中！然后将其存储在 Nexus 中，可以用作 Helm
+    图表仓库。
 - en: Secondly, it will install this Helm chart. Depending on what branch we're on,
     this behavior of how the application will be deployed differs. If we're building
     on `master` or `main`, it is a release candidate, so there is no more `oc` applying
@@ -2711,19 +2753,25 @@
   id: totrans-415
   prefs: []
   type: TYPE_NORMAL
+  zh: 其次，它将安装这个 Helm 图表。根据我们所在的分支，应用部署的行为有所不同。如果我们在 `master` 或 `main` 上构建，它是发布候选版本，因此不再使用
+    `oc` 应用配置——这是 GitOps 环境！相反，我们可以将最新的更改提交到我们的 Argo CD 配置仓库（Ubiquitous Journey）。如果我们按正确的方式操作，这个仓库中的提交应该是大部分自动化的。通过这种方式管理我们的应用使得回滚变得容易——我们所需要做的只是
+    Git revert！
 - en: '![](img/B16297_14_34.jpg)'
   id: totrans-416
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/B16297_14_34.jpg)'
 - en: 'Figure 14.34: Jenkins automated commit of the new version from a pipeline run'
   id: totrans-417
   prefs: []
   type: TYPE_NORMAL
+  zh: 图 14.34：Jenkins 从管道运行自动提交新版本
 - en: Branching
   id: totrans-418
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 分支
 - en: Our pipeline is designed to work on *multibranch*, creating new pipeline instances
     for every branch that is committed to in Git. It is intended to have slightly
     different behavior on each branch. In our world, anything that gets merged to
@@ -2737,6 +2785,9 @@
   id: totrans-419
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们的管道设计用于在 *多分支* 环境中工作，为 Git 中提交的每个分支创建新的管道实例。每个分支的行为稍有不同。在我们的世界中，任何合并到 `master`
+    或 `main` 的内容都被视为发布候选版本。这意味着，当开发人员准备合并代码时，他们会修改 `package.json` 版本（或 Java 项目的 `pom.xml`
+    版本），以便尝试通过管道并最终部署到生产环境。我们可以自动化版本管理，但因为我们的工作流程一直很简单，所以由开发人员来管理版本，他们最了解是否是补丁、次要版本或主要版本。
 - en: 'This means that anything not on the `main` or `master` branch is deemed to
     be a sandbox execution of the pipeline. If something is a sandbox build, it is
     there to provide fast feedback to the developers of the current state of development
@@ -2747,6 +2798,7 @@
   id: totrans-420
   prefs: []
   type: TYPE_NORMAL
+  zh: 这意味着，任何不在 `main` 或 `master` 分支上的内容都被视为管道的沙箱执行。如果某个构建是沙箱构建，它的作用是为开发人员提供该功能当前开发状态的快速反馈。如果它失败了，它还可以作为其他工程师的警告，表明该内容还不准备合并。沙箱构建应该被看作是临时的——我们不希望它们一直存在——因此我们对管道做了一些关键修改以适应这一点：
 - en: '**Internal registry**: If our built image is pushed to our external repository,
     it will become clogged up and messy with unnecessary images. Every time a developer
     commits to any branch it would create new images, so it can introduce a cleanup
@@ -2757,6 +2809,7 @@
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: '**内部注册表**：如果我们将构建的镜像推送到外部仓库，它会变得拥挤且凌乱，充满了不必要的镜像。每次开发者提交到任何分支时都会创建新的镜像，这可能会引发清理的麻烦；因此我们使用内部注册表，它会自动为我们修剪旧镜像。只有在我们知道某个发布可能会进入生产环境时，才会使用外部注册表。'
 - en: '**Helm install**: For our deployments, we''re not interested in bringing in
     a heavyweight tool like Argo CD to manage the development/sandbox deployments.
     It''s unnecessary, so we just use Jenkins to execute a Helm install instead. This
@@ -2767,23 +2820,29 @@
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: '**Helm 安装**：对于我们的部署，我们并不希望引入像 Argo CD 这样的重量级工具来管理开发/沙盒环境的部署。它并不是必须的，所以我们只是使用
+    Jenkins 来执行 Helm 安装。这样可以验证我们的应用程序能按预期进行部署。我们使用 Argo CD 和 GitOps 来管理测试和预发布环境中的部署，但对于任何低环境，我们也应该把它们视作临时环境（就像测试和预发布环境一样）。'
 - en: This approach allows us to support many different types of Git workflow. We
     can support GitHub Flow, Gitflow, and Trunk, all via the same consistent approach
     to the pipelines.
   id: totrans-423
   prefs: []
   type: TYPE_NORMAL
+  zh: 这种方法允许我们支持多种不同类型的 Git 工作流。我们可以通过相同的流水线方法支持 GitHub Flow、Gitflow 和 Trunk。
 - en: Webhooks
   id: totrans-424
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: Webhooks
 - en: Before we actually trigger Jenkins to build things for us, it's important to
     add a few webhooks to make our development faster. We need two, one for the Argo
     CD config repo and one for Jenkins in our source code repository.
   id: totrans-425
   prefs: []
   type: TYPE_NORMAL
+  zh: 在我们实际触发 Jenkins 为我们构建之前，添加一些 webhook 来加速我们的开发是非常重要的。我们需要两个，一个用于 Argo CD 配置仓库，一个用于
+    Jenkins，放在我们的源代码仓库中。
 - en: When we commit a new change to the Git repositories that Argo CD is watching
     for, it polls. The poll time is configurable, but who can be bothered to wait
     at all? Argo CD allows you to configure a webhook to tell it to initiate a sync
@@ -2791,6 +2850,8 @@
   id: totrans-426
   prefs: []
   type: TYPE_NORMAL
+  zh: 当我们向 Argo CD 监视的 Git 仓库提交新更改时，它会进行轮询。轮询时间是可以配置的，但谁愿意浪费时间等待呢？Argo CD 允许你配置 webhook
+    来通知它，在更改发生时启动同步操作。
 - en: This is particularly important if we want things to happen after Argo CD has
     worked its magic, such as in a system test. Our pipeline in Jenkins runs synchronously,
     but Argo CD is asynchronous and therefore anything we can do to reduce the wait
@@ -2798,25 +2859,32 @@
   id: totrans-427
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果我们希望在 Argo CD 完成操作后进行某些操作（例如系统测试），这尤其重要。我们在 Jenkins 中的流水线是同步运行的，而 Argo CD
+    是异步的，因此任何能减少这些行为之间等待时间的做法都是至关重要的。
 - en: On GitHub, we can configure the webhook for Ubiquitous Journey to trigger Argo
     CD whenever the repository updates. On GitHub, add the webhook with the address
     of our Argo CD server followed by `/api/webhook`.
   id: totrans-428
   prefs: []
   type: TYPE_NORMAL
+  zh: 在 GitHub 上，我们可以配置 Ubiquitous Journey 的 webhook，当仓库更新时触发 Argo CD。在 GitHub 上，添加一个
+    webhook，地址为我们的 Argo CD 服务器地址后面加上 `/api/webhook`。
 - en: '![](img/B16297_14_35.jpg)'
   id: totrans-429
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/B16297_14_35.jpg)'
 - en: 'Figure 14.35: Webhook to trigger Argo CD on Git commit'
   id: totrans-430
   prefs: []
   type: TYPE_NORMAL
+  zh: 图 14.35：在 Git 提交时触发 Argo CD 的 Webhook
 - en: Jenkins
   id: totrans-431
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: Jenkins
 - en: Every time we commit to our source code repository, we want Jenkins to run a
     build. We're using the multibranch plugin for Jenkins, so this means that when
     we commit to the repository, the webhook will trigger a branch scan, which should
@@ -2825,6 +2893,7 @@
   id: totrans-432
   prefs: []
   type: TYPE_NORMAL
+  zh: 每次我们向源代码仓库提交时，都希望 Jenkins 执行构建。我们使用的是 Jenkins 的多分支插件，这意味着当我们向仓库提交时，webhook 会触发一个分支扫描，这应该会拉取任何新的功能分支来构建流水线或为任何新代码提交创建构建。
 - en: Configuring the Jenkins webhook for the `pet-battle` frontend is simple. On
     GitHub's *Hooks* page, add the URL to our Jenkins instance in the following form,
     where the trigger token is the name of our GitHub project. As a convention, I
@@ -2834,6 +2903,10 @@
   id: totrans-433
   prefs: []
   type: TYPE_NORMAL
+  zh: 配置 `pet-battle` 前端的 Jenkins webhook 非常简单。在 GitHub 的 *Hooks* 页面上，添加我们的 Jenkins
+    实例的 URL，格式如下，其中触发令牌是我们 GitHub 项目的名称。作为一种约定，我倾向于使用 Git 项目的名称作为令牌，因此如果你使用 Jenkins
+    构建后端，后端也会采用相同的方法：`JENKINS_URL/multibranch-webhook-trigger/invoke?token=[Trigger
+    token]`
 - en: 'For example, the frontend application''s webhook URL would look something like
     this:'
   id: totrans-434
@@ -2962,14 +3035,19 @@
   id: totrans-450
   prefs: []
   type: TYPE_NORMAL
+  zh: 对于我们认为是发布候选版本的主分支，构建的工件可能会一直沿着流水线走。如果我们正在更新应用程序，我们会更新清单版本，并且提交Git，这应该会触发构建。从这个点开始，我们的构建环境已经配置好，流水线应该开始执行。我们将目标指向外部仓库，构建的镜像将推送到Quay.io，以便在多个集群之间进行移植。我们的Helm
+    chart的值会被修补并推送到Nexus进行存储。如果我们需要更新Helm chart本身，例如添加一些新的配置到chart中或添加一个新的Kubernetes资源，我们当然也应该更新chart的版本。对于我们的部署，我们会修补Argo
+    CD配置仓库（Ubiquitous Journey）并提供新的发布信息，它应该会自动同步并将我们的应用程序部署到`labs-test`命名空间！然后，我们会运行验证步骤，检查正在发布的版本是否与新版本匹配（基于标签），并且已经成功。
 - en: '![](img/B16297_14_38.jpg)'
   id: totrans-451
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/B16297_14_38.jpg)'
 - en: 'Figure 14.38: Jenkins feature development pipeline'
   id: totrans-452
   prefs: []
   type: TYPE_NORMAL
+  zh: 图14.38：Jenkins特性开发流水线
 - en: For our feature branches, the idea is much the same, but without the need for
     an external repository. Our charts are also manipulated to override the name to
     include the branch. This means that on each commit to a feature branch, we get
@@ -2979,17 +3057,20 @@
   id: totrans-453
   prefs: []
   type: TYPE_NORMAL
+  zh: 对于我们的功能分支，思路大致相同，但不需要外部仓库。我们的charts也会被修改，以覆盖名称并包括分支。这意味着，每次向功能分支提交时，我们都会部署一个新的应用程序，路由中包含分支名称。因此，对于我们的`cool-new-cat`分支，应用程序将作为`cool-new-cat-pet-battle`部署，并在开发环境中可用。
 - en: The remaining stages that were added to the Big Picture, System Test and Promote,
     will be covered in the next chapter, when we look in more detail at the testing
     for PetBattle.
   id: totrans-454
   prefs: []
   type: TYPE_NORMAL
+  zh: Big Picture中新增的其余阶段，系统测试和推广，将在下一章中详细讨论，我们将更详细地了解PetBattle的测试。
 - en: What's Next for Jenkinsfile
   id: totrans-455
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: Jenkinsfile的下一步
 - en: Jenkins has been around for quite some time. It is not the most container-native
     approach to building software but there is a rich ecosystem surrounding it. It's
     lasted a long time because people like it! Hopefully, this gives you a taste of
@@ -3005,6 +3086,7 @@
   id: totrans-456
   prefs: []
   type: TYPE_NORMAL
+  zh: Jenkins已经存在一段时间了。它不是构建软件的最容器化方法，但周围有一个丰富的生态系统。它能够持续这么长时间，因为大家喜欢它！希望这能让你对我们PetBattle应用程序中Jenkins的应用有所了解，但这远不是终点。故事中还是有一些漏洞的，正如你们中的一些人可能已经注意到了。例如，一旦构建成功部署到测试环境，我该如何将其进一步推广？我是否需要做更多的测试？好吧，答案将在下一章给出，我们将探讨系统测试，并进一步扩展我们的流水线以包含推广镜像的步骤。在成功的流水线执行结束时，我们仓库中的值文件并未更新；我们应该考虑将成功构建的工件细节写回到仓库中，这样它总是能够设置一个合理的默认值，指向当前已部署的内容。
 - en: The stages we have written here are fairly massive and do have some `bash` and
     other logic inside of them. If you were to build a non-frontend application, for
     example, you would want to build something in Golang. For the most part, the only
@@ -3020,14 +3102,17 @@
   id: totrans-457
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们在这里写的阶段非常庞大，确实包含一些`bash`和其他逻辑。例如，如果你要构建一个非前端应用程序，你可能会想用Golang来构建。大部分情况下，唯一需要改变的是构建阶段，因为将某个东西放入容器以及我们如何打包我们的Helm图表并部署应用程序的方式保持不变。一旦应用程序（无论是使用什么语言或框架）被放入容器中，那么我们如何运输它也保持不变。这意味着在Bake和Deploy阶段重用代码的潜力很高，从而降低了在OpenShift等平台上采用新技术的门槛。但是要小心——在大量应用程序的多个任务中复制粘贴相同的步骤可能会导致某个错误被复制到各处。对管道的修改也可能变得很昂贵，因为你需要更新每个仓库中的每个`Jenkinsfile`。
 - en: '![](img/B16297_14_39.jpg)'
   id: totrans-458
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/B16297_14_39.jpg)'
 - en: 'Figure 14.39: A lurking dragon, watch out!'
   id: totrans-459
   prefs: []
   type: TYPE_NORMAL
+  zh: 图 14.39：潜伏的龙，小心！
 - en: Jenkins does tackle these problems with the use of shared libraries, and more
     recently the **Jenkins Templating Engine** (**JTE**). The JTE tackles the problem
     by enforcing pipeline approaches from a governance point of view. While this might
@@ -3035,6 +3120,7 @@
   id: totrans-460
   prefs: []
   type: TYPE_NORMAL
+  zh: Jenkins通过使用共享库来解决这些问题，最近还引入了**Jenkins模板引擎**（**JTE**）。JTE通过从治理的角度强制执行管道方法来解决这个问题。虽然这看起来像是一种很好的方式来在企业范围内实现标准化，但这里有潜在的风险！
 - en: Applying a standard pipeline without justification or the ability for teams
     to pull requests and make changes for their own specific use case is the same
     as having Dev and Ops in separate rooms. We've worked with plenty of customers
@@ -3046,26 +3132,31 @@
   id: totrans-461
   prefs: []
   type: TYPE_NORMAL
+  zh: 应用一个标准管道而没有正当理由，或者不给团队提供拉取请求并针对其特定用例做出更改的能力，就相当于将开发和运维分隔开来。我们与许多客户合作过，他们曾尝试过类似的方法，最终发现这让他们的速度变慢，而不是加快。那些实施管道的团队认为自己在提供帮助和优质服务，但当事情出错时，他们却成了修复的瓶颈。对于一些团队来说，采用强硬方法可能不适合他们的用例，因此管道就成了他们加速发展的障碍。
 - en: Tekton is another way for us to get greater pipeline reusability and also honor
     more of our GitOps landscape. Let's explore it now for our Java microservices.
   id: totrans-462
   prefs: []
   type: TYPE_NORMAL
+  zh: Tekton是另一种让我们实现更高管道重用性的方式，同时也更好地支持我们的GitOps架构。现在让我们来探讨它在Java微服务中的应用。
 - en: Tekton–The Backend
   id: totrans-463
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: Tekton—后端
 - en: Tekton[8](#footnote-086) is an open source cloud-native CI/CD tool that forms
     the basis for OpenShift Pipelines.[9](#footnote-085)
   id: totrans-464
   prefs: []
   type: TYPE_NORMAL
+  zh: Tekton[8](#footnote-086)是一个开源的云原生CI/CD工具，构成了OpenShift管道的基础。[9](#footnote-085)
 - en: Tekton Basics
   id: totrans-465
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: Tekton基础知识
 - en: There are many similarities between what Jenkins does and what Tekton does.
     For example, both can be used to store pipeline definitions as code in a Git repository.
     Tekton is deployed as an operator in our cluster and allows users to define in
@@ -3075,26 +3166,33 @@
   id: totrans-466
   prefs: []
   type: TYPE_NORMAL
+  zh: Jenkins和Tekton之间有很多相似之处。例如，两者都可以用来将管道定义作为代码存储在Git仓库中。Tekton作为一个运算符部署在我们的集群中，允许用户在YAML文件中定义`Pipeline`和`Task`。Tekton
+    Hub[10](#footnote-084)是一个用于共享这些YAML资源的仓库，能够为标准工作流提供极高的重用性。
 - en: '[8](#footnote-086-backlink) [https://tekton.dev](https://tekton.dev)'
   id: totrans-467
   prefs: []
   type: TYPE_NORMAL
+  zh: '[8](#footnote-086-backlink) [https://tekton.dev](https://tekton.dev)'
 - en: '[9](#footnote-085-backlink) [https://docs.openshift.com/container-platform/4.7/cicd/pipelines/understanding-openshift-pipelines.html](https://docs.openshift.com/container-platform/4.7/cicd/pipelines/understanding-openshift-pipelines.html)'
   id: totrans-468
   prefs: []
   type: TYPE_NORMAL
+  zh: '[9](#footnote-085-backlink) [https://docs.openshift.com/container-platform/4.7/cicd/pipelines/understanding-openshift-pipelines.html](https://docs.openshift.com/container-platform/4.7/cicd/pipelines/understanding-openshift-pipelines.html)'
 - en: '[10](#footnote-084-backlink) [https://hub.tekton.dev](https://hub.tekton.dev)'
   id: totrans-469
   prefs: []
   type: TYPE_NORMAL
+  zh: '[10](#footnote-084-backlink) [https://hub.tekton.dev](https://hub.tekton.dev)'
 - en: '![](img/B16297_14_40.jpg)'
   id: totrans-470
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/B16297_14_40.jpg)'
 - en: 'Figure 14.40: Tekton Hub and OpenShift Cluster tasks'
   id: totrans-471
   prefs: []
   type: TYPE_NORMAL
+  zh: '图 14.40: Tekton Hub 和 OpenShift 集群任务'
 - en: OpenShift also makes these available globally as `ClusterTasks`. To write a
     pipeline you can wire together these task definitions. OpenShift provides a guided
     `Pipeline` builder UI for just this task. You link various tasks together and
@@ -3102,14 +3200,18 @@
   id: totrans-472
   prefs: []
   type: TYPE_NORMAL
+  zh: OpenShift 还将这些任务作为 `ClusterTasks` 在全局范围内提供。要编写一个流水线，你可以将这些任务定义串联在一起。OpenShift
+    提供了一个引导式的 `Pipeline` 构建器 UI 来完成这项任务。你将不同的任务连接在一起，并根据每个任务定义中的要求，定义参数和输出。
 - en: '![](img/B16297_14_41.jpg)'
   id: totrans-473
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/B16297_14_41.jpg)'
 - en: 'Figure 14.41: OpenShift Pipeline builder UI'
   id: totrans-474
   prefs: []
   type: TYPE_NORMAL
+  zh: '图 14.41: OpenShift 流水线构建器 UI'
 - en: 'There are numerous task activities in our pipeline definitions that require
     persistent storage. When building our backend PetBattle API and Tournament applications
     using Maven, we pull our Java dependencies via our Nexus repository manager. To
@@ -3121,6 +3223,9 @@
   id: totrans-475
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们的流水线定义中有许多任务活动需要持久化存储。在使用 Maven 构建我们的后端 PetBattle API 和 Tournament 应用程序时，我们通过
+    Nexus 仓库管理器拉取 Java 依赖项。为了加速这个过程，我们可以在本地执行与笔记本电脑上相同的缓存操作，并将这些依赖项存储在 `.m2/repository`
+    文件夹中，跨构建共享它们。我们还使用持久化存储来存储构建后的工件，以便它们可以在流水线的不同步骤之间共享。另一个用例是将 Kubernetes 秘密挂载到我们的流水线中：
 - en: '[PRE168]'
   id: totrans-476
   prefs: []
@@ -3303,11 +3408,14 @@
   id: totrans-511
   prefs: []
   type: TYPE_NORMAL
+  zh: 在 Tekton 中，我们通过命名的 `workspaces` 将这些 Kubernetes 对象链接起来，当我们创建所谓的 `PipelineRun`
+    时，后者代表一次流水线运行的代码。同样，单个任务的执行是 `TaskRun`。每个 `workspace` 随后会作为该 `PipelineRun` 中任务的资源，如下所示。
 - en: Reusable Pipelines
   id: totrans-512
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 可重用流水线
 - en: There are some choices to be made before you start writing and designing your
     Tekton pipeline. The first is to choose whether you write a pipeline for each
     application, or whether you write reusable pipelines that can be used for applications
@@ -3315,6 +3423,7 @@
   id: totrans-513
   prefs: []
   type: TYPE_NORMAL
+  zh: 在开始编写和设计 Tekton 流水线之前，有一些选择需要做出。第一个选择是决定是为每个应用编写一个流水线，还是编写可重用的流水线，这些流水线可以用于相似的应用程序。
 - en: In PetBattle, we started with one pipeline per application; this is similar
     to having a `Jenkinsfile` in each application Git repository. Both the API and
     Tournament PetBattle applications are built using Java, Quarkus, and Maven, so
@@ -3324,14 +3433,19 @@
   id: totrans-514
   prefs: []
   type: TYPE_NORMAL
+  zh: 在 PetBattle 中，我们开始时为每个应用程序编写一个流水线；这类似于在每个应用程序的 Git 仓库中都有一个 `Jenkinsfile`。API
+    和 Tournament PetBattle 应用程序都使用 Java、Quarkus 和 Maven 构建，因此将流水线代码整合并为这两个应用程序编写一个可重用的参数化流水线是有意义的，因为它们始终有相似的任务。我们在
+    PetBattle 中使用 `maven-pipeline` 来实现这一点。
 - en: '![](img/B16297_14_42.jpg)'
   id: totrans-515
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/B16297_14_42.jpg)'
 - en: 'Figure 14.42: PetBattle''s Tekton pipelines'
   id: totrans-516
   prefs: []
   type: TYPE_NORMAL
+  zh: '图 14.42: PetBattle 的 Tekton 流水线'
 - en: Of course, you could keep the reuse to the `Task` level only but we share common
     tasks across the PetBattle UI, API, and Tournament applications. Ultimately, the
     development team has to balance the benefits of maintaining one pipeline over
@@ -3339,11 +3453,13 @@
   id: totrans-517
   prefs: []
   type: TYPE_NORMAL
+  zh: 当然，你也可以将重用限制在 `Task` 级别，但我们在 PetBattle 的 UI、API 和 Tournament 应用程序之间共享公共任务。最终，开发团队必须权衡维护一个流水线和每个应用程序流水线自治之间的利弊。没有放之四海而皆准的答案。
 - en: Build, Bake, Deploy with Tekton
   id: totrans-518
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 使用 Tekton 进行构建、打包和部署
 - en: The next step is to start designing what we put into our pipeline. This is a
     very iterative process! In our Big Picture, we talked about the Build, Bake, and
     Deploy process, so it makes sense to add pipeline task steps that follow this
@@ -3351,14 +3467,17 @@
   id: totrans-519
   prefs: []
   type: TYPE_NORMAL
+  zh: 下一步是开始设计我们在流水线中使用的内容。这是一个非常迭代的过程！在我们的宏观图中，我们讨论了构建、打包和部署过程，因此增加遵循此方法论的流水线任务步骤是有意义的。
 - en: '![](img/B16297_14_43.jpg)'
   id: totrans-520
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/B16297_14_43.jpg)'
 - en: 'Figure 14.43: The list of task definitions used by PetBattle''s Tekton Pipelines'
   id: totrans-521
   prefs: []
   type: TYPE_NORMAL
+  zh: 图 14.43：PetBattle 的 Tekton 流水线使用的任务定义列表
 - en: The `maven-pipeline` starts by cloning the application and CI/CD (Ubiquitous
     Journey) repositories into the shared `workspace`. We check the code quality by
     invoking Maven to build and test the application, with quality reports being uploaded
@@ -3366,6 +3485,8 @@
   id: totrans-522
   prefs: []
   type: TYPE_NORMAL
+  zh: '`maven-pipeline` 开始通过将应用程序和 CI/CD（普遍旅程）代码库克隆到共享的 `workspace` 中。我们通过调用 Maven
+    来构建和测试应用程序，从而检查代码质量，质量报告会被上传到我们的 SonarQube 镜像中。'
 - en: We check that the quality gate in SonarQube has passed and then invoke Maven
     to package our application. Tekton offers us useful constructs to retry a task
     step if it fails by specifying the number of `retries` as well as the ordering
@@ -3373,6 +3494,8 @@
   id: totrans-523
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们检查 SonarQube 中的质量门是否通过，然后调用 Maven 来打包我们的应用程序。Tekton 提供了有用的构造，允许我们在任务步骤失败时通过指定
+    `retries` 数量以及使用 `runAfter` 任务名称列表来重新尝试任务步骤。
 - en: '[PRE203]'
   id: totrans-524
   prefs: []
@@ -3443,19 +3566,24 @@
   id: totrans-536
   prefs: []
   type: TYPE_NORMAL
+  zh: 在 Java Quarkus 中，打包格式可以是 fat JAR、爆炸式快速 JAR 或基于 GraalVM 的本地镜像。这些格式各有利弊。[11](#footnote-083)
+    然而，在 PetBattle 中，我们使用的是爆炸式快速 JAR，这让我们在更快的构建时间和更快的启动时间之间做出权衡。这是构建阶段的结束。我们将单元测试向左移动到流水线中，这样在进入打包和部署阶段之前，我们可以快速反馈任何代码质量问题。
 - en: '![](img/B16297_14_44.jpg)'
   id: totrans-537
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/B16297_14_44.jpg)'
 - en: 'Figure 14.44: The view of a PipelineRun in OpenShift showing the tasks being
     executed'
   id: totrans-538
   prefs: []
   type: TYPE_NORMAL
+  zh: 图 14.44：在 OpenShift 中查看 PipelineRun，显示正在执行的任务
 - en: '[11](#footnote-083-backlink) [https://quarkus.io/guides/maven-tooling](https://quarkus.io/guides/maven-tooling)'
   id: totrans-539
   prefs: []
   type: TYPE_NORMAL
+  zh: '[11](#footnote-083-backlink) [https://quarkus.io/guides/maven-tooling](https://quarkus.io/guides/maven-tooling)'
 - en: The Bake stage is next. We use a standard OpenShift BuildConfig object, which
     is loaded using Kustomize, as we do not package that with our Helm chart. We perform
     a binary build using the `oc start build` command on the packaged application.
@@ -3467,14 +3595,19 @@
   id: totrans-540
   prefs: []
   type: TYPE_NORMAL
+  zh: 接下来是打包阶段。我们使用一个标准的 OpenShift BuildConfig 对象，并通过 Kustomize 加载它，因为我们没有将其与 Helm
+    图表一起打包。我们使用 `oc start build` 命令在打包的应用程序上执行二进制构建。我们决定不将构建好的应用程序包上传到 Nexus，因为我们希望使用容器镜像作为部署单元。如果我们正在构建需要支持我们服务的库，那么这些库应该在这个阶段被捕获到
+    Nexus 中。值得指出的是，我们也可以在此时将镜像推送到外部注册中心，这样它可以在 OpenShift 集群之间轻松共享。
 - en: '![](img/B16297_14_45.jpg)'
   id: totrans-541
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/B16297_14_45.jpg)'
 - en: 'Figure 14.45: Bake part of the pipeline'
   id: totrans-542
   prefs: []
   type: TYPE_NORMAL
+  zh: 图 14.45：流水线的打包部分
 - en: 'The next step is to lint and package the application Helm chart. The versioned
     chart is then uploaded to Nexus. If we were on an application branch, the next
     pipeline step would be a `helm install` into the `labs-dev` project. We can make
@@ -3482,6 +3615,8 @@
   id: totrans-543
   prefs: []
   type: TYPE_NORMAL
+  zh: 下一步是进行代码检查并打包应用程序的 Helm 图表。然后，将版本化的图表上传到 Nexus。如果我们在应用程序分支上，下一步流水线操作将是将 `helm
+    install` 安装到 `labs-dev` 项目中。我们可以在 Tekton 流水线中利用 `when` 语句来配置这种行为：
 - en: '[PRE215]'
   id: totrans-544
   prefs: []
@@ -3528,33 +3663,43 @@
   id: totrans-551
   prefs: []
   type: TYPE_NORMAL
+  zh: 当在 trunk/HEAD 上时，ImageStream 会被版本化并打标签到我们将要部署应用程序的命名空间（`labs-test`、`labs-staging`）。由于我们在实践
+    GitOps，应用程序是通过 Argo CD 和 Git 部署的。Argo CD 的应用程序的值文件会更新为新的图表和镜像版本。这些文件会通过管道检查并执行
+    `git commit`。Argo CD 配置为自动同步我们在 `labs-test` 和 `labs-staging` 中的应用程序，管道的最后一步是确保同步任务成功。
 - en: '![](img/B16297_14_46.jpg)'
   id: totrans-552
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/B16297_14_46.jpg)'
 - en: 'Figure 14.46: Deploy part of the pipeline'
   id: totrans-553
   prefs: []
   type: TYPE_NORMAL
+  zh: 图 14.46：管道的部署部分
 - en: There is a lot of pipeline information available to the developer in the OpenShift
     web console and all of the pipeline task logs can be easily seen.
   id: totrans-554
   prefs: []
   type: TYPE_NORMAL
+  zh: 在 OpenShift web 控制台中，开发人员可以访问到大量的管道信息，所有管道任务的日志也可以轻松查看。
 - en: '![](img/B16297_14_47.jpg)'
   id: totrans-555
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/B16297_14_47.jpg)'
 - en: 'Figure 14.47: Tekton pipeline progress and status hover'
   id: totrans-556
   prefs: []
   type: TYPE_NORMAL
+  zh: 图 14.47：Tekton 管道进度和状态悬浮
 - en: Tekton also has a great command-line tool called `tkn`, which can be used to
     perform all of the pipeline actions available in the OpenShift console, such as
     viewing logs, starting pipeline runs, and defining Tekton objects.
   id: totrans-557
   prefs: []
   type: TYPE_NORMAL
+  zh: Tekton 还提供了一个非常好的命令行工具，叫做 `tkn`，它可以用于执行 OpenShift 控制台中所有可用的管道操作，例如查看日志、启动管道运行和定义
+    Tekton 对象。
 - en: '[PRE222]'
   id: totrans-558
   prefs: []
@@ -3564,6 +3709,7 @@
   id: totrans-559
   prefs: []
   type: TYPE_NORMAL
+  zh: 名称 启动时间 持续时间 状态
 - en: '[PRE223]'
   id: totrans-560
   prefs: []
@@ -3598,11 +3744,13 @@
   id: totrans-566
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在让我们来看看如何触发构建。
 - en: Triggers and Webhooks
   id: totrans-567
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 触发器和 Webhooks
 - en: On every developer push to Git, we wish to trigger a build. This ensures we
     get the fastest feedback for all of our code changes. In Tekton this is achieved
     by using an `EventListener` pod object. When created, a pod is deployed, exposing
@@ -3610,14 +3758,18 @@
   id: totrans-568
   prefs: []
   type: TYPE_NORMAL
+  zh: 每次开发人员将代码推送到 Git 时，我们希望触发一个构建。这确保了我们可以最快地获得所有代码变更的反馈。在 Tekton 中，这是通过使用一个 `EventListener`
+    pod 对象来实现的。创建时，会部署一个 pod，暴露我们定义的触发器操作。
 - en: '![](img/B16297_14_48.jpg)'
   id: totrans-569
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/B16297_14_48.jpg)'
 - en: 'Figure 14.48: Tekton Triggers flow'
   id: totrans-570
   prefs: []
   type: TYPE_NORMAL
+  zh: 图 14.48：Tekton 触发器流
 - en: 'Tekton Triggers work by having `EventListener` objects receive incoming webhook
     notifications, processing them using an interceptor, and creating Kubernetes resources
     from templates if the interceptor allows it, with the extraction of fields from
@@ -3625,6 +3777,8 @@
   id: totrans-571
   prefs: []
   type: TYPE_NORMAL
+  zh: Tekton 触发器通过让 `EventListener` 对象接收传入的 webhook 通知来工作，使用拦截器处理这些通知，并根据拦截器的允许从模板中创建
+    Kubernetes 资源，同时从 webhook 的正文中提取字段（假设正文是一个 JSON 文件）：
 - en: '[PRE229]'
   id: totrans-572
   prefs: []
@@ -3707,6 +3861,9 @@
   id: totrans-587
   prefs: []
   type: TYPE_NORMAL
+  zh: 在 OpenShift 中，我们将 `EventListener` 的 webhook 端点作为路由暴露，以便可以将其连接到 Git。不同类型的 `TriggerBinding`
+    被传递到我们的 `TriggerTemplate`。然后，`TriggerTemplate` 定义了要创建的 Tekton 资源。在我们的案例中，这是一个
+    `PipelineRun` 或 `TaskRun` 定义。
 - en: '[PRE244]'
   id: totrans-588
   prefs: []
@@ -3821,20 +3978,27 @@
   id: totrans-608
   prefs: []
   type: TYPE_NORMAL
+  zh: Tekton使用一种表达式语言，称为**通用表达式语言**（**CEL**），[13](#footnote-081)用来根据JSON主体和请求头解析和过滤请求。这是必要的，因为Webhook的有效载荷和Git工作流可能会有所不同。例如，我们使用GitHub，并且将拉取请求与对我们的main/HEAD分支的更改视为不同。我们在上述示例中所做的一项自定义是，根据Git仓库名称在触发绑定中定义Argo
+    CD的app-of-apps键。这使我们可以在管道的部署阶段检查只更改了的那个应用的同步状态，而不是整个应用套件。虽然触发过程看起来复杂，但在处理各种Git
+    SCM和开发团队可用的工作流时，这种灵活性是必需的。
 - en: '[12](#footnote-082-backlink) [https://docs.github.com/en/developers/webhooks-and-events/webhook-events-and-payloads](https://docs.github.com/en/developers/webhooks-and-events/webhook-events-and-payloads)'
   id: totrans-609
   prefs: []
   type: TYPE_NORMAL
+  zh: '[12](#footnote-082-backlink) [https://docs.github.com/en/developers/webhooks-and-events/webhook-events-and-payloads](https://docs.github.com/en/developers/webhooks-and-events/webhook-events-and-payloads)'
 - en: '[13](#footnote-081-backlink) [https://github.com/google/cel-go](https://github.com/google/cel-go)'
   id: totrans-610
   prefs: []
   type: TYPE_NORMAL
+  zh: '[13](#footnote-081-backlink) [https://github.com/google/cel-go](https://github.com/google/cel-go)'
 - en: There are some convenience templates loaded into the `labs-ci-cd` project by
     Ubiquitous Journey that can be used to manually trigger a `PipelineRun`—this is
     handy if you have not configured the GitHub webhook yet.
   id: totrans-611
   prefs: []
   type: TYPE_NORMAL
+  zh: 有一些便捷的模板已经被Ubiquitous Journey加载到`labs-ci-cd`项目中，可以用于手动触发`PipelineRun`——如果你还没有配置GitHub
+    webhook，这个功能非常有用。
 - en: '[PRE264]'
   id: totrans-612
   prefs: []
@@ -3855,6 +4019,7 @@
   id: totrans-615
   prefs: []
   type: TYPE_NORMAL
+  zh: 你可以手动将webhook添加到你的GitHub项目中[14](#footnote-080)，指向在`labs-ci-cd`项目中暴露的`EventListener`路由。
 - en: '[PRE267]'
   id: totrans-616
   prefs: []
@@ -3865,11 +4030,13 @@
   id: totrans-617
   prefs: []
   type: TYPE_NORMAL
+  zh: 否则，查看PetBattle Ubiquitous Journey文档，了解可以运行的Tekton任务，这些任务能够自动将这些webhook添加到你的Git仓库中。
 - en: GitOps our Pipelines
   id: totrans-618
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: GitOps我们的管道
 - en: Our pipeline, task, trigger, workspace, and volume definitions are themselves
     applied to our `labs-ci-cd` project using GitOps. The idea here is to minimize
     how hard it is to adapt our pipelines. We may want to add some more security checks
@@ -3880,6 +4047,7 @@
   id: totrans-619
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们的管道、任务、触发器、工作空间和卷定义本身通过GitOps应用到`labs-ci-cd`项目中。这里的想法是最小化我们对管道进行适应的难度。例如，我们可能想要在管道步骤中增加一些安全检查。如果测试失败，或者生产环境中的服务失败，我们就需要调整管道，以适应更多的质量控制或测试步骤。添加新工具或修改任务步骤仅仅是将管道代码定义推送到Git中而已。
 - en: '[PRE268]'
   id: totrans-620
   prefs: []
@@ -3931,15 +4099,18 @@
   id: totrans-629
   prefs: []
   type: TYPE_NORMAL
+  zh: 在我们的Tekton源文件夹中，我们使用Kustomize来应用所有定义Tekton对象的YAML文件。这些管道对象通过Argo CD保持同步。
 - en: '[14](#footnote-080-backlink) [https://docs.github.com/en/developers/webhooks-and-events/creating-webhooks](https://docs.github.com/en/developers/webhooks-and-events/creating-webhooks)'
   id: totrans-630
   prefs: []
   type: TYPE_NORMAL
+  zh: '[14](#footnote-080-backlink) [https://docs.github.com/en/developers/webhooks-and-events/creating-webhooks](https://docs.github.com/en/developers/webhooks-and-events/creating-webhooks)'
 - en: Which One Should I Use?
   id: totrans-631
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 我应该使用哪个？
 - en: 'The CI/CD tooling landscape is massive[15](#footnote-079) and also extremely
     vibrant and healthy. The CNCF landscape for tools in this category has no less
     than 36 products and projects today. In trying to answer the question of which
@@ -3947,6 +4118,7 @@
   id: totrans-632
   prefs: []
   type: TYPE_NORMAL
+  zh: CI/CD工具的生态系统庞大[15](#footnote-079)，并且充满活力和健康。CNCF在这个类别中的工具生态系统今天有不少于36个产品和项目。在试图回答“我应该使用哪一个？”这个问题时，最好考虑多个因素：
 - en: Does your team have previous skills in a certain tooling or language? For example,
     pipelines as code in Jenkins use the Groovy language, so if your team has Groovy
     or JavaScript skills, this could be a good choice.
@@ -3954,6 +4126,8 @@
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 你的团队是否拥有某些工具或语言的相关经验？例如，Jenkins 中的代码流水线使用 Groovy 语言，因此如果你的团队具有 Groovy 或 JavaScript
+    技能，这可能是一个不错的选择。
 - en: Does the tool integrate with the platform easily? Most of the tools in CNCF
     have good integration with Kubernetes already and have a cloud-native pedigree.
     That does not mean that all tools are the same in terms of deployment, platform
@@ -3967,6 +4141,9 @@
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 该工具是否能与平台轻松集成？CNCF 中的大多数工具已与 Kubernetes 良好集成，并且具有云原生的血统。但这并不意味着所有工具在部署、平台集成或生命周期管理方面都是相同的——有些可能只是**软件即服务**（**SaaS**）形式的工具，使用代理进行部署，而另一些则可以通过在集群中使用命名空间隔离为每个团队进行部署。还有一些工具，如
+    Argo CD 和 Tekton，可以使用操作器模式在集群范围内部署，并通过**操作器生命周期管理器**（**OLM**）来管理它们的生命周期。由于 OpenShift
+    Pipelines 操作器的存在，Tekton 与 OpenShift 的 Web 控制台集成非常出色。
 - en: 'Tool deployment model: Jenkins and Argo CD both have a client-server model
     for deployment. This can be problematic at larger scales, such as when looking
     after thousands of pipelines or hundreds of applications. It may be necessary
@@ -3977,6 +4154,8 @@
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 工具部署模型：Jenkins 和 Argo CD 都采用客户端-服务器模型进行部署。在大规模应用时可能会遇到问题，例如需要管理成千上万的流水线或数百个应用程序。可能需要使用多个部署来扩展到不同团队和集群。Argo
+    CD 和 Tekton 使用 CRD 和操作器模式扩展 Kubernetes，因此它们的部署在扩展模型上更符合 Kubernetes 本地化。
 - en: 'Enterprise support: Most, but not all, the tools have vendor support. This
     is important for enterprise organizations that need a relationship with a vendor
     to cover certification, training, security fixes, and product lifecycles.'
@@ -3984,18 +4163,22 @@
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 企业支持：大多数工具都提供供应商支持，但并非所有工具都有。这对于需要与供应商建立关系的企业组织至关重要，以涵盖认证、培训、安全修复和产品生命周期等问题。
 - en: '[15](#footnote-079-backlink) [https://landscape.cncf.io/card-mode?category=continuous-integration-delivery&grouping=category](https://landscape.cncf.io/card-mode?category=continuous-integration-delivery&grouping=category)'
   id: totrans-637
   prefs: []
   type: TYPE_NORMAL
+  zh: '[15](#footnote-079-backlink) [https://landscape.cncf.io/card-mode?category=continuous-integration-delivery&grouping=category](https://landscape.cncf.io/card-mode?category=continuous-integration-delivery&grouping=category)'
 - en: '![](img/B16297_14_49.jpg)'
   id: totrans-638
   prefs: []
   type: TYPE_IMG
+  zh: '![](img/B16297_14_49.jpg)'
 - en: 'Figure 14.49: CNCF CI/CD tooling landscape'
   id: totrans-639
   prefs: []
   type: TYPE_NORMAL
+  zh: 图 14.49：CNCF CI/CD 工具生态图
 - en: 'Active open-source communities: A vibrant upstream community is important as
     a place to collaborate and share code and knowledge. Rapid development of features
     and plugins often occurs in a community based on real user problems and requests.'
@@ -4003,6 +4186,7 @@
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 活跃的开源社区：一个充满活力的上游社区非常重要，它是合作、共享代码和知识的场所。功能和插件的快速开发通常源自一个基于实际用户问题和需求的社区。
 - en: One tool for both CI and CD or use different tools? As we have shown with PetBattle,
     sometimes it makes sense for CI to be a push-type model, and CD to be a pull-type
     model using different tools.
@@ -4010,6 +4194,7 @@
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 使用同一工具进行 CI 和 CD，还是使用不同的工具？正如我们在 PetBattle 中所展示的那样，有时 CI 使用推式模型，CD 使用拉式模型并使用不同的工具是有意义的。
 - en: 'Extensibility model: This is important for the ecosystem around the tooling.
     Jenkins has a great plugin model that allows lots of different extensions to the
     core. Tekton has a similar model, but it is different in that users have the ability
@@ -4023,6 +4208,9 @@
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 可扩展性模型：这对于工具周围的生态系统非常重要。Jenkins 拥有一个出色的插件模型，允许许多不同的扩展到核心。Tekton 有类似的模型，但它与 Jenkins
+    的不同之处在于，用户可以在任务中使用任何容器。评估这些扩展很重要，因为它们在核心工具之上提供了很多价值。一个好的例子是，Tekton 在管理测试仪表盘和结果方面不如
+    Jenkins 及其插件那样好，因此我们可能会依赖 Allure 来完成这项工作。报告和仪表盘扩展对于在 CI/CD 过程中尽量缩短反馈循环至关重要。
 - en: Once you have considered a few of these ideals, hopefully you will agree on
     the right set of tools for your product and team. A measure of design and planning
     is required to answer the question of where the various steps in your continuous
@@ -4033,19 +4221,24 @@
   id: totrans-643
   prefs: []
   type: TYPE_NORMAL
+  zh: 一旦你考虑了这些理想， hopefully 你会对适合你的产品和团队的工具组合达成共识。设计和规划是回答各个连续部署步骤如何进行以及应使用什么应用打包方法（例如，是否使用模板）的必要手段。到目前为止，我们已经培养了一种以实验为驱动的方法来回答这些问题，这里并不是非此即彼的工具选择，而是选择最适合当前任务的工具！
 - en: Conclusion
   id: totrans-644
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 结论
 - en: In this chapter we introduced how we use Git as the single source of truth.
     We covered taking our source code and packaging it using either
   id: totrans-645
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本章中，我们介绍了如何将 Git 作为唯一的可信来源。我们涵盖了如何使用它来打包源代码，选择使用模板或不使用模板的方式。
 - en: Tekton or Jenkins. In the next chapter, we will focus on testing, introducing
     a new component to our app using Knative, running A/B tests, and capturing user
     metrics using some of the advanced deployment capabilities within OpenShift.
   id: totrans-646
   prefs: []
   type: TYPE_NORMAL
+  zh: Tekton 或 Jenkins。在下一章中，我们将重点介绍测试，使用 Knative 向我们的应用程序添加新组件，进行 A/B 测试，并利用 OpenShift
+    中一些高级部署功能捕获用户指标。

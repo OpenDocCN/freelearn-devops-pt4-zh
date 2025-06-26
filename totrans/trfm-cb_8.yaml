@@ -1,0 +1,1636 @@
+- en: Using Terraform Cloud to Improve Collaboration
+  prefs: []
+  type: TYPE_NORMAL
+- en: Throughout this book, we have learned how to write Terraform configurations
+    and use the Terraform CLI throughout different recipes. All this applies to small
+    projects and small teams, but in a corporate context, when working on large infrastructure
+    projects, it is necessary to have a real platform for sharing modules and centralized
+    deployment. This platform, which must be able to be connected to a source control
+    repository with a **Version Control System** (**VCS**) such as Git, must allow
+    infrastructure changes to be applied to Terraform in an automated and centralized
+    manner for all team members. This is why, since 2019, HashiCorp has published
+    a SaaS platform (known as a cloud) called **Terraform Cloud**. To learn more about
+    Terraform Cloud and its history, please refer to the documentation here: [https://www.terraform.io/docs/cloud/index.html](https://www.terraform.io/docs/cloud/index.html).
+  prefs: []
+  type: TYPE_NORMAL
+- en: This Terraform Cloud platform (which also exists in an on-premise version called
+    **Terraform Enterprise**), in its free plan in particular, provides functionalities
+    of the `remote` backend type, a private modules registry, user management for
+    a team of up to five users, and remote execution of Terraform configuration, which
+    is stored in a VCS repository. In its paid plan, Terraform Cloud also integrates
+    more advanced team management functionalities, provides cost estimation for resources
+    that will be managed by Terraform, and supplies integration with **Sentinel**,
+    which is a compliance framework. The complete and detailed list of Terraform Cloud
+    functionalities is available in the documentation here: [https://www.hashicorp.com/products/terraform/pricing/](https://www.hashicorp.com/products/terraform/pricing/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this last chapter of this book, we will learn how to use the `remote` backend
+    of Terraform Cloud and how to share Terraform modules in the private registry
+    on Terraform Cloud. Then, we will learn how to perform the remote execution of
+    Terraform configuration directly inside Terraform Cloud and how to use Terraform
+    Cloud using its APIs. Finally, we will end this chapter by exploring the paid
+    features and usage of Sentinel in order to apply compliance tests and visualize
+    cost estimation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we''ll cover the following recipes:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using the remote backend in Terraform Cloud
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using Terraform Cloud as a private module registry
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Executing Terraform configuration remotely in Terraform Cloud
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Automating Terraform Cloud using APIs
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Testing the compliance of Terraform configurations using Sentinel
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using cost estimation for cloud cost resources governance
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Let's get started!
+  prefs: []
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The primary prerequisite for this chapter is to have an account on the Terraform
+    Cloud platform. Creating an account is simple and offers a free plan. You can
+    do this at [https://app.terraform.io/signup/account](https://app.terraform.io/signup/account).
+  prefs: []
+  type: TYPE_NORMAL
+- en: For all the recipes in this chapter, we will already be connected to Terraform
+    Cloud via a web browser.
+  prefs: []
+  type: TYPE_NORMAL
+- en: After registering for an account, it will be necessary (if you haven't done
+    so already) to create an organization by clicking on the Create organization link.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For detailed steps regarding how to create an account and organization, follow
+    the Terraform learning process at [https://learn.hashicorp.com/terraform/cloud-getting-started/signup](https://learn.hashicorp.com/terraform/cloud-getting-started/signup).
+    For more information on organizations, read the documentation at [https://www.terraform.io/docs/cloud/users-teams-organizations/organizations.html#creating-organizations](https://www.terraform.io/docs/cloud/users-teams-organizations/organizations.html#creating-organizations).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, it's important that you're familiar with the concept of workspaces
+    in Terraform Cloud (which is a little different from the workspaces we studied
+    in the *Using workspaces to manage environments* recipe in [Chapter 4](fc591e87-b893-40fa-9021-7827bffcc094.xhtml), *Using
+    the Terraform CLI*). Please refer to the documentation at [https://www.terraform.io/docs/cloud/workspaces/index.html](https://www.terraform.io/docs/cloud/workspaces/index.html) to
+    find out more.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When creating a connection between Terraform Cloud and a Git repository, we
+    will be using GitHub. You can create a free account on GitHub at [https://github.com/](https://github.com/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The source code for this chapter is available at [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP08](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP08).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Check out the following video to see the code in action: [https://bit.ly/2Zl3tyA](https://bit.ly/2Zl3tyA)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using the remote backend in Terraform Cloud
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Throughout this book, we have discussed the backend and its importance for storing
+    and sharing the Terraform state file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the *Protecting the state file in the Azure remote backend* recipe in [Chapter
+    6](d054157b-d534-47c9-8079-3af13107c4ef.xhtml), *Provisioning Azure Infrastructure
+    with Terraform*, we had a concrete case of this when we set up and used a backend
+    in Azure (using Azure Storage). However, this recipe can only be applied with
+    an Azure subscription. The different types of backend listed at [https://www.terraform.io/docs/backends/types/index.html](https://www.terraform.io/docs/backends/types/index.html)
+    mostly require you to purchase platforms or tools.
+  prefs: []
+  type: TYPE_NORMAL
+- en: One of Terraform's primary features is that it allows you to host a Terraform
+    state file in a managed service, which is called a `remote` backend.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this recipe, we will learn how to use the `remote` backend in Terraform Cloud.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Getting ready
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The prerequisite for this recipe (as for all the others in this chapter) is
+    that you have an account on Terraform Cloud ([http://app.terraform.io/](http://app.terraform.io/))
+    and are logged in. Furthermore, you will need to create a new workspace called `demo-app` manually
+    from the Terraform Cloud UI by following the documentation at [https://www.terraform.io/docs/cloud/workspaces/creating.html](https://www.terraform.io/docs/cloud/workspaces/creating.html) and
+    configuring it without choosing a VCS repository.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The goal of this recipe is to configure and use the `remote` backend for a simple
+    Terraform configuration (for a better understanding that does not depend on a
+    cloud provider). Furthermore, the execution of this Terraform configuration will
+    be configured in Terraform Cloud for execution in **local** mode; that is, on
+    a machine outside Terraform Cloud (which can be a local workstation or a CI/CD
+    pipeline agent).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note that in this recipe, we will be using local mode. In the next recipe, we
+    will explain how to execute in **remote **mode.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The source code for this recipe is available here: [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP08/app](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP08/app).
+  prefs: []
+  type: TYPE_NORMAL
+- en: How to do it…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'This recipe will be split into three parts, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Configuring local mode execution in Terraform Cloud
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Generating a new API token
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Configuring and using the `remote` backend
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'For the first part, we will configure local mode execution, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In our new Terraform Cloud workspace (`demo-app`), go to the Settings | General
+    tab and change the Execution Mode option to Local:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/9af14b46-4133-4271-af9d-cf9d0a731855.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Click the Save settings button to apply these changes.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Now, for the second part, we need to generate a new API token to authenticate
+    with Terraform Cloud. Follow these steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the Settings tab of the `demoBook` organization, go to the API Tokens tab:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/e201e661-e42e-4f64-932b-b5438375916e.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Scroll down to the bottom of this page and click on the Create an authentication
+    token button to generate a new API token.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Keep this generated token safe.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Finally, the last part is to configure and use the `remote` backend. Follow
+    these steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the `main.tf` file of the Terraform configuration, add the following backend
+    configuration:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Then, in the appropriate Terraform CLI configuration folder, which is the home
+    directory (documented here: [https://www.terraform.io/docs/commands/cli-config.html](https://www.terraform.io/docs/commands/cli-config.html)),
+    create a new file called `terraform.rc` (for Windows OS) or `.terraform.rc` (for
+    Linux OS). This will be the Terraform CLI configuration. Inside this file, add
+    the following content:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: Execute the basic workflow Terraform commands with `init`, `plan`, and `apply` from
+    your local workstation.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: How it works…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In the first part of this recipe, we configured the Terraform execution mode
+    of our workspace. In this configuration, we chose local mode, which indicates
+    that Terraform will ensure the configuration is installed on a private machine
+    (either a local development station or a CI/CD pipeline agent). In this case,
+    the created workspace is just used to store the Terraform state.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Then, in the second part, we created a token that allows the Terraform binary
+    to authenticate with our Terraform Cloud workspace.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the last part, we wrote the Terraform configuration, which describes the
+    settings of our `remote` backend. In this configuration, we used the `remote`
+    backend, in which we added the following parameters:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`hostname` with the `"app.terraform.io"` value, which is the domain of Terraform
+    Cloud'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`organization`, which contains the `demoBook` name of the organization'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`workspaces` with the name of the `demo-app` workspace that we created manually
+    in the prerequisites of this recipe'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Then, in *step 2*, we created the Terraform CLI configuration file by adding
+    the authentication token that was generated in the second part of this recipe.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, in the last step, we executed the Terraform commands workflow.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'After executing these commands, on the States tab of our workspace, we will
+    see that our status file has been created:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/99304b91-d7b7-4122-99af-756b9474697c.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: By clicking on this file, you can view its content or download it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There's more…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In this recipe, we learned how to centrally store report files in the Terraform
+    Cloud backend.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To do this, we created a workspace manually so that we could configure it and
+    choose the local execution mode. In the *Executing Terraform configuration in
+    Terraform Cloud* recipe of this chapter, if we want to use remote mode, we simply
+    put the name of the workspace in the configuration of the backend, which creates
+    it automatically if it does not exist.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Then, we configured the Terraform CLI with the `terraform.rc` file. Another
+    solution is to use the `terraform login` command, which creates the token, and
+    the `credential.tfrc.json` configuration file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following screenshot shows the execution of this command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/58fa6df4-8306-4e69-aac1-4ae675436a12.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: This command is not to be used for automation usage as it requires a web browser
+    and manual intervention.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Concerning the token, we created it at the organization level in order to protect
+    Terraform''s organization-only executions. To give broader permissions to all
+    organizations in this account, you can create a token on the full account in User
+    Settings and then in the Tokens tab:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/6e65e800-a66d-40f0-866f-270512edcef3.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: To learn more about the use of API tokens, please refer to the documentation
+    at [https://www.terraform.io/docs/cloud/users-teams-organizations/api-tokens.html](https://www.terraform.io/docs/cloud/users-teams-organizations/api-tokens.html).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, you can read the documentation at [https://www.terraform.io/docs/cloud/architectural-details/data-security.html](https://www.terraform.io/docs/cloud/architectural-details/data-security.html)
+    to learn more about securing data and the Terraform state file, which are stored
+    in Terraform Cloud. If you already have Terraform configurations with state files
+    that are stored in other types of backends and you would like to migrate them
+    to Terraform Cloud, here is the migration documentation: [https://www.terraform.io/docs/cloud/migrate/index.html](https://www.terraform.io/docs/cloud/migrate/index.html).
+  prefs: []
+  type: TYPE_NORMAL
+- en: See also
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The documentation on the `remote` backend is available here: [https://www.terraform.io/docs/backends/types/remote.html](https://www.terraform.io/docs/backends/types/remote.html)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The `terraform login` command documentation is available here: [https://www.terraform.io/docs/commands/login.html](https://www.terraform.io/docs/commands/login.html)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Documentation on the configuration of the Terraform CLI is available here: [https://www.terraform.io/docs/commands/cli-config.html.](https://www.terraform.io/docs/commands/cli-config.html.)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using Terraform Cloud as a private module registry
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In the previous recipe, we learned how to use Terraform Cloud as a remote backend
+    that is centralized, secure, and free of charge.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this book, we have dedicated [Chapter 5](ddb13a41-5cdd-4931-b38f-d185d3a10c1e.xhtml), *Sharing
+    Terraform Configuration with Modules*, to the creation, usage, and sharing of
+    Terraform modules. As a reminder, what we studied was publishing modules in the
+    Terraform public registry, which is publicly accessible by all Terraform users,
+    and sharing Terraform modules privately using a Git repository.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Concerning private module sharing, the Git repository system is efficient but
+    does not offer a centralized platform for sharing and documenting modules like
+    the public registry does. In order to provide companies with a private registry
+    of their Terraform modules, HashiCorp has integrated this functionality into Terraform
+    Cloud/Enterprise.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this recipe, we will learn how to publish and use a Terraform module in the
+    private registry of the Terraform Cloud.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Getting ready
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In order to publish a module in Terraform Registry, you'll need to store your
+    module code in a VCS file that is supported by Terraform Cloud. The list of supported
+    file types can be found at [https://www.terraform.io/docs/cloud/vcs/index.html](https://www.terraform.io/docs/cloud/vcs/index.html).
+  prefs: []
+  type: TYPE_NORMAL
+- en: To start this recipe, in the Settings section of the Terraform Cloud organization,
+    we need to create a connection to the VCS provider that contains the Terraform
+    configuration, as described in the documentation at [https://www.terraform.io/docs/cloud/vcs/index.html](https://www.terraform.io/docs/cloud/vcs/index.html).
+  prefs: []
+  type: TYPE_NORMAL
+- en: In our scenario, we will use the GitHub VCS, which contains a `terraform-azurerm-webapp`
+    repository (which creates a Service Plan, an App Service instance, and an Application Insights
+    in Azure). To get this repository, you can fork [https://github.com/mikaelkrief/terraform-azurerm-webapp](https://github.com/mikaelkrief/terraform-azurerm-webapp).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In addition, as we studied in the *Sharing Terraform module using GitHub* recipe
+    in [Chapter 5](ddb13a41-5cdd-4931-b38f-d185d3a10c1e.xhtml), *Sharing Terraform
+    Configuration with Modules*, you need to create a Git tag in this repository that
+    contains the version number of the module. For this recipe, we will create a `v1.0.0`
+    tag, as shown in the following screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/8a1a183b-6730-42ad-b254-2443e7fdb302.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'To integrate between Terraform Cloud and GitHub, execute the process documented
+    here: [https://www.terraform.io/docs/cloud/vcs/github-app.html](https://www.terraform.io/docs/cloud/vcs/github-app.html).
+    At the end of this integration, we get the following screen under Settings | VCS
+    Providers:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/57257202-73e2-453d-a5b3-9fdb753d18ce.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Our organization now has a connection to the required GitHub account and we
+    can start publishing the module in Terraform Cloud.
+  prefs: []
+  type: TYPE_NORMAL
+- en: How to do it…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'To publish a Terraform module in Terraform Cloud''s private registry, perform
+    the following steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In our Terraform Cloud organization, click on the Modules menu, which is located
+    in the top bar menu:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/cea0efd3-d8e5-4eeb-9e6d-71392fbf54ad.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'To add the module, click on the Add module button:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/b7b7f06b-2c97-4396-85bc-8ea75c941d09.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Then, in the next layout, in the first step of the wizard, choose GitHub as
+    the VCS provider, which we integrated as part of the requirements for this recipe:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/5cc76d1d-f121-409e-9b06-25062ecb67c1.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'In the second step of the wizard, choose the repository that contains the Terraform
+    module configuration:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/7d2be4bc-69da-4fc6-8f06-a43ccde44b07.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Finally, in the last step of the wizard, publish the module by clicking on
+    the Publish module button:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/d6ba232f-7a68-4a91-84fa-18d7624f1411.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: How it works…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: To publish a module in the private registry of Terraform, you just have to follow
+    the steps proposed by the wizard, which consist of choosing a VCS provider and
+    then selecting the repository that contains the Terraform configuration of the
+    module so that it can be published. After doing this, details about the module
+    will be displayed in the layout of the public registry. In the center of this
+    page, you will be able to see the contents of the `Readme.md` file, while on the
+    right-hand side, you will be able to see the technical information about the use
+    of this module.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There's more…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Once this module has been published in this registry, you can use it in a Terraform
+    configuration. If you''re using Terraform Cloud in local execution mode, you must
+    configure the Terraform CLI with the authentication token in the `terraform.rc`
+    file, as described in the previous recipe. Then, you need to use this module in
+    a Terraform configuration and write the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In this configuration, the `source` property is the module identifier in the
+    Terraform Cloud registry, while the `version` property corresponds to the Git
+    tag that''s been set in the repository. After doing this, you can select what
+    version you wish to use from the Versions drop-down list:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/6ab8d8d6-c982-4d0d-b3a1-2773bfd828f5.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: If we change the Terraform configuration of the module and we want to upgrade
+    its version, we just have to add a Git tag to this repository, along with the
+    desired version. By doing this, the module will be automatically updated in the
+    Terraform Cloud registry.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In addition, if your modules have been published in this private registry, you
+    can generate the Terraform configuration that calls them using the design configuration feature
+    of Terraform Cloud. You can find out more about this at [https://www.terraform.io/docs/cloud/registry/design.html](https://www.terraform.io/docs/cloud/registry/design.html).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, please note that if you have several organizations in Terraform Cloud
+    and you want to use the same modules in all of them, you will have to publish
+    these modules in each of your organizations. As for upgrading their versions,
+    this will be done automatically for each organization.
+  prefs: []
+  type: TYPE_NORMAL
+- en: See also
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Documentation regarding privately registering modules in Terraform Cloud is
+    available here: [https://www.terraform.io/docs/cloud/registry/index.html](https://www.terraform.io/docs/cloud/registry/index.html).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Executing Terraform configuration remotely in Terraform Cloud
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In the previous two recipes, we studied the use of Terraform Cloud with local
+    runtime settings. This configuration indicates that the Terraform binary that
+    applies the Terraform configuration is installed on a machine outside the Terraform
+    Cloud platform. This machine is therefore private and can be a development workstation
+    or a machine that serves as an agent for a CI/CD pipeline (such as on an Azure
+    pipeline agent or a Jenkins node).
+  prefs: []
+  type: TYPE_NORMAL
+- en: One of the great advantages of Terraform Cloud is its ability to execute Terraform
+    configurations directly within this platform. This feature, called **remote operations**,
+    makes it possible to have free Terraform configuration execution pipelines without
+    having to install, configure, and maintain VMs that serve as agents. In addition,
+    it provides a shared Terraform execution interface for all the members of the
+    organization.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this recipe, we will look at the steps involved in running a Terraform configuration
+    in Terraform Cloud using the UI workflow.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Getting ready
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The Terraform configuration source code that we will be using in this recipe
+    can be found at [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP08/remote](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP08/remote).
+    This configuration creates a Resource Group and an App Service in Azure. If you
+    want to use this Terraform configuration, you will need to make a fork of this
+    repository. This configuration also uses a `terraform-azurerm-webapp` Terraform module,
+    which has been published in the private registry of our Terraform Cloud organization.
+    For more information about publishing a module in the private registry, see the
+    previous recipe, *Using Terraform Cloud as a private module registry*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Since, in this Terraform configuration, we will be creating Azure resources,
+    we need to create an Azure Service Principal that has sufficient permissions in
+    the subscription. For more information on Azure Service Principals and the authentication
+    of Terraform to Azure, see the *Protecting the Azure credential provider* recipe in
+    [Chapter 6](d054157b-d534-47c9-8079-3af13107c4ef.xhtml), *Provisioning Azure Infrastructure
+    with Terraform*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Also, since we will be exposing a Terraform configuration in GitHub, we will
+    need to add the GitHub VCS provider, as explained in the documentation here: [https://www.terraform.io/docs/cloud/vcs/github-app.html](https://www.terraform.io/docs/cloud/vcs/github-app.html).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, all the steps of this recipe will be done in the Terraform Cloud web
+    interface.
+  prefs: []
+  type: TYPE_NORMAL
+- en: How to do it…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Before we execute the Terraform configuration, we need to create and configure
+    a new workspace. Follow these steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Inside the Workspace section of our organization, click on the New organization
+    button to create a new organization.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'In the first step of the wizard, choose the VCS provider we registered in the
+    requirements. Here, we will choose our GitHub provider:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/0b0e1220-84b7-4bcf-afa5-79bc6be8c03d.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Then, in the second step of this wizard, select the GitHub repository that
+    contains the Terraform configuration so that we can execute it in Terraform Cloud:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/14df9a6f-c6fa-421f-8fee-6a721937e02b.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Finally, in the last step of the wizard, configure this workspace by specifying
+    the mandatory parameter, which is the name of the workspace. This is `demo-app-remote`
+    in our case:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/44cf213d-0db1-4e55-bc21-af7d677cff98.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'In the optional Advanced options tab, set the folder path of the Terraform
+    configuration (leave this blank if the Terraform configuration is in the root
+    of your repository). We can also fill in the Automatic Run Triggering and VCS
+    branch parameters so that they can be run (we leave the master branch empty):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/7cfb421f-a021-4884-95e7-718f680d8334.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Finally, click on the Create workspace button to finalize the creation of the
+    workspace.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Now that we''ve created the workspace, because we''re deploying resources in
+    Azure, we need to add the four Azure authentication environment variables to the
+    workspace variables settings. Follow these steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Click on the Configure variables button:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/b0749a08-0723-4911-8a4f-5d580c3a2db4.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Then, in the Environment Variables section, add our four Terraform Azure provider
+    environment variables, as shown in the following screenshot:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/a342a133-9e33-49ea-9d2f-22b29ecdba6b.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Now that we've configured our workspace, we can execute the Terraform configuration
+    inside Terraform Cloud.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To run the Terraform configuration remotely in Terraform Cloud, perform the
+    following steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To trigger the execution of the Terraform configuration, click on the Queue
+    plan button, enter a reason for doing this, and confirm this by clicking on the Queue
+    plan button:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/67d01631-33c5-433d-8b78-5c64b122b033.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Terraform Cloud will launch a new execution for this Terraform configuration.
+    By running the `terraform plan` command, we will be able to see the logs for this
+    execution:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/3a2f7ef7-5e5b-436b-bdae-893f82027b6d.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: After executing `plan`, Terraform Cloud expects the user to confirm this before
+    the changes are applied.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If we agree to the preview changes, we can confirm these changes by clicking
+    on the Confirm & Apply button:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/7209e9c5-8d98-49d1-88a2-2682d9d7c5ce.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Add some comments and click on the Confirm Plan button:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/23353f4a-932d-4697-b1a3-321d2ba28c94.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Once finished, the result of executing the plan will be provided:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/2aed3cc2-b4b2-4bbe-9b9c-354bdc750415.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: How it works…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In this recipe, we configured a workspace in Terraform Cloud in order to run
+    a Terraform configuration that's in a GitHub repository directly in an instance
+    managed by Terraform Cloud.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the middle of this configuration, before executing the Terraform configuration,
+    we performed the Azure environment variables configuration, which is an optional
+    step and depends on the resources and cloud providers you wish to manage.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There's more…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this recipe, we learned how to run the `plan` and `apply` Terraform Cloud
+    variables directly using the web interface of this platform. In the workspace
+    settings, you can also configure whether you want to apply the plan manually (that
+    is, with a confirmation, like in our recipe) or automatically. You can also choose
+    the version of the Terraform binary you wish to use (by default, it uses the latest
+    stable version that can found at the time of the workspace''s creation; beta versions
+    are not taken into account):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/89a0eace-93ad-4193-bf7b-c821b23294eb.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'You can also destroy all the resources that have been provisioned using the
+    Destruction and Deletion feature, which is accessible in the Settings | Destruction
+    and Deletion menu, and then click on the Queue destroy plan button:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/2a5e295a-71fb-479c-8320-a997c3733de8.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'In addition, as you may have noticed, by running the Terraform configuration
+    in Terraform Cloud using the UI, we did not need to configure the `remote` backend
+    information for the state file, as we discussed in the *Using a remote backend
+    in Terraform Cloud* recipe of this chapter. In our case, the configuration of
+    the Terraform state file is integrated with the workspace. In the States tab,
+    we''ll notice the presence of the Terraform state file:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/4a6ec36c-334f-46e9-b5d3-c68be74849d7.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Moreover, if you are in a development context and want to check the development
+    before committing to the repository, you can still use this remote mode of Terraform
+    execution to make a plan. This is done by controlling this execution, which takes
+    place in Terraform Cloud using your Terraform binary (or CLI). To do this, simply
+    add the configuration of the `remote` backend, as in the *Using a remote backend
+    in Terraform Cloud* recipe of this chapter, by using the name of the workspace
+    we created in the first step of that recipe, which corresponds to the following
+    code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Then, on the development station, execute the `terraform plan` command, as
+    shown in the following screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/2edbecc7-028d-4a41-b089-9f6a10b86ec2.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: During this execution, your Terraform CLI will create a configuration package
+    and upload it to the Terraform Cloud workspace. The CLI triggers the Terraform
+    Cloud CLI to run Terraform on the uploaded package. Finally, the output of the
+    `plan` command is also available in the command-line terminal. Please also note
+    that, in this case, you do not need to set the environment variables locally since
+    they are already configured in the workspace.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In order to ensure that the changes are applied in one place, you can't run
+    the `terraform apply` command on a workspace that is connected to a VCS. However,
+    if your workspace is not connected to a VCS, then you can also execute the `apply` command from
+    your local CLI.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, if your Terraform configuration includes the provisioning `local-exec`
+    (which we studied in the *Executing local programs with Terraform* recipe in [Chapter
+    2](3099c9ac-8c38-4e7d-8146-411fac26a2b7.xhtml), *Writing Terraform Configuration*)
+    and, in its command, it uses a third-party tool, you will have to ensure that
+    this tool is already present or installed on the Terraform Cloud agent, which
+    will execute the Terraform binary. For more information about additional third-party
+    tools in the execution of Terraform Cloud, I recommend reading the documentation
+    available at [https://www.terraform.io/docs/cloud/run/install-software.html](https://www.terraform.io/docs/cloud/run/install-software.html).
+  prefs: []
+  type: TYPE_NORMAL
+- en: See also
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The documentation on remote execution in Terraform Cloud is available here: [https://www.terraform.io/docs/cloud/run/index.html](https://www.terraform.io/docs/cloud/run/index.html).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The documentation on using the CLI with remote execution is available here: [https://www.terraform.io/docs/cloud/run/cli.html](https://www.terraform.io/docs/cloud/run/cli.html).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Automating Terraform Cloud using APIs
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In the previous recipes, we learned how to use the Terraform Cloud platform
+    to store Terraform state files in a `remote` backend. Then, we used Terraform
+    Cloud as a private registry of modules and learned how to run Terraform configurations
+    remotely in Terraform Cloud.
+  prefs: []
+  type: TYPE_NORMAL
+- en: All these actions were mainly done via the Terraform Cloud UI web interface.
+    In the *There's more...* section of the previous recipe, we discussed that it
+    is also possible to use the Terraform CLI locally to run Terraform remotely.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In a company, we need to automate all of these actions for the following reasons:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The use of the UI is ergonomic but requires a lot of manual actions, which,
+    with many projects, can be very time- and resource-consuming.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In Terraform Cloud, the execution workflow in remote mode is fixed with the
+    execution of the `plan` command, as well as the application. It isn't possible
+    to add other actions (which we have studied in this book) such as the execution
+    of integration tests upstream. Due to this, it isn't possible to customize the
+    workflow with the business needs of the company.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Due to the need for automation and customization, HashiCorp has published APIs
+    that allow Terraform Cloud to be managed as it should be with the UI.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this recipe, we will look at automating the actions of Terraform Cloud using
+    its APIs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Getting ready
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Before starting, it is good to recall the Terraform Cloud workflow, which is
+    as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Write the Terraform configuration, then commit it to a VCS repository (such
+    as Git).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In Terraform Cloud, the workspace retrieves this Terraform configuration and
+    executes the dry run using the `terraform plan` command.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In manual mode, if the user confirms the plan, Terraform Cloud triggers the
+    application and applies the changes to the infrastructure.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In automatic mode (auto-apply), the changes are applied automatically after
+    the `plan` command has been issued.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In this recipe, we will use the same scenario and Terraform configuration that
+    we used for the previous recipe, except we will use scripts that call the Terraform
+    Cloud APIs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As a prerequisite, however, you will need to create an API token in your Terraform
+    Cloud user account settings. This will be used for authentication:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/f4099a5d-54c6-4251-ba65-024cde5510d6.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: A run is triggered via an API by using a user API token, not an organization
+    token.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In regard to the scripting language used in this recipe, we will use PowerShell.
+    However, you can adapt this and make use of your usual programming languages (shell,
+    Python, C#, and so on).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The source code for this recipe is available at [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP08/api](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP08/api).
+  prefs: []
+  type: TYPE_NORMAL
+- en: How to do it…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'To automate Terraform Cloud with an API, perform the following steps inside
+    a new folder:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Create a JSON file named `workspace.json`. This will contain the definition
+    of the workspace we will be creating. Insert the following content:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: To understand how to get `oauth-token-id`, read the documentation available
+    at [https://www.terraform.io/docs/cloud/api/oauth-tokens.html](https://www.terraform.io/docs/cloud/api/oauth-tokens.html).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Create a PowerShell script called `tfcloud-workspaces.ps1` that contains the
+    following content:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: The complete source code of this script is available at [https://github.com/PacktPublishing/Terraform-Cookbook/blob/master/CHAP08/api/tfcloud-workspaces.ps1](https://github.com/PacktPublishing/Terraform-Cookbook/blob/master/CHAP08/api/tfcloud-workspaces.ps1).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In a PowerShell terminal, run the following command to create a workspace:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'At the end of this execution, the script will display the ID for the created
+    workspace:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/d365119d-9089-4c60-ae34-a5772e113ad8.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Create another JSON file called `variables.json` that will contain the definition
+    of the environment variables to create. Insert the following content:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: The complete source code for this JSON script is available at [https://github.com/PacktPublishing/Terraform-Cookbook/blob/master/CHAP08/api/variables.json](https://github.com/PacktPublishing/Terraform-Cookbook/blob/master/CHAP08/api/variables.json).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Create a PowerShell script called `tfcloud-variables.ps1` that contains the
+    following content:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: The complete source code for this script is available at [https://github.com/PacktPublishing/Terraform-Cookbook/blob/master/CHAP08/api/tfcloud-variables.ps1](https://github.com/PacktPublishing/Terraform-Cookbook/blob/master/CHAP08/api/tfcloud-variables.ps1).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In PowerShell, run the preceding script to create environment variables in
+    the workspaces we''ve created with the following command:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'To trigger a new execution of the Terraform configuration, create a JSON file
+    called `run.json` that contains the definition of the queue. Add the following
+    content:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Create a PowerShell script called `tfcloud-run.ps1` that contains the following
+    content:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In PowerShell, run the following command to queue a new Terraform `run`:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: How it works…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this recipe, we automated the implementation of a Terraform workflow in
+    three steps, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating and configuring a workspace
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Creating environment variables in this workspace
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Triggering a Terraform `run` in the Terraform configuration defined in this
+    workspace
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'From *steps 1* to *3*, we used the API to create a workspace. To do this, we
+    created a file called `workspace.json` that contains the body (payload) that will
+    be sent as a parameter to the API. In this file, we defined the following properties:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`name`: The name of the workspace to create.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`working-directory`: The directory of the repository that contains the Terraform
+    configuration.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`auto-apply`: This indicates that the runs will be done automatically after
+    the plan, without the user having to review this plan (optional property).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`vcs-repo`: This block contains information about the VCS provider we configured
+    in the organization, which is detailed here: [https://www.terraform.io/docs/cloud/vcs/index.html](https://www.terraform.io/docs/cloud/vcs/index.html).
+    The `oauth-token-id` property is obtained either by the VCS provider''s screen
+    or via an API, as detailed here: [https://www.terraform.io/docs/cloud/api/oauth-clients.html](https://www.terraform.io/docs/cloud/api/oauth-clients.html).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Then, we wrote and executed the PowerShell script that calls the workspace creation
+    API. In this script, we defined the user's API token and the name of the organization
+    as a variable before calling the workspace creation API.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The documentation for the workspace API is available here: [https://www.terraform.io/docs/cloud/api/workspaces.html](https://www.terraform.io/docs/cloud/api/workspaces.html).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'At the end of its execution, this script displays the ID of the created workspace,
+    which will have to be preserved so that we can continue making API calls. In the
+    web interface of Terraform Cloud, we will be able to view this new workspace:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/f4dbd97d-72d6-44eb-8ae2-b1f2034a4401.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Then, from *steps 4* to *6*, we used the API to create the environment variables
+    in this new workspace. To do this, we created a `variables.json` file that contains
+    the four variables of the Azure Service Principal, as well as their body, which
+    will be processed so that the API parameters for its payload are sent to the API.
+    In this file, we defined the following properties for each of the variables:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`name`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`value`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`category`: `env` (to define it as an environment variable)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Then, we wrote and executed the PowerShell script that calls the workspace creation
+    API for each of these variables.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this recipe, we created these four environment variables because the Terraform
+    configuration we used as an example manages an Azure infrastructure. This step
+    is optional if you don't need environment variables.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In addition, the documentation for the variables API is available at [https://www.terraform.io/docs/cloud/api/workspace-variables.html](https://www.terraform.io/docs/cloud/api/workspace-variables.html).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'At the end of its execution, in the Terraform Cloud UI, we will be able to
+    see the new variable environments:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/93322496-c740-45b6-b9db-056a1ba1fc1c.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Finally, in *steps 7* to *9*, we used the API to trigger a run – that is, the
+    execution of the Terraform configuration we defined in the workspace (in the VCS).
+    To do this, we created a file called `run.json` that will also be used as a payload
+    for the API. This contains the following properties:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`message`: Message about the run'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`workspace.id`: Workspace ID'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Then, we wrote and executed the PowerShell script that calls the `run` trigger
+    API. At the end of its execution, we saw that the execution of Terraform is triggered
+    in Terraform Cloud, as shown in the following screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/47703ed7-5261-423d-af62-26fe8b7f0ce6.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: By using the `auto-apply` property of the workspace, `terraform apply` will
+    complete automatically, without requiring manual configuration by the user.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There's more…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In this recipe, we looked at the simple and basic use of the Terraform cloud
+    APIs. As always, there are many other scenarios in which we can use them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Remember to protect the API token and any Azure or similar tokens by not putting
+    them in clear text in your scripts.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Furthermore, to stay in an IaC context, instead of using the APIs directly,
+    you can use the Terraform configuration with the **Terraform Enterprise** **provider**,
+    which is documented here: [https://www.terraform.io/docs/providers/tfe/index.html](https://www.terraform.io/docs/providers/tfe/index.html).
+    It is also recommended by HashiCorp for Terraform Cloud administration purposes.
+    You can find more information about this at [https://www.terraform.io/docs/cloud/api/index.html](https://www.terraform.io/docs/cloud/api/index.html)
+    (first note).
+  prefs: []
+  type: TYPE_NORMAL
+- en: See also
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The documentation about the various Terraform Cloud APIs is available here: [https://www.terraform.io/docs/cloud/api/index.html](https://www.terraform.io/docs/cloud/api/index.html).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The following is a video demonstration on the use of Terraform Cloud/Enterprise
+    APIs: [https://www.hashicorp.com/resources/demystifying-the-terraform-enterprise-api/](https://www.hashicorp.com/resources/demystifying-the-terraform-enterprise-api/).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Testing the compliance of Terraform configurations using Sentinel
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The aspect of Terraform configuration tests has been discussed several times
+    in this book, such as using `terratest` (in the *Testing Terraform module code
+    with Terratest* recipe of [Chapter 5](d054157b-d534-47c9-8079-3af13107c4ef.xhtml), *Provisioning
+    Azure Infrastructure with Terraform*) and `kitchen-terraform` (in the *Testing
+    Terraform configuration using kitchen-terraform* recipe of [Chapter 7](905f7886-2827-44fe-af8c-4f9f3e3a9cef.xhtml), *Deep
+    Diving into Terraform*). The common point of these two tools is that the purpose
+    of the tests is to write and test the changes that have already been applied by
+    Terraform.
+  prefs: []
+  type: TYPE_NORMAL
+- en: All these tests are very beneficial but they are done after the changes have
+    been made. The rollback also requires work from all teams. To be even more in
+    line with the business and financial requirements of the company, there is another
+    level of testing that verifies the compliance of the Terraform configuration before
+    it is applied to the target infrastructure.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In Terraform, these compliance tests are carried out after the `terraform plan`
+    command is executed. They verify that the result of the `plan` command corresponds
+    to the rules described in the tests. Only if these tests have passed can the `terraform
+    apply` command be executed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Among the tools and frameworks for compliance testing, Terraform Cloud offers,
+    in its paid plan, the stack, which allows us to write tests using the **Sentinel**
+    framework and execute them directly in Terraform Cloud by using the `run` command
+    between `plan` and `apply`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this recipe, we will study a simple case of writing compliance tests and
+    executing them in Terraform Cloud.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Getting ready
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The essential requirement for this recipe is to have a Terraform Cloud paid
+    plan. We will be using Team & Governance:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/9eb5bfb1-8b7d-4b09-882b-4f271a768a44.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'If you have the free plan, you can try all the features of the paid plan for
+    30 days by activating your free trial:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/1663a27d-194f-44bd-90ae-2d61676251ac.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Documentation about the plans, prices, and features is available here: [https://www.terraform.io/docs/cloud/paid.html](https://www.terraform.io/docs/cloud/paid.html).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Terraform configuration that we will be using has already been discussed
+    and is available at [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP08/remote](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP08/remote).
+    This configuration will create a Resource Group, a Service Plan, and an Azure
+    App Service.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In addition, to use the code written in this recipe in your organization, you
+    need to create a fork of the original repository of this book ([https://github.com/PacktPublishing/Terraform-Cookbook](https://github.com/PacktPublishing/Terraform-Cookbook)).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The goal of this recipe is to write the rules, as part of policy sets, that
+    will test the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: That the FTP mode for the App Service is configured only with FTPS mode.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: That the Service Plan that will be provisioned to an SKU tier type is either
+    Basic or Standard. This rule prohibits the provisioning of Premium or Premium
+    v2 Service Plan.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Then, we will learn how to apply these policy sets during the execution of Terraform
+    Cloud.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To write these policies, we will use **Sentinel**, which is a test framework
+    provided by HashiCorp. Its documentation is available at [https://www.hashicorp.com/resources/writing-and-testing-sentinel-policies-for-terraform/](https://www.hashicorp.com/resources/writing-and-testing-sentinel-policies-for-terraform/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The purpose of this recipe is not to study all the elements for writing policies
+    (the preceding guide can be used for that). Here, we will be writing some simple
+    code that you can easily reproduce.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, the `demo-app-remote` workspace must be created and configured in Terraform
+    Cloud, as described in the *Executing Terraform configuration remotely in Terraform
+    Cloud* recipe of this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The source code for this recipe is available here: [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP08/sentinel-policies](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP08/sentinel-policies).
+  prefs: []
+  type: TYPE_NORMAL
+- en: How to do it…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'To complete this recipe, we will do three things:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Write the policy rules
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Configure the organization in order to integrate these policies
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Run the Terraform configuration with these policies
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'We start by writing the compliance policies, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The code we will be writing in this part can be in the same repository where
+    the configuration to be tested is located. Alternatively, if its policies are
+    shared, then this code can be put in another repository.
+  prefs: []
+  type: TYPE_NORMAL
+- en: It is still a good practice to put these policies in a separate repository so
+    that you don't mix the Terraform configuration commits of the policy. Another
+    reason to do this would be that this separate repository could be managed by another
+    team (such as ops or security).
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this recipe, for simplicity, we will write our code in the repository that
+    contains the Terraform configuration, which has already been integrated into the
+    VCS providers of our organization.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Inside a new folder, `sentinel-policies`, create a new file called `restrict-app-service-to-ftps.sentinel` to
+    test the FTP mode of the App Service instance. Use the following code to do so:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: The complete source code for this file is available here: [https://github.com/PacktPublishing/Terraform-Cookbook/blob/master/CHAP08/sentinel-policies/restrict-app-service-to-ftps.sentinel](https://github.com/PacktPublishing/Terraform-Cookbook/blob/master/CHAP08/sentinel-policies/restrict-app-service-to-ftps.sentinel).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Create a new file called `allowed-app-service-plan-tiers.sentinel` to test
+    the type of Service Plan SKU. Ensure it contains the following content:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: The complete source code for this file (with comments) is available here: [https://github.com/PacktPublishing/Terraform-Cookbook/blob/master/CHAP08/sentinel-policies/allowed-app-service-plan-tiers.sentinel](https://github.com/PacktPublishing/Terraform-Cookbook/blob/master/CHAP08/sentinel-policies/allowed-app-service-plan-tiers.sentinel).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Create a new file called `sentinel.hcl`. This will be the entry point for the
+    tests and references of the two preceding policies. Add the following content:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: Commit and push all the files into the remote repository.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'For the second phase, we need to configure Policy Sets in our Terraform Cloud
+    organization:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In your organization Settings, go to the Policy Sets tab and click on the Connect
+    a new policy set button:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/113d055f-437d-4605-8fab-66c3e49dab5b.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'In the first step of the wizard, choose the VCS provider that contains the
+    code for the policies we just wrote:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/9bee5245-536a-4635-a224-dfc8f41c3106.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'In the second step, select the repository that contains the policy''s code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/d4e7d6fe-9928-4cba-8571-94c813bb7df0.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'In the last step of the wizard, configure the policy set by adding Name and
+    Description details, as shown in the following screenshot:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/8cb58246-a389-442e-8362-8d5fd5726704.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Under Additional options, specify the folder that contains the code policies
+    and the target workspace that will use these policies:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/63cf27d1-d6a5-420b-9aa8-6b1aae1727d5.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'The following screenshot shows the workspaces you need to choose in order to
+    use the policy set:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/3ae840d7-b2fb-40ba-9754-695398278646.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Click on the Connect policy set button to create the policy sets.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Now, we can run the Terraform configuration in Terraform Cloud and check the
+    policies:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the `demo-app-remote` workspace we created in the *Executing Terraform configuration
+    remotely in Terraform Cloud* recipe of this chapter, we will queue a new Terraform
+    `run`.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'In the results of this `run`, we will be able to see the policy check''s result:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/80226245-bf5f-4bcb-9e56-811c6093e811.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'If the policy check if successful, apply the changes by clicking the Confirm
+    & Apply button:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/9e9c8084-fb4f-4071-96a1-62014c2ddfbe.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: How it works…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In the first part of this recipe, we wrote the compliance tests so that we could
+    test our Terraform configuration using **Sentinel**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the `restrict-app-service-to-ftps.sentinel` file, by writing the `import
+    "tfplan-functions" as plan` line, we imported a Sentinel function library, which
+    is available at [https://github.com/hashicorp/terraform-guides/tree/master/governance/third-generation/common-functions/tfplan-functions](https://github.com/hashicorp/terraform-guides/tree/master/governance/third-generation/common-functions/tfplan-functions). The
+    lines after that line search for all `azurerm_app_service` resources in the `terraform
+    plan` command and check that the FTPS state is configured to FTPS only:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: This is the call point of the test and sends a message in the event of an error
+    with a non-compliant FTPS state.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the second file, `allowed-app-service-plan-tiers.sentinel`, we wrote the
+    `allowed_tiers = ["Basic", "Standard"]` line to create a list of SKUs that are
+    allowed for the Service Plan. The lines search for all `azurerm_service_plan`
+    resources in `terraform plan` and check that the SKU is in the list we declared
+    previously:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: This is the call point of the test and sends a message in the event of an error
+    with a non-compliant SKU.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The third file we wrote, `sentinel.hcl`, is the entry point for the test file.
+    We used a module that imports the custom library and the declaration of the two
+    policies that refer to the two files we wrote earlier.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Other examples of Sentinel tests are available here: [https://github.com/hashicorp/terraform-guides/tree/master/governance/third-generation](https://github.com/hashicorp/terraform-guides/tree/master/governance/third-generation).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Then, in the second part of this recipe, we configured the policy sets in our
+    Terraform Cloud organization by selecting the repository that contains the Sentinel
+    code and selecting the workspaces that these policies will apply to.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, once the tests had been written and the configuration of the policy
+    sets had been carried out, we triggered a Terraform `run` (in remote mode) on
+    the workspace we selected in the policy sets and the result of the poster with
+    successful compliance tests.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There's more…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'After completing this recipe, all the tests passed successfully, but what is
+    interesting is testing their functionality by testing a case where they fail.
+    To do this, we need to sufficiently modify the Terraform configuration that is
+    used in the workspace by modifying the SKU type of the Service Plan, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This SKU takes a `Premium` value that was prohibited in the list of SKUs allowed
+    in the tests. Then, we execute `run`. During its execution, we get the following
+    result:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/777b10d1-26ee-4b26-bd59-ad20583cbf4a.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: As we can see, the compliance tests failed after the `terraform plan` command
+    was run and the implementation of the changes is refused.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As far as blocking the application is concerned, this is configured in the `sentinel.hcl`
+    file with the `enforcement_level ="hard-mandatory"` property for each policy.
+    To find out more about the values of this property and their implication, read
+    the documentation at [https://docs.hashicorp.com/sentinel/concepts/enforcement-levels/](https://docs.hashicorp.com/sentinel/concepts/enforcement-levels/)
+    [and here](https://docs.hashicorp.com/sentinel/concepts/enforcement-levels/) [https://www.terraform.io/docs/cloud/sentinel/manage-policies.html](https://www.terraform.io/docs/cloud/sentinel/manage-policies.html).
+  prefs: []
+  type: TYPE_NORMAL
+- en: See also
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The code for Sentinel functions is available here: [https://github.com/hashicorp/terraform-guides/tree/master/governance/third-generation](https://github.com/hashicorp/terraform-guides/tree/master/governance/third-generation).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The documentation on how to install the Sentinel CLI is available at [https://docs.hashicorp.com/sentinel/intro/getting-started/install/](https://docs.hashicorp.com/sentinel/intro/getting-started/install/).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The guide to writing and installing policies is available here: [https://www.hashicorp.com/resources/writing-and-testing-sentinel-policies-for-terraform/](https://www.hashicorp.com/resources/writing-and-testing-sentinel-policies-for-terraform/).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The basic learning guide for policies is available here: [https://learn.hashicorp.com/terraform/cloud-getting-started/enforce-policies](https://learn.hashicorp.com/terraform/cloud-getting-started/enforce-policies).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Read this article to learn more about the use of Sentinel: [https://medium.com/hashicorp-engineering/using-new-sentinel-features-in-terraform-cloud-c1ade728cbb0](https://medium.com/hashicorp-engineering/using-new-sentinel-features-in-terraform-cloud-c1ade728cbb).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The following is a video that demonstrates policy testing: [https://www.hashicorp.com/resources/testing-terraform-sentinel-policies-using-mocks/](https://www.hashicorp.com/resources/testing-terraform-sentinel-policies-using-mocks/).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'There are other tools we can use to write and execute Terraform compliance
+    configuration, such as *terraform-compliance* ([https://github.com/eerkunt/terraform-compliance](https://github.com/eerkunt/terraform-compliance))
+    and *Open Policy Agent* ([https://www.openpolicyagent.org/docs/latest/terraform/](https://www.openpolicyagent.org/docs/latest/terraform/)).
+    They are both free and open source, but beware: they can''t be used in a Terraform
+    Cloud execution.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using cost estimation for cloud cost resources governance
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: When we create resources in a cloud architecture, we often tend to forget that
+    this incurs a financial cost that depends on the types of resources that are created.
+    This is even more true with automation and IaC, which allow us to create a multitude
+    of resources using a few commands.
+  prefs: []
+  type: TYPE_NORMAL
+- en: One of the interesting features of the version of Terraform Cloud that's integrated
+    into the paid plan is cost estimation, which makes it possible to visualize the
+    cost of the resources that are handled in the Terraform configuration while it's
+    being run.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this recipe, we will learn how to use cost estimation in Terraform Cloud.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Getting ready
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Before you start this recipe, you must have a paid Terraform Cloud plan or
+    activate the free trial (for a 30-day duration):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/ebc2228a-8813-45fd-825a-6653697b964f.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: After doing this, you need to get to know the cloud providers and the resources
+    that are supported by the cost management functionality. This list is available
+    at [https://www.terraform.io/docs/cloud/cost-estimation/index.html#supported-resources](https://www.terraform.io/docs/cloud/cost-estimation/index.html#supported-resources).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The purpose of this recipe is to provision a virtual machine in Azure with Terraform
+    and to visualize the cost estimation of this resource in the Terraform Cloud interface.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The source code for the Terraform configuration that will be executed in this
+    recipe is available here: [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP08/cost](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP08/cost).
+  prefs: []
+  type: TYPE_NORMAL
+- en: How to do it…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'To view the estimation of cost for our resources, perform the following steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the Settings section of the Terraform Cloud organization, in the Cost Estimation
+    tab, check the Enable Cost Estimation for all workspaces checkbox:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/91d03bfa-68a5-44ba-923e-fed328e01a5c.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: In the created workspace that provisions the Azure VM with our Terraform configuration,
+    queue a new `run`.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Just after executing our `plan`, we can view the evaluated cost of the resource:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/a299bda9-d34a-4ae2-8eef-3e27ba37df5f.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: How it works…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Once the cost estimation option has been activated, Terraform Cloud uses the
+    APIs of the different cloud providers to evaluate and display the costs of the
+    resources that will be provisioned.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There's more…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: It is important to note that this is only an estimate and that it is necessary
+    to refer to the different price documentations of the cloud providers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can also write policies with Sentinel (which we studied in the previous
+    recipe) to integrate compliance rules for estimated costs. For more information,
+    please read the documentation at [https://www.terraform.io/docs/cloud/cost-estimation/index.html#verifying-costs-in-policies](https://www.terraform.io/docs/cloud/cost-estimation/index.html#verifying-costs-in-policies).
+  prefs: []
+  type: TYPE_NORMAL
+- en: See also
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The documentation regarding the cost estimation feature is available here: [https://www.terraform.io/docs/cloud/cost-estimation/index.html](https://www.terraform.io/docs/cloud/cost-estimation/index.html).
+  prefs: []
+  type: TYPE_NORMAL

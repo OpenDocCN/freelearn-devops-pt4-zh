@@ -1,0 +1,2208 @@
+- en: Sharing Terraform Configuration with Modules
+  prefs: []
+  type: TYPE_NORMAL
+- en: The real challenge for developers and software factories in recent years has
+    been to stop writing the portions of code that are repeated between applications
+    and even between teams. Hence the emergence of language, framework, and software
+    packages that are easily reusable in several applications and that can be shared
+    between several teams (such as NuGet, NPM, Bower, PyPI, RubyGems, and many others).
+    In **Infrastructure as Code** (**IaC**) in general, we also encounter the same
+    problems of code structure, its homogenization, and its sharing in the company.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We learned in the *Provisioning infrastructure in multiple environments* recipe of
+    [Chapter 2](3099c9ac-8c38-4e7d-8146-411fac26a2b7.xhtml), *Writing Terraform Configuration*, some
+    topologies of the structure of the Terraform configuration, that gave us a partial
+    answer to the question of how to structure a Terraform configuration well. But
+    that doesn't stop there—Terraform also allows you to create modules with which
+    you can share Terraform configuration between several applications and several
+    teams.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we will study the main stages of the modules, which are: the
+    creation, use, and publishing of Terraform modules. We will learn about the creation
+    of a Terraform module and its local use, as well as the rapid bootstrapping of
+    the code of a module. We will also study the use of Terraform modules using the
+    public registry or a Git repository. Finally, we will study how to test a module
+    as well as an example of a CI/CD pipeline of a Terraform module in Azure Pipelines
+    and GitHub Actions.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we cover the following recipes:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating a Terraform module and using it locally
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using modules from the public registry
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Sharing a Terraform module using GitHub
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using another file inside a custom module
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using the Terraform module generator
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Generating module documentation
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using a private Git repository for sharing Terraform modules
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Applying a Terrafile pattern for using modules
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Testing Terraform module code with Terratest
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Building CI/CD for Terraform modules in Azure Pipelines
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Building a workflow for Terraform modules using GitHub Actions
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In this chapter, for some recipes, we will need certain prerequisites, which
+    are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**To have Node.js and NPM installed on your computer**: The download website
+    is here: [https://nodejs.org/en/](https://nodejs.org/en/).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**To have a GitHub account**: If you don''t have one, the creation of the account
+    is free and can be done here: [https://github.com/](https://github.com/).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**To have an Azure DevOps organization**: You can create one with a Live or
+    GitHub account here: [https://azure.microsoft.com/en-in/services/devops/](https://azure.microsoft.com/en-in/services/devops/).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**To have a basic knowledge of Git commands and workflow**: The documentation
+    is available here: [https://git-scm.com/doc](https://git-scm.com/doc).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**To know about Docker**: The documentation is here: [https://docs.docker.com/](https://docs.docker.com/).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**To install Golang on our workstation**: The documentation is here: [https://golang.org/doc/install](https://golang.org/doc/install).
+    We will see the main steps of its installation in the *Testing a Terraform module
+    using Terratest* recipe.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The complete source code for this chapter is available on GitHub at [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP05](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP05).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Check out the following video to see the Code in Action: [https://bit.ly/3ibKgH2](https://bit.ly/3ibKgH2)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating a Terraform module and using it locally
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: A Terraform module is a Terraform configuration that contains one or more Terraform
+    resource. Once created, this module can be used in several Terraform configuration
+    files either locally or even remotely.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this recipe, we will look at the basics of a Terraform module with the steps
+    involved in creating a module and using it locally.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Getting ready
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: To start this recipe, we will use the Terraform configuration that we have already
+    written in the *Provisioning infrastructure in multiple environments* recipe in [Chapter
+    2](3099c9ac-8c38-4e7d-8146-411fac26a2b7.xhtml), *Writing Terraform Configuration*,
+    and whose sources can be found at [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP05/sample-app](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP05/sample-app).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The module we will create in this recipe will be in charge of providing a Service
+    Plan, one App Service, and an Application Insights resource in Azure. Its source
+    code is available here: [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP05/moduledemo/Modules/webapp](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP05/moduledemo/Modules/webapp).
+    Then, we will write a Terraform configuration that uses this module and the code
+    is here: [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP05/moduledemo/MyApp](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP05/moduledemo/MyApp).
+  prefs: []
+  type: TYPE_NORMAL
+- en: How to do it…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'To create the module, perform the following steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In a new folder called `moduledemo`, create the `Modules` and `webapp` folders.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'In the `webapp` folder, create a new `variables.tf` file with the following
+    code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Then, create the `main.tf` file with the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Finally, create the `output.tf` file with the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: Inside the `moduledemo` folder, create a subfolder called `MyApp`.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Inside the `MyApp` folder, create a `main.tf` file with the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: How it works…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In *step 1*, we create the `moduledemo` directory, which will contain the code
+    for all modules with one subdirectory per module. So, we create a `WebApp` subdirectory for
+    our recipe, which will contain the Terraform configuration of the `webapp` module.
+    Then in *steps 2*, *3*, and *4*, we create the module code, which is the standard
+    Terraform configuration and contains the following files:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`main.tf`: This file contains the code of the resources that will be provided
+    by the module.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`variables.tf`: This file contains the input variables needed by the module.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`outputs.tf`: This file contains the outputs of the module that can be used
+    in the main Terraform configuration.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In *step 5*, we created the directory that will contain the Terraform configuration
+    of our application. Finally, in *step 6*, we created the Terraform configuration
+    of our application with the `main.tf` file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the code of this file, we have three Terraform elements:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: There is the Terraform `azurerm_resource_group` resource, which provides a Resource
+    Group.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The Terraform configuration that uses the module we created, using the `module
+    "<module name>"` expression. In this module type block, we used the source properties
+    whose value is the relative path of the directory that contains the `webapp` module.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Note that if some variables of the module are defined with default values, then
+    in some cases, it will not be necessary to instantiate them when calling the module.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We also have the Terraform output, `webapp_url`, which gets the output of the
+    module to use it as output for our main Terraform configuration.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: There's more…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'At the end of all of these steps, we obtain the following directory tree:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/6e656a99-2a8a-4950-8783-897189d53e81.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'To apply this Terraform configuration, you have to navigate in a command terminal
+    to the `MyApp` folder containing the Terraform configuration and then execute
+    the following Terraform workflow commands:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'When executing the `terraform init` command, Terraform will get the module''s
+    code and hence integrate its configuration with that of the application, as shown
+    in the following screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/6f9e7a26-66eb-4026-bbc8-6fab3039e54f.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Finally, at the end of the execution of the `terraform apply` command, the
+    value of the output is displayed in the terminal, as shown in the following screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/6523c357-2ea2-4570-b671-ffe78fda2790.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Our Terraform configuration has therefore retrieved the output of the module
+    and used it as the output of our main code.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this recipe, we have shown the basics of the creation of a Terraform module
+    and its local use. In this chapter, we will see how to generate the structure
+    of a module and how to use remote modules in the *Using the Terraform module generator*
+    recipe.
+  prefs: []
+  type: TYPE_NORMAL
+- en: See also
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The documentation on module creation is available at [https://www.terraform.io/docs/modules/index.html](https://www.terraform.io/docs/modules/index.html)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: General documentation on the modules is available at [https://www.terraform.io/docs/configuration/modules.html](https://www.terraform.io/docs/configuration/modules.html)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Terraform's learning lab on module creation is available at [https://learn.hashicorp.com/terraform/modules/creating-modules](https://learn.hashicorp.com/terraform/modules/creating-modules)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using modules from the public registry
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In the previous recipe, we studied how to create a module and how to write a
+    Terraform configuration that uses this module locally.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To facilitate the development of Terraform configuration, HashiCorp has set
+    up a public Terraform module registry.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This registry actually solves several problems, such as the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Discoverability with search and filter
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The quality provided via a partner verification process
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Clear and efficient versioning strategy, which is otherwise impossible to solve
+    universally across other existing module sources (HTTP, S3, and Git)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: These public modules published in this registry are developed by cloud providers,
+    publishers, communities, or even individual users who wish to share their modules
+    publicly. In this recipe, we will see how to access this registry and how to use
+    a module that has been published in this public registry.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Getting ready
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In this recipe, we will write a Terraform code from scratch that does not require
+    any special prerequisite.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The purpose of this recipe is to provision a Resource Group and network resources
+    in Azure, which are a Virtual Network and Subnet. We will see the public module
+    call but we won't look at the Terraform configuration of the module in detail.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The code source of this recipe is available here: [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP05/publicmodule](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP05/publicmodule).
+  prefs: []
+  type: TYPE_NORMAL
+- en: How to do it…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'To use the Terraform module from a public registry, perform the following steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In a web browser, go to the URL: [https://registry.terraform.io/browse/modules](https://registry.terraform.io/browse/modules).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'On this page, in the FILTERS list in the left panel, choose azurerm:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/7c860d58-f9aa-4f31-b1ef-def165da076b.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'In the results list, click on the first result, that is, the Azure / network module:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/b621e18d-f5a1-4e7c-a355-a86af97eb9b2.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Then, on the Details page of this module, copy the code from the Usage section:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/eea095d2-77ae-4687-bf7b-84f079b8ce08.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Finally, in your workstation, create a new file, `main.tf`, then paste the
+    preceding code and update it as follows:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: How it works…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In *steps 1* to *2*, we explored Terraform's public registry to look for a module
+    that allows the provisioning of resources for Azure (using the `azurerm` filter).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Then, in *steps 3* and *4*, we accessed the Details page of the Network module
+    published by the Azure team.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In *step 5*, we used this module by specifying these necessary input variables
+    with the `source` property, which is worth of a public module-specific alias, `Azure/network/azurerm`, provided
+    by the registry.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There's more…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: We have seen in this recipe that using a module from the public registry saves
+    development time. Here, in our recipe, we used a verified module but you can perfectly
+    use the other community modules.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'It is possible to use the versioning of these modules by choosing the desired
+    version of the module in the version drop-down list:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/57fa38f5-1215-4c2c-9c70-6193c50246ee.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: And so in the module call, use the `Version` property with the chosen version
+    number.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note that, like all modules or community packages, you must check that their
+    code is clean and secure before using them by manually reviewing the code inside
+    their GitHub repository. Indeed, in each of these modules, there is a link to
+    the GitHub repository, which contains the sources.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the *Sharing a Terraform module using GitHub* recipe of this chapter, we
+    will see how to publish a module in the public registry.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Also, before using a module in a company project, you must take into account
+    that in case of a request for correction or evolution of a module, you need to
+    create an issue or make a pull request in the GitHub repository of this module.
+    This requires waiting for a period of time (validation waiting time and merge
+    of the pull request) before it can be used with the fixed or the requested evolution.
+  prefs: []
+  type: TYPE_NORMAL
+- en: However, it's worth using these modules daily, as they are very handy and save
+    a lot of time for demonstrations, labs, and sandbox projects.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We have seen the use of the public registry in this recipe; we will study in
+    [Chapter 8](7a338622-bf1e-4c4b-9c08-88eb36f079da.xhtml), *Using Terraform Cloud
+    to Improve Collaboration*, how to use a private registry of modules in Terraform.
+  prefs: []
+  type: TYPE_NORMAL
+- en: See also
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The documentation on the Terraform module registry is available at [https://www.terraform.io/docs/registry/](https://www.terraform.io/docs/registry/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Sharing a Terraform module using GitHub
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In the *Creating a Terraform module and using it locally* recipe of this chapter,
+    we studied how to create a module and in the previous recipe, *Using a module
+    from the public registry*, of this chapter, how to use a module from the public
+    registry.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this recipe, we'll see how to publish a module in the public registry by
+    storing its code on GitHub.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Getting ready
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: To apply this recipe, we need to have a GitHub account (which is currently the
+    only Git provider available for publishing public modules) that you can create
+    here: [https://github.com/join](https://github.com/join). Also, you'll need to
+    know the basics of Git commands and workflow ([https://www.hostinger.com/tutorials/basic-git-commands](https://www.hostinger.com/tutorials/basic-git-commands)).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Concerning the code of the module we are going to publish, we will use the code
+    of the module we created in the first recipe of this chapter, the sources of which
+    are available at [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP05/moduledemo/Modules/webapp](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP05/moduledemo/Modules/webapp).
+  prefs: []
+  type: TYPE_NORMAL
+- en: How to do it…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'To share our custom module in the public registry, perform the following steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In our GitHub account, create a new repository named `terraform-azurerm-webapp`
+    with basic configuration, as shown in the following screenshot:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/b3a6fec8-43ca-4401-a3ff-e70af59eedb1.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'In the local workstation, execute the Git command to clone this repository:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: Copy the sources code from [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP05/moduledemo/Modules/webapp](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP05/moduledemo/Modules/webapp)
+    and paste it inside the new folder created by the `git clone` command.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Update the content of the `Readme.md` file with more description of the module
+    role.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Commit and push all files in this folder; to perform this action, you can use
+    Visual Studio Code or Git commands (`commit` and `push`)
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Add and push a Git tag on this commit with the name `v0.0.1`, by executing
+    this command:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: In a web browser, go to the URL [https://registry.terraform.io/](https://registry.terraform.io/).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'On this page, click on the Sign-in link on the top menu:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/5634bdda-72b1-4500-8c03-bfe84d503226.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'On the newly opened window, click on the Sign in with GitHub button, and if
+    prompted, authorize HashiCorp to read your repositories:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/f29e1357-63dd-40f0-aac8-e7aaa4d98800.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Once authenticated, click on the Publish link on the top menu:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/ce25e395-258e-4263-a602-4f7bfe13370b.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'On the next page, select the mikaelkrief/terraform-azurerm-webapp repository, which
+    contains the code of the module to publish, and check the I agree to the Terms
+    of Use checkbox:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/7bd318aa-446e-4c20-81f8-af18d58b2b99.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Click on the PUBLISH MODULE button and wait for the module page to load.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: How it works…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In *steps 1* and *2*, we created a Git repository in GitHub and cloned it locally,
+    and in *steps 3* to *6*, we wrote the Terraform configuration for the module (using
+    an existing code). We also edited the `Readme.md` file that will be used as documentation
+    to use the module.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Then, we made a commit and pushed this code in the remote Git repository, and
+    we added a tag that will be in the form `vX.X.X` and will be used to version the
+    module.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, in *steps 7* to *12*, we published this module in the public registry,
+    by logging in with our GitHub credentials in the registry and then selecting the
+    repository that contains the module code.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The registry automatically detects the version of the module in relation to
+    the Git tag that was pushed (in *step 6*).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'After all of these steps, the module is available in Terraform''s public registry,
+    as shown in the following screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/25926ff4-cb3c-49ce-935d-100cdec2f059.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: The module is publicly accessible; the instructions for use are displayed in
+    the right panel and the `Readme.md` text is displayed as documentation in the
+    content of the page.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There's more…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Concerning the name of the repository that will contain the module code, it
+    must be composed as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: Similarly, for the Git tag, it must be in the form `vX.X.X` to be integrated
+    into the registry. To learn more about module resumes, see the documentation: [https://www.terraform.io/docs/registry/modules/publish.html#requirements](https://www.terraform.io/docs/registry/modules/publish.html#requirements).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Once published, it is possible to delete a module by choosing Delete module from
+    the Manage Module drop-down list:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/ead4f621-5465-4017-b9f3-12edecb517c4.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Be careful: after deleting it from the registry, the module becomes unusable.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: See also
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Module publishing documentation is available here: [https://www.terraform.io/docs/registry/modules/publish.html](https://www.terraform.io/docs/registry/modules/publish.html).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Documentation on the Registry APIs is available here: [https://www.terraform.io/docs/registry/api.html](https://www.terraform.io/docs/registry/api.html).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using another file inside a custom module
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In the *Creating Terraform module and using it locally* recipe of this chapter,
+    we studied the steps to create a basic Terraform module.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We can have scenarios where we need to use another file in the module that doesn't
+    describe the infrastructure via Terraform (`.tf` extension), for example, in the
+    case where the module needs to execute a script locally for operating an internal
+    program.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this recipe, we will study how to use another file in a Terraform module.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Getting ready
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: For this recipe, we don't need any prerequisites; we will write the Terraform
+    configuration for the module from scratch.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The goal of this recipe is to create a Terraform module that will execute a
+    Bash script that will perform actions on the local computer (for this recipe,
+    a `hello world` display will suffice).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Since we will be running a Bash script as an example, we will run Terraform
+    under a Linux system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: It is important to keep in mind that provisioners such as this reduce the reusability
+    of your configuration by assuming that the system where Terraform runs has Bash
+    installed. This is otherwise usually not a limiting factor in Terraform as it
+    offers builds for different OSes and architectures and runs cross-platform.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The source code of the created module in this recipe is available here: [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP05/moduledemo/Modules/execscript](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP05/moduledemo/Modules/execscript).
+  prefs: []
+  type: TYPE_NORMAL
+- en: How to do it…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Perform the following steps to use the file inside the module:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In a new folder called `execscript` (inside the `Modules` folder) that will
+    contain the code of the module, we create a new file, `script.sh`, with the following
+    content:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Create a `main.tf` file in this module and write the following code inside
+    it:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Then, in the Terraform configuration, call this module using the following
+    code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Finally, in a command-line terminal, navigate to the folder of the Terraform
+    configuration and execute the basic Terraform workflow with the following commands:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: How it works…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In *steps 1* and *2*, we created a module that executes a script locally using
+    the resource, `local_exec` ([https://www.terraform.io/docs/provisioners/local-exec.html](https://www.terraform.io/docs/provisioners/local-exec.html)).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`local_exec` executes a script that is in a `script.sh` file that is stored
+    inside the module. To configure the path relative to this `script.sh` file, which
+    can be used during the execution of Terraform, we used the `path.module` expression,
+    which returns the complete path relative to the module.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Then, in *step 3*, we wrote the Terraform configuration that calls this module.
+    Finally, in *step 4*, we run Terraform on this code and we get the following result:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/1a6cc0f5-b01a-4979-b71b-1c0babb545a8.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: You can see that the script executed successfully and it displays `Hello World`
+    in the console.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There's more…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Let''s see what would happen if we hadn''t used the `path.module` expression in
+    the code of this module and we had written the module code in the following way:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'When executing the `apply` command, the following error would have occurred:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/6d27804a-779a-47c3-bc2f-f5cd0bffb60d.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: This is because Terraform runs in the `main.tf` file, which does not have access
+    to the `relatif` path of the `script.sh` file in the module directory.
+  prefs: []
+  type: TYPE_NORMAL
+- en: See also
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Documentation on the `Path.Module` expression is available here: [https://www.terraform.io/docs/configuration/expressions.html#references-to-named-values](https://www.terraform.io/docs/configuration/expressions.html#references-to-named-values).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using the Terraform module generator
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: We learned how to create, use, and share a Terraform module and we studied the
+    module's files structure good practices, which consists of having a main file,
+    another for variables, and another that contains the outputs of the module. In
+    the *Sharing a Terraform module using GitHub* recipe, we also discussed that we
+    could document the use of the module with a `Readme.md` file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Apart from these standard files for the operation of the module, we can also
+    add scripts, tests (which we will see in the *Testing Terraform module code with
+    Terratest *recipe), and other files.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For company projects with large infrastructures and a lot of resources to be
+    provided with Terraform, we will need to create a lot of Terraform modules.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To facilitate the creation of the structure of the modules, Microsoft has published
+    a tool that allows us to generate the basic structure (also called a **template**)
+    of a Terraform module.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this recipe, we will see how to create the base of a module using the module
+    generator.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Getting ready
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The software prerequisites to use this module generator are in the following
+    order:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Install Node.js (6.0+) locally; its download documentation is available at [https://nodejs.org/en/download/](https://nodejs.org/en/download/).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Then install the `npm` package, Yeoman ([https://www.npmjs.com/package/yo](https://www.npmjs.com/package/yo)),
+    by executing the following command:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: To illustrate this recipe, we will use this generator to create the structure
+    of a module that will be in charge of provisioning a Resource Group.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A sample of the generated module from this recipe is available at [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP05/generatedmodule](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP05/generatedmodule).
+  prefs: []
+  type: TYPE_NORMAL
+- en: How to do it…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'To generate a structure for a Terraform module perform the following steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In a command-line terminal, execute the command:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: Create a new folder with the name of the module as `terraform-azurerm-rg`.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Then, in this folder, in the command-line terminal, execute this command:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Finally, the generator will ask some questions; type the responses like this
+    following screenshot:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/8b5e3dd2-1dbb-4b0c-bac8-461c44db7382.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: How it works…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In *step 1*, we installed the module generator, which is an `npm` package called
+    `generator-az-terra-module`. So we used the classical `npm` command line, which
+    installs a package globally, that is to say, for the whole machine.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In *step 2*, we created the folder that will contain the code of the module;
+    for our recipe, we used the nomenclature required by the Terraform registry.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In *steps 3 and 4*, we executed the `az-terra-module` generator. During its
+    execution, this generator asks the user questions that will allow the customization
+    of the module template that will be generated. The first question concerns the
+    name of the module. The second one concerns the existence of the module in `npm`;
+    we answered `No`. Then, the next three questions concern the module metadata.
+    Finally, the last question is to know whether we want to add to the module code
+    a Dockerfile that will be used to run the tests on the module—we answer `Yes`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'At the end of all of these questions, the generator copies all of the files
+    necessary for the module in our directory:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/8f924608-681f-47a0-92fa-5941ad9149e3.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: As you can see in this screen, the generator displays in the terminal the list
+    of folders and files that have been created.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Finally, in our file explorer, we can actually see all of these files:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/fccd8fd0-fd81-42d0-86d1-1e11a14e4b99.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: The basic structure of our Terraform module is well generated.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There's more…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In this recipe, we have seen that it is possible to generate the file structure
+    of a Terraform module. At the end of the execution of this generator, the directory
+    of the created module contains the Terraform files of the module, which will be
+    edited afterward with the code of the module. This folder will also contain other
+    test files and a Dockerfile whose usefulness we will see in the *Testing a Terraform
+    module with Terratest* recipe of this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Also, although this generator is published by Microsoft, it can be used to generate
+    the structure of any Terraform modules you need to create even if it does not
+    provide anything in Azure.
+  prefs: []
+  type: TYPE_NORMAL
+- en: See also
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The source code for the module generator is available on GitHub at [https://github.com/Azure/generator-az-terra-module](https://github.com/Azure/generator-az-terra-module).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Documentation on the use of the generator is available at [https://docs.microsoft.com/en-us/azure/developer/terraform/create-a-base-template-using-yeoman](https://docs.microsoft.com/en-us/azure/developer/terraform/create-a-base-template-using-yeoman).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Yeoman documentation is available at [https://yeoman.io/](https://yeoman.io/).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The `npm` package of the generator is available at [https://www.npmjs.com/package/generator-az-terra-module](https://www.npmjs.com/package/generator-az-terra-module).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Generating module documentation
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: We have learned from the previous recipes that in the composition of a Terraform
+    module we have input variables, as well as outputs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As with all packages that are made available to other teams or even publicly,
+    it is very important to document your Terraform module.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The problem with this documentation is that it is tedious to update the document
+    with each change and therefore quickly becomes obsolete.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Among all of the tools in the Terraform toolbox, there is `terraform-docs`,
+    an open source, cross-platform tool that allows the documentation of a Terraform
+    module to be generated automatically.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We will discuss in this recipe how to automatically generate the markdown documentation
+    of a module with `terraform-docs`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Getting ready
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: For this recipe, we are going to generate the documentation of the module we
+    created in the *Creating a Terraform module and using it locally* recipe of this
+    chapter, which allowed us to create a web app in Azure, the sources of which are
+    here: [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP05/moduledemo/Modules/webapp](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP05/moduledemo/Modules/webapp).
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you are working on a Windows OS, you will need to install **Chocolatey**
+    by following this documentation: [https://chocolatey.org/install](https://chocolatey.org/install).
+    The documentation we will generate for the `webapp` module is available at [https://github.com/PacktPublishing/Terraform-Cookbook/blob/master/CHAP05/moduledemo/Modules/webapp/Readme.md](https://github.com/PacktPublishing/Terraform-Cookbook/blob/master/CHAP05/moduledemo/Modules/webapp/Readme.md).
+  prefs: []
+  type: TYPE_NORMAL
+- en: How to do it…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Perform the following steps to generate the module documentation:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If you work on a Linux OS, execute the following script in a command-line terminal:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'If you work on a Windows OS, execute the following script:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Execute the following script to test the installation:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In a command-line terminal, navigate inside the `moduledemo` folder and execute
+    the following command:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: How it works…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In *step 1*, we install `terraform-docs` according to the operating system.
+    For Linux, the provided script downloads the `terraform-docs` package from GitHub,
+    decompresses it with the TAR tool, gives it execution rights with `chmod`, and
+    finally copies it to the local directory, `/usr/bin/local` (which is already configured
+    in the `PATH` environment variable).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following screenshot shows the installation in Linux:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/8f3b3fb7-3a62-47eb-97af-c58b812637ad.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: For Windows, the script uses the `choco install` command from **Chocolatey**
+    to download the `terraform-docs` package.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following screenshot shows the installation in Windows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/5df811ca-9c44-4cec-9e0a-5fa57040dd0e.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Then, in *step 2*, we check its installation by running `terraform-docs` and
+    adding the `--version` option. This command displays the installed version of
+    `terraform-docs`, as shown in the following screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/a070d16a-6475-47ba-9c1c-396cb914f9ce.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Finally, in *step 3*, we execute `terraform-docs` specifying in the first argument
+    the type of format of the documentation. In our case, we want it in `markdown`
+    format. Then, in the second argument, we specify the path of the `modules` directory.
+    At this stage, we could execute the command this way and during its execution,
+    the documentation is displayed in the console, as shown in the following screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/9e7a2608-68cd-49f2-a879-69582c8389f8.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: But to go further, we added the `> Modules/webapp/Readme.md` command, which
+    indicates that the content of the generated documentation will be written in the
+    `Readme.md` file that will be created in the module directory.
+  prefs: []
+  type: TYPE_NORMAL
+- en: At the end of the execution of this command, a new `Readme.md` file can be seen
+    inside the module folder that contains the module documentation. The generated
+    documentation is composed of the providers used in the module, the input variables,
+    and the outputs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There's more…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In our recipe, we chose to generate markdown documentation, but it is also possible
+    to generate it in JSON, XML, YAML, or text (pretty) format. To do so, you have
+    to add the format option to the `terraform-docs` command. To know more about the
+    available generation formats, read the documentation here: [https://github.com/segmentio/terraform-docs/blob/master/docs/FORMATS_GUIDE.md](https://github.com/segmentio/terraform-docs/blob/master/docs/FORMATS_GUIDE.md).
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can also improve your processes by automating the generation of documentation
+    by triggering the execution of `terraform-docs` every time you commit code in
+    Git. For this, you can use a pre-commit Git Hook, as explained in the documentation
+    here: [https://github.com/segmentio/terraform-docs/blob/master/docs/USER_GUIDE.md#integrating-with-your-terraform-repository](https://github.com/segmentio/terraform-docs/blob/master/docs/USER_GUIDE.md#integrating-with-your-terraform-repository).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Also, to get the latest version of `terraform-docs`, follow the release here: [https://github.com/segmentio/terraform-docs/releases](https://github.com/segmentio/terraform-docs/releases),
+    as well as `CHANGELOG` here: [https://github.com/segmentio/terraform-docs/blob/master/CHANGELOG.md](https://github.com/segmentio/terraform-docs/blob/master/CHANGELOG.md),
+    to see the changes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you want to publish your module in the Terraform registry as we have seen
+    in the *Sharing a Terraform module using GitHub* recipe in this chapter, you do
+    not need to generate this documentation because it is already included in the
+    registry's functionalities.
+  prefs: []
+  type: TYPE_NORMAL
+- en: See also
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Source code for `terraform-docs` is available here: [https://github.com/segmentio/terraform-docs](https://github.com/segmentio/terraform-docs).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The Chocolatey `terraform-docs` package page is available here: [https://chocolatey.org/packages/Terraform-Docs](https://chocolatey.org/packages/Terraform-Docs).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using a private Git repository for sharing a Terraform module
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter dedicated to Terraform modules, we have seen that it is possible
+    to put the code of a module in a GitHub repository to publish it in the Terraform
+    public registry.
+  prefs: []
+  type: TYPE_NORMAL
+- en: However, in enterprises, there is a need to create modules without exposing
+    the code of these modules publicly by archiving them in GitHub repositories, which
+    are public, that is, accessible by everyone.
+  prefs: []
+  type: TYPE_NORMAL
+- en: What you need to know is that there are several types of Terraform module sources,
+    as indicated in this documentation: [https://www.terraform.io/docs/modules/sources.html](https://www.terraform.io/docs/modules/sources.html).
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this recipe, we will study how to expose a Terraform module through a private
+    Git repository. That is to say, either this Git is installed internally (so-called
+    on-premises) or in cloud mode, SaaS, but requires authentication.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Getting ready
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: For this recipe, we will use a Git repository in **Azure Repos **(Azure DevOps),
+    which is free and requires authentication to access it. For more information and
+    how to create a free Azure DevOps account, go to [https://azure.microsoft.com/en-us/services/devops/](https://azure.microsoft.com/en-us/services/devops/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: As a prerequisite, we need a project that has already been created; it can be
+    named, for example, `Terraform-modules`, and it will contain the Git repository
+    of all of the modules.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The next screenshot shows the form to create this Azure DevOps project:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/f1b7b966-5572-46a0-94b1-3ababfa7a565.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: The purpose of this recipe is not to focus on the use of Azure DevOps; we will
+    use it just to have an example of a private repository.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You will also need to know the basics of the commands and workflow of Git: [https://www.hostinger.com/tutorials/basic-git-commands](https://www.hostinger.com/tutorials/basic-git-commands).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Concerning the code of the module that we are going to put in Azure Repos, we
+    are going to use the code of the module that we created in the first recipe of
+    this chapter, the source code for which is available here: [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP05/moduledemo/Modules/webapp](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP05/moduledemo/Modules/webapp).
+  prefs: []
+  type: TYPE_NORMAL
+- en: How to do it…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'To use a private module repository, we need to perform the following steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the Azure DevOps project, `Terraform-modules`, create a new Git repository
+    named `terraform-azurerm-webapp` with basic configuration, as shown in the following
+    screenshot:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/bf2184cd-59b0-44b5-b8bd-ce42afa205e8.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'In a local workstation, execute the Git command for cloning this repository:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: During the first operation, you will have to enter your Azure DevOps login and
+    password for identification.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Copy the source code from [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP05/moduledemo/Modules/webapp](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP05/moduledemo/Modules/webapp)
+    and paste it the new folder created by the Git clone.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Update the content of the `Readme.md` file with more of a description of the
+    module role.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Commit and push all files in this folder; to perform this action, you can use
+    VS Code or Git commands:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Add and push a Git tag on this commit with the name, `v0.0.1`, by executing
+    this command:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: This operation can also be done via the web interface of Azure Repos, in the
+    Tags tab of the repository.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Finally, in the Terraform `main.tf` file, the following code is written that
+    uses the module:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: How it works…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In *steps 1* and *2*, we created a Git repository in Azure Repos and cloned
+    it locally. Then, in *steps 3* to *7*, we wrote the Terraform configuration for
+    the module (using an already existing code). We also edited the `Readme.md` file
+    that will be used as a documentation for the use of the module. Then, we made
+    a commit and pushed this code into the remote Git Azure repository. The following
+    screenshot shows the remote repository in Azure Repos:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/4805b372-65d4-4fbb-b6bf-0e44050f51fb.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: And finally, we added a Git tag, which will be in the form `vX.X.X` and which
+    will be used to version the module.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, in *step 8*, we wrote the Terraform configuration, which remotely uses
+    this module with a Git type source. For this, we specified the `source` property
+    of the module with the Git URL of the repository. In addition to this URL, we
+    added the `ref` parameter to which we give as a value the Git tag we created.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'It will be during the execution of the `terraform init` command that Terraform
+    will clone the repository locally:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/4e78e09e-fbd3-4fb6-ba58-74239f1689b1.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'The module code will be cloned into the Terraform context directory, as shown
+    in the following screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/794c0775-d955-42ae-8377-cf3219380985.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: The `webapp` module is downloaded inside the `.terraform` folder.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There's more…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In this recipe, the majority of the steps are identical to the ones already
+    studied in the *Sharing a Terraform module using GitHub* recipe in which we stored
+    the module code in GitHub and shared it in the public registry. The difference
+    is that, in *step 8* of this recipe, we filled the value of the `source` property
+    with the Git repository URL.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The advantages of using a private Git repository are, on the one hand, that
+    it's only accessible by people who have permissions for that repository. On the
+    other hand, in the `ref` parameter that we put in the module call URL, we used
+    a specific version of the module using a Git tag. We can also perfectly name a
+    specific Git branch, which is very useful when we want to evolve the module without
+    impacting the master branch.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We could also very well store the module's code in a GitHub repository and fill
+    the `source` properties with the GitHub repository URL, as shown in this documentation: [https://www.terraform.io/docs/modules/sources.html#github](https://www.terraform.io/docs/modules/sources.html#github).
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this recipe, we took a Git repository in Azure DevOps as an example, but
+    it works very well with other Git repository providers such as Bitbucket ([https://www.terraform.io/docs/modules/sources.html#bitbucket](https://www.terraform.io/docs/modules/sources.html#bitbucket)).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Regarding Git repository authentication, you can check out this documentation
+    at [https://www.terraform.io/docs/modules/sources.html#generic-git-repository](https://www.terraform.io/docs/modules/sources.html#generic-git-repository),
+    for information on access to and authentication of the Git repository in HTTPS
+    or SSH.
+  prefs: []
+  type: TYPE_NORMAL
+- en: See also
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The module source documentation is available here: [https://www.terraform.io/docs/modules/sources.html](https://www.terraform.io/docs/modules/sources.html).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Applying a Terrafile pattern for using modules
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: We have seen throughout this chapter's recipes how to create Terraform modules
+    and how to use them either locally or remotely with the public registry or Git
+    repositories.
+  prefs: []
+  type: TYPE_NORMAL
+- en: However, when you have a Terraform configuration that uses many modules, managing
+    these modules can become complicated. This is indeed the case when the versions
+    of these modules change; it is necessary to browse through all of the Terraform
+    configurations to make version changes. Moreover, we do not have global visibility
+    on all of the modules called in this Terraform configuration as well as their
+    versions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Analogous to the classic package managers (NPM and NuGet), a pattern has been
+    exposed by several people that allows users to gather the configuration of the
+    Terraform modules used in a Terraform configuration in a centralized file called
+    a **Terrafile**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this recipe, we will study how to use the Terrafile pattern to manage the
+    sources of the Terraform modules.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Getting ready
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: For this recipe, we will use the Terraform source code that is already written
+    and available here: [https://github.com/PacktPublishing/Terraform-Cookbook/blob/master/CHAP05/terrafile/initial/main.tf](https://github.com/PacktPublishing/Terraform-Cookbook/blob/master/CHAP05/terrafile/initial/main.tf).
+    This Terraform configuration is at first classically configured—it calls several
+    modules and in each of the calls to these modules, we use the source property
+    with the GitHub repositories' URLs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Moreover, we will execute a code written in Ruby with Rake ([https://github.com/ruby/rake](https://github.com/ruby/rake)).
+    For this, we need to have Ruby installed on our computer. The installation documentation
+    is available here: [https://www.ruby-lang.org/en/documentation/installation/](https://www.ruby-lang.org/en/documentation/installation/).
+    However, no prior Ruby knowledge is required; the complete script is provided
+    in the source code of this recipe.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The goal of this recipe will be to integrate the Terrafile pattern in this code
+    by centralizing the management of the modules to be used. The code source of this
+    recipe is available at [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP05/terrafile](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP05/terrafile).
+  prefs: []
+  type: TYPE_NORMAL
+- en: How to do it…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Perform the following steps to use the Terrafile pattern:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Copy the content of `main.tf` available at [https://github.com/PacktPublishing/Terraform-Cookbook/blob/master/CHAP05/terrafile/initial/main.tf](https://github.com/PacktPublishing/Terraform-Cookbook/blob/master/CHAP05/terrafile/initial/main.tf)
+    inside a new folder.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'In this new folder, create a new file called `Terrafile` (without an extension)
+    with the following content:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Create another new file, `Rakefile` (without an extension), with the following
+    content (the complete source code is at [https://github.com/PacktPublishing/Terraform-Cookbook/blob/master/CHAP05/terrafile/new/Rakefile](https://github.com/PacktPublishing/Terraform-Cookbook/blob/master/CHAP05/terrafile/new/Rakefile)):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In `main.tf`, update all source module properties with the following content:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In a command-line terminal, inside this folder, execute the following script:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: How it works…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The mechanism of the Terrafile pattern is that instead of using the Git sources
+    directly in module calls, we reference them in a file in Terrafile YAML format.
+    In the Terraform configuration, in the module call, we instead use a local path
+    relative to the `modules` folder. Finally, before executing the Terraform workflow,
+    we execute a script that runs through this `Terrafile` file and will locally clone
+    each of these modules referenced in its specific folder (which is in the module
+    call).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In *step 1*, we created the `Terrafile` file, which is in YAML format and contains
+    the repository of the modules we are going to use in the Terraform configuration.
+    For each of the modules, we indicate the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The name of the folder where the module will be copied
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The URL of the Git repository of the module
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Its version, which is the Git tag or its branch
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In *step 2*, we wrote the Ruby Rake script called Rakefile, which, when executed,
+    will browse the Terrafile and will execute the `git clone` command on all modules
+    into the specified folder.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Then, in *step 3*, we modify the Terraform configuration to call the modules,
+    no longer with the Git URL but earlier with the relative path of their specified
+    folder in the Terrafile.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, in *step 4*, we execute the Rakefile script by calling the `get_modules`
+    function of this script, which will make a Git clone of all of these modules in
+    their folders.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Once these steps are done, we can execute the classic Terraform workflow commands
+    with `init`, `plan`, and `apply`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There's more…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: As we have learned in this recipe, we have created a `Terrafile` file that serves
+    as a repository for the modules we will use in our Terraform configuration. It
+    allows for better management and maintenance of the modules and versions to be
+    used.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this Terrafile, for each module, we have specified its destination folder,
+    and as you can see, we have added the version number in the folder name. Hence,
+    the name of the folder is unique and will allow us to use several versions of
+    the same module in the Terraform configuration. The following code shows an extract
+    of a Terrafile with two different versions of the same module:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: Also, it allows you to specify, if necessary, the authorized Git credentials to
+    clone the module code. Be careful, however, not to write passwords in this file,
+    which will be archived in a Git repository.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this recipe, the Rakefile script was provided and is available in the original
+    article of the Terrafile pattern ([https://bensnape.com/2016/01/14/terraform-design-patterns-the-terrafile/](https://bensnape.com/2016/01/14/terraform-design-patterns-the-terrafile/)).
+    You are free to adapt it according to your needs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, the essentials of the Terrafile pattern is not the script, the language,
+    or the format used but, rather, its working principle. There are alternative scripts
+    and tools to this Rakefile with, for example, a Python script available at [https://github.com/claranet/python-terrafile](https://github.com/claranet/python-terrafile), or
+    a tool written in Go available at [https://github.com/coretech/terrafile](https://github.com/coretech/terrafile).
+  prefs: []
+  type: TYPE_NORMAL
+- en: See also
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The main reference article on the Terrafile pattern is available here: [https://bensnape.com/2016/01/14/terraform-design-patterns-the-terrafile/](https://bensnape.com/2016/01/14/terraform-design-patterns-the-terrafile/).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The Python Terrafile package is available here: [https://pypi.org/project/terrafile/](https://pypi.org/project/terrafile/)
+    [and its use is described here](https://pypi.org/project/terrafile/) [https://github.com/claranet/python-terrafile](https://github.com/claranet/python-terrafile).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The Terrafile tool written in Go is available here: [https://github.com/coretech/terrafile](https://github.com/coretech/terrafile).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Testing Terraform module code with Terratest
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: When developing a Terraform module that will be used in multiple Terraform configurations
+    and shared with other teams, there is one step that is often neglected and that
+    is the testing of the module.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Among the Terraform framework and testing tools is the **Terratest** framework,
+    created by the *Gruntwork* community ([https://gruntwork.io/static/](https://gruntwork.io/static/)),
+    which is popular and allows testing on code written in the Go language.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this recipe, we will study how to use Terratest to write and run integration
+    tests on Terraform configuration and modules in particular.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Getting ready
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The **Terratest** test framework is written in Golang (Go language) and the
+    tests run on the Go runtime. That's why, as a prerequisite, we need to install
+    Go by going to [https://golang.org/](https://golang.org/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The minimum Go version required for Terratest is specified here: [https://terratest.gruntwork.io/docs/getting-started/quick-start/#requirements](https://terratest.gruntwork.io/docs/getting-started/quick-start/#requirements).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here are some important steps to install Go: for the Windows OS, you can install
+    the Golang package using Chocolatey ([https://chocolatey.org/packages/golang](https://chocolatey.org/packages/golang))
+    by executing this command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'For the Linux OS, run the following script:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: The preceding script creates the workspace directories of Go (`bin` and `src`),
+    then downloads the Go SDK, and sets the environment variables, `GOPATH` and `PATH`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you are on Linux, you will also need the `gcc` package that you can install
+    by running the `apt install gcc` command.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The goal of this recipe is to write the integration tests for a very simple
+    module that we will also write in this recipe to serve as a demonstration.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The source code of this chapter with the module and its test is available here: [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP05/testing-terratest](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP05/testing-terratest).
+  prefs: []
+  type: TYPE_NORMAL
+- en: How to do it…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: This recipe is in two parts. The first part concerns the writing of the module
+    and its tests and the second part concerns the execution of the tests.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To write the module and its tests, we perform the following steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We create a new `module` folder that will contain the Terraform configuration
+    of the module.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'In this `module` folder, we create a `main.tf` file, which contains the following
+    code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: In this `module` folder, we create the `fixture` folder inside a `test` folder.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Then, in this `fixture` folder, we create a `main.tf` file, which contains
+    the following Terraform configuration:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In the test folder, we create a `test_module.go` file, which contains the following
+    code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE35]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'To execute the tests, we perform the following steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The first step is to download the `terratest` Go package by executing the following
+    command:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE36]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Then, in the directory that contains the `test_module.go` file, we execute
+    this command:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE37]'
+  prefs: []
+  type: TYPE_PRE
+- en: How it works…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In the first part of this recipe, we worked on the development of the module
+    and its tests with the Terratest framework. In *step 2*, we wrote the module's
+    code, which is extremely simple and focuses on the module's output. In *step 3*,
+    in the `fixture` folder, we wrote a Terraform configuration that uses the module
+    locally and that we will use to test it. What is important in this configuration
+    is to have an output in the module. Indeed, in Terratest, we will use the outputs
+    to test that the module correctly returns the correct expected value.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In *step 4*, we write the module tests in a file written in Golang. The code
+    is composed as follows: in the first lines of this code, we import the libraries
+    needed to run the tests, including the `terratest` and `assert` libraries. Then,
+    we create a `TestTerraformModule` function, which takes `testing.T` as a parameter,
+    which is a Go pointer that indicates that it is a test code.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Following are the details of the code of this function, which is composed of
+    five lines of code.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the first line, we define the test options with the folder containing the
+    Terraform configuration that will be executed during the tests:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE38]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Then, we define the `terrafom.Destroy` function, which allows us to execute
+    the `terraform destroy` command at the end of the tests, as described in the following
+    code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE39]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Then, we call the `terraform.InitAndApply` function, which allows us to execute
+    the `terraform init` and `apply` commands, as described in the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE40]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After executing the `apply` command, we will retrieve the value of the output,
+    which is called `outmodule`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE41]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Finally, we use `assert`, testing the previously recovered value of the output
+    with the value we expect:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE42]'
+  prefs: []
+  type: TYPE_PRE
+- en: Then, in the second part of this recipe, we work on the execution of the tests.
+    The first step is to download the Terratest Go package with the `go get <package
+    source>` command.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We can also run the `go get -v -t -d ./...` command to get all required package
+    dependencies.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Then, inside the `test` folder, we run the tests by executing this command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE43]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'During this execution, Terratest will carry out the following actions in order:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Execute the `terraform init` and `terraform apply` commands on the Terraform
+    test code located in the fixture folder.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Get the value of the `outmodule` output.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Compare this value with the expected value.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Execute the `terraform destroy` command.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Display the test results.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'The next screenshot shows the execution of the tests on our module:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/580cf530-5ff2-420e-8361-1c013229ffb5.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: You can see, in this screenshot, the different operations that have been executed
+    by the `go test -v` command as well as the result of the tests.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There's more…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Terratest allows you to execute integration tests on Terraform configuration
+    with a powerful routine that allows you to provision resources, execute the tests,
+    and finally destroy the resources.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We have seen in the prerequisites of this recipe that the setup of the Golang
+    development environment requires actions that can vary from one operating system
+    to another. To facilitate this task, you can execute your Terratest tests in a
+    Docker container that already has an environment configured. The Dockerfile corresponding
+    to this container is available here: [https://github.com/PacktPublishing/Terraform-Cookbook/blob/master/CHAP05/testing-terratest/Dockerfile](https://github.com/PacktPublishing/Terraform-Cookbook/blob/master/CHAP05/testing-terratest/Dockerfile).
+  prefs: []
+  type: TYPE_NORMAL
+- en: If Terraform modules provide resources in cloud providers, the authentication
+    parameters must be set before running tests.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, as said in the introduction of this recipe, Terratest is not limited
+    to Terraform—it also allows testing on Packer, Docker, and Kubernetes code. But
+    it goes further by also doing tests on cloud providers such as AWS, Azure, and
+    GCP.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following code snippet shows how to test the existence of the VM in Azure
+    based on Terraform''s output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE44]'
+  prefs: []
+  type: TYPE_PRE
+- en: In the next recipes, we will study its integration in a CI/CD pipeline in Azure
+    Pipelines and then in GitHub with GitHub Actions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: See also
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Terratest's official website is available here: [https://terratest.gruntwork.io/](https://terratest.gruntwork.io/).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Terratest's documentation is available here: [https://terratest.gruntwork.io/docs/](https://terratest.gruntwork.io/docs/).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Sample Terratest code is available here: [https://github.com/gruntwork-io/terratest/tree/master/examples](https://github.com/gruntwork-io/terratest/tree/master/examples).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Read this great article about Terratest: [https://blog.octo.com/en/test-your-infrastructure-code-with-terratest/](https://blog.octo.com/en/test-your-infrastructure-code-with-terratest/).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Building CI/CD for Terraform modules in Azure Pipelines
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Throughout this chapter, we have studied recipes for creating, using, and testing
+    Terraform modules. On the other hand, in the *Using a private Git repository for
+    sharing a Terraform module* recipe in this chapter, we discussed the possibility
+    of using a private Git repository, such as Azure DevOps, to store and version
+    your Terraform modules.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In a DevOps context, when the module is created and the tests have been written,
+    we need to create a DevOps CI/CD pipeline that will automate all of the steps
+    we discussed for the execution of the tests that we performed manually.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There are many CI/CD pipeline platforms; in this recipe, we will see the implementation
+    of a CI/CD pipeline to automate the tests and the publication of a Terraform module
+    in Azure Pipelines.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Getting ready
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: To start this recipe, we must first create a Terraform module and tests with
+    Terratest. For this, we will use the same module and its tests that we created
+    in the previous recipe, the source code for which is available from [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP05/testing-terratest/module](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP05/testing-terratest/module).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Also, as far as the Azure Pipeline is concerned, you will assume that we have
+    already archived the module code in Azure Repos as we saw in the *Using a private
+    Git repository for sharing a Terraform module* recipe of this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To avoid having to install the tools needed to run tests in an Azure Pipelines
+    agent, we will use a Docker image. You should, therefore, have a basic knowledge
+    of Docker and the Docker Hub by referring to the documentation here: [https://docs.docker.com/](https://docs.docker.com/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, in Azure Pipelines, we will use the YAML pipelines, which allows us
+    to have pipelines as code, the documentation for which is here: [https://docs.microsoft.com/en-us/azure/devops/pipelines/yaml-schema?view=azure-devops&tabs=schema%2Cparameter-schema](https://docs.microsoft.com/en-us/azure/devops/pipelines/yaml-schema?view=azure-devops&tabs=schema%2Cparameter-schema).
+  prefs: []
+  type: TYPE_NORMAL
+- en: How to do it…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Perform the following steps to create a pipeline for the module in Azure Pipelines:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the `module` directory, we will create a Dockerfile with the following content:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE45]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In this same directory, we create a `runtests.sh` file with the following content:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE46]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Then, we create an `azure-pipeline.yaml` file with the following extract YAML
+    code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE47]'
+  prefs: []
+  type: TYPE_PRE
+- en: The complete code source of this file is available here: [https://github.com/PacktPublishing/Terraform-Cookbook/blob/master/CHAP05/testing-terratest/azure-pipeline.yaml](https://github.com/PacktPublishing/Terraform-Cookbook/blob/master/CHAP05/testing-terratest/azure-pipeline.yaml).
+  prefs: []
+  type: TYPE_NORMAL
+- en: We `commit` and `push` these three files to the Azure Repos of the Terraform
+    module.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'In Azure Pipelines, in the Pipelines section, we click on the Create Pipeline button:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/0e60774e-1885-4fa2-930d-a62f4e4f0261.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Then, we choose the repository in Azure Repos that contains the code of the
+    module:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/c73e23c2-eab4-4e07-aa68-b54bf04aa41e.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Then, select the Existing Azure Pipelines YAML file option in the pipeline
+    configuration window:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/4315e680-1548-4068-a2c9-9903d46c08b8.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'In the layout that opens on the right, we choose the `azure-pipeline.yaml` file that
+    we wrote in *step 3*, then we validate it by clicking on the Continue button:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/ecce28a1-00e5-4681-bd0c-72b658de6e82.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Finally, the next page displays the contents of the YAML file of the pipeline
+    we have selected. To trigger the pipeline, we click on the Run button:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/d742f325-ca0f-4805-9d76-3ab44854de6b.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: How it works…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In *step 1*, we wrote the Dockerfile that will run the Terratest tests—this
+    Docker image is based on an image called `go-terraform` that I created and already
+    contains Terraform and the Go SDK.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This `go-terraform` image is publicly available in Docker Hub ([https://hub.docker.com/repository/docker/mikaelkrief/go-terraform](https://hub.docker.com/repository/docker/mikaelkrief/go-terraform))
+    and the source code is available at [https://github.com/PacktPublishing/Terraform-Cookbook/blob/master/CHAP05/testing-terratest/Dockerfile-go-terraform](https://github.com/PacktPublishing/Terraform-Cookbook/blob/master/CHAP05/testing-terratest/Dockerfile-go-terraform).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following code is the `FROM` instruction of the Dockerfile:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE48]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Then, in this Dockerfile, we create the `src` folder and copy the module sources
+    into this `src` directory, as shown in the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE49]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Finally, we give the execution rights to the `runtest.sh` script, and we define
+    `entrypoint` on this script, as shown in the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE50]'
+  prefs: []
+  type: TYPE_PRE
+- en: In *step 2*, we write the code of the shell script, `runtest.sh`, which will
+    be in charge of executing the Terratest tests using the `dep ensure` and `go test
+    -v` commands as we learned in the *Testing a Terraform module with Terratest*
+    recipe in this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In *step 3*, we write the YAML code of the Azure DevOps pipeline, which consists
+    of three steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Build the Docker image using the `docker build` command.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Instantiate a new container with this image using the `docker run` command,
+    which will run the tests.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Version-control the module code by adding a tag to the module code.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Then, we `commit` and push these files to the Azure Repos repository of the
+    module.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, in *steps 5* to *8*, we create a new pipeline in Azure Pipelines by
+    choosing the module repository and the YAML file that contains the pipeline definition.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In *step 9*, we execute the pipeline and wait for the end of its execution.
+    As soon as the pipeline ends, you can see that all of the steps have been executed
+    successfully, as shown in the following screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/b6adf142-c0a0-469c-80c7-319344ea67b1.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'And the new tag version is applied to the code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/fc65aecd-2165-4599-ab34-6d2214e2fc51.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: This added tag will be used to version the Terraform module so that it can be
+    used when calling the module.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Hence, with this implementation, when calling the module, we will use a version
+    of the module that has been automatically tested by the pipeline.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There's more…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In this recipe, we have studied the basic steps of the YAML pipeline installation
+    in Azure Pipelines. It is possible to go further by additionally using the reporting
+    of the tests in the pipeline. To learn more, read this blog post: [https://blog.jcorioland.io/archives/2019/09/25/terraform-microsoft-azure-ci-docker-azure-pipeline.html](https://blog.jcorioland.io/archives/2019/09/25/terraform-microsoft-azure-ci-docker-azure-pipeline.html).
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next recipe, we will see the same pipeline process but for a Terraform
+    module that is stored in GitHub and that we want to publish in the Terraform public
+    registry.
+  prefs: []
+  type: TYPE_NORMAL
+- en: See also
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Documentation for Azure Pipelines is available here: [https://docs.microsoft.com/en-us/azure/devops/pipelines/?view=azure-devops](https://docs.microsoft.com/en-us/azure/devops/pipelines/?view=azure-devops)[.](https://docs.microsoft.com/en-us/azure/devops/pipelines/?view=azure-devops)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Building a workflow for Terraform modules using GitHub Actions
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In the *Sharing a Terraform module using GitHub* recipe of this chapter, we
+    studied how to publish a Terraform module in the Terraform public registry by
+    putting its code on GitHub. Then, we learned in the *Testing a Terraform module
+    with Terratest* recipe how to write and run module tests using Terratest.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We will go further in this recipe by studying the implementation of an automated
+    module publishing workflow using GitHub Actions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Getting ready
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: To start this recipe, you must have assimilated the two recipes, *Sharing a
+    Terraform module using GitHub* and *Testing a Terraform module with Terratest*,
+    which include all of the bases and artifacts necessary for this recipe.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this recipe, we will use the module code we wrote in the *Testing Terraform
+    module code with Terratest* recipe, the source code for which is available here: [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP05/testing-terratest/module](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP05/testing-terratest/module).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Also, we will be using GitHub Actions, which is a free service for public GitHub
+    repositories, the documentation for which is available here: [https://github.com/features/actions](https://github.com/features/actions).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The source code for this recipe is available here: [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP05/githubaction](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP05/githubaction).
+  prefs: []
+  type: TYPE_NORMAL
+- en: How to do it…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Perform the following steps to use GitHub Actions on our Terraform module:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the root of the GitHub repository that contains the module code, we create,
+    via the GitHub web interface, a new file called `integration-test.yaml` in the
+    `.github` | `workflows` folder:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/a69394c7-e2bd-4c99-b1f3-2da0f24ad09c.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'In this file, we write the following extract YAML code (the complete code is
+    here: [https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP05/githubaction](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP05/githubaction)):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE51]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Then, we validate the page by clicking on the Commit new file button at the
+    bottom of the page:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/f97fe323-4ae4-4293-9d5b-7f3c199b170f.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Finally, we click on the Actions tab of our repository and we can see the workflow
+    that has been triggered:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/9db2b775-91d7-40d9-a241-c040af9ac966.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: How it works…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: To create the workflow in GitHub Actions, we have created a new YAML file in
+    the repository that contains the module code, in the specific `.github` | `workflows`
+    folder that contains the steps that the GitHub Action agent will perform.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The steps of our workflow are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The first step is to do a checkout to retrieve the repository code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE52]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Then, we install the SDK for Go with the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE53]'
+  prefs: []
+  type: TYPE_PRE
+- en: For more information about the minimum Go version, read the documentation here: [https://terratest.gruntwork.io/docs/getting-started/quick-start/#requirements](https://terratest.gruntwork.io/docs/getting-started/quick-start/#requirements).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Then, we download the dependencies with this code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE54]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We run the Terratest tests with the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE55]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Finally, the last step is to add a tag to the code. To do this, we use the
+    `Github-tag` action provided by the `mathieudutour/github-tag-action@v4` repository and
+    we use the built-in `GITHUB_TOKEN` variable that allows the agent to authenticate
+    itself to perform Git commands on the repository:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE56]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'At the end of the execution of the workflow, you can see the results, as in
+    the following screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/82012d6b-a8f5-4f26-8cb3-450772e3dc20.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'If the workflow runs correctly, a new tag will be added to the code, as shown
+    in the following screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/818b1ad7-1ace-4d61-9b27-e9116f3339b7.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: And if this module is published in the public registry, a new version of this
+    module will be available.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There's more…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The incrementing of the tag in the repository (major, minor, or patch) is done
+    automatically and will depend on the content of the commit description that triggered
+    the action. For more information, read the documentation at [https://github.com/angular/angular.js/blob/master/DEVELOPERS.md#-git-commit-guidelines](https://github.com/angular/angular.js/blob/master/DEVELOPERS.md#-git-commit-guidelines).
+  prefs: []
+  type: TYPE_NORMAL
+- en: See also
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Documentation on the GitHub-Tag action is available here: [https://github.com/marketplace/actions/github-tag](https://github.com/marketplace/actions/github-tag).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Read this blog post about Terratest and GitHub Actions, provided by HashiCorp: [https://www.hashicorp.com/blog/continuous-integration-for-terraform-modules-with-github-actions/](https://www.hashicorp.com/blog/continuous-integration-for-terraform-modules-with-github-actions/)[.](https://github.com/marketplace/actions/github-tag)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

@@ -1,6 +1,6 @@
-# Github DevOps 加速指南
+# AWS 认证 DevOps 工程师
 
-> 原文：[`annas-archive.org/md5/677f27c30764b3701bc2b6cf6de3a30e`](https://annas-archive.org/md5/677f27c30764b3701bc2b6cf6de3a30e)
+> 原文：[`annas-archive.org/md5/b44a68a3321a441a0fdffa7dcbaf1892`](https://annas-archive.org/md5/b44a68a3321a441a0fdffa7dcbaf1892)
 > 
 > 译者：[飞龙](https://github.com/wizardforcel)
 > 

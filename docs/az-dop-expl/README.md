@@ -1,6 +1,6 @@
-# Github DevOps 加速指南
+# Azure DevOps 详解
 
-> 原文：[`annas-archive.org/md5/677f27c30764b3701bc2b6cf6de3a30e`](https://annas-archive.org/md5/677f27c30764b3701bc2b6cf6de3a30e)
+> 原文：[`annas-archive.org/md5/b9af5174af71449b8d6f11a56dee9821`](https://annas-archive.org/md5/b9af5174af71449b8d6f11a56dee9821)
 > 
 > 译者：[飞龙](https://github.com/wizardforcel)
 > 

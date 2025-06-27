@@ -1,6 +1,6 @@
-# Github DevOps 加速指南
+# 无服务器应用的 DevOps
 
-> 原文：[`annas-archive.org/md5/677f27c30764b3701bc2b6cf6de3a30e`](https://annas-archive.org/md5/677f27c30764b3701bc2b6cf6de3a30e)
+> 原文：[`annas-archive.org/md5/3c0d8d1b654bd7429a2508ed40e3fbf9`](https://annas-archive.org/md5/3c0d8d1b654bd7429a2508ed40e3fbf9)
 > 
 > 译者：[飞龙](https://github.com/wizardforcel)
 > 

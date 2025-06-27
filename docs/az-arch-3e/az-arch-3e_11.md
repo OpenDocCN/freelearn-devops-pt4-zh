@@ -1,4 +1,4 @@
-# 11. 使用 Azure Logic Apps、Event Grid 和 Functions 的 Azure 解决方案
+# 第十一章：11. 使用 Azure Logic Apps、Event Grid 和 Functions 的 Azure 解决方案
 
 本章接续上一章内容，进一步深入探讨 Azure 中可用的无服务器服务。在上一章中，你详细了解了 Azure Functions、函数即服务、耐久性函数以及 Event Grid。接下来，本章将重点讲解 Logic Apps，并且将展示如何创建一个完整的端到端无服务器解决方案，该解决方案结合了多个无服务器服务及其他服务，例如 Key Vault 和 Azure Automation。
 

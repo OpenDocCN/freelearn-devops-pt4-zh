@@ -1,4 +1,4 @@
-# Salt - 使用 Salt 配置 Vagrant Box
+# 第十四章：Salt - 使用 Salt 配置 Vagrant Box
 
 你已经到达了本书的最后一章，以及我们的配置迷你系列。在本章中，我们将更深入地了解可以与 Vagrant 一起使用的 Salt 配置工具。在本章结束时，你将对如何使用 Salt 配置 Vagrant 有一个清晰的理解，并进一步了解 Salt 作为一款独立的配置管理软件。我们将学习 Salt 及其工作原理。
 

@@ -1,4 +1,4 @@
-# 18. Azure Synapse Analytics for architects
+# 第十八章：18. Azure Synapse Analytics for architects
 
 Azure Synapse Analytics 是 Azure SQL Data Warehouse 的一个突破性进化。Azure Synapse 是一个完全托管的集成数据分析服务，将数据仓库、数据集成和大数据处理与加速洞察时间结合，形成一个单一的服务。
 

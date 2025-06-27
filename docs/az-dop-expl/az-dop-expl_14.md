@@ -1,6 +1,6 @@
 第九章：
 
-# 将 Azure DevOps 与 GitHub 集成
+# 第十章：将 Azure DevOps 与 GitHub 集成
 
 GitHub 是全球最受欢迎的开发平台之一，被开源开发者和企业广泛使用来存储代码。在本章中，你将学习如何在继续使用 GitHub 作为软件开发中心的同时，利用 Azure DevOps 的能力。
 

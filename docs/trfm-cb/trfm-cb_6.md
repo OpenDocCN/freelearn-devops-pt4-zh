@@ -28,7 +28,7 @@ Terraform 包含多种提供者，可以实现各种类型基础设施的配置�
 
 +   为现有的 Azure 基础设施生成 Terraform 配置
 
-# 技术要求
+# 第七章：技术要求
 
 要应用本章中的教程，你必须拥有 Azure 订阅。如果没有，你可以在此网站免费创建一个 Azure 帐户：[`azure.microsoft.com/en-us/free/`](https://azure.microsoft.com/en-us/free/)
 

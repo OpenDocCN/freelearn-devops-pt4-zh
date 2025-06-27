@@ -1,4 +1,4 @@
-# *第一章*：DevOps、SRE 和 Google Cloud CI/CD 服务
+# 第一章：DevOps、SRE 和 Google Cloud CI/CD 服务
 
 **DevOps** 是一种思维方式的转变，试图平衡发布速度与系统可靠性。它旨在提高一个组织相较于传统软件开发流程时，持续交付可靠应用和服务的能力，并保持较高的速度。
 

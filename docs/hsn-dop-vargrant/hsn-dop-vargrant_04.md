@@ -1,4 +1,4 @@
-# 发现 Vagrant Boxes - Vagrant Cloud
+# 第四章：发现 Vagrant Boxes - Vagrant Cloud
 
 在本章中，你将全面了解 Vagrant boxes。你将学习什么是 box，以及如何通过我们在前一章中介绍的 Vagrant 命令和子命令来管理它。我们还将学习 Vagrant Cloud，它是一个公共和私有 Vagrant box 的在线目录，供你搜索并安装到系统中，准备好用于你的 Vagrant 环境！
 

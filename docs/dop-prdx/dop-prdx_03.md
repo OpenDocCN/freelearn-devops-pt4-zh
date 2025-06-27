@@ -1,4 +1,4 @@
-## 介绍 Jeff Sussna
+## 第四章：介绍 Jeff Sussna
 
 2011 年，Jeff Sussna 创立了 Sussna Associates，这是一家专注于企业工作坊、辅导和战略设计的公司，帮助客户整合 DevOps。他是《设计交付：在数字服务经济中重新思考 IT》的作者，拥有超过 30 年的 IT 经验，从软件开发到 IT 集成。你可以在 Twitter 上关注他，账号是`@jeffsussna`。
 

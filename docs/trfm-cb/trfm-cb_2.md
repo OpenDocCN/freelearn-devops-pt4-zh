@@ -36,7 +36,7 @@
 
 让我们开始吧！
 
-# 技术要求
+# 第三章：技术要求
 
 本章需要你在计算机上安装 Terraform 二进制文件。本章的源代码可以在[`github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP02`](https://github.com/PacktPublishing/Terraform-Cookbook/tree/master/CHAP02)找到。
 

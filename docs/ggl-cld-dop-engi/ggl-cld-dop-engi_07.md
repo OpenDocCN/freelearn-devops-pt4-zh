@@ -1,4 +1,4 @@
-# *第五章*：使用 Cloud Source Repositories 管理源代码
+# 第五章：使用 Cloud Source Repositories 管理源代码
 
 本书的第一部分（由四章组成）深入探讨了**站点可靠性工程**（**SRE**）的概念。内容包括 SRE 的技术实践、理解监控和警报以提高可靠性，以及通过应用 SRE 文化实践来建立 SRE 团队的见解。
 

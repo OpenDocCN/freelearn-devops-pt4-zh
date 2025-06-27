@@ -1,4 +1,4 @@
-# 监视、扩展和 CI/CD 与 Azure 函数
+# 第十五章：监视、扩展和 CI/CD 与 Azure 函数
 
 在上一章中，我们学习了如何使用 Visual Studio 和 Visual Studio Code 创建 Azure 函数，如何在 Azure 上发布函数，以及如何从 Dynamics 365 Business Central 扩展中调用 Azure 函数。
 

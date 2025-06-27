@@ -1,4 +1,4 @@
-## 关于作者
+## 第三章：关于作者
 
 Viktor Farcic 是[CloudBees](https://www.cloudbees.com/)的高级顾问，属于[Docker Captains](https://www.docker.com/community/docker-captains)小组成员，并且是作者。
 

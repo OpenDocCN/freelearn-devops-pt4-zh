@@ -1,4 +1,4 @@
-# 设置 VS Code 并使用 GitHub 项目
+# 第十三章：设置 VS Code 并使用 GitHub 项目
 
 本书讲述的是在 Microsoft Dynamics 365 Business Central 中编写自动化测试，而不是如何使用 VS Code 和 AL 语言开发扩展。假设你已经知道如何将 VS Code 与 AL 开发语言结合使用，并且了解 Dynamics 365 Business Central 作为平台和应用程序的工作原理。基于此，我们直接进入了 第二章，*可测试性框架* 的编码，没有解释我们使用的开发工具，并且在接下来的章节中继续这样做。
 

@@ -1,6 +1,6 @@
 第七章：
 
-# 在 Azure DevOps 中使用 Artifacts
+# 第八章：在 Azure DevOps 中使用 Artifacts
 
 在上一章中，我们讲解了如何在 Azure Pipelines 中托管构建代理。在本章中，我们将讲解如何在 Azure DevOps 中使用 Artifacts。我们将从解释什么是 Artifacts 开始。然后，我们将看看如何在 Azure DevOps 中创建它们，以及如何从构建管道中生成工件包。接下来，我们将讲解如何使用发布管道部署供稿。然后，我们将讲解如何设置供稿权限，以及如何在 Visual Studio 中消费包。最后，我们将讲解如何使用 WhiteSource Bolt 扫描包漏洞。
 

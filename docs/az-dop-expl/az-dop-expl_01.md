@@ -1,4 +1,4 @@
-# 第一节：DevOps 原则与 Azure DevOps 项目管理
+# 第一部分：DevOps 原则与 Azure DevOps 项目管理
 
 本节将涵盖 DevOps 原则、Azure DevOps 关键概念以及项目管理内容。
 

@@ -1,4 +1,4 @@
-## 大规模部署有状态应用程序
+## 第七章：大规模部署有状态应用程序
 
 大多数应用程序通过部署到 Kubernetes 使用 Deployments。毫无疑问，它是最常用的控制器。Deployments 提供了我们可能需要的（几乎）所有功能。当我们的应用需要扩展时，我们可以指定副本数。我们可以通过 PersistentVolumeClaims 挂载卷。我们可以通过 Services 与由 Deployments 控制的 Pods 进行通信。我们可以执行滚动更新，在没有停机的情况下部署新版本。Deployments 启用了许多其他功能。这是否意味着 Deployments 是运行所有类型应用程序的首选方式？是否有某个功能是我们需要的，但 Deployments 和我们可以与其关联的其他资源中并没有提供？
 

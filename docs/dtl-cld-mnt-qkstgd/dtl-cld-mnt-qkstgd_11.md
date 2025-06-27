@@ -1,4 +1,4 @@
-# *第九章*：使用 Datadog REST API
+# 第九章：使用 Datadog REST API
 
 在上一章中，您学习了如何通过 Datadog 支持的集成和自定义检查将平台组件，主要由第三方软件产品和云服务组成，集成到 Datadog 中。这些集成的主要目标是通过 Datadog 监控应用栈中使用的第三方工具。Datadog 的集成也可以反向进行。工具和脚本可以使用 Datadog 的 HTTP REST API 以编程方式访问 Datadog 平台。例如，如果您需要从应用程序向 Datadog 发布一个指标值或事件，可以使用相关的 REST API 来完成。
 

@@ -1,4 +1,4 @@
-# 使用 Google Functions 的 DevOps
+# 第六章：使用 Google Functions 的 DevOps
 
 Google 决定将其无服务器平台推出为 Cloud Functions，但它仍处于成熟阶段。在写这本书时，我们只能使用 Node.js 编写 Google Cloud Functions。这些函数可以通过 Google 内部的事件总线——Pub/Sub 和通过 HTTP 作为来自 Firebase 的移动事件触发。我不会深入讨论 Google Functions 的功能，因为我们在前面的章节中已经讲解过了。因此，在本章中，我们将讨论如何将 DevOps 应用于 Google Functions，以及部署、发布管理、监控和日志记录的最佳实践。我们将通过 `gcloud` 命令行、Serverless Framework 和 Jenkins 进行各种示例和演示。好了，让我们进入 DevOps 主题。
 

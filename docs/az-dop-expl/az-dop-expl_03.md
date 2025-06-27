@@ -1,6 +1,6 @@
 第二章：
 
-# 使用 Azure DevOps Boards 管理项目
+# 第二章：使用 Azure DevOps Boards 管理项目
 
 在上一章中，我们介绍了 DevOps，并讲解了六个原则。我们还简要介绍了 Azure DevOps 的关键概念和不同的服务。最后，我们介绍了本书将贯穿使用的场景。
 

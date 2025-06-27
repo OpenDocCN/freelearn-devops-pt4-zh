@@ -1,4 +1,4 @@
-## 介绍 Nirmal Mehta
+## 第四十九章：介绍 Nirmal Mehta
 
 Nirmal Mehta 是 Booz Allen Hamilton 战略创新小组的首席技术专家，专门从事新兴技术的研究、实施和集成，以服务 Booz Allen 的联邦政府客户。他领导公司的数字研究与开发、沉浸式机器智能和新兴技术战略方面的工作。此外，他是容器化领域的主题专家和 DevOps 实践的思想领袖。他曾是备受关注的 GSA 集成奖环境 AWS 云平台的首席架构师，负责实施首个以开放源代码、数据为中心、基于微服务的分布式应用程序，该项目在公共部门具有开创性意义。他对机器学习、沉浸式技术、开源、DevOps 以及将新兴技术与客户需求结合充满热情。他致力于将前沿技术引入企业系统，为商业和公共部门客户提供服务。他是 Docker Captains 小组成员。你可以在 Twitter 上关注他，账号是`@normalfaults`，在 LinkedIn 上访问他： [`www.linkedin.com/in/nirmalkmehta/`](https://www.linkedin.com/in/nirmalkmehta/)，以及在网上访问：[`nirmal.io`](https://nirmal.io)。
 

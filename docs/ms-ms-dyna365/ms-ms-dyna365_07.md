@@ -1,4 +1,4 @@
-# 为 Dynamics 365 Business Central 开发定制化解决方案
+# 第六章：为 Dynamics 365 Business Central 开发定制化解决方案
 
 在上一章中，我们学习了 Dynamics 365 Business Central 扩展开发的基本知识，并分析了创建扩展的所有构建模块，如事件和基本对象定义，以及如何扩展标准对象。
 

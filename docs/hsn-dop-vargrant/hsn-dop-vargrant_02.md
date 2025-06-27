@@ -1,4 +1,4 @@
-# 安装 VirtualBox 和 Vagrant
+# 第二章：安装 VirtualBox 和 Vagrant
 
 VirtualBox 是一个非常重要的软件，我们称之为**提供者**。它的工作是进行繁重的工作，创建和维护虚拟机和环境。Vagrant 本质上是对提供者（在我们的例子中是 VirtualBox）进行的封装，并暴露出一个强大的 API，允许您通过代码和配置（如 Vagrantfile）来创建和管理虚拟机。
 

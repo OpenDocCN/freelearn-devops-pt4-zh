@@ -1,4 +1,4 @@
-# *附录：*为专业云 DevOps 工程师认证考试做准备
+# 第十一章：*附录：*为专业云 DevOps 工程师认证考试做准备
 
 本书是一本实用指南，旨在学习和理解**网站可靠性工程**（**SRE**），这是一种实施 DevOps 的规定性方法。书中还深入探讨了在 Google Cloud Platform 上实施 DevOps 所必需的 Google Cloud 服务。
 

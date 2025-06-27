@@ -1,4 +1,4 @@
-# Ansible - 使用 Ansible 配置 Vagrant Box
+# 第十章：Ansible - 使用 Ansible 配置 Vagrant Box
 
 在我们的配置系列的第二部分中，我们将学习关于 Ansible 的知识，如何使用它来配置 Vagrant 机器。本章将覆盖以下主题：
 

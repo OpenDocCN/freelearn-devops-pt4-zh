@@ -1,6 +1,6 @@
 第五章：
 
-# 在构建管道中运行质量测试
+# 第六章：在构建管道中运行质量测试
 
 在上一章中，我们介绍了 Azure Pipelines，并学习了如何使用 Azure DevOps、GitHub 和容器实现 CI/CD 流程。
 

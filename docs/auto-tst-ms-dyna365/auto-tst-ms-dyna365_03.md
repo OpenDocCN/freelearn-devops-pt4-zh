@@ -1,4 +1,4 @@
-# 第二章：Microsoft Dynamics 365 Business Central 中的自动化测试
+# 第二部分：Microsoft Dynamics 365 Business Central 中的自动化测试
 
 本节将讨论 Microsoft Dynamics 365 Business Central 如何通过*可测试性框架*和*测试工具*来实现自动化测试。接下来，我们将关注标准测试和测试库。
 

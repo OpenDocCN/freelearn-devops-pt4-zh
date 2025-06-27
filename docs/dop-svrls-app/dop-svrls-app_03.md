@@ -1,4 +1,4 @@
-# 将 DevOps 应用到 AWS Lambda 应用程序
+# 第三章：将 DevOps 应用到 AWS Lambda 应用程序
 
 我们简要回顾一下关于 AWS Lambda 函数的内容。亚马逊网络服务是第一个推出无服务器计算模块 Lambda 的网络服务平台，Lambda 函数是用 **Lambda 函数** 编写的。Lambda 函数是无状态的，并且与底层基础设施没有依赖关系。Lambda 函数是响应事件执行的，这些事件可能是一个 HTTP 请求、S3 桶中的数据变化、DynamoDB 表的变化，或者 Kinesis 或 SNS 的变化。Lambda 函数会在事件发生时快速复制，并且在事件数量减少时会缩减规模。
 

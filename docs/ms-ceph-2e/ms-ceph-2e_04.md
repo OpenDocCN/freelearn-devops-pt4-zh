@@ -1,4 +1,4 @@
-# BlueStore
+# 第四章：BlueStore
 
 在本章中，你将了解 BlueStore，这个新对象存储设计用于取代现有的 filestore。它提高的性能和增强的功能集旨在使 Ceph 能够继续发展，并为未来提供一个具有弹性和高性能的分布式存储系统。自 Luminous 版本以来，BlueStore 已成为推荐并默认的对象存储，在创建新的 OSD 时使用。本章将介绍 BlueStore 的工作原理，以及它为何比 Filestore 更适合 Ceph 的需求。然后，通过逐步教程，你将学习如何将 Ceph 集群升级到 BlueStore。
 

@@ -1,4 +1,4 @@
-## 介绍 Ádám Sándor
+## 第三十一章：介绍 Ádám Sándor
 
 Ádám 通过利用云技术来提高商业中的软件交付速度。他是认证的 ScrumMaster 和认证的 Kubernetes 管理员，Ádám 将大部分时间投入到 DevOps 技术中。您可以在 Twitter 上关注他，用户名是 `@adamsand0r`。
 

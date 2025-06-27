@@ -22,7 +22,7 @@
 
 让我们开始吧！
 
-# 技术要求
+# 第九章：技术要求
 
 本章的主要前提条件是拥有一个 Terraform Cloud 平台的账户。创建账户非常简单，并且提供免费计划。你可以在 [`app.terraform.io/signup/account`](https://app.terraform.io/signup/account) 上完成注册。
 

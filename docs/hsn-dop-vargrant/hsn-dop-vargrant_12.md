@@ -1,4 +1,4 @@
-# Docker - 使用 Docker 与 Vagrant
+# 第十二章：Docker - 使用 Docker 与 Vagrant
 
 在本章中，我们将学习如何使用 Docker 配置 Vagrant 虚拟机。这与 Docker 提供者不同，Docker 提供者用于支持和管理 Vagrant 虚拟机。目前，我们使用的是 VirtualBox 提供者。
 

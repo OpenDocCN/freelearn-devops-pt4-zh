@@ -1,4 +1,4 @@
-# 使用 Azure Functions 进行 DevOps
+# 第四章：使用 Azure Functions 进行 DevOps
 
 Microsoft Azure 是全球第二大云服务提供商，仅次于 AWS。但直到 2015 年，他们才提供 API 服务，之前在 AWS 和 Google Cloud Functions 等其他云服务领域表现出色。最终，他们决定投资于云函数。所以，Azure Functions 就是 AWS Lambda 的回应，但其底层技术不同，我们将在接下来的章节中详细介绍。Azure Functions 基于 Azure 应用服务和 WebJobs SDK。Azure Functions 支持多种语言，如 F#、Python、Batch、PHP 和 PowerShell，但官方支持的语言是 C# 和 Node.js。我们将在本章节中使用 Node.js 进行所有的教程，并且有关 Azure Functions 的更多详细信息可以参考微软链接：https:/ / msdn. microsoft. com/ en- us/ magazine/ mt793269\. aspx。
 

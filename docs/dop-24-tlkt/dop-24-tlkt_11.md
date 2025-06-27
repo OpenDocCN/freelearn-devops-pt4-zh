@@ -1,4 +1,4 @@
-## 分发 Kubernetes 应用程序
+## 第十一章：分发 Kubernetes 应用程序
 
 我们已经将镜像存储在[Docker Hub](https://hub.docker.com/)中。我们本可以选择其他容器注册表，但由于 Docker Hub 非常方便，我们将继续在本书中使用它。尽管这可能不是最好的选择，但如果我们将关于容器镜像仓库的讨论放到一边，就可以集中精力讨论 YAML 文件，或者更具体地说，Helm Charts。
 

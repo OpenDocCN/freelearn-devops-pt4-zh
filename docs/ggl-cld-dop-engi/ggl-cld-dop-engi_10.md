@@ -1,4 +1,4 @@
-# *第八章*：理解 GKE 基础知识以部署容器化应用
+# 第八章：理解 GKE 基础知识以部署容器化应用
 
 Kubernetes 或 K8s 是一个开源的容器编排系统，用于自动化应用程序的部署、扩展和管理运行容器化应用程序的集群。前一章介绍了 K8s 的基础知识，包括集群结构、主平面组件、Kubernetes 对象（如 Pods 和 Services）、工作负载（如 Deployments、StatefulSets、DaemonSets 等），并深入探讨了部署策略。然而，搭建一个开源的 Kubernetes 集群涉及大量基础设施层面的工作，并且需要花费大量时间来设置。此外，还包括后期的维护活动，如更新、升级或修复集群。GCP 提供了一个计算服务，提供一个托管的 Kubernetes 或 K8s 环境，称为 **Google Kubernetes Engine** (**GKE**)。
 

@@ -1,4 +1,4 @@
-# *第十二章*：为 DevSecOps 架构设计
+# 第十二章：为 DevSecOps 架构设计
 
 和企业 IT 领域的所有内容一样，DevSecOps 需要一个架构基础。在本章中，您将学习如何为 DevSecOps 实践构建参考架构，并设计 DevSecOps 管道。我们还将讨论主要公共云服务提供商的最佳 DevSecOps 实践；即 AWS、Azure 和 GCP。为此，我们将详细阐述市场上一些领先的工具。在最后一节中，您将了解企业应采取哪些步骤来实施 DevSecOps。
 

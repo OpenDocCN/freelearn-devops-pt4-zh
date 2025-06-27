@@ -1,4 +1,4 @@
-# *第六章*：使用 Cloud Build 构建代码，并推送到容器注册表
+# 第六章：使用 Cloud Build 构建代码，并推送到容器注册表
 
 上一章集中讲解了如何使用**Cloud Source Repositories**（**CSR**）管理源代码。CSR 提供了一个完全托管的私有 Git 仓库，支持与 GitHub 和 Bitbucket 的单向同步，并与 GCP 服务集成。这是**持续集成**（**CI**）流程的第一步。
 

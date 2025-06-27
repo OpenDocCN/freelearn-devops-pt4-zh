@@ -1,4 +1,4 @@
-# Microsoft Dynamics 365 Business Central 概述
+# 第二章：Microsoft Dynamics 365 Business Central 概述
 
 **Microsoft Dynamics 365 Business Central** 是一款顶尖的基于云的 **企业资源规划**（**ERP**）应用软件，专为 **中小企业**（**SMB**）市场设计。该应用基于 **软件即服务**（**SaaS**）模式，并通过 **云解决方案提供商**（**CSP**）合作伙伴进行销售。
 

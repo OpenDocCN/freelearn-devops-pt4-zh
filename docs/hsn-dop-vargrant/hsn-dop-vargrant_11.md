@@ -1,4 +1,4 @@
-# Chef - 使用 Chef 配置 Vagrant Box
+# 第十一章：Chef - 使用 Chef 配置 Vagrant Box
 
 在本章中，我们将继续使用流行的 DevOps 配置管理工具来配置 Vagrant 的系列教程。我们将重点介绍 Chef，并涵盖以下主题：
 

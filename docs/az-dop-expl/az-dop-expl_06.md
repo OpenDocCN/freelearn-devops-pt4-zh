@@ -1,6 +1,6 @@
 第四章：
 
-# 了解 Azure DevOps Pipelines
+# 第四章：了解 Azure DevOps Pipelines
 
 在组织中采用 **Azure DevOps** 时，您必须做出的一个主要决策是如何定义您的开发过程的 **流水线**。流水线是一个公司定义的模型，描述了从构建到最终发布阶段代码库必须支持的步骤和操作。它是任何 DevOps 架构的关键部分。
 

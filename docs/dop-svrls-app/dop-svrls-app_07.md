@@ -1,4 +1,4 @@
-# 为 Kubeless 添加 DevOps 风味
+# 第七章：为 Kubeless 添加 DevOps 风味
 
 在上一章中，我们了解了 Google Functions 以及如何使用各种不同的工具和过程自动化部署 Google Functions。我们还研究了如何监控和记录服务。本章将介绍另一个开源无服务器框架——Kubeless。我们将学习如何在 minikube 上设置 Kubeless 框架，创建、部署和调用 Kubeless 函数，以及如何构建、部署、记录和监控 Kubeless 函数。
 

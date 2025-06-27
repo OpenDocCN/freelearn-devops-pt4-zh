@@ -1,4 +1,4 @@
-# Puppet - 使用 Puppet 配置 Vagrant Box
+# 第十三章：Puppet - 使用 Puppet 配置 Vagrant Box
 
 在本章中，我们将继续学习配置过程，并了解如何使用 Puppet 软件配置 Vagrant 机器。本章中，你将学习以下主题：
 

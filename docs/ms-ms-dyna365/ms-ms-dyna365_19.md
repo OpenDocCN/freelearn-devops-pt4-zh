@@ -1,4 +1,4 @@
-# 第十六章：Business Central 与 Power Platform 的集成
+# 第十五章：Business Central 与 Power Platform 的集成
 
 在上一章中，我们看到如何使用 Azure 服务结合 Dynamics 365 Business Central 来实现现代无服务器业务流程，并且我们对如何从 AL 中使用 Azure Functions 进行了广泛的概述。
 

@@ -1,4 +1,4 @@
-# 第二十一章：使用 Amazon Inspector 检查您的环境
+# 第二十二章：使用 Amazon Inspector 检查您的环境
 
 Amazon Inspector 允许您将安全测试作为开发和 **信息技术**（**IT**）运营的常规部分。随着 **开发运营**（**DevOps**）向 **开发安全运营**（**DevSecOps**）的转变，安全责任更多地由开发人员承担，使用像 Amazon Inspector 这样的工具可以帮助您采取更主动的安全态度来保护您和您组织的安全状况。
 

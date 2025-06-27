@@ -1,4 +1,4 @@
-# 第十三章：Dynamics 365 Business Central API
+# 第十二章：Dynamics 365 Business Central API
 
 在上一章中，我们学习了如何在 Dynamics 365 Business Central 项目中使用 DevOps 技术，并重点讨论了源代码管理和 CI/CD 管道等方面。
 

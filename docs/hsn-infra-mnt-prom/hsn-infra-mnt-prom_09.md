@@ -1,4 +1,4 @@
-# 第八章：Prometheus 查询语言 - PromQL  
+# 第七章：Prometheus 查询语言 - PromQL  
 
 Prometheus 提供了一种强大且灵活的查询语言，利用其多维数据模型进行临时聚合和时间序列数据的组合。在本章中，我们将介绍 PromQL 及其语法和语义。掌握了这门语言的知识和功能后，我们将能够解锁 Prometheus 的真正潜力。  
 

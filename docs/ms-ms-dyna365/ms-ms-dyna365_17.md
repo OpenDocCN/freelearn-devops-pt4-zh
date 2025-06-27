@@ -1,4 +1,4 @@
-# 第十四章：使用 Business Central 和 Azure 实现无服务器业务流程
+# 第十三章：使用 Business Central 和 Azure 实现无服务器业务流程
 
 在第十二章*《Dynamics 365* *Business Central APIs》*中，我们回顾了由 Dynamics 365 Business Central 提供的各种 API 的概述。我们学习了如何在应用程序中使用这些 API，以及如何创建自定义 API。
 

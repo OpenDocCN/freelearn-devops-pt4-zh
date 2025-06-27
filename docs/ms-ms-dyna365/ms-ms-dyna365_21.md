@@ -1,4 +1,4 @@
-# 第十七章：将机器学习集成到 Dynamics 365 Business Central 中
+# 第十六章：将机器学习集成到 Dynamics 365 Business Central 中
 
 在上一章中，我们概述了 Microsoft Power Platform，并且我们看到了如何结合 Flow 和 PowerApps 使用 Dynamics 365 Business Central 来解决无需编码的业务任务。
 

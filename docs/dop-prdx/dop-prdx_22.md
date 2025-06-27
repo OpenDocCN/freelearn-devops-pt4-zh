@@ -1,0 +1,1 @@
+![](img/andy-clemenko.jpg)

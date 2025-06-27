@@ -1,0 +1,1 @@
+![](img/mike-kail.jpg)

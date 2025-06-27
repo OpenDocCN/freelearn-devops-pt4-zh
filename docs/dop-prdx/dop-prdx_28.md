@@ -1,0 +1,1 @@
+![](img/adam-sandor.jpg)

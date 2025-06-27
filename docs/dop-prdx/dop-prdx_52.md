@@ -1,0 +1,1 @@
+![](img/wian-vos.jpg)

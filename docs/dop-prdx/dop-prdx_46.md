@@ -1,0 +1,1 @@
+![](img/nirmal-mehta.jpg)

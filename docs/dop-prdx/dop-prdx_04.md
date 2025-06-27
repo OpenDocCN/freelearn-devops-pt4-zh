@@ -1,0 +1,1 @@
+![](img/damien-duportal.jpg)

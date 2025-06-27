@@ -1,0 +1,1 @@
+![](img/greg-bledsoe.jpg)
